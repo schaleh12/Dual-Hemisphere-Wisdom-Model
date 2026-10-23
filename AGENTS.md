@@ -54,3 +54,15 @@ handoff updates. Keep summaries compact and preserve superseded choices with rep
 ## Current stage
 
 This is an early-stage experimental repository. Simplicity, inspectability, reproducibility, and scientific validity take priority over production-scale engineering.
+
+## Clean Slate & Anti-Rigging Rules (Mandatory)
+
+1. **Zero Legacy Pollution**: Never read, import, or reuse anything from the old `LMFT based general AI` folders (`LMFT-School`, `LMFT-Trainee`, `LMFT-Firmware`, or post-Commit-36 `LMFT-Lab`).
+2. **Zero Fake AI / Zero Rubric Rigging**:
+   - Never hardcode words or substrings from test sentences into grading rubrics, validation filters, or classification rules to make an experiment pass.
+   - Never use `if/else` text templates, pre-written essays, or keyword lookup tables to pretend a system is "thinking" or "speaking."
+   - Never call a float array or NumPy matrix a "Small Language Model (SLM)."
+3. **Let Experiments Fail Openly**:
+   - If a model output is inadmissible, a rule fails to generalize, or a fuzzy tree loses to a simple baseline, report the failure plainly (`0/4`, `FAILED`, etc.). Never move the goalposts to pass a test.
+4. **Human-Readable Code**:
+   - Keep new scripts small, self-contained, and explained in plain English.
