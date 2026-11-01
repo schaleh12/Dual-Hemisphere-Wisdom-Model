@@ -29,6 +29,7 @@ Plain-English architecture:
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+import inspect
 import json
 import math
 from pathlib import Path
@@ -165,12 +166,26 @@ class ThreeBridgeSensors:
 
     - `will_cultural` (The Do-er): scores the 6 Cultural leaves + active `cultural/*` drawers.
     - `truth_philosophical` (The Thinker): scores the 6 Philosophical leaves + active `philosophical/*` drawers.
-    - `contemplation_experiential` (The Feeler): scores raw felt `salience`, `valence`, and `arousal`.
+    - `contemplation_experiential` (The Feeler): scores raw felt `salience`, `valence`, `arousal`,
+      plus active `experiential/*` complex-feeling drawers (e.g. bittersweet release, austere sanctuary).
     """
 
     will_cultural: Callable[[str, tuple[LearnedLeaf, ...]], Mapping[str, float]]
     truth_philosophical: Callable[[str, tuple[LearnedLeaf, ...]], Mapping[str, float]]
-    contemplation_experiential: Callable[[str], Mapping[str, float]]
+    contemplation_experiential: Callable[..., Mapping[str, float]]
+
+    def _call_feeler(self, text: str, children: tuple[LearnedLeaf, ...]) -> Mapping[str, float]:
+        sig = inspect.signature(self.contemplation_experiential)
+        params = [
+            p for p in sig.parameters.values()
+            if p.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+        ]
+        has_varargs = any(p.kind == inspect.Parameter.VAR_POSITIONAL for p in sig.parameters.values())
+        if has_varargs or len(params) >= 2:
+            return self.contemplation_experiential(text, children)
+        if children:
+            raise ValueError("contemplation_experiential callable must accept (text, child_leaves) to score experiential/* drawers")
+        return self.contemplation_experiential(text)
 
     def score_text(
         self,
@@ -185,9 +200,9 @@ class ThreeBridgeSensors:
             raise ValueError("text must be a nonempty string")
 
         exp_raw = _validate_unit_map(
-            self.contemplation_experiential(text),
+            self._call_feeler(text, ()),
             EXPERIENTIAL_SENSOR_LEAVES,
-            "contemplation_experiential",
+            "contemplation_experiential(tier1)",
         )
         cult_base = _validate_unit_map(
             self.will_cultural(text, ()),
@@ -200,7 +215,7 @@ class ThreeBridgeSensors:
             "truth_philosophical(tier1)",
         )
 
-        coords: dict[str, float] = {**cult_base, **phil_base}
+        coords: dict[str, float] = {**cult_base, **phil_base, **exp_raw}
         queried: list[str] = []
         skipped: list[str] = []
 
@@ -211,17 +226,27 @@ class ThreeBridgeSensors:
                     continue
                 open_cult: list[LearnedLeaf] = []
                 open_phil: list[LearnedLeaf] = []
+                open_exp: list[LearnedLeaf] = []
                 for leaf in tier_leaves:
                     parent_active = True
                     if branch_gating:
                         if tier_level == 2:
-                            parent_vals = [
-                                v for k, v in coords.items()
-                                if k in FOUNDATIONAL_LEAVES and k.startswith(leaf.parent_branch + "/")
-                            ]
-                            max_founding = max(coords.values(), default=0.0)
-                            blind_spot_fallback = max_founding < branch_gate_threshold and exp_raw[SALIENCE_LEAF] >= 0.45
-                            parent_active = blind_spot_fallback or (max(parent_vals, default=0.0) >= branch_gate_threshold)
+                            if leaf.leaf_id.startswith("experiential/"):
+                                parent_vals = [
+                                    v for k, v in exp_raw.items()
+                                    if k.startswith(leaf.parent_branch + "/")
+                                ]
+                                # Synchronization has no tier-1 raw sensor key yet, so open when salience >= threshold
+                                exp_signal = max(parent_vals, default=exp_raw[SALIENCE_LEAF])
+                                parent_active = exp_signal >= branch_gate_threshold
+                            else:
+                                parent_vals = [
+                                    v for k, v in coords.items()
+                                    if k in FOUNDATIONAL_LEAVES and k.startswith(leaf.parent_branch + "/")
+                                ]
+                                max_founding = max((coords[k] for k in FOUNDATIONAL_LEAVES), default=0.0)
+                                blind_spot_fallback = max_founding < branch_gate_threshold and exp_raw[SALIENCE_LEAF] >= 0.45
+                                parent_active = blind_spot_fallback or (max(parent_vals, default=0.0) >= branch_gate_threshold)
                         else:
                             parent_active = float(coords.get(leaf.parent_branch, 0.0)) >= CONFUSION_THRESHOLD
                     if not parent_active:
@@ -229,6 +254,8 @@ class ThreeBridgeSensors:
                         skipped.append(leaf.leaf_id)
                     elif leaf.leaf_id.startswith("cultural/"):
                         open_cult.append(leaf)
+                    elif leaf.leaf_id.startswith("experiential/"):
+                        open_exp.append(leaf)
                     else:
                         open_phil.append(leaf)
 
@@ -253,6 +280,18 @@ class ThreeBridgeSensors:
                         f"truth_philosophical(tier{tier_level})",
                     )
                     for l in phil_t:
+                        coords[l.leaf_id] = scored[l.leaf_id]
+                        queried.append(l.leaf_id)
+
+                if open_exp:
+                    exp_t = tuple(open_exp)
+                    expected = EXPERIENTIAL_SENSOR_LEAVES + tuple(l.leaf_id for l in exp_t)
+                    scored = _validate_unit_map(
+                        self._call_feeler(text, exp_t),
+                        expected,
+                        f"contemplation_experiential(tier{tier_level})",
+                    )
+                    for l in exp_t:
                         coords[l.leaf_id] = scored[l.leaf_id]
                         queried.append(l.leaf_id)
 
@@ -1035,11 +1074,17 @@ def make_temporary_llm_bridge_sensors(models, *, role: str = "interpretation") -
             text,
         )
 
-    def score_contemplation_experiential(text: str) -> Mapping[str, float]:
+    def score_contemplation_experiential(
+        text: str,
+        children: tuple[LearnedLeaf, ...] = (),
+    ) -> Mapping[str, float]:
+        desc = dict(exp_guide)
+        for c in children:
+            desc[c.leaf_id] = c.description
         return _run_bridge(
             "contemplation_experiential",
-            "Evaluate felt weight, life-giving vs. bleak emotional tone, and intensity.",
-            exp_guide,
+            "Evaluate complex felt nuances (bittersweet release, austere warmth, hollow stillness), weight, and intensity.",
+            desc,
             text,
         )
 

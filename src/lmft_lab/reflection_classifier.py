@@ -70,6 +70,14 @@ FOUNDING_PARENT_BRANCHES = (
     "philosophical/persistence",
 )
 
+EXPERIENTIAL_PARENT_BRANCHES = (
+    "experiential/reflection",
+    "experiential/phase",
+    "experiential/synchronization",
+)
+
+ALL_GROWABLE_PARENT_BRANCHES = FOUNDING_PARENT_BRANCHES + EXPERIENTIAL_PARENT_BRANCHES
+
 NOVELTY_LEAF = "experiential/reflection/novelty"
 SALIENCE_LEAF = "experiential/reflection/salience"
 VALENCE_LEAF = "experiential/phase/valence"
@@ -115,9 +123,16 @@ def leaf_tier(leaf_id: str) -> int:
     """Return 1 for founding leaves, 2 for child leaves under founding branches, 3 for Tier-3 sub-leaves."""
     if not isinstance(leaf_id, str):
         return 0
-    if leaf_id in FOUNDATIONAL_LEAVES:
+    if leaf_id in FOUNDATIONAL_LEAVES or leaf_id in (
+        NOVELTY_LEAF,
+        SALIENCE_LEAF,
+        VALENCE_LEAF,
+        AROUSAL_LEAF,
+        RESONANCE_LEAF,
+        RETENTION_LEAF,
+    ):
         return 1
-    for branch in FOUNDING_PARENT_BRANCHES:
+    for branch in ALL_GROWABLE_PARENT_BRANCHES:
         prefix = branch + "/"
         if leaf_id.startswith(prefix):
             rest = leaf_id[len(prefix):]
@@ -143,13 +158,13 @@ class LearnedLeaf:
     description: str
 
     def __post_init__(self):
-        if self.parent_branch not in FOUNDING_PARENT_BRANCHES and leaf_tier(self.parent_branch) != 2:
+        if self.parent_branch not in ALL_GROWABLE_PARENT_BRANCHES and leaf_tier(self.parent_branch) != 2:
             raise ValueError(
                 f"parent_branch must be a founding branch or Tier-2 learned leaf: {self.parent_branch!r}"
             )
         if not isinstance(self.leaf_name, str) or not re.fullmatch(r"[a-z][a-z0-9_-]{2,40}", self.leaf_name):
             raise ValueError(f"invalid leaf_name: {self.leaf_name!r}")
-        if self.leaf_id in FOUNDATIONAL_LEAVES:
+        if leaf_tier(self.leaf_id) == 1:
             raise ValueError(f"learned leaf cannot overwrite founding leaf: {self.leaf_id!r}")
         if not isinstance(self.description, str) or not self.description.strip():
             raise ValueError("description must be a nonempty string")

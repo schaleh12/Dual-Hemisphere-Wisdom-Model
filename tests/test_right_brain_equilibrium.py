@@ -426,6 +426,63 @@ def test_feeler_unease_vetoes_tone_deaf_theory_when_valence_stays_bleak():
     assert res.outcome == "UNRESOLVED_TENSION"
 
 
+def test_feeler_grows_complex_experiential_drawers_and_forms_poetic_harmony_chords():
+    birth = _birth()
+    bittersweet = LearnedLeaf(
+        "experiential/phase",
+        "bittersweet_release",
+        "Simultaneous fracture of an enclosure and life-giving relief.",
+    )
+    earned_thaw = LearnedLeaf(
+        "experiential/phase/bittersweet_release",
+        "earned_thaw_after_enclosure",
+        "Water returning to shared flow after stagnant isolation cracks open.",
+    )
+    learned = (bittersweet, earned_thaw)
+
+    poetic_chord_rule = FuzzyConceptRule(
+        rule_id="rule-earned-thaw",
+        concept_name="restorative_fracture_into_flow",
+        description="A stagnant barrier cracking open into bittersweet, life-giving shared release.",
+        target_leaves={
+            "cultural/justice/fairness": 0.70,
+            "philosophical/persistence/continuity": 0.70,
+            "experiential/phase/bittersweet_release/earned_thaw_after_enclosure": 0.80,
+        },
+    )
+    rules = _sample_rules() + (poetic_chord_rule,)
+
+    def feeler(_text: str, children: tuple[LearnedLeaf, ...] = ()):
+        out = {
+            SALIENCE_LEAF: 0.78,
+            VALENCE_LEAF: 0.68,
+            AROUSAL_LEAF: 0.72,
+        }
+        for c in children:
+            out[c.leaf_id] = 0.88
+        return out
+
+    sensors = ThreeBridgeSensors(
+        will_cultural=lambda _t, _c: _uniform(WILL_CULTURAL_LEAVES, 0.20, fairness=0.75, power=0.55, needlessness=0.15),
+        truth_philosophical=lambda _t, _c: _uniform(TRUTH_PHILOSOPHICAL_LEAVES, 0.20, continuity=0.78, order=0.35, chaos=0.30),
+        contemplation_experiential=feeler,
+    )
+
+    res = settle_scenario(
+        birth,
+        "At dawn the yellow wall split open and meltwater braided freely out to three stray kids.",
+        sensors,
+        rules,
+        learned_leaves=learned,
+    )
+    assert "experiential/phase/bittersweet_release" in res.final_vibe.queried_child_leaves
+    assert "experiential/phase/bittersweet_release/earned_thaw_after_enclosure" in res.final_vibe.queried_child_leaves
+    assert res.settled is True
+    assert res.final_vibe.active_concept == "restorative_fracture_into_flow"
+    assert res.final_vibe.synthesis.conflicts == ()
+    assert res.final_vibe.synthesis.harmony == pytest.approx(0.70)
+
+
 def test_plain_english_validator_strips_think_tags_and_rejects_json_dumps():
     cleaned = validate_plain_english_left_brain_reply(
         "<think>internal scratch</think>  The keeper's rigid rules shut out thirsty travelers. "
