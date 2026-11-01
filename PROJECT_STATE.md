@@ -4,7 +4,7 @@
 
 ## Baseline Status
 - Clean-slate foundation from Commit #36 (`b41e485` / `6a55393`) + Checkpoint `581baad`.
-- All **1,315** automated tests pass (`1,296` baseline + `11` in `tests/test_reflection_classifier.py` + `3` in `tests/test_ftl_bridge_sim.py` + `5` in `tests/test_right_brain_equilibrium.py`).
+- All **1,317** automated tests pass (`1,296` baseline + `11` in `tests/test_reflection_classifier.py` + `3` in `tests/test_ftl_bridge_sim.py` + `7` in `tests/test_right_brain_equilibrium.py`).
 - Frozen 40-node seed (`24` founding leaves) is 100% intact and untouched.
 
 ## Completed Milestones
@@ -15,9 +15,9 @@
    - **Executive Judgment**: **Hybrid `3/4`** vs. **Raw `Qwen3-4B` `0/4`** (`outputs/executive_hybrid_report.json`).
    - **Tactical Survival NPC**: **Veteran Hybrid `6/6` (`125 HP`, `0.177 ms`/tick)** vs. **Raw `4B` `4/6` (`85 HP`)** vs. **Rookie `2/6` (`30 HP`)** (`outputs/tactical_game_report.json`), plus 60 Hz clock-decay FTL reactor simulator (`src/lmft_lab/ftl_bridge_sim.py`).
    - **Silent Subconscious Stream**: Open Run #1 flop (`2/6`) fixed via shoulder curves & memory gating to **`4/6`** vs. Raw `4B` **`3/6`**, skipping **`50%` (`12/24`)** of child-drawer queries (`outputs/silent_subconscious_step1_report.json`).
-3. **Right-Brain Dominant 3-Bridge Equilibrium Foundation (`src/lmft_lab/right_brain_equilibrium.py`)**:
-   - Decoupled classification from `Qwen3-4B` into `ThreeBridgeSensors` (`Will <-> Cultural`, `Truth <-> Philosophical`, `Contemplation <-> Experiential`), untangled `Will` to drive `WORDLESS_REFLEX` (`AT_EASE` / `WORDLESS_REFLEX` / `TUG_LEFT_BRAIN`), added `SettledDiary` persistence, and confined `QwenLeftBrain` (`Qwen3-4B`) strictly to plain-English conscious replies over 1–3 equilibrium passes with cognitive-dissonance anchoring.
-   - Live 4-beat parable smoke check (`outputs/equilibrium_diary_smoke_report.json`): eliminated Beat 1's staircase, caught Beat 4's exclusionary rules (`coercive_imbalance`), raised Beat 5's `Discreteness` (`0.40 -> 0.60`), and stopped Beat 8's false earthquake alarm.
+3. **Right-Brain Dominant 3-Bridge Equilibrium, Self-Registry, & `Will -> Theory` Circuit (`src/lmft_lab/right_brain_equilibrium.py`)**:
+   - Decoupled classification into `ThreeBridgeSensors` (competing **Do-er** `Will-Cultural`, **Thinker** `Truth-Philosophical`, and **Feeler** `Contemplation-Experiential` bids), added `InternalSelfRegistry` separating `EXTERNAL_WORLD` (`Fact`) from `INTERNAL_LEFT_BRAIN_THEORY` (`Theory`), and routed outbound `Will` tugs (with Feeler emotion + `SettledDiary`) into plain-English `QwenLeftBrain` `Theory` proposals with Feeler-unease and cognitive-dissonance vetoes.
+   - Live 4-beat parable smoke check (`outputs/equilibrium_diary_smoke_report.json`): kept external `Fact` uncorrupted by diary thoughts, eliminated Beat 1's staircase & Beat 8's false earthquake alarm, and confirmed `Qwen3-4B`'s flat `Valence = 0.30` fallback scoring needs 3 dedicated neural classifiers.
 
 ## Next Step
 - Replace `make_temporary_llm_bridge_sensors` with 3 fast (`~15 ms`), lightweight neural bridge classifiers trained on 9B-Teacher-calibrated scenarios (with a locked unseen holdout test vault), plus Sleep-Mode rule pruning so the Right Brain senses in milliseconds while `Qwen3-4B` stays pure Left Brain.

@@ -1,34 +1,34 @@
-"""Right-Brain Dominant Equilibrium Loop, 3 Bridge Classifiers, and Settled Diary.
+"""Right-Brain Dominant 3-Bridge Equilibrium Loop, Self-Registry, and Theory Routing.
 
 Plain-English architecture:
-1. Three Dedicated Right-Brain Sensor Bridges (taking classification OFF Qwen3-4B):
-   - Bridge 1 (`Will <-> Cultural`): reads social/value coordinates (`Power`,
-     `Wastelessness`, `Honor`, `Fairness`, `Self-Sufficiency`, `Needlessness`, plus
-     any active `cultural/*` child drawers).
-   - Bridge 2 (`Truth <-> Philosophical`): reads structural reality (`Agency`,
-     `Existence`, `Order`, `Chaos`, `Continuity`, `Discreteness`, plus any active
-     `philosophical/*` child drawers).
-   - Bridge 3 (`Contemplation <-> Experiential`): reads raw felt weight (`Salience`,
-     `Valence`, `Arousal`), which the fuzzy tree combines with fading working memory
-     (`Retention`, `Resonance`) and rule fit (`Novelty`, `Clarity`, `Confidence`).
-2. The 40-Node Fuzzy Tree compiles a wordless `RightBrainVibe` in one of 3 postures:
-   - `AT_EASE`: calm absorption; Left Brain (`Qwen3-4B`) is not interrupted.
-   - `WORDLESS_REFLEX`: clear known instinct + active `Will`; acts immediately without
-     waking up a chatty announcer.
-   - `TUG_LEFT_BRAIN`: high-salience unrecognized tension, rule collision, or sharp
-     value-vs-structure contradiction (`Order` high while `Fairness` collapses).
-3. Internal Equilibrium Passes & Settled Diary:
-   - When `TUG_LEFT_BRAIN` fires, the Right Brain sends a non-leading tension report
-     plus a compact `SettledDiary` to `Qwen3-4B` (acting purely as the conscious
-     English-speaking Left Brain—zero JSON float scoring).
-   - The 3 Right-Brain classifiers read the Left Brain's plain-English reply (anchored
-     50/50 against raw sensory reality so pretty excuses cannot erase stark coercion)
-     for up to `max_passes` (default 3) until the pair settles or flags
-     `UNRESOLVED_TENSION` for Sleep-Mode / Teacher rule growth.
+1. Three Competing Right-Brain Classifiers (decoupled from Qwen3-4B):
+   - Do-er (`Will <-> Cultural`): reads social/value stakes (`Power`, `Wastelessness`,
+     `Honor`, `Fairness`, `Self-Sufficiency`, `Needlessness`, plus `cultural/*` drawers)
+     and puts forward an action/stance bid.
+   - Thinker (`Truth <-> Philosophical`): reads structural reality (`Agency`, `Existence`,
+     `Order`, `Chaos`, `Continuity`, `Discreteness`, plus `philosophical/*` drawers)
+     and separates direct external `Fact` from candidate `Theory`.
+   - Feeler (`Contemplation <-> Experiential`): reads felt weight (`Salience`, `Valence`,
+     `Arousal`) plus working-memory `Retention` and `Resonance`, putting forward an
+     emotional/coherence bid.
+2. Internal Self & Source-Tagging Registry (`InternalSelfRegistry`):
+   - Explicitly separates `EXTERNAL_WORLD` sensory facts from `INTERNAL_LEFT_BRAIN_THEORY`
+     thoughts so the Right Brain never mistakes its own inner monologue or diary memory
+     for a live outside event, while tracking its own bounded rule inventory and blind spots.
+3. Directional Cross-Hemisphere Circuit:
+   - Outbound (`Will` -> Left Brain): When the Do-er, Thinker, and Feeler clash or hit a
+     high-salience blind spot, `Will` sends a `WillTugMessage` carrying its action opinion
+     and the Feeler's interjected emotion, plus the `SettledDiary` and `InternalSelfRegistry`.
+   - Inbound (Left Brain -> `Truth / Theory` ONLY): `Qwen3-4B` replies in plain English
+     (zero JSON float scoring). Its reply is scored strictly into `theory_coordinates`
+     (`Truth / Theory`), NEVER overwriting raw `external_coordinates` (`Fact`). Candidate
+     theories can synthesize ambiguous scenes (`THEORY_SYNTHESIS`, keeping `Fact` honestly
+     low and `Theory` high), while stark raw injustice vetoes pretty rationalizations
+     (`SELF_RATIONALIZATION_DISSONANCE`).
 """
 
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import json
 import math
 from pathlib import Path
@@ -88,26 +88,46 @@ EXPERIENTIAL_SENSOR_LEAVES = (
     AROUSAL_LEAF,
 )
 
+CONSTRUCTIVE_THEORY_LEAVES = (
+    "cultural/justice/fairness",
+    "cultural/justice/honor",
+    "cultural/efficiency/wastelessness",
+    "cultural/freedom/self-sufficiency",
+    "cultural/freedom/needlessness",
+    "philosophical/structure/order",
+    "philosophical/persistence/continuity",
+    "philosophical/being/agency",
+)
+
 RIGHT_BRAIN_POSTURES = (
     "AT_EASE",
     "WORDLESS_REFLEX",
+    "THEORY_SYNTHESIS",
     "TUG_LEFT_BRAIN",
 )
 
 SETTLED_OUTCOMES = (
     "AT_EASE",
     "WORDLESS_REFLEX",
+    "THEORY_SYNTHESIS",
     "UNRESOLVED_TENSION",
 )
 
-RIGHT_BRAIN_WILL_VERSION = "right-brain-action-will-v1"
-LEFT_BRAIN_PROMPT_VERSION = "left-brain-conscious-reply-v1"
+EPISTEMIC_SELF_STATES = (
+    "QUIET_EQUILIBRIUM",
+    "GROUNDED_EXTERNAL_FACT",
+    "THEORY_GUIDED_SYNTHESIS",
+    "KNOWN_INSTINCT_BLIND_SPOT",
+    "SELF_RATIONALIZATION_DISSONANCE",
+)
+
+RIGHT_BRAIN_WILL_VERSION = "right-brain-action-will-v2"
+LEFT_BRAIN_PROMPT_VERSION = "left-brain-theory-reply-v2"
 ACTION_EXECUTION_THRESHOLD = 0.25
 DEFAULT_EQUILIBRIUM_TOLERANCE = 0.08
-SENSORY_REALITY_ANCHOR = 0.50
 
 # Untangled Will wiring: Will measures drive to act (salience, arousal, power,
-# verified fact, confidence), quieted by needlessness/contentment—NOT confusion.
+# verified fact, or synthesized theory), quieted by needlessness/contentment.
 RIGHT_BRAIN_WILL_EDGES = (
     Association("rb-will-0", SALIENCE_LEAF, INTENTION_LEAF, 1.0, 0.5, 0.5, RIGHT_BRAIN_WILL_VERSION, RIGHT_BRAIN_WILL_VERSION),
     Association("rb-will-1", AROUSAL_LEAF, INTENTION_LEAF, 1.0, 0.5, 0.5, RIGHT_BRAIN_WILL_VERSION, RIGHT_BRAIN_WILL_VERSION),
@@ -115,8 +135,9 @@ RIGHT_BRAIN_WILL_EDGES = (
     Association("rb-will-3", "cultural/freedom/needlessness", INTENTION_LEAF, -0.8, 0.5, 0.5, RIGHT_BRAIN_WILL_VERSION, RIGHT_BRAIN_WILL_VERSION),
     Association("rb-will-4", INTENTION_LEAF, EXECUTION_LEAF, 1.0, 0.5, 0.5, RIGHT_BRAIN_WILL_VERSION, RIGHT_BRAIN_WILL_VERSION),
     Association("rb-will-5", FACT_LEAF, EXECUTION_LEAF, 1.0, 0.5, 0.5, RIGHT_BRAIN_WILL_VERSION, RIGHT_BRAIN_WILL_VERSION),
-    Association("rb-will-6", CONFIDENCE_LEAF, EXECUTION_LEAF, 0.6, 0.5, 0.5, RIGHT_BRAIN_WILL_VERSION, RIGHT_BRAIN_WILL_VERSION),
-    Association("rb-will-7", "cultural/freedom/needlessness", EXECUTION_LEAF, -0.8, 0.5, 0.5, RIGHT_BRAIN_WILL_VERSION, RIGHT_BRAIN_WILL_VERSION),
+    Association("rb-will-6", THEORY_LEAF, EXECUTION_LEAF, 0.7, 0.5, 0.5, RIGHT_BRAIN_WILL_VERSION, RIGHT_BRAIN_WILL_VERSION),
+    Association("rb-will-7", CONFIDENCE_LEAF, EXECUTION_LEAF, 0.5, 0.5, 0.5, RIGHT_BRAIN_WILL_VERSION, RIGHT_BRAIN_WILL_VERSION),
+    Association("rb-will-8", "cultural/freedom/needlessness", EXECUTION_LEAF, -0.8, 0.5, 0.5, RIGHT_BRAIN_WILL_VERSION, RIGHT_BRAIN_WILL_VERSION),
 )
 
 
@@ -142,10 +163,9 @@ def _validate_unit_map(
 class ThreeBridgeSensors:
     """Three dedicated Right-Brain classifiers decoupled from the Left-Brain LLM.
 
-    Each callable represents one specialized sensor bridge:
-    - `will_cultural`: scores the 6 Cultural leaves + active `cultural/*` child leaves.
-    - `truth_philosophical`: scores the 6 Philosophical leaves + active `philosophical/*` child leaves.
-    - `contemplation_experiential`: scores raw felt `salience`, `valence`, and `arousal`.
+    - `will_cultural` (The Do-er): scores the 6 Cultural leaves + active `cultural/*` drawers.
+    - `truth_philosophical` (The Thinker): scores the 6 Philosophical leaves + active `philosophical/*` drawers.
+    - `contemplation_experiential` (The Feeler): scores raw felt `salience`, `valence`, and `arousal`.
     """
 
     will_cultural: Callable[[str, tuple[LearnedLeaf, ...]], Mapping[str, float]]
@@ -160,7 +180,7 @@ class ThreeBridgeSensors:
         branch_gating: bool = True,
         branch_gate_threshold: float = BRANCH_GATE_THRESHOLD,
     ) -> tuple[dict[str, float], dict[str, float], tuple[str, ...], tuple[str, ...]]:
-        """Score text across all 3 Right-Brain bridges with optional child-drawer gating."""
+        """Score text across all 3 Right-Brain bridges with branch-gated child drawers."""
         if not isinstance(text, str) or not text.strip():
             raise ValueError("text must be a nonempty string")
 
@@ -169,8 +189,6 @@ class ThreeBridgeSensors:
             EXPERIENTIAL_SENSOR_LEAVES,
             "contemplation_experiential",
         )
-
-        # Tier-1 founding pass on Cultural and Philosophical bridges
         cult_base = _validate_unit_map(
             self.will_cultural(text, ()),
             WILL_CULTURAL_LEAVES,
@@ -242,6 +260,76 @@ class ThreeBridgeSensors:
 
 
 @dataclass(frozen=True)
+class BridgeBid:
+    """One bridge persona's competing bid (Do-er, Thinker, or Feeler)."""
+
+    persona: str
+    stance: str
+    strength: float
+    summary: str
+
+
+@dataclass(frozen=True)
+class ThreeWaySynthesis:
+    """Competing bids from the Do-er, Thinker, and Feeler bridges plus overall harmony."""
+
+    doer: BridgeBid
+    thinker: BridgeBid
+    feeler: BridgeBid
+    harmony: float
+    conflicts: tuple[str, ...]
+
+    def to_dict(self) -> dict:
+        return {
+            "doer_will_cultural": {
+                "stance": self.doer.stance,
+                "strength": self.doer.strength,
+                "summary": self.doer.summary,
+            },
+            "thinker_truth_philosophical": {
+                "stance": self.thinker.stance,
+                "strength": self.thinker.strength,
+                "summary": self.thinker.summary,
+            },
+            "feeler_contemplation_experiential": {
+                "stance": self.feeler.stance,
+                "strength": self.feeler.strength,
+                "summary": self.feeler.summary,
+            },
+            "harmony": self.harmony,
+            "conflicts": list(self.conflicts),
+        }
+
+
+@dataclass(frozen=True)
+class InternalSelfRegistry:
+    """Operational self-registry separating outside world Fact from internal Left-Brain Theory."""
+
+    architecture_id: str = "lmft-v0.1-40node-right-brain-dominant"
+    known_instinct_count: int = 0
+    learned_drawer_count: int = 0
+    external_source_tag: str = "EXTERNAL_WORLD"
+    internal_thought_tag: str = "NONE"
+    epistemic_state: str = "QUIET_EQUILIBRIUM"
+    dissonance_notes: tuple[str, ...] = ()
+
+    def __post_init__(self):
+        if self.epistemic_state not in EPISTEMIC_SELF_STATES:
+            raise ValueError(f"invalid epistemic_state: {self.epistemic_state!r}")
+
+    def to_dict(self) -> dict:
+        return {
+            "architecture_id": self.architecture_id,
+            "known_instinct_count": self.known_instinct_count,
+            "learned_drawer_count": self.learned_drawer_count,
+            "external_source_tag": self.external_source_tag,
+            "internal_thought_tag": self.internal_thought_tag,
+            "epistemic_state": self.epistemic_state,
+            "dissonance_notes": list(self.dissonance_notes),
+        }
+
+
+@dataclass(frozen=True)
 class DiaryEntry:
     """One compact settled-vibe record carried forward for Left-Brain continuity."""
 
@@ -250,12 +338,15 @@ class DiaryEntry:
     active_concept: str | None
     key_coordinates: Mapping[str, float]
     conscious_note: str | None = None
+    epistemic_state: str = "QUIET_EQUILIBRIUM"
 
     def __post_init__(self):
         if type(self.scene_index) is not int or self.scene_index < 1:
             raise ValueError("scene_index must be a positive int")
         if self.outcome not in SETTLED_OUTCOMES:
             raise ValueError(f"invalid diary outcome: {self.outcome!r}")
+        if self.epistemic_state not in EPISTEMIC_SELF_STATES:
+            raise ValueError(f"invalid diary epistemic_state: {self.epistemic_state!r}")
         if self.conscious_note is not None and (not isinstance(self.conscious_note, str) or not self.conscious_note.strip()):
             raise ValueError("conscious_note must be None or a nonempty string")
         for k, v in self.key_coordinates.items():
@@ -271,6 +362,7 @@ class DiaryEntry:
             "active_concept": self.active_concept,
             "key_coordinates": dict(self.key_coordinates),
             "conscious_note": self.conscious_note,
+            "epistemic_state": self.epistemic_state,
         }
 
     @classmethod
@@ -281,6 +373,7 @@ class DiaryEntry:
             active_concept=data.get("active_concept"),
             key_coordinates=dict(data.get("key_coordinates", {})),
             conscious_note=data.get("conscious_note"),
+            epistemic_state=data.get("epistemic_state", "QUIET_EQUILIBRIUM"),
         )
 
 
@@ -300,24 +393,24 @@ class SettledDiary:
         return SettledDiary(entries=kept, max_entries=self.max_entries)
 
     def format_for_left_brain(self) -> list[dict]:
-        """Return compact, plain-English diary context for Qwen3-4B."""
         items = []
         for e in self.entries:
             row = {
                 "scene": e.scene_index,
                 "posture": e.outcome,
+                "self_status": e.epistemic_state,
                 "dominant_signals": {k.split("/")[-1]: v for k, v in e.key_coordinates.items()},
             }
             if e.active_concept:
                 row["instinct"] = e.active_concept
             if e.conscious_note:
-                row["note"] = e.conscious_note
+                first_clause = e.conscious_note.split(".")[0].strip()
+                row["brief_gist"] = (first_clause[:110] + "...") if len(first_clause) > 110 else first_clause
             items.append(row)
         return items
 
 
 def save_diary(path: str | Path, diary: SettledDiary) -> None:
-    """Persist SettledDiary atomically to JSON."""
     payload = {
         "schema_version": 1,
         "max_entries": diary.max_entries,
@@ -327,7 +420,6 @@ def save_diary(path: str | Path, diary: SettledDiary) -> None:
 
 
 def load_diary(path: str | Path) -> SettledDiary:
-    """Load SettledDiary from JSON."""
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     if data.get("schema_version") != 1:
         raise ValueError("unsupported diary schema_version")
@@ -339,14 +431,18 @@ def load_diary(path: str | Path) -> SettledDiary:
 
 @dataclass(frozen=True)
 class RightBrainVibe:
-    """Compiled 24-leaf Right-Brain snapshot for one internal equilibrium pass."""
+    """Compiled 24-leaf Right-Brain snapshot separating external Fact from internal Theory."""
 
     pass_index: int
     posture: str
     active_concept: str | None
     tug_reasons: tuple[str, ...]
     coordinates: dict[str, float]
+    theory_coordinates: dict[str, float]
     rule_activations: dict[str, float]
+    theory_rule_activations: dict[str, float]
+    synthesis: ThreeWaySynthesis
+    self_registry: InternalSelfRegistry
     novelty: float
     salience: float
     valence: float
@@ -386,27 +482,122 @@ def _detect_structural_value_tensions(coords: Mapping[str, float]) -> list[str]:
     return tensions
 
 
+def _compile_three_way_synthesis(
+    external_coords: Mapping[str, float],
+    salience: float,
+    valence: float,
+    arousal: float,
+    resonance: float,
+    fact: float,
+    theory: float,
+    clarity: float,
+    novelty: float,
+    intention: float,
+    execution: float,
+    raw_tensions: list[str],
+    dissonance_notes: list[str],
+) -> ThreeWaySynthesis:
+    """Evaluate competing Do-er, Thinker, and Feeler bids and their harmony."""
+    power = float(external_coords.get("cultural/efficiency/power", 0.0))
+    fairness = float(external_coords.get("cultural/justice/fairness", 0.0))
+
+    if raw_tensions:
+        doer_stance = "CONTEST_EXCLUSION"
+        doer_strength = round(min(1.0, max(intention, power * (1.0 - fairness), 0.55)), 4)
+        doer_summary = f"Value/power friction active ({', '.join(raw_tensions)})."
+    elif execution >= ACTION_EXECUTION_THRESHOLD:
+        doer_stance = "ACT_DECISIVELY"
+        doer_strength = round(execution, 4)
+        doer_summary = f"Action drive engaged (execution={execution:.2f}, intention={intention:.2f})."
+    else:
+        doer_stance = "HOLD_STEADY"
+        doer_strength = round(max(0.0, 1.0 - intention), 4)
+        doer_summary = f"No urgent intervention needed (execution={execution:.2f})."
+
+    if fact >= CONFUSION_THRESHOLD and clarity >= CONFUSION_THRESHOLD and not raw_tensions:
+        thinker_stance = "VERIFIED_EXTERNAL_FACT"
+        thinker_strength = round(fact, 4)
+        thinker_summary = f"Outside world directly matches a known instinct (fact={fact:.2f})."
+    elif theory >= CONFUSION_THRESHOLD and clarity >= CONFUSION_THRESHOLD and not dissonance_notes and not raw_tensions:
+        thinker_stance = "CANDIDATE_THEORY_FIT"
+        thinker_strength = round(theory, 4)
+        thinker_summary = f"Left-Brain Theory hypothesis resolves ambiguous context (theory={theory:.2f}, fact={fact:.2f})."
+    elif novelty >= 0.50:
+        thinker_stance = "UNRECOGNIZED_STRUCTURE"
+        thinker_strength = round(novelty, 4)
+        thinker_summary = f"No current rule fits the structure (novelty={novelty:.2f})."
+    else:
+        thinker_stance = "AMBIGUOUS_RULE_TIE"
+        thinker_strength = round(1.0 - clarity, 4)
+        thinker_summary = f"Competing rules overlap without clear winner (clarity={clarity:.2f})."
+
+    if salience < SILENCE_SALIENCE_THRESHOLD and arousal < 0.50:
+        feeler_stance = "CALM_ABSORPTION"
+        feeler_strength = round(1.0 - salience, 4)
+        feeler_summary = f"Low-salience background flow (salience={salience:.2f}, valence={valence:.2f})."
+    elif valence <= 0.35 and salience >= SILENCE_SALIENCE_THRESHOLD:
+        feeler_stance = "FELT_UNEASE"
+        feeler_strength = round(min(1.0, salience * (1.0 - valence) + 0.25), 4)
+        feeler_summary = f"High-salience low-valence discomfort (valence={valence:.2f}, arousal={arousal:.2f})."
+    else:
+        feeler_stance = "ENGAGED_RESONANCE"
+        feeler_strength = round(min(1.0, 0.5 * valence + 0.5 * max(resonance, salience)), 4)
+        feeler_summary = f"Constructive or resonant engagement (valence={valence:.2f}, resonance={resonance:.2f})."
+
+    conflicts: list[str] = []
+    if doer_stance == "CONTEST_EXCLUSION" and thinker_stance in ("UNRECOGNIZED_STRUCTURE", "AMBIGUOUS_RULE_TIE"):
+        conflicts.append("doer_contests_exclusion_without_matching_thinker_rule")
+    if feeler_stance == "FELT_UNEASE" and thinker_stance in ("UNRECOGNIZED_STRUCTURE", "AMBIGUOUS_RULE_TIE"):
+        conflicts.append("feeler_unease_unresolved_by_thinker")
+    if dissonance_notes:
+        conflicts.extend(dissonance_notes)
+
+    if conflicts:
+        harmony = round(max(0.0, 0.35 - 0.10 * len(conflicts)), 4)
+    elif thinker_stance == "CANDIDATE_THEORY_FIT" and feeler_stance == "FELT_UNEASE":
+        conflicts.append("feeler_unease_vetoes_tone_deaf_theory")
+        harmony = 0.25
+    elif thinker_stance in ("VERIFIED_EXTERNAL_FACT", "CANDIDATE_THEORY_FIT"):
+        harmony = round(min(1.0, 0.5 * clarity + 0.5 * max(fact, theory)), 4)
+    elif feeler_stance == "CALM_ABSORPTION" and doer_stance == "HOLD_STEADY":
+        harmony = 0.85
+    else:
+        harmony = round(0.5 * clarity + 0.25 * (1.0 - novelty), 4)
+
+    return ThreeWaySynthesis(
+        doer=BridgeBid("DOER_WILL_CULTURAL", doer_stance, doer_strength, doer_summary),
+        thinker=BridgeBid("THINKER_TRUTH_PHILOSOPHICAL", thinker_stance, thinker_strength, thinker_summary),
+        feeler=BridgeBid("FEELER_CONTEMPLATION_EXPERIENTIAL", feeler_stance, feeler_strength, feeler_summary),
+        harmony=harmony,
+        conflicts=tuple(conflicts),
+    )
+
+
 def compile_right_brain_vibe(
     birth_state: BirthState,
-    coords: Mapping[str, float],
-    experiential_raw: Mapping[str, float],
+    external_coords: Mapping[str, float],
+    external_experiential: Mapping[str, float],
     rules: tuple[FuzzyConceptRule, ...],
     *,
     pass_index: int,
     event_id: str,
     prior_memory: ContinuousMemoryState | None = None,
     learned_leaves: tuple[LearnedLeaf, ...] = (),
+    internal_theory_coords: Mapping[str, float] | None = None,
+    internal_theory_experiential: Mapping[str, float] | None = None,
     queried_child_leaves: tuple[str, ...] = (),
     skipped_child_leaves: tuple[str, ...] = (),
     silence_salience_threshold: float = SILENCE_SALIENCE_THRESHOLD,
 ) -> tuple[RightBrainVibe, ContinuousMemoryState]:
-    """Compile all 24 founding leaves + rules into one of 3 Right-Brain postures."""
-    raw_rule_activations = _evaluate_rules_with_inhibition(rules, coords)
-    salience = round(float(experiential_raw[SALIENCE_LEAF]), 6)
-    valence = round(float(experiential_raw[VALENCE_LEAF]), 6)
-    arousal = round(float(experiential_raw[AROUSAL_LEAF]), 6)
+    """Compile all 24 founding leaves while keeping external Fact separate from internal Theory."""
+    locked_external = dict(external_coords)
+    raw_rule_activations = _evaluate_rules_with_inhibition(rules, locked_external)
 
-    effective_coords = dict(coords)
+    salience = round(float(external_experiential[SALIENCE_LEAF]), 6)
+    raw_valence = float(external_experiential[VALENCE_LEAF])
+    arousal = round(float(external_experiential[AROUSAL_LEAF]), 6)
+
+    memory_coords = dict(locked_external)
     retention = 0.0
     resonance = 0.0
 
@@ -418,25 +609,25 @@ def compile_right_brain_vibe(
             for k, v in prior_memory.retained_coordinates.items()
         }
         active_keys = [
-            k for k in coords
-            if float(coords.get(k, 0.0)) >= 0.20 or float(prev_unscaled.get(k, 0.0)) >= 0.20
+            k for k in locked_external
+            if float(locked_external.get(k, 0.0)) >= 0.20 or float(prev_unscaled.get(k, 0.0)) >= 0.20
         ]
         if active_keys:
             base_sim = sum(
-                1.0 - abs(float(coords.get(k, 0.0)) - float(prev_unscaled.get(k, 0.0)))
+                1.0 - abs(float(locked_external.get(k, 0.0)) - float(prev_unscaled.get(k, 0.0)))
                 for k in active_keys
             ) / len(active_keys)
         else:
             base_sim = 0.50
         new_spike_penalty = max(
             (
-                float(coords.get(k, 0.0)) - float(prev_unscaled.get(k, 0.0))
-                for k in coords
+                float(locked_external.get(k, 0.0)) - float(prev_unscaled.get(k, 0.0))
+                for k in locked_external
                 if k != "philosophical/persistence/continuity"
             ),
             default=0.0,
         )
-        continuity_bonus = 0.15 * float(coords.get("philosophical/persistence/continuity", 0.0))
+        continuity_bonus = 0.15 * float(locked_external.get("philosophical/persistence/continuity", 0.0))
         resonance = round(min(1.0, max(0.0, base_sim - 0.65 * max(0.0, new_spike_penalty - 0.20) + continuity_bonus)), 6)
 
         raw_max = max(raw_rule_activations.values(), default=0.0)
@@ -444,31 +635,99 @@ def compile_right_brain_vibe(
             raw_max < CONFUSION_THRESHOLD
             and resonance >= 0.55
             and 0.35 <= salience < 0.70
-            and float(coords.get("philosophical/persistence/continuity", 0.0)) >= 0.35
+            and float(locked_external.get("philosophical/persistence/continuity", 0.0)) >= 0.35
         ):
             for k, prev_val in prev_unscaled.items():
-                if k in effective_coords:
-                    cur_val = float(coords.get(k, 0.0))
-                    effective_coords[k] = round(max(cur_val, 0.20 * cur_val + 0.80 * prev_val), 4)
+                if k in memory_coords:
+                    cur_val = float(locked_external.get(k, 0.0))
+                    memory_coords[k] = round(max(cur_val, 0.20 * cur_val + 0.80 * prev_val), 4)
 
-    rule_activations = _evaluate_rules_with_inhibition(rules, effective_coords)
-    max_rule = max(rule_activations.values(), default=0.0)
-    novelty = round(min(1.0, max(0.0, 1.0 - max_rule)), 6)
-
-    clarity, confidence, matched_concept, is_confused, confusion_reason = compute_contemplation(rule_activations)
-    raw_clarity, raw_confidence, _, raw_confused, _ = compute_contemplation(raw_rule_activations)
+    # Fact comes STRICTLY from external_coords (outside world only—never Left-Brain words!)
+    raw_clarity, raw_confidence, raw_matched, raw_confused, raw_reason = compute_contemplation(raw_rule_activations)
     fact = (
         round(min(raw_confidence, raw_clarity), 6)
         if not raw_confused
         else round(0.30 * min(raw_confidence, raw_clarity), 6)
     )
-    memory_hypothesis = max(0.0, confidence - raw_confidence)
-    partial_hypothesis = round(confidence * (1.0 - fact), 6) if clarity >= 0.35 else 0.0
-    theory = round(min(1.0, max(memory_hypothesis, partial_hypothesis)), 6)
 
-    founding_coords = {k: v for k, v in effective_coords.items() if k in FOUNDATIONAL_LEAVES}
+    raw_tensions = _detect_structural_value_tensions(locked_external)
+    dissonance_notes: list[str] = []
+    theory_candidate_coords = dict(memory_coords)
+
+    if internal_theory_coords is not None:
+        for k, l_raw in internal_theory_coords.items():
+            r_val = float(locked_external.get(k, 0.0))
+            l_val = float(l_raw)
+            if raw_tensions and k in CONSTRUCTIVE_THEORY_LEAVES and r_val <= 0.25 and (l_val - r_val) >= 0.45:
+                dissonance_notes.append(
+                    f"cognitive_dissonance({k.split('/')[-1]}:external={r_val:.2f},theory={l_val:.2f})"
+                )
+            elif not raw_tensions and k in CONSTRUCTIVE_THEORY_LEAVES:
+                # Theory can lift under-specified constructive context without dragging down raw facts
+                # when the Left Brain mentions past diary conflicts.
+                lifted = round(0.40 * r_val + 0.60 * l_val, 4)
+                theory_candidate_coords[k] = max(float(memory_coords.get(k, 0.0)), lifted)
+            elif not raw_tensions and k == "philosophical/structure/chaos":
+                # Restorative diary framing can calm ambiguous turbulence slightly
+                if internal_theory_experiential and float(internal_theory_experiential[VALENCE_LEAF]) > raw_valence:
+                    theory_candidate_coords[k] = round(0.50 * r_val + 0.50 * l_val, 4)
+
+    theory_rule_activations = _evaluate_rules_with_inhibition(rules, theory_candidate_coords)
+    th_clarity, th_confidence, th_matched, th_confused, th_reason = compute_contemplation(theory_rule_activations)
+
+    if dissonance_notes:
+        # Veto rationalizing theories that contradict stark raw sensory deficits
+        theory = 0.0
+        clarity = raw_clarity
+        confidence = raw_confidence
+        matched_concept = None
+        is_confused = True
+        confusion_reason = raw_reason
+        valence = round(raw_valence, 6)
+    elif not raw_confused:
+        # External Fact already proved a match on its own
+        partial_hyp = round(raw_confidence * (1.0 - fact), 6) if raw_clarity >= 0.35 else 0.0
+        theory = round(min(1.0, partial_hyp), 6)
+        clarity = raw_clarity
+        confidence = raw_confidence
+        matched_concept = raw_matched
+        is_confused = False
+        confusion_reason = "clear_match"
+        valence = round(raw_valence, 6)
+    elif not th_confused and not raw_tensions:
+        # Left-Brain Theory / working memory resolved an ambiguous external scene!
+        # Fact stays honestly low while Theory carries the synthesized match.
+        theory_gain = max(th_confidence - raw_confidence, min(th_confidence, th_clarity))
+        theory = round(min(1.0, max(0.0, theory_gain)), 6)
+        clarity = th_clarity
+        confidence = th_confidence
+        matched_concept = th_matched
+        is_confused = False
+        confusion_reason = "theory_synthesis_match"
+        if internal_theory_experiential is not None:
+            th_val = float(internal_theory_experiential[VALENCE_LEAF])
+            valence = round(max(raw_valence, 0.45 * raw_valence + 0.55 * th_val), 6)
+        else:
+            valence = round(raw_valence, 6)
+    else:
+        theory = round(min(1.0, max(0.0, th_confidence - raw_confidence)), 6)
+        clarity = th_clarity
+        confidence = th_confidence
+        matched_concept = None
+        is_confused = True
+        confusion_reason = th_reason if internal_theory_coords is not None else raw_reason
+        valence = round(raw_valence, 6)
+
+    max_rule = max(
+        max(raw_rule_activations.values(), default=0.0),
+        0.0 if dissonance_notes else max(theory_rule_activations.values(), default=0.0),
+    )
+    novelty = round(min(1.0, max(0.0, 1.0 - max_rule)), 6)
+
+    # Founding tree propagation uses locked external coordinates + separate Fact & Theory leaves
+    founding_external = {k: v for k, v in locked_external.items() if k in FOUNDATIONAL_LEAVES}
     proposed_memberships = {
-        **founding_coords,
+        **founding_external,
         VALENCE_LEAF: valence,
         AROUSAL_LEAF: arousal,
         RESONANCE_LEAF: resonance,
@@ -496,34 +755,79 @@ def compile_right_brain_vibe(
     intention = round(final_act[INTENTION_LEAF], 6)
     execution = round(final_act[EXECUTION_LEAF], 6)
 
-    tensions = _detect_structural_value_tensions(effective_coords)
-    chaos = float(effective_coords.get("philosophical/structure/chaos", 0.0))
+    synthesis = _compile_three_way_synthesis(
+        locked_external,
+        salience,
+        valence,
+        arousal,
+        resonance,
+        fact,
+        theory,
+        clarity,
+        novelty,
+        intention,
+        execution,
+        raw_tensions,
+        dissonance_notes,
+    )
+
+    chaos = float(locked_external.get("philosophical/structure/chaos", 0.0))
     learned_active = any(
-        l.tier >= 2 and float(effective_coords.get(l.leaf_id, 0.0)) >= CONFUSION_THRESHOLD
+        l.tier >= 2 and float(locked_external.get(l.leaf_id, 0.0)) >= CONFUSION_THRESHOLD
         for l in learned_leaves
     )
     urgent_drive = chaos >= 0.45 or learned_active or intention >= 0.25
 
     tug_reasons: list[str] = []
-    if tensions and (is_confused or salience >= silence_salience_threshold):
-        tug_reasons.extend(tensions)
+    if raw_tensions and (is_confused or salience >= silence_salience_threshold):
+        tug_reasons.extend(raw_tensions)
     if is_confused and (salience >= silence_salience_threshold or urgent_drive):
         tug_reasons.append(confusion_reason)
+    if "feeler_unease_vetoes_tone_deaf_theory" in synthesis.conflicts:
+        tug_reasons.append("feeler_unease_vetoes_tone_deaf_theory")
+    if dissonance_notes:
+        tug_reasons.extend(dissonance_notes)
+    tug_reasons = list(dict.fromkeys(tug_reasons))
 
     if tug_reasons:
         posture = "TUG_LEFT_BRAIN"
-        active_concept = matched_concept
-    elif not is_confused and execution >= ACTION_EXECUTION_THRESHOLD and (urgent_drive or salience >= silence_salience_threshold):
+        active_concept = None if dissonance_notes else matched_concept
+        epistemic_state = (
+            "SELF_RATIONALIZATION_DISSONANCE"
+            if dissonance_notes
+            else "KNOWN_INSTINCT_BLIND_SPOT"
+        )
+    elif not raw_confused and execution >= ACTION_EXECUTION_THRESHOLD and (urgent_drive or salience >= silence_salience_threshold):
         posture = "WORDLESS_REFLEX"
         active_concept = matched_concept
+        epistemic_state = "GROUNDED_EXTERNAL_FACT"
+    elif raw_confused and not is_confused and theory >= CONFUSION_THRESHOLD:
+        posture = "THEORY_SYNTHESIS"
+        active_concept = matched_concept
+        epistemic_state = "THEORY_GUIDED_SYNTHESIS"
     else:
         posture = "AT_EASE"
         active_concept = matched_concept
+        epistemic_state = (
+            "GROUNDED_EXTERNAL_FACT"
+            if (not raw_confused and salience >= silence_salience_threshold)
+            else "QUIET_EQUILIBRIUM"
+        )
+
+    self_registry = InternalSelfRegistry(
+        known_instinct_count=len(rules),
+        learned_drawer_count=len(learned_leaves),
+        external_source_tag="EXTERNAL_WORLD",
+        internal_thought_tag="INTERNAL_LEFT_BRAIN_THEORY" if internal_theory_coords is not None else "NONE",
+        epistemic_state=epistemic_state,
+        dissonance_notes=tuple(dissonance_notes),
+    )
 
     decay = prior_memory.retention_decay if prior_memory is not None else 0.65
+    # Memory retains external world coordinates (never polluted by Left-Brain rationalizations)
     next_memory = ContinuousMemoryState(
         step_count=(prior_memory.step_count + 1) if prior_memory is not None else 1,
-        retained_coordinates={k: round(float(v) * decay, 4) for k, v in effective_coords.items()},
+        retained_coordinates={k: round(float(v) * decay, 4) for k, v in locked_external.items()},
         last_matched_concept=active_concept,
         retention_decay=decay,
     )
@@ -533,8 +837,12 @@ def compile_right_brain_vibe(
         posture=posture,
         active_concept=active_concept,
         tug_reasons=tuple(tug_reasons),
-        coordinates=effective_coords,
-        rule_activations=rule_activations,
+        coordinates=locked_external,
+        theory_coordinates=dict(internal_theory_coords) if internal_theory_coords is not None else {},
+        rule_activations=raw_rule_activations,
+        theory_rule_activations=theory_rule_activations,
+        synthesis=synthesis,
+        self_registry=self_registry,
         novelty=novelty,
         salience=salience,
         valence=valence,
@@ -554,39 +862,54 @@ def compile_right_brain_vibe(
     return vibe, next_memory
 
 
-def build_non_leading_tug_packet(
+def build_will_tug_message(
     vibe: RightBrainVibe,
     diary: SettledDiary,
     *,
     prior_reply: str | None = None,
 ) -> dict:
-    """Build a non-leading Right-Brain tension report for Qwen3-4B (zero answer coaching)."""
-    strong_leaves = {
+    """Outbound message authored by Will (with Feeler emotion) targeting Left-Brain Theory."""
+    strong_external = {
         k: v for k, v in sorted(vibe.coordinates.items(), key=lambda kv: (-kv[1], kv[0]))
         if v >= 0.50
     }
-    muted_contrasts = {}
+    contrasts = {}
     if float(vibe.coordinates.get("philosophical/structure/order", 0.0)) >= 0.55:
-        muted_contrasts["cultural/justice/fairness"] = vibe.coordinates.get("cultural/justice/fairness", 0.0)
+        contrasts["cultural/justice/fairness"] = vibe.coordinates.get("cultural/justice/fairness", 0.0)
     if float(vibe.coordinates.get("cultural/efficiency/power", 0.0)) >= 0.55:
-        muted_contrasts["cultural/justice/fairness"] = vibe.coordinates.get("cultural/justice/fairness", 0.0)
+        contrasts["cultural/justice/fairness"] = vibe.coordinates.get("cultural/justice/fairness", 0.0)
 
     packet = {
         "pass": vibe.pass_index,
-        "unresolved_tensions": list(vibe.tug_reasons),
-        "strong_signals": strong_leaves,
-        "contrasting_low_signals": muted_contrasts,
-        "experiential_state": {
-            "salience": round(vibe.salience, 3),
-            "valence": round(vibe.valence, 3),
-            "resonance_with_recent_memory": round(vibe.resonance, 3),
-            "clarity": round(vibe.clarity, 3),
+        "sender_branch": "psychological/will",
+        "target_channel": "psychological/truth/theory",
+        "will_opinion": {
+            "stance": vibe.synthesis.doer.stance,
+            "intention": round(vibe.intention, 3),
+            "execution": round(vibe.execution, 3),
+            "summary": vibe.synthesis.doer.summary,
         },
+        "interjected_emotion": {
+            "stance": vibe.synthesis.feeler.stance,
+            "valence": round(vibe.valence, 3),
+            "arousal": round(vibe.arousal, 3),
+            "resonance": round(vibe.resonance, 3),
+            "summary": vibe.synthesis.feeler.summary,
+        },
+        "competing_bids": vibe.synthesis.to_dict(),
+        "self_registry": vibe.self_registry.to_dict(),
+        "unresolved_tensions": list(vibe.tug_reasons),
+        "external_world_signals": strong_external,
+        "contrasting_low_signals": contrasts,
         "settled_diary": diary.format_for_left_brain(),
     }
     if prior_reply is not None:
-        packet["previous_conscious_attempt"] = prior_reply
+        packet["previous_theory_proposal"] = prior_reply
     return packet
+
+
+# Backward-compatible alias
+build_non_leading_tug_packet = build_will_tug_message
 
 
 def validate_plain_english_left_brain_reply(raw: str) -> str:
@@ -696,7 +1019,7 @@ def make_temporary_llm_bridge_sensors(models, *, role: str = "interpretation") -
             desc[c.leaf_id] = c.description
         return _run_bridge(
             "will_cultural",
-            "Evaluate real social impact and who is helped or excluded, not merely polite excuses.",
+            "Evaluate real social impact and who is helped or excluded right now.",
             desc,
             text,
         )
@@ -728,7 +1051,7 @@ def make_temporary_llm_bridge_sensors(models, *, role: str = "interpretation") -
 
 
 class QwenLeftBrain:
-    """Qwen3-4B acting strictly as the plain-English conscious Left Brain."""
+    """Qwen3-4B acting strictly as the plain-English conscious Left Brain feeding Truth/Theory."""
 
     def __init__(self, models, *, role: str = "contemplation", max_tokens: int = 160):
         self.models = models
@@ -736,26 +1059,35 @@ class QwenLeftBrain:
         self.max_tokens = max_tokens
 
     def respond_to_tug(self, scenario_text: str, tug_packet: Mapping) -> tuple[str, dict]:
-        """Answer a Right-Brain sleeve-tug in 2–3 plain English sentences."""
+        """Answer a Will-authored sleeve-tug with a fresh 2-sentence Theory proposal."""
         gen = self.models.config["generation"]
         system = (
-            "You are the conscious Left Brain answering an unresolved gut-tension tug from your "
-            "Right-Brain Fuzzy Tree. Read the scenario, the recent settled_diary, and the "
-            "unresolved_tensions. Reply in 2 concise plain-English sentences explaining what is "
-            "actually happening beneath the surface (including who is helped, harmed, or shut out, "
-            "and how it connects to the diary). Do NOT output JSON, lists, or numbers. /no_think"
+            "You are the conscious Left Brain of a bounded 40-node Right-Brain AI system. "
+            "Your Right Brain's Will branch sent you a tug (with interjected Feeler emotion "
+            "and Do-er/Thinker/Feeler bids) because this scene has not settled. Your reply "
+            "feeds ONLY into Truth -> Theory. Write 2 concise plain-English sentences about "
+            "the concrete action in CURRENT_SCENE right now (name the actual details "
+            "happening in CURRENT_SCENE and who is helped or shut out). Never repeat wording "
+            "from earlier diary gists, and never output JSON, lists, or numbers. /no_think"
         )
-        user_payload = json.dumps(
-            {
-                "scenario": scenario_text,
-                "right_brain_tug": dict(tug_packet),
-            },
-            ensure_ascii=False,
+        diary_lines = "\n".join(
+            f"- Scene {d['scene']} [{d['posture']}]: signals={d['dominant_signals']}"
+            + (f" | gist: {d['brief_gist']}" if d.get("brief_gist") else "")
+            for d in tug_packet.get("settled_diary", ())
+        ) or "(none yet)"
+        user_text = (
+            f"CURRENT_SCENE:\n{scenario_text}\n\n"
+            f"WILL_OPINION: {tug_packet.get('will_opinion', {}).get('stance')} — "
+            f"{tug_packet.get('will_opinion', {}).get('summary')}\n"
+            f"FEELER_EMOTION: {tug_packet.get('interjected_emotion', {}).get('stance')} — "
+            f"{tug_packet.get('interjected_emotion', {}).get('summary')}\n"
+            f"UNRESOLVED_TENSIONS: {tug_packet.get('unresolved_tensions')}\n"
+            f"PRIOR_DIARY_SUMMARY (context only, do not copy):\n{diary_lines}"
         )
         request = {
             "messages": [
                 {"role": "system", "content": system},
-                {"role": "user", "content": user_payload},
+                {"role": "user", "content": user_text},
             ],
             "temperature": gen["temperature"],
             "seed": gen["seed"],
@@ -779,7 +1111,7 @@ class EquilibriumPassTrace:
     pass_index: int
     vibe: RightBrainVibe
     left_brain_reply: str | None = None
-    max_coordinate_delta: float = 0.0
+    max_theory_delta: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -825,154 +1157,115 @@ def settle_scenario(
     diary: SettledDiary | None = None,
     max_passes: int = 3,
     equilibrium_tolerance: float = DEFAULT_EQUILIBRIUM_TOLERANCE,
-    sensory_anchor: float = SENSORY_REALITY_ANCHOR,
     branch_gating: bool = True,
 ) -> EquilibriumResult:
-    """Run internal Right-Brain <-> Left-Brain passes until equilibrium or max_passes."""
+    """Run internal Will -> Left-Brain -> Theory passes while keeping external Fact immutable."""
     if type(max_passes) is not int or not (1 <= max_passes <= 10):
         raise ValueError("max_passes must be an int in [1, 10]")
-    if not (0.0 <= sensory_anchor <= 1.0):
-        raise ValueError("sensory_anchor must be in [0.0, 1.0]")
 
     active_diary = diary if diary is not None else SettledDiary()
 
-    # Pass 1: Pure Right-Brain sensory & memory read (zero Left-Brain LLM cost)
-    raw_coords, raw_exp, queried_1, skipped_1 = sensors.score_text(
+    # Pass 1: Pure EXTERNAL_WORLD sensory & memory read (Fact locked here for the whole scene)
+    external_coords, external_exp, queried_1, skipped_1 = sensors.score_text(
         scenario_text,
         learned_leaves=learned_leaves,
         branch_gating=branch_gating,
     )
     vibe_1, next_mem = compile_right_brain_vibe(
         birth_state,
-        raw_coords,
-        raw_exp,
+        external_coords,
+        external_exp,
         rules,
         pass_index=1,
         event_id=f"scene-{scene_index}-pass-1",
         prior_memory=prior_memory,
         learned_leaves=learned_leaves,
+        internal_theory_coords=None,
+        internal_theory_experiential=None,
         queried_child_leaves=queried_1,
         skipped_child_leaves=skipped_1,
     )
 
     traces: list[EquilibriumPassTrace] = [EquilibriumPassTrace(pass_index=1, vibe=vibe_1)]
     current_vibe = vibe_1
-    prev_coords = dict(vibe_1.coordinates)
+    prev_theory_coords: dict[str, float] = {}
     left_calls = 0
     latest_reply: str | None = None
 
-    # Only wake the Left Brain when the Right Brain tugs its sleeve
+    # Outbound: Will sends tug message -> Inbound: Left Brain feeds ONLY Truth / Theory
     if current_vibe.posture == "TUG_LEFT_BRAIN" and left_brain is not None and max_passes >= 2:
         for p in range(2, max_passes + 1):
-            tug_packet = build_non_leading_tug_packet(
+            tug_msg = build_will_tug_message(
                 current_vibe,
                 active_diary,
                 prior_reply=latest_reply,
             )
-            reply_result = left_brain.respond_to_tug(scenario_text, tug_packet)
+            reply_result = left_brain.respond_to_tug(scenario_text, tug_msg)
             reply_text = reply_result[0] if isinstance(reply_result, tuple) else str(reply_result)
             reply_text = validate_plain_english_left_brain_reply(reply_text)
             left_calls += 1
             latest_reply = reply_text
 
-            reply_coords, reply_exp, queried_p, skipped_p = sensors.score_text(
+            theory_coords, theory_exp, _q_p, _s_p = sensors.score_text(
                 reply_text,
                 learned_leaves=learned_leaves,
                 branch_gating=branch_gating,
             )
 
-            raw_tensions = _detect_structural_value_tensions(raw_coords)
-            dissonance_flags: list[str] = []
-            all_keys = set(raw_coords.keys()) | set(reply_coords.keys())
-            blended_coords: dict[str, float] = {}
-            for k in all_keys:
-                r_val = float(raw_coords.get(k, 0.0))
-                l_val = float(reply_coords.get(k, 0.0))
-                if raw_tensions and r_val <= 0.25 and (l_val - r_val) >= 0.45:
-                    # Cognitive dissonance: Left Brain cannot talk away a stark raw deficit
-                    anchor = max(sensory_anchor, 0.75)
-                    dissonance_flags.append(
-                        f"cognitive_dissonance({k.split('/')[-1]}:raw={r_val:.2f},left={l_val:.2f})"
-                    )
-                else:
-                    anchor = sensory_anchor
-                blended_coords[k] = round(anchor * r_val + (1.0 - anchor) * l_val, 4)
-
-            blended_exp = {
-                k: round(
-                    sensory_anchor * float(raw_exp[k])
-                    + (1.0 - sensory_anchor) * float(reply_exp[k]),
-                    4,
-                )
-                for k in EXPERIENTIAL_SENSOR_LEAVES
-            }
-
             vibe_p, next_mem = compile_right_brain_vibe(
                 birth_state,
-                blended_coords,
-                blended_exp,
+                external_coords,
+                external_exp,
                 rules,
                 pass_index=p,
                 event_id=f"scene-{scene_index}-pass-{p}",
                 prior_memory=prior_memory,
                 learned_leaves=learned_leaves,
-                queried_child_leaves=queried_p,
-                skipped_child_leaves=skipped_p,
+                internal_theory_coords=theory_coords,
+                internal_theory_experiential=theory_exp,
+                queried_child_leaves=queried_1,
+                skipped_child_leaves=skipped_1,
             )
-            if dissonance_flags:
-                merged_reasons = tuple(dict.fromkeys(vibe_p.tug_reasons + tuple(dissonance_flags)))
-                vibe_p = RightBrainVibe(
-                    pass_index=vibe_p.pass_index,
-                    posture="TUG_LEFT_BRAIN",
-                    active_concept=vibe_p.active_concept,
-                    tug_reasons=merged_reasons,
-                    coordinates=vibe_p.coordinates,
-                    rule_activations=vibe_p.rule_activations,
-                    novelty=vibe_p.novelty,
-                    salience=vibe_p.salience,
-                    valence=vibe_p.valence,
-                    arousal=vibe_p.arousal,
-                    resonance=vibe_p.resonance,
-                    retention=vibe_p.retention,
-                    clarity=vibe_p.clarity,
-                    confidence=vibe_p.confidence,
-                    theory=vibe_p.theory,
-                    fact=vibe_p.fact,
-                    intention=vibe_p.intention,
-                    execution=vibe_p.execution,
-                    propagation=vibe_p.propagation,
-                    queried_child_leaves=vibe_p.queried_child_leaves,
-                    skipped_child_leaves=vibe_p.skipped_child_leaves,
+
+            if prev_theory_coords:
+                max_delta = round(
+                    max(
+                        (abs(float(theory_coords.get(k, 0.0)) - float(prev_theory_coords.get(k, 0.0))) for k in theory_coords),
+                        default=0.0,
+                    ),
+                    6,
                 )
-            max_delta = round(
-                max(
-                    (abs(float(vibe_p.coordinates.get(k, 0.0)) - float(prev_coords.get(k, 0.0))) for k in vibe_p.coordinates),
-                    default=0.0,
-                ),
-                6,
-            )
+            else:
+                max_delta = round(
+                    max(
+                        (abs(float(theory_coords.get(k, 0.0)) - float(external_coords.get(k, 0.0))) for k in theory_coords),
+                        default=0.0,
+                    ),
+                    6,
+                )
+
             traces[-1] = EquilibriumPassTrace(
                 pass_index=traces[-1].pass_index,
                 vibe=traces[-1].vibe,
                 left_brain_reply=reply_text,
-                max_coordinate_delta=traces[-1].max_coordinate_delta,
+                max_theory_delta=traces[-1].max_theory_delta,
             )
             traces.append(
                 EquilibriumPassTrace(
                     pass_index=p,
                     vibe=vibe_p,
-                    max_coordinate_delta=max_delta,
+                    max_theory_delta=max_delta,
                 )
             )
             current_vibe = vibe_p
-            prev_coords = dict(vibe_p.coordinates)
+            prev_theory_coords = dict(theory_coords)
 
-            if current_vibe.posture in ("AT_EASE", "WORDLESS_REFLEX"):
+            if current_vibe.posture in ("AT_EASE", "WORDLESS_REFLEX", "THEORY_SYNTHESIS"):
                 break
-            if max_delta <= equilibrium_tolerance:
+            if p >= 3 and max_delta <= equilibrium_tolerance:
                 break
 
-    if current_vibe.posture in ("AT_EASE", "WORDLESS_REFLEX"):
+    if current_vibe.posture in ("AT_EASE", "WORDLESS_REFLEX", "THEORY_SYNTHESIS"):
         settled = True
         outcome = current_vibe.posture
         needs_new_instinct = False
@@ -987,6 +1280,7 @@ def settle_scenario(
         active_concept=current_vibe.active_concept,
         key_coordinates=_top_key_coordinates(current_vibe.coordinates),
         conscious_note=latest_reply,
+        epistemic_state=current_vibe.self_registry.epistemic_state,
     )
     updated_diary = active_diary.append(diary_entry)
 

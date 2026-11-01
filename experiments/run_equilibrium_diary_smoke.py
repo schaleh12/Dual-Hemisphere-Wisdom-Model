@@ -92,14 +92,22 @@ def main() -> None:
             print(f"\n=== SCENE {idx} (Parable Beat {beat_num}: {phase}) ===")
             print(
                 f"Outcome: {res.outcome} | Settled: {res.settled} | "
+                f"Self: {fv.self_registry.epistemic_state} | "
                 f"Passes: {len(res.passes)} | Left-Brain Calls: {res.left_brain_calls} | "
                 f"Active Concept: {fv.active_concept}"
             )
             print(
-                f"Key Gauges: Order={fv.coordinates['philosophical/structure/order']:.2f} "
+                f"External Fact vs Theory: Fact={fv.fact:.2f} Theory={fv.theory:.2f} | "
+                f"Order={fv.coordinates['philosophical/structure/order']:.2f} "
                 f"Fair={fv.coordinates['cultural/justice/fairness']:.2f} "
                 f"Disc={fv.coordinates['philosophical/persistence/discreteness']:.2f} "
                 f"Valence={fv.valence:.2f} Exec={fv.execution:.2f}"
+            )
+            print(
+                f"3 Personas: Do-er={fv.synthesis.doer.stance}({fv.synthesis.doer.strength:.2f}) | "
+                f"Thinker={fv.synthesis.thinker.stance}({fv.synthesis.thinker.strength:.2f}) | "
+                f"Feeler={fv.synthesis.feeler.stance}({fv.synthesis.feeler.strength:.2f}) | "
+                f"Harmony={fv.synthesis.harmony:.2f}"
             )
             if fv.tug_reasons:
                 print(f"Tug Reasons: {list(fv.tug_reasons)}")
@@ -118,8 +126,11 @@ def main() -> None:
                 "left_brain_calls": res.left_brain_calls,
                 "active_concept": fv.active_concept,
                 "final_conscious_note": res.final_conscious_note,
+                "self_registry": fv.self_registry.to_dict(),
+                "competing_bids": fv.synthesis.to_dict(),
                 "tug_reasons": list(fv.tug_reasons),
-                "final_coordinates": fv.coordinates,
+                "external_coordinates": fv.coordinates,
+                "theory_coordinates": fv.theory_coordinates,
                 "experiential": {
                     "novelty": fv.novelty,
                     "salience": fv.salience,
@@ -142,7 +153,7 @@ def main() -> None:
                         "posture": pt.vibe.posture,
                         "active_concept": pt.vibe.active_concept,
                         "tug_reasons": list(pt.vibe.tug_reasons),
-                        "max_coordinate_delta": pt.max_coordinate_delta,
+                        "max_theory_delta": pt.max_theory_delta,
                         "left_brain_reply": pt.left_brain_reply,
                     }
                     for pt in res.passes
