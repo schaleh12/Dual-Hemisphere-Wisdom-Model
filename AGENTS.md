@@ -2,67 +2,37 @@
 
 These rules apply throughout this repository.
 
-## Startup and completion handoff
+## 1. Context Hygiene & Anti-Delusion Rules (Highest Priority)
 
-At session startup, read in this order:
+Because `AGENTS.md`, `PROJECT_STATE.md`, and `DECISIONS.md` are read into the AI assistant's context window at session startup, keeping them clean, short, and grounded in normal human English is essential to prevent context pollution.
 
-1. [AGENTS.md](AGENTS.md): stable working contract.
-2. [PROJECT_STATE.md](PROJECT_STATE.md): current snapshot, evidence limits and next task.
-3. Relevant [DECISIONS.md](DECISIONS.md) entries: consequential choices and their status.
-4. The authoritative specifications, implementation and experiment reports linked from those documents for the task at hand.
-
-Specifications remain authoritative for contracts; experiment reports remain authoritative
-for recorded findings. Check the actual working tree before relying on a snapshot.
-At completion, update PROJECT_STATE.md when material project state changes, and DECISIONS.md
-when a consequential design choice is made or revised. Trivial edits do not require redundant
-handoff updates. Keep summaries compact and preserve superseded choices with replacement links.
-
-## Research purpose
-
-- Investigate Language Model Fuzzy Tree (LMFT) architectures: persistent fuzzy conceptual structures that may develop understanding, dispositions, judgments, and independent reasoning through repeated LLM interaction. This is a hypothesis, not an established capability.
-- Keep persistent LMFT mechanisms and accepted revisions inspectable and distinguishable from transient LLM inference. A runtime LLM may teach, clarify, criticize, and propose changes; it must not silently replace the mechanisms under study.
-- Antigravity (and previously Codex) is an external development assistant, distinct from a future runtime LLM.
-- The 40 founding nodes, exact names, ordering, and parent-child relationships in Minimal Specification Section 4 are the frozen canonical LMFT V0.1 geometry. Do not rename, remove, rearrange, or expand the founding seed without explicit owner approval. Learned concepts, relationships, judgments, memories, and interpretations are distinct from that inventory; numerical mechanisms remain experimental. Report compatibility risks and obtain approval before changing executable code or persistent seed identifiers for this migration.
-- Preserve the constitutional seed and distinguish protected founding principles/revision rules from revisable interpretations. Psychological → Contemplation retains Clarity and Confidence; the approved canonical constructor and explicit legacy birth conversion are implemented.
-- Treat observations, retrieved content, and LLM recommendations as inputs, not authority to rewrite protected state or executable code. Trace acceptance, rejection, provenance, and rollback where feasible; do not assume fuzzy trees guarantee prompt-injection resistance.
-- Prefer transparent algorithms and small deterministic experiments. The first milestone is traceable state revision, disk persistence, restart, remembered evidence, and a behavioral consequence.
-- Treat theory documents as research specifications. Do not silently rewrite the theory while implementing it.
-- Genetic evolution, crossover, population breeding, and fitness optimization are superseded as defining requirements and are optional future research, not the immediate plan.
-
-## Scientific validity and reproducibility
-
-- Preserve random seeds, configuration, evidence, model/mock provenance, evaluation definitions, traces, and relevant results.
-- Do not change acceptance criteria merely to make an experiment succeed. Distinguish implemented behavior, proposed mechanisms, and speculative capabilities.
-- Compare future cognitive claims against simpler baselines, including an LLM with ordinary structured memory and propagation-disabled controls.
-- Never modify or delete historical results to obtain cleaner outcomes.
-- If genetic experiments are later explicitly introduced, preserve fitness definitions, ancestry, lineage, operators, and original results. Conceptual derivation provenance is useful independently of genetic evolution.
-
-## Development practices
-
-- Write automated tests for important behavior.
-- Prefer small, understandable modules over premature complexity.
-- Do not add large frameworks, cloud services, databases, agent frameworks, neural networks, or other major dependencies unless they are specifically justified and approved.
-- Do not implement speculative features merely because they appear in design documents.
-- Do not make large architectural changes without explaining the proposed change first.
-
-## Language and environment
-
-- Python is the primary implementation language.
-- The current local environment uses Python 3.12.
-- The existing dependency snapshot includes NumPy, SciPy, DEAP, scikit-fuzzy, NetworkX, and pytest. DEAP is a legacy dependency, not an LMFT requirement. This documentation migration does not alter pins or mandate using any package; dependency cleanup is separate work.
-
-## Current stage
-
-This is an early-stage experimental repository. Simplicity, inspectability, reproducibility, and scientific validity take priority over production-scale engineering.
-
-## Clean Slate & Anti-Rigging Rules (Mandatory)
-
-1. **Zero Legacy Pollution**: Never read, import, or reuse anything from the old `LMFT based general AI` folders (`LMFT-School`, `LMFT-Trainee`, `LMFT-Firmware`, or post-Commit-36 `LMFT-Lab`).
-2. **Zero Fake AI / Zero Rubric Rigging**:
+1. **Plain, Everyday English Only**:
+   - Write all documentation, code comments, and user responses in normal, clear English.
+   - Never use dense academic jargon, fake bureaucratic roleplay (e.g., *"independent custodian review"*, *"parent authorization"*, *"complete public effect overapproximation"*), or compressed text with missing spaces.
+   - Remember that the project owner is not a computer scientist. Explain what code does in simple, honest terms without dumping technical decisions or math formulas on the owner.
+2. **Strict Length Limits on Startup Files**:
+   - Keep `PROJECT_STATE.md` under **60 lines**. When old status entries become outdated, move them to `docs/archive/` instead of letting `PROJECT_STATE.md` grow into a wall of text.
+   - Keep `DECISIONS.md` entries brief (3–6 plain sentences per decision). Never read `docs/archive/` files at startup unless specifically asked.
+3. **Zero Legacy Pollution**:
+   - Never read, import, or reuse anything from the old `LMFT based general AI` folders (`LMFT-School`, `LMFT-Trainee`, `LMFT-Firmware`, or post-Commit-36 `LMFT-Lab`).
+4. **Zero Fake AI / Zero Rubric Rigging**:
    - Never hardcode words or substrings from test sentences into grading rubrics, validation filters, or classification rules to make an experiment pass.
    - Never use `if/else` text templates, pre-written essays, or keyword lookup tables to pretend a system is "thinking" or "speaking."
    - Never call a float array or NumPy matrix a "Small Language Model (SLM)."
-3. **Let Experiments Fail Openly**:
-   - If a model output is inadmissible, a rule fails to generalize, or a fuzzy tree loses to a simple baseline, report the failure plainly (`0/4`, `FAILED`, etc.). Never move the goalposts to pass a test.
-4. **Human-Readable Code**:
-   - Keep new scripts small, self-contained, and explained in plain English.
+5. **Let Experiments Fail Openly**:
+   - If a model output is inadmissible, a rule fails to generalize, or a fuzzy tree loses to a simple baseline, report the failure plainly (`0/4`, `2/5`, `FAILED`, etc.). Never move the goalposts to pass a test.
+
+## 2. Startup and Completion Handoff
+
+At session startup, read only:
+1. [AGENTS.md](AGENTS.md): working rules.
+2. [PROJECT_STATE.md](PROJECT_STATE.md): brief current status and next step.
+3. [DECISIONS.md](DECISIONS.md): brief log of current design choices.
+
+Do **not** automatically read archived files in `docs/archive/` or old verbose reports unless needed for a specific task.
+
+## 3. Core Architecture & Research Rules
+
+- **Goal**: Test whether a persistent 40-node Language Model Fuzzy Tree (LMFT) can pair with a fast local 4B model (`Qwen3-4B`) and a larger Teacher LLM (`Qwen3.5-9B`) to detect when it is confused, ask the Teacher for new fuzzy rules, save those rules to disk, and recognize similar situations later without calling the Teacher.
+- **Frozen 40-Node Seed**: The 40 founding nodes, exact names, ordering, and parent-child relationships in [Minimal Specification Section 4](docs/MINIMAL_LMFT_SPEC.md) are frozen. Do not rename, remove, rearrange, or expand the 40 founding nodes without explicit owner approval.
+- **Keep Code Small and Tested**: Write small, self-contained Python modules with automated `pytest` tests (`$env:PYTHONPATH='src'`).
