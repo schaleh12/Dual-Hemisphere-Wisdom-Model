@@ -94,6 +94,8 @@ CONSTRUCTIVE_LEAVES = (
 
 CONFUSION_THRESHOLD = 0.50
 EXECUTION_THRESHOLD = 0.20
+BRANCH_GATE_THRESHOLD = 0.25
+SILENCE_SALIENCE_THRESHOLD = 0.48
 PROMPT_VERSION = "reflection-leaf-mapper-step1-v2"
 TIER2_PROMPT_VERSION = "reflection-tier2-child-mapper-v1"
 TEACHER_PROMPT_VERSION = "desperation-teacher-step3-v1"
@@ -212,13 +214,20 @@ class FuzzyConceptRule:
         return max(leaf_tier(leaf_id) for leaf_id in self.target_leaves)
 
     def evaluate(self, leaf_coordinates: Mapping[str, float]) -> float:
-        """Compute fuzzy rule firing strength in [0, 1] from the leaf coordinates."""
+        """Compute fuzzy rule firing strength in [0, 1] using shoulder/triangular leaf similarity."""
         similarities = []
         for leaf_id, target_val in self.target_leaves.items():
             if leaf_id not in leaf_coordinates:
                 raise ValueError(f"missing coordinate for leaf {leaf_id!r}")
             actual = float(leaf_coordinates[leaf_id])
-            similarities.append(1.0 - abs(actual - float(target_val)))
+            t_val = float(target_val)
+            if t_val >= 0.65 and actual >= t_val:
+                sim = 1.0
+            elif t_val <= 0.30 and actual <= t_val:
+                sim = 1.0
+            else:
+                sim = 1.0 - abs(actual - t_val)
+            similarities.append(sim)
         min_similarity = min(similarities)
         universe = np.array([0.0, self.low, self.high, 1.0], dtype=float)
         curve = fuzz.trapmf(universe, [self.low, self.high, 1.0, 1.0])
@@ -472,7 +481,8 @@ class ContinuousMemoryState:
                 raise ValueError(f"retained coordinate for {k!r} must be in [0, 1]")
 
 
-EXECUTIVE_MODES = ("COMMIT_FAST", "VERIFY_HYPOTHESIS", "ESCALATE_TO_TEACHER")
+EXECUTIVE_MODES = ("STAY_SILENT", "COMMIT_FAST", "VERIFY_HYPOTHESIS", "ESCALATE_TO_TEACHER")
+ACTIVE_EXECUTIVE_MODES = ("COMMIT_FAST", "VERIFY_HYPOTHESIS", "ESCALATE_TO_TEACHER")
 EXECUTIVE_PROMPT_VERSION = "executive-hybrid-response-v1"
 
 
@@ -522,6 +532,8 @@ class ReflectionEvaluation:
     fact: float = 0.0
     executive_decision: ExecutiveDecision = field(default_factory=ExecutiveDecision)
     next_memory_state: ContinuousMemoryState = field(default_factory=ContinuousMemoryState)
+    queried_child_leaves: tuple[str, ...] = ()
+    skipped_child_leaves: tuple[str, ...] = ()
 
     @property
     def activation_frame(self) -> ActivationFrame:
@@ -552,6 +564,56 @@ def _evaluate_rules_with_inhibition(
     return rule_activations
 
 
+def _select_active_tier2_leaves(
+    coords: Mapping[str, float],
+    missing_tier2: tuple[LearnedLeaf, ...],
+    salience_estimate: float,
+    branch_gate_threshold: float,
+) -> tuple[tuple[LearnedLeaf, ...], tuple[LearnedLeaf, ...]]:
+    """Open only Tier-2 child leaves under active founding parent branches (with high-salience blind-spot fallback)."""
+    if not missing_tier2:
+        return (), ()
+    max_founding = max((float(coords.get(k, 0.0)) for k in FOUNDATIONAL_LEAVES), default=0.0)
+    if max_founding < CONFUSION_THRESHOLD and float(salience_estimate) >= 0.45:
+        return missing_tier2, ()
+    branch_max = {
+        b: max(
+            (float(coords.get(k, 0.0)) for k in FOUNDATIONAL_LEAVES if k.startswith(b + "/")),
+            default=0.0,
+        )
+        for b in FOUNDING_PARENT_BRANCHES
+    }
+    to_query = []
+    skipped = []
+    for leaf in missing_tier2:
+        if branch_max.get(leaf.parent_branch, 0.0) >= branch_gate_threshold:
+            to_query.append(leaf)
+        else:
+            skipped.append(leaf)
+    return tuple(to_query), tuple(skipped)
+
+
+def _has_urgent_or_disruptive_signal(
+    effective_coords: Mapping[str, float],
+    learned_leaves: tuple[LearnedLeaf, ...],
+) -> bool:
+    """Check 24-leaf coordinates for disruption, coercive imbalance, or active Tier-2/3 exception leaves."""
+    chaos = float(effective_coords.get("philosophical/structure/chaos", 0.0))
+    power = float(effective_coords.get("cultural/efficiency/power", 0.0))
+    fairness = float(effective_coords.get("cultural/justice/fairness", 0.0))
+    learned_active = any(
+        leaf.tier >= 2 and float(effective_coords.get(leaf.leaf_id, 0.0)) >= CONFUSION_THRESHOLD
+        for leaf in learned_leaves
+    )
+    if chaos >= 0.45:
+        return True
+    if power >= 0.65 and fairness <= 0.40:
+        return True
+    if learned_active:
+        return True
+    return False
+
+
 def evaluate_reflection(
     birth_state: BirthState,
     observation: str,
@@ -561,6 +623,10 @@ def evaluate_reflection(
     event_id: str,
     learned_leaves: tuple[LearnedLeaf, ...] = (),
     memory_state: ContinuousMemoryState | None = None,
+    allow_silence: bool = False,
+    branch_gating: bool = True,
+    branch_gate_threshold: float = BRANCH_GATE_THRESHOLD,
+    silence_salience_threshold: float = SILENCE_SALIENCE_THRESHOLD,
 ) -> ReflectionEvaluation:
     """Run Steps 1–3: map Tier-1/2/3 leaves, update continuous memory, evaluate rules, and drive Will."""
     if not isinstance(rules, tuple):
@@ -584,17 +650,66 @@ def evaluate_reflection(
     )
 
     coords = dict(slm_output["leaf_coordinates"])
-    # Tier 2/3: If learned child leaves exist and were not already supplied by a test stub, score them separately
+    queried_ids: list[str] = []
+    skipped_ids: list[str] = []
+
     missing_learned = tuple(l for l in learned_leaves if l.leaf_id not in coords)
     if missing_learned:
-        tier2_req = make_tier2_child_request(observation, generation, missing_learned)
-        tier2_coords, _ = models.generate(
-            "interpretation",
-            tier2_req,
-            TIER2_PROMPT_VERSION,
-            lambda raw: validate_tier2_child_output(raw, missing_learned),
-        )
-        coords.update(tier2_coords)
+        if not branch_gating:
+            tier2_req = make_tier2_child_request(observation, generation, missing_learned)
+            tier2_coords, _ = models.generate(
+                "interpretation",
+                tier2_req,
+                TIER2_PROMPT_VERSION,
+                lambda raw: validate_tier2_child_output(raw, missing_learned),
+            )
+            coords.update(tier2_coords)
+            queried_ids.extend(l.leaf_id for l in missing_learned)
+        else:
+            # Stage 2: Branch-gated Tier-2 child leaves
+            missing_tier2 = tuple(l for l in missing_learned if l.tier == 2)
+            tier2_open, tier2_skip = _select_active_tier2_leaves(
+                coords,
+                missing_tier2,
+                float(slm_output["salience_estimate"]),
+                branch_gate_threshold,
+            )
+            for l in tier2_skip:
+                coords[l.leaf_id] = 0.0
+                skipped_ids.append(l.leaf_id)
+            if tier2_open:
+                tier2_req = make_tier2_child_request(observation, generation, tier2_open)
+                tier2_coords, _ = models.generate(
+                    "interpretation",
+                    tier2_req,
+                    TIER2_PROMPT_VERSION,
+                    lambda raw: validate_tier2_child_output(raw, tier2_open),
+                )
+                coords.update(tier2_coords)
+                queried_ids.extend(l.leaf_id for l in tier2_open)
+
+            # Stage 3: Parent-gated Tier-3 sub-leaves (only open when Tier-2 parent >= CONFUSION_THRESHOLD)
+            missing_tier3 = tuple(l for l in missing_learned if l.tier == 3)
+            tier3_open = tuple(
+                l for l in missing_tier3 if float(coords.get(l.parent_branch, 0.0)) >= CONFUSION_THRESHOLD
+            )
+            tier3_skip = tuple(
+                l for l in missing_tier3 if float(coords.get(l.parent_branch, 0.0)) < CONFUSION_THRESHOLD
+            )
+            for l in tier3_skip:
+                coords[l.leaf_id] = 0.0
+                skipped_ids.append(l.leaf_id)
+            if tier3_open:
+                tier3_req = make_tier2_child_request(observation, generation, tier3_open)
+                tier3_coords, _ = models.generate(
+                    "interpretation",
+                    tier3_req,
+                    TIER2_PROMPT_VERSION,
+                    lambda raw: validate_tier2_child_output(raw, tier3_open),
+                )
+                coords.update(tier3_coords)
+                queried_ids.extend(l.leaf_id for l in tier3_open)
+
         slm_output = {
             **slm_output,
             "leaf_coordinates": coords,
@@ -613,25 +728,36 @@ def evaluate_reflection(
             k: min(1.0, float(v) / memory_state.retention_decay)
             for k, v in memory_state.retained_coordinates.items()
         }
-        shared_keys = [k for k in prev_unscaled if k in coords]
+        shared_keys = [
+            k
+            for k in prev_unscaled
+            if k in coords
+            and k != "philosophical/persistence/continuity"
+            and max(float(coords.get(k, 0.0)), prev_unscaled[k]) >= 0.20
+        ]
         if shared_keys:
             diffs = [abs(float(coords.get(k, 0.0)) - prev_unscaled[k]) for k in shared_keys]
             continuity_bonus = 0.15 * float(coords.get("philosophical/persistence/continuity", 0.0))
             new_spike_penalty = 0.50 * max(
-                (float(coords.get(k, 0.0)) - prev_unscaled.get(k, 0.0) for k in coords),
+                (
+                    float(coords.get(k, 0.0)) - prev_unscaled.get(k, 0.0)
+                    for k in coords
+                    if k != "philosophical/persistence/continuity"
+                ),
                 default=0.0,
             )
             resonance = round(
                 min(1.0, max(0.0, 1.0 - (sum(diffs) / len(diffs)) + continuity_bonus - new_spike_penalty)),
                 6,
             )
-        # If the current observation is a quiet/brief follow-up (raw_max_rule < CONFUSION_THRESHOLD
-        # and salience_estimate < 0.70) and resonates with retained working memory (resonance >= 0.55),
-        # blend retained coordinates without overwriting loud new events.
+        # If the current observation is a quiet/brief follow-up (raw_max_rule < CONFUSION_THRESHOLD,
+        # 0.35 <= salience_estimate < 0.70, and continuity >= 0.35) and resonates with retained working
+        # memory (resonance >= 0.55), blend retained coordinates without bleeding onto low-salience chatter.
         if (
             raw_max_rule < CONFUSION_THRESHOLD
             and resonance >= 0.55
-            and float(slm_output["salience_estimate"]) < 0.70
+            and 0.35 <= float(slm_output["salience_estimate"]) < 0.70
+            and float(coords.get("philosophical/persistence/continuity", 0.0)) >= 0.35
         ):
             for k, prev_val in prev_unscaled.items():
                 cur_val = float(coords.get(k, 0.0))
@@ -718,14 +844,43 @@ def evaluate_reflection(
     final_activations = propagation.activations
     intention = round(final_activations[INTENTION_LEAF], 6)
     execution = round(final_activations[EXECUTION_LEAF], 6)
-    needs_teacher = execution >= EXECUTION_THRESHOLD or is_confused
+    urgent_signal = _has_urgent_or_disruptive_signal(effective_coords, learned_leaves)
+
+    if allow_silence and not urgent_signal and (
+        salience < silence_salience_threshold or execution < EXECUTION_THRESHOLD
+    ):
+        needs_teacher = False
+    else:
+        needs_teacher = execution >= EXECUTION_THRESHOLD or is_confused
 
     top_concept = (
         max(rule_activations.items(), key=lambda kv: (kv[1], kv[0]))[0]
         if rule_activations and max_rule > 0.0
         else None
     )
-    if not is_confused and fact >= CONFUSION_THRESHOLD:
+    if allow_silence and not urgent_signal and (
+        salience < silence_salience_threshold
+        or execution < EXECUTION_THRESHOLD
+        or (not is_confused and (fact >= CONFUSION_THRESHOLD or theory >= CONFUSION_THRESHOLD))
+        or (clarity >= 0.25 and confidence >= 0.40)
+    ):
+        quiet_concept = matched_concept or (
+            top_concept if confidence >= CONFUSION_THRESHOLD or (clarity >= 0.25 and confidence >= 0.40) else None
+        )
+        executive_decision = ExecutiveDecision(
+            mode="STAY_SILENT",
+            active_concept=quiet_concept,
+            fact=fact,
+            theory=theory,
+            clarity=clarity,
+            confidence=confidence,
+            execution=execution,
+            rationale=(
+                f"Silent background observation (salience={salience:.2f}, urgent=False, "
+                f"noted_concept={quiet_concept}, execution={execution:.2f})."
+            ),
+        )
+    elif not is_confused and fact >= CONFUSION_THRESHOLD:
         executive_decision = ExecutiveDecision(
             mode="COMMIT_FAST",
             active_concept=matched_concept,
@@ -787,6 +942,8 @@ def evaluate_reflection(
         fact=fact,
         executive_decision=executive_decision,
         next_memory_state=next_memory_state,
+        queried_child_leaves=tuple(queried_ids),
+        skipped_child_leaves=tuple(skipped_ids),
     )
 
 
@@ -1195,7 +1352,16 @@ def generate_executive_response(
     evaluation: ReflectionEvaluation,
     slm_models,
 ) -> tuple[dict, dict]:
-    """Generate a 4B spoken response governed by the Fuzzy Tree's ExecutiveDecision."""
+    """Generate a 4B spoken response governed by the Fuzzy Tree's ExecutiveDecision (0 chars on STAY_SILENT)."""
+    if evaluation.executive_decision.mode == "STAY_SILENT":
+        return (
+            {
+                "executive_mode": "STAY_SILENT",
+                "active_concept": evaluation.executive_decision.active_concept or "unclassified",
+                "spoken_response": "",
+            },
+            {"role": "silent_gate", "prompt_version": EXECUTIVE_PROMPT_VERSION, "llm_calls": 0},
+        )
     generation = slm_models.config["generation"]
     req = make_executive_response_request(evaluation, generation)
     return slm_models.generate(

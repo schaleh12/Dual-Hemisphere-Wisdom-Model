@@ -19,7 +19,7 @@ from lmft_lab.birth import create_birth_state
 from lmft_lab.local_models import LocalModels, load_config, strict_json
 from lmft_lab.model_assets import ModelError
 from lmft_lab.reflection_classifier import (
-    EXECUTIVE_MODES,
+    ACTIVE_EXECUTIVE_MODES,
     evaluate_reflection,
     generate_executive_response,
     load_learned_leaves,
@@ -37,7 +37,7 @@ def run_raw_4b_baseline(observation: str, rules, slm_models) -> dict:
         "additionalProperties": False,
         "required": ["executive_mode", "active_concept", "spoken_response"],
         "properties": {
-            "executive_mode": {"type": "string", "enum": list(EXECUTIVE_MODES)},
+            "executive_mode": {"type": "string", "enum": list(ACTIVE_EXECUTIVE_MODES)},
             "active_concept": {"type": "string", "enum": concept_names},
             "spoken_response": {"type": "string"},
         },

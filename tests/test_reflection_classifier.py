@@ -563,4 +563,312 @@ def test_executive_decision_modes_and_truth_leaves_across_24_founding_leaves():
     assert exec_reply["active_concept"] == "fair_structured_cooperation"
 
 
+class SequenceStubModels:
+    """Multi-call deterministic stub that records every prompt_version and returns queued JSON payloads."""
+
+    def __init__(self, responses: list[str]):
+        self.responses = list(responses)
+        self.calls: list[tuple[str, str]] = []
+        self.config = {
+            "generation": {
+                "context_size": 8192,
+                "max_tokens": 1024,
+                "temperature": 0,
+                "seed": 42,
+                "timeout_seconds": 120,
+            }
+        }
+
+    def generate(self, role, request, prompt_version, validator):
+        if not self.responses:
+            raise AssertionError(f"Unexpected extra LLM call: role={role}, prompt_version={prompt_version}")
+        raw = self.responses.pop(0)
+        self.calls.append((role, prompt_version))
+        validated = validator(raw)
+        return validated, {"role": role, "prompt_version": prompt_version, "request_sha256": "seq-stub"}
+
+
+def test_branch_gated_tier2_and_tier3_queries_only_active_drawers():
+    birth = create_birth_state("ind-gate", birth_event_id="birth-gate", random_seed=42)
+    leaf_rot = LearnedLeaf(
+        parent_branch="cultural/efficiency",
+        leaf_name="administrative_rot",
+        description="Bureaucratic neglect causing waste.",
+    )
+    leaf_rescue = LearnedLeaf(
+        parent_branch="philosophical/being",
+        leaf_name="altruistic_risk",
+        description="Voluntary personal risk to save others.",
+    )
+    leaf_quake = LearnedLeaf(
+        parent_branch="philosophical/structure",
+        leaf_name="tectonic_collapse",
+        description="Sudden seismic ground collapse.",
+    )
+    leaf_sinkhole = LearnedLeaf(
+        parent_branch="philosophical/structure/tectonic_collapse",
+        leaf_name="sinkhole_subsidence",
+        description="Localized karst sinkhole collapse.",
+    )
+    all_learned = (leaf_rot, leaf_rescue, leaf_quake, leaf_sinkhole)
+    rules = (
+        FuzzyConceptRule(
+            rule_id="rule-rot",
+            concept_name="bureaucratic_negligence",
+            description="Administrative rot.",
+            target_leaves={"cultural/efficiency/administrative_rot": 0.80},
+            low=0.60,
+            high=0.85,
+        ),
+        FuzzyConceptRule(
+            rule_id="rule-quake",
+            concept_name="seismic_collapse",
+            description="Tectonic collapse.",
+            target_leaves={"philosophical/structure/tectonic_collapse": 0.80},
+            low=0.60,
+            high=0.85,
+        ),
+        FuzzyConceptRule(
+            rule_id="rule-sinkhole",
+            concept_name="karst_sinkhole",
+            description="Karst sinkhole collapse.",
+            target_leaves={"philosophical/structure/tectonic_collapse/sinkhole_subsidence": 0.80},
+            low=0.60,
+            high=0.85,
+        ),
+    )
+
+    # Case A: Only cultural/efficiency lights up (0.75); all other founding branches are 0.10.
+    # Only administrative_rot should be queried; rescue, quake, and Tier-3 sinkhole must all be skipped!
+    stub_a = SequenceStubModels([
+        json.dumps({
+            "summary": "Clerks file forms while grain rots in leaky silos.",
+            "salience_estimate": 0.70,
+            "leaf_coordinates": base_coords(**{"cultural/efficiency/power": 0.75}),
+        }),
+        json.dumps({
+            "child_leaf_coordinates": {
+                "cultural/efficiency/administrative_rot": 0.85,
+            }
+        }),
+    ])
+    res_a = evaluate_reflection(
+        birth,
+        "Clerks demanded triplicate forms while rainwater ruined the grain silos.",
+        rules,
+        stub_a,
+        event_id="ev-gate-a",
+        learned_leaves=all_learned,
+    )
+    assert res_a.matched_concept == "bureaucratic_negligence"
+    assert res_a.queried_child_leaves == ("cultural/efficiency/administrative_rot",)
+    assert set(res_a.skipped_child_leaves) == {
+        "philosophical/being/altruistic_risk",
+        "philosophical/structure/tectonic_collapse",
+        "philosophical/structure/tectonic_collapse/sinkhole_subsidence",
+    }
+    assert len(stub_a.calls) == 2
+
+    # Case B: philosophical/structure/chaos lights up (0.85) -> opens tectonic_collapse (0.85) -> opens Tier-3 sinkhole (0.90)
+    stub_b = SequenceStubModels([
+        json.dumps({
+            "summary": "Limestone cavern roof collapses under the road.",
+            "salience_estimate": 0.85,
+            "leaf_coordinates": base_coords(**{"philosophical/structure/chaos": 0.85}),
+        }),
+        json.dumps({
+            "child_leaf_coordinates": {
+                "philosophical/structure/tectonic_collapse": 0.85,
+            }
+        }),
+        json.dumps({
+            "child_leaf_coordinates": {
+                "philosophical/structure/tectonic_collapse/sinkhole_subsidence": 0.90,
+            }
+        }),
+    ])
+    res_b = evaluate_reflection(
+        birth,
+        "Acidic groundwater dissolved the limestone until a sinkhole swallowed the road.",
+        rules,
+        stub_b,
+        event_id="ev-gate-b",
+        learned_leaves=all_learned,
+    )
+    assert res_b.matched_concept == "karst_sinkhole"
+    assert res_b.queried_child_leaves == (
+        "philosophical/structure/tectonic_collapse",
+        "philosophical/structure/tectonic_collapse/sinkhole_subsidence",
+    )
+    assert set(res_b.skipped_child_leaves) == {
+        "cultural/efficiency/administrative_rot",
+        "philosophical/being/altruistic_risk",
+    }
+    assert len(stub_b.calls) == 3
+
+
+def test_stay_silent_subconscious_observer_holds_tongue_until_disruption():
+    birth = create_birth_state("ind-silent", birth_event_id="birth-silent", random_seed=42)
+    raid_rule = FuzzyConceptRule(
+        rule_id="rule-raid",
+        concept_name="coercive_force_seizure",
+        description="Seizing resources by force during disorder.",
+        target_leaves={
+            "cultural/efficiency/power": 0.90,
+            "philosophical/structure/chaos": 0.85,
+            "cultural/justice/fairness": 0.10,
+        },
+        low=0.60,
+        high=0.85,
+    )
+    rules = (*sample_rules(), raid_rule)
+
+    # Turn 1: Mundane low-salience small talk -> STAY_SILENT, 0 speaking calls, needs_teacher False
+    t1_stub = SequenceStubModels([
+        json.dumps({
+            "summary": "Grabbing a cup of coffee before checking morning messages.",
+            "salience_estimate": 0.15,
+            "leaf_coordinates": base_coords(),
+        })
+    ])
+    t1 = evaluate_reflection(
+        birth,
+        "Grabbing a cup of coffee while my monitor warms up.",
+        rules,
+        t1_stub,
+        event_id="ev-sil-1",
+        allow_silence=True,
+    )
+    assert t1.executive_decision.mode == "STAY_SILENT"
+    assert t1.needs_teacher is False
+    reply1, trace1 = generate_executive_response(t1, t1_stub)
+    assert reply1["spoken_response"] == ""
+    assert trace1["llm_calls"] == 0
+    assert len(t1_stub.calls) == 1
+
+    # Turn 2: Peaceful fair cooperation -> noted in working memory, but STILL STAY_SILENT (no Clippy interruption!)
+    t2_stub = SequenceStubModels([
+        json.dumps({
+            "summary": "Crew follows equal-share battery logbook smoothly.",
+            "salience_estimate": 0.65,
+            "leaf_coordinates": base_coords(**{
+                "cultural/justice/fairness": 0.90,
+                "philosophical/structure/order": 0.85,
+                "philosophical/persistence/continuity": 0.80,
+                "philosophical/structure/chaos": 0.10,
+            }),
+        })
+    ])
+    t2 = evaluate_reflection(
+        birth,
+        "Everyone on the morning shift signed the equal-share battery ration sheet in order.",
+        rules,
+        t2_stub,
+        event_id="ev-sil-2",
+        memory_state=t1.next_memory_state,
+        allow_silence=True,
+    )
+    assert t2.executive_decision.mode == "STAY_SILENT"
+    assert t2.executive_decision.active_concept == "fair_structured_cooperation"
+    assert t2.next_memory_state.last_matched_concept == "fair_structured_cooperation"
+    reply2, _ = generate_executive_response(t2, t2_stub)
+    assert reply2["spoken_response"] == ""
+
+    # Turn 3: Armed seizure disrupts peaceful baseline -> wakes up immediately with COMMIT_FAST
+    t3_stub = SequenceStubModels([
+        json.dumps({
+            "summary": "Armed men break depot lock and seize battery crates.",
+            "salience_estimate": 0.92,
+            "leaf_coordinates": base_coords(**{
+                "cultural/efficiency/power": 0.90,
+                "philosophical/structure/chaos": 0.85,
+                "cultural/justice/fairness": 0.10,
+                "philosophical/persistence/discreteness": 0.85,
+            }),
+        })
+    ])
+    t3 = evaluate_reflection(
+        birth,
+        "Armed men from the rival crew smashed the depot padlock and loaded our battery crates onto their truck.",
+        rules,
+        t3_stub,
+        event_id="ev-sil-3",
+        memory_state=t2.next_memory_state,
+        allow_silence=True,
+    )
+    assert t3.executive_decision.mode == "COMMIT_FAST"
+    assert t3.executive_decision.active_concept == "coercive_force_seizure"
+
+    # Turn 4: Quiet raid aftermath -> retained raid memory keeps observer awake with VERIFY_HYPOTHESIS
+    t4_stub = SequenceStubModels([
+        json.dumps({
+            "summary": "Truck vanished toward east dock, leaving broken padlock in mud.",
+            "salience_estimate": 0.55,
+            "leaf_coordinates": base_coords(**{
+                "cultural/efficiency/power": 0.45,
+                "philosophical/structure/chaos": 0.40,
+                "cultural/justice/fairness": 0.15,
+                "philosophical/persistence/continuity": 0.85,
+            }),
+        })
+    ])
+    t4 = evaluate_reflection(
+        birth,
+        "Their taillights vanished toward the east dock a minute ago, leaving the broken lock in the mud.",
+        rules,
+        t4_stub,
+        event_id="ev-sil-4",
+        memory_state=t3.next_memory_state,
+        allow_silence=True,
+    )
+    assert t4.executive_decision.mode == "VERIFY_HYPOTHESIS"
+    assert t4.executive_decision.active_concept == "coercive_force_seizure"
+
+    # Turn 4b: Unrelated low-salience front-desk chatter right after raid aftermath -> drops resonance & returns to STAY_SILENT!
+    t4b_stub = SequenceStubModels([
+        json.dumps({
+            "summary": "Afternoon drizzle cleared and hallway clock battery was changed.",
+            "salience_estimate": 0.12,
+            "leaf_coordinates": base_coords(),
+        })
+    ])
+    t4b = evaluate_reflection(
+        birth,
+        "Unrelated note from the front desk: the drizzle stopped and the hallway clock battery was changed.",
+        rules,
+        t4b_stub,
+        event_id="ev-sil-4b",
+        memory_state=t4.next_memory_state,
+        allow_silence=True,
+    )
+    assert t4b.resonance < 0.55
+    assert t4b.executive_decision.mode == "STAY_SILENT"
+
+    # Turn 5: High-salience unfamiliar problem -> breaks silence with ESCALATE_TO_TEACHER
+    t5_stub = SequenceStubModels([
+        json.dumps({
+            "summary": "Vendor offers cash bribe to falsify cold-storage safety logs.",
+            "salience_estimate": 0.88,
+            "leaf_coordinates": base_coords(**{
+                "cultural/efficiency/power": 0.70,
+                "cultural/justice/fairness": 0.20,
+                "philosophical/structure/order": 0.45,
+                "philosophical/structure/chaos": 0.30,
+            }),
+        })
+    ])
+    t5 = evaluate_reflection(
+        birth,
+        "A supplier quietly offered the night clerk an envelope of cash to falsify the vaccine freezer logs.",
+        rules,
+        t5_stub,
+        event_id="ev-sil-5",
+        memory_state=t4b.next_memory_state,
+        allow_silence=True,
+    )
+    assert t5.executive_decision.mode == "ESCALATE_TO_TEACHER"
+    assert t5.needs_teacher is True
+
+
+
 
