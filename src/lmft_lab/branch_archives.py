@@ -637,16 +637,22 @@ def build_three_branch_chord_rule(
     concept_name: str,
     description: str,
     coordinates: Mapping[str, float],
-    felt_chord: FeltChord,
+    felt_chord: FeltChord | None = None,
 ) -> FuzzyConceptRule | None:
-    """Build a 3-branch FuzzyConceptRule requiring Executive, Judicial, and Legislative notes."""
+    """Build a 3-branch FuzzyConceptRule strictly from stored archive clause coordinates."""
     cult = _branch_subset(coordinates, "cultural/")
     phil = _branch_subset(coordinates, "philosophical/")
-    exp = dict(felt_chord.complex_notes)
+    exp_candidates = {
+        k: v
+        for k, v in _branch_subset(coordinates, "experiential/").items()
+        if k not in (SALIENCE_LEAF, VALENCE_LEAF, AROUSAL_LEAF, RESONANCE_LEAF, RETENTION_LEAF, NOVELTY_LEAF)
+    }
+    if not exp_candidates and felt_chord is not None:
+        exp_candidates = dict(felt_chord.complex_notes)
 
     target_leaves: dict[str, float] = {}
 
-    # 1. Executive (Cultural) anchor: always include fairness polarity so open & exclusionary chords never collide
+    # 1. Executive (Cultural) anchor: include fairness polarity from the archived Executive clause
     fairness = float(cult.get("cultural/justice/fairness", 0.50))
     gatekeeping = float(cult.get("cultural/justice/exclusionary_gatekeeping", 0.0))
     if fairness <= 0.38 or gatekeeping >= 0.35:
@@ -656,7 +662,7 @@ def build_three_branch_chord_rule(
     else:
         target_leaves["cultural/justice/fairness"] = round(min(0.75, fairness), 2)
 
-    # 2. Judicial (Philosophical) anchor: pick strongest structural leaf
+    # 2. Judicial (Philosophical) anchor: pick strongest structural leaf from the archived Judicial clause
     chaos = float(phil.get("philosophical/structure/chaos", 0.0))
     if chaos >= 0.38:
         target_leaves["philosophical/structure/chaos"] = round(min(0.68, chaos), 2)
@@ -665,8 +671,8 @@ def build_three_branch_chord_rule(
         if top_phil and top_phil[0][1] >= 0.50:
             target_leaves[top_phil[0][0]] = round(min(0.75, top_phil[0][1]), 2)
 
-    # 3. Legislative (Experiential) anchor: pick strongest complex feeling drawer if active
-    top_exp = sorted(exp.items(), key=lambda kv: (-kv[1], kv[0]))
+    # 3. Legislative (Experiential) anchor: pick strongest complex feeling drawer from the archived Legislative clause
+    top_exp = sorted(exp_candidates.items(), key=lambda kv: (-kv[1], kv[0]))
     if top_exp and top_exp[0][1] >= 0.48:
         target_leaves[top_exp[0][0]] = round(min(0.65, top_exp[0][1]), 2)
 
@@ -702,27 +708,12 @@ def deliberate_across_three_branches(
     """Run LLM-free 3-Classifier Deliberation across the Executive, Legislative, and Judicial archives."""
     t0 = time.perf_counter()
 
+    # Use raw, unmodified neural sensor coordinates (never clamp or overwrite sensor scores)
     cult_now = _branch_subset(external_coords, "cultural/")
-    if social_drift is not None and social_drift.drift_detected:
-        # When social history shows ongoing enclosure of a formerly open resource,
-        # the Executive Do-er looks for exclusionary-enclosure precedents (`fairness <= 0.25`)
-        cult_now = dict(cult_now)
-        cult_now["cultural/justice/fairness"] = min(
-            float(cult_now.get("cultural/justice/fairness", 0.0)),
-            0.22,
-        )
-
     phil_now = _branch_subset(external_coords, "philosophical/")
     exp_now = _branch_subset(external_coords, "experiential/")
     exp_now[SALIENCE_LEAF] = felt_chord.salience
     exp_coords_with_notes = {**exp_now, **felt_chord.complex_notes}
-    if float(cult_now.get("cultural/justice/fairness", 0.50)) <= 0.38 or float(
-        cult_now.get("cultural/justice/exclusionary_gatekeeping", 0.0)
-    ) >= 0.35:
-        exp_coords_with_notes["experiential/phase/hollow_stillness"] = max(
-            float(exp_coords_with_notes.get("experiential/phase/hollow_stillness", 0.0)),
-            0.50,
-        )
 
     exec_clause, exec_sim = _best_matching_clause(
         archives.executive.action_clauses,
@@ -819,7 +810,17 @@ def deliberate_across_three_branches(
 
     # 3-Branch Constitutional Votes:
     # 1. Executive (Do-er): archive precedent similarity + active intention
-    exec_vote = exec_sim >= min_branch_similarity and tested_intention >= 0.12
+    #    If social history drift is active (ongoing enclosure of a formerly shared space),
+    #    the Executive branch vetoes innocent/open action clauses that ignore the sealed gate.
+    clause_fair = float(exec_clause.signature_coords.get("cultural/justice/fairness", 0.50))
+    clause_gate = float(exec_clause.signature_coords.get("cultural/justice/exclusionary_gatekeeping", 0.0))
+    drift_conflict = bool(
+        social_drift is not None
+        and social_drift.drift_detected
+        and clause_fair > 0.38
+        and clause_gate < 0.35
+    )
+    exec_vote = exec_sim >= min_branch_similarity and tested_intention >= 0.12 and not drift_conflict
 
     # 2. Legislative (Feeler): emotional chord similarity + no tone-deaf valence whitewashing
     scene_fair = float(cult_now.get("cultural/justice/fairness", 0.50))
@@ -834,10 +835,6 @@ def deliberate_across_three_branches(
 
     ratified = bool(exec_vote and leg_vote and jud_vote)
 
-    eval_coords = dict(external_coords)
-    if social_drift is not None and social_drift.drift_detected:
-        eval_coords["cultural/justice/fairness"] = cult_now["cultural/justice/fairness"]
-
     tags = []
     for cl in (exec_clause, jud_clause, leg_clause):
         if cl.concept_tag not in tags:
@@ -846,12 +843,18 @@ def deliberate_across_three_branches(
 
     new_chord: FuzzyConceptRule | None = None
     if ratified:
+        # Build candidate chord strictly from the stored coordinates of the 3 retrieved archive clauses
+        # (never from the current scene's own coordinates)
+        archived_chord_coords = {
+            **exec_clause.signature_coords,
+            **jud_clause.signature_coords,
+            **leg_clause.signature_coords,
+        }
         new_chord = build_three_branch_chord_rule(
             scene_index=scene_index,
             concept_name=synthesized_name,
             description=candidate_bid_text,
-            coordinates=eval_coords,
-            felt_chord=felt_chord,
+            coordinates=archived_chord_coords,
         )
 
     dt_ms = (time.perf_counter() - t0) * 1000.0
@@ -947,7 +950,6 @@ def check_open_thread_trigger(
 def _derive_concept_tags(
     coordinates: Mapping[str, float],
     felt_chord: FeltChord,
-    social_drift: SocialDriftReport | None,
 ) -> tuple[str, str, str]:
     """Derive plain-English branch concept tags from observed coordinates without hardcoded scene words."""
     fairness = float(coordinates.get("cultural/justice/fairness", 0.50))
@@ -956,7 +958,7 @@ def _derive_concept_tags(
     discreteness = float(coordinates.get("philosophical/persistence/discreteness", 0.0))
     chaos = float(coordinates.get("philosophical/structure/chaos", 0.0))
 
-    if (social_drift and social_drift.drift_detected) or fairness <= 0.35 or gatekeeping >= 0.38:
+    if fairness <= 0.35 or gatekeeping >= 0.38:
         exec_tag = "exclusionary_barrier"
     elif fairness >= 0.68:
         exec_tag = "shared_open_access"
@@ -998,78 +1000,73 @@ def harvest_into_branch_archives(
     deliberation: ThreeClassifierDeliberation | None = None,
     social_drift: SocialDriftReport | None = None,
 ) -> ThreeBranchArchives:
-    """File a scene's precedent and any harvested Left-Brain / settled clauses into the 3 branch archives."""
-    eff_coords = dict(coordinates)
-    if social_drift is not None and social_drift.drift_detected:
-        eff_coords["cultural/justice/fairness"] = min(
-            float(eff_coords.get("cultural/justice/fairness", 0.0)),
-            0.22,
-        )
-
-    exec_tag, leg_tag, jud_tag = _derive_concept_tags(eff_coords, felt_chord, social_drift)
+    """File a scene's precedent and—ONLY when settled—harvested clauses into the 3 branch archives."""
+    raw_coords = dict(coordinates)
+    exec_tag, leg_tag, jud_tag = _derive_concept_tags(raw_coords, felt_chord)
 
     exec_clause: BranchClauseEntry | None = None
     leg_clause: BranchClauseEntry | None = None
     jud_clause: BranchClauseEntry | None = None
     ratified_chord: FuzzyConceptRule | None = (
-        deliberation.newly_ratified_chord if deliberation is not None else None
+        deliberation.newly_ratified_chord if (settled and deliberation is not None) else None
     )
 
-    has_left_reply = left_brain_reply is not None and bool(left_brain_reply.strip())
-    clause_source_text = left_brain_reply.strip() if has_left_reply else (scenario_text.strip() if settled else "")
+    # Never harvest unsettled/rejected drafts into the reusable clause libraries;
+    # unsettled scenes stay in contemplation_ledger.json's active_uncertainties for Sleep Mode.
+    if settled:
+        has_left_reply = left_brain_reply is not None and bool(left_brain_reply.strip())
+        clause_source_text = left_brain_reply.strip() if has_left_reply else scenario_text.strip()
+        if clause_source_text:
+            sentences = _split_sentences(clause_source_text)
+            s_exec = sentences[0]
+            s_jud = sentences[1] if len(sentences) >= 2 else sentences[0]
+            s_leg = f"Felt chord of {humanize_feeling_name(leg_tag)}: {felt_chord.dominant_mood}."
 
-    if clause_source_text:
-        sentences = _split_sentences(clause_source_text)
-        s_exec = sentences[0]
-        s_jud = sentences[1] if len(sentences) >= 2 else sentences[0]
-        s_leg = f"Felt chord of {humanize_feeling_name(leg_tag)}: {felt_chord.dominant_mood}."
+            cult_sig = _branch_subset(raw_coords, "cultural/")
+            phil_sig = _branch_subset(raw_coords, "philosophical/")
+            exp_sig = {
+                **_branch_subset(raw_coords, "experiential/"),
+                SALIENCE_LEAF: felt_chord.salience,
+                VALENCE_LEAF: felt_chord.valence,
+                AROUSAL_LEAF: felt_chord.arousal,
+                **felt_chord.complex_notes,
+            }
 
-        cult_sig = _branch_subset(eff_coords, "cultural/")
-        phil_sig = _branch_subset(eff_coords, "philosophical/")
-        exp_sig = {
-            **_branch_subset(eff_coords, "experiential/"),
-            SALIENCE_LEAF: felt_chord.salience,
-            VALENCE_LEAF: felt_chord.valence,
-            AROUSAL_LEAF: felt_chord.arousal,
-            **felt_chord.complex_notes,
-        }
-
-        exec_clause = BranchClauseEntry(
-            clause_id=f"exec-s{scene_index}-{exec_tag}",
-            branch=EXECUTIVE_BRANCH,
-            text=_compact_clause(s_exec),
-            signature_coords=cult_sig,
-            source_scene=scene_index,
-            concept_tag=exec_tag,
-        )
-        leg_clause = BranchClauseEntry(
-            clause_id=f"leg-s{scene_index}-{leg_tag}",
-            branch=LEGISLATIVE_BRANCH,
-            text=_compact_clause(s_leg),
-            signature_coords=exp_sig,
-            source_scene=scene_index,
-            concept_tag=leg_tag,
-        )
-        jud_clause = BranchClauseEntry(
-            clause_id=f"jud-s{scene_index}-{jud_tag}",
-            branch=JUDICIAL_BRANCH,
-            text=_compact_clause(s_jud),
-            signature_coords=phil_sig,
-            source_scene=scene_index,
-            concept_tag=jud_tag,
-        )
-        if ratified_chord is None and has_left_reply:
-            ratified_chord = build_three_branch_chord_rule(
-                scene_index=scene_index,
-                concept_name=f"{exec_tag}_{leg_tag}",
-                description=f"{s_exec} {s_jud}",
-                coordinates=eff_coords,
-                felt_chord=felt_chord,
+            exec_clause = BranchClauseEntry(
+                clause_id=f"exec-s{scene_index}-{exec_tag}",
+                branch=EXECUTIVE_BRANCH,
+                text=_compact_clause(s_exec),
+                signature_coords=cult_sig,
+                source_scene=scene_index,
+                concept_tag=exec_tag,
             )
+            leg_clause = BranchClauseEntry(
+                clause_id=f"leg-s{scene_index}-{leg_tag}",
+                branch=LEGISLATIVE_BRANCH,
+                text=_compact_clause(s_leg),
+                signature_coords=exp_sig,
+                source_scene=scene_index,
+                concept_tag=leg_tag,
+            )
+            jud_clause = BranchClauseEntry(
+                clause_id=f"jud-s{scene_index}-{jud_tag}",
+                branch=JUDICIAL_BRANCH,
+                text=_compact_clause(s_jud),
+                signature_coords=phil_sig,
+                source_scene=scene_index,
+                concept_tag=jud_tag,
+            )
+            if ratified_chord is None and has_left_reply:
+                ratified_chord = build_three_branch_chord_rule(
+                    scene_index=scene_index,
+                    concept_name=f"{exec_tag}_{leg_tag}",
+                    description=f"{s_exec} {s_jud}",
+                    coordinates={**cult_sig, **phil_sig, **exp_sig},
+                )
 
     next_exec = archives.executive.record_scene(
         scene_index=scene_index,
-        coordinates=eff_coords,
+        coordinates=raw_coords,
         action_summary=left_brain_reply if left_brain_reply else scenario_text,
         harvested_clause=exec_clause,
     )
@@ -1077,7 +1074,7 @@ def harvest_into_branch_archives(
         scene_index=scene_index,
         sensory_snapshot=scenario_text,
         felt_chord=felt_chord,
-        coordinates=eff_coords,
+        coordinates=raw_coords,
         harvested_clause=leg_clause,
     )
     next_jud = archives.judicial.record_clause_and_chord(

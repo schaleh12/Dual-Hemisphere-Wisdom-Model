@@ -142,8 +142,10 @@ def test_three_branch_archives_save_load_and_social_drift_precedent_tracking(tmp
     assert reloaded.executive.precedents[0].access_state == "OPEN_SHARED"
     assert reloaded.executive.precedents[1].access_state == "SEALED_EXCLUSIONARY"
 
-    # 3. With social history showing open -> sealed drift, the exact same enclosed coordinates
-    # are recognized as ongoing exclusionary enclosure rather than innocent `solitary_autarky`!
+    # 3. With social history showing open -> sealed drift, the Executive branch flags
+    # `social_drift_ongoing_enclosure` and refuses to settle as innocent `solitary_autarky`,
+    # while keeping raw sensor coordinates (`fairness == 0.51`) 100% untouched and
+    # refusing to harvest unsettled drafts into the clause library!
     drift_res = settle_scenario(
         birth,
         "Outside, dry hooves scraped in the heat; inside the cool dark, the mason wiped a speck of lime.",
@@ -155,9 +157,13 @@ def test_three_branch_archives_save_load_and_social_drift_precedent_tracking(tmp
     )
     assert drift_res.social_drift is not None
     assert drift_res.social_drift.drift_detected is True
+    assert drift_res.final_vibe.coordinates["cultural/justice/fairness"] == 0.51
     assert "social_drift_ongoing_enclosure" in drift_res.final_vibe.tug_reasons
     assert drift_res.final_vibe.synthesis.doer.stance == "CONTEST_EXCLUSION"
-    assert drift_res.final_vibe.active_concept != "solitary_autarky"
+    assert drift_res.settled is False
+    assert drift_res.outcome == "UNRESOLVED_TENSION"
+    assert len(drift_res.next_archives.executive.action_clauses) == 0
+    assert len(drift_res.next_archives.judicial.ratified_chords) == 0
 
 
 def test_right_brain_three_classifier_deliberation_recombines_clauses_with_zero_llm_calls():
@@ -297,7 +303,17 @@ def test_right_brain_three_classifier_deliberation_recombines_clauses_with_zero_
 
 def test_dual_hemisphere_open_thread_trigger_and_proposer_self_critic_closure():
     birth = _birth()
-    rules = _founding_rules()
+    restorative_rule = FuzzyConceptRule(
+        rule_id="rule-restorative-release",
+        concept_name="restorative_fracture_into_flow",
+        description="Fractured barrier releases hoarded water into shared relief.",
+        target_leaves={
+            "cultural/justice/fairness": 0.75,
+            "philosophical/structure/chaos": 0.55,
+            "experiential/phase/bittersweet_release": 0.60,
+        },
+    )
+    rules = _founding_rules() + (restorative_rule,)
     bittersweet = LearnedLeaf(
         "experiential/phase",
         "bittersweet_release",

@@ -671,14 +671,6 @@ def compile_right_brain_vibe(
         or float(locked_external.get("experiential/phase/bittersweet_release", 0.0)) >= 0.45
     ) and "solitary_autarky" in raw_rule_activations:
         raw_rule_activations["solitary_autarky"] = 0.0
-    if social_drift is not None and social_drift.drift_detected:
-        for constructive_rule_name in (
-            "solitary_autarky",
-            "fair_structured_cooperation",
-            "honorable_stewardship",
-        ):
-            if constructive_rule_name in raw_rule_activations:
-                raw_rule_activations[constructive_rule_name] = 0.0
 
     salience = round(float(external_experiential[SALIENCE_LEAF]), 6)
     raw_valence = float(external_experiential[VALENCE_LEAF])
@@ -771,11 +763,6 @@ def compile_right_brain_vibe(
                     float(theory_candidate_coords.get(k, 0.0)),
                     round(0.50 * r_val + 0.50 * l_val, 4),
                 )
-        if social_drift is not None and social_drift.drift_detected:
-            theory_candidate_coords["cultural/justice/fairness"] = min(
-                float(theory_candidate_coords.get("cultural/justice/fairness", 0.0)),
-                0.22,
-            )
 
     ratified_chord_names: set[str] = set()
     active_theory_rules = list(rules)
@@ -796,24 +783,6 @@ def compile_right_brain_vibe(
         or float(locked_external.get("experiential/phase/bittersweet_release", 0.0)) >= 0.45
     ) and "solitary_autarky" in theory_rule_activations:
         theory_rule_activations["solitary_autarky"] = 0.0
-    if raw_tensions:
-        for constructive_rule_name in (
-            "solitary_autarky",
-            "fair_structured_cooperation",
-            "honorable_stewardship",
-        ):
-            if constructive_rule_name in theory_rule_activations and constructive_rule_name not in ratified_chord_names:
-                theory_rule_activations[constructive_rule_name] = 0.0
-
-    if ratified_chord_names:
-        max_ratified = max(
-            (theory_rule_activations.get(name, 0.0) for name in ratified_chord_names),
-            default=0.0,
-        )
-        if max_ratified >= CONFUSION_THRESHOLD:
-            for r_name in list(theory_rule_activations.keys()):
-                if r_name not in ratified_chord_names:
-                    theory_rule_activations[r_name] = 0.0
 
     th_clarity, th_confidence, th_matched, th_confused, th_reason = compute_contemplation(theory_rule_activations)
     matched_ratified_chord = bool(
@@ -1653,20 +1622,11 @@ def settle_scenario(
                     branch_gating=branch_gating,
                 )
 
-                pass_ratified_chords: tuple[FuzzyConceptRule, ...] = ()
-                if p >= 3 and open_thread.triggered:
-                    if deliberation is not None and deliberation.newly_ratified_chord is not None:
-                        pass_ratified_chords = (deliberation.newly_ratified_chord,)
-                    elif float(theory_coords.get("cultural/justice/fairness", 0.0)) >= 0.60:
-                        closure_chord = build_three_branch_chord_rule(
-                            scene_index=scene_index,
-                            concept_name=f"open_thread_closure_s{scene_index}",
-                            description=reply_text,
-                            coordinates=external_coords,
-                            felt_chord=initial_felt_chord,
-                        )
-                        if closure_chord is not None:
-                            pass_ratified_chords = (closure_chord,)
+                pass_ratified_chords = (
+                    (deliberation.newly_ratified_chord,)
+                    if (deliberation is not None and deliberation.newly_ratified_chord is not None)
+                    else active_archives.judicial.ratified_chords
+                )
 
                 vibe_p, next_mem = compile_right_brain_vibe(
                     birth_state,
