@@ -61,22 +61,21 @@ During live daytime interaction, the system never pauses for 15 seconds to call 
 How do you connect a non-verbal Right Brain to a verbal Left Brain (`Qwen3-4B`) without turning the Left Brain into a theater kid reading stage directions from a text prompt?
 
 We use the exact same neural mechanism that Vision-Language Models use to wire a camera into a blind text model ([`docs/SUBLIMINAL_GAP_SPLICE_BLUEPRINT.md`](docs/SUBLIMINAL_GAP_SPLICE_BLUEPRINT.md), [`src/lmft_lab/subliminal_gap_splice.py`](src/lmft_lab/subliminal_gap_splice.py)):
-1. **Scale-Invariant 37-Float `SubliminalChordVector` (Zero English Words)**:
-   - `[0..23]`: The **24 Frozen Founding Leaves**.
-   - `[24..32]`: The **9 Permanent Founding Parent-Branch Child-Drawer Pools** (`pool_child_drawers_by_parent_branch`). Whether the Fuzzy Tree has `10` learned child leaves today or `10,000` child leaves across dozens of domains in the future, every learned Tier-2/Tier-3 child leaf rolls up into its permanent parent branch (`cultural/efficiency`, `cultural/justice`, `cultural/freedom`, `philosophical/being`, `philosophical/structure`, `philosophical/persistence`, `experiential/reflection`, `experiential/phase`, `experiential/synchronization`). **The 37-float plug never changes shape.**
-   - `[33..36]`: The **4 Three-Legged Race Cadence & Ankle-Rope Signals** (`branch_harmony`, `social_drift_flag`, `dissonance_pressure`, and deadband-gated `cadence_rupture_drive`).
+1. **Four Strictly Separate Departmental Vectors (`SubliminalChordVector`, Zero English Words, Zero Cross-Department Leakage)**:
+   - Rather than packing the Right Brain into one flat shared trunk or squashing sibling child concepts under the same parent branch into a single `max()` number, each of the 4 Right-Brain departments owns its **own independent, fixed-size vector**:
+     - **`doer_vector` — Executive / Do-er (`Will <-> Cultural`, `17` floats)**: `6` Founding Cultural leaves + `2` Founding Will leaves (`Intention`, `Execution`) + `1` Longitudinal `social_drift_flag` + `8` **Cultural Child-Drawer Chord** floats (`pool_departmental_child_chord` over active `cultural/*` Tier-2/Tier-3 child leaves).
+     - **`thinker_vector` — Judicial / Thinker (`Truth <-> Philosophical`, `16` floats)**: `6` Founding Philosophical leaves + `2` Founding Truth leaves (`Theory`, `Fact`) + `8` **Philosophical Child-Drawer Chord** floats (`pool_departmental_child_chord` over active `philosophical/*` Tier-2/Tier-3 child leaves).
+     - **`feeler_vector` — Legislative / Feeler (`Contemplation <-> Experiential`, `16` floats)**: `6` Founding Experiential leaves + `2` Founding Contemplation leaves (`Clarity`, `Confidence`) + `8` **Experiential Child-Drawer Chord** floats (`pool_departmental_child_chord` over active `experiential/*` Tier-2/Tier-3 child leaves).
+       *Why this matters*: Because every child leaf maps deterministically to an 8-float basis signature inside its own department, sibling child concepts under the exact same parent branch (such as `experiential/phase/austere_sanctuary`, `experiential/phase/hollow_stillness`, and `experiential/phase/bittersweet_release`, or 10,000 future Tier-2/Tier-3 leaves) produce **completely distinct Feeler vectors** without ever changing the 16-float Feeler department size.
+     - **`cadence_vector` — Three-Legged Race Cadence & Ankle-Rope (`3` floats)**: `branch_harmony`, `dissonance_pressure`, and deadband-gated `cadence_rupture_drive` (zero index overlap with the 3 branch departments).
 2. **Strict Departmental Isolation Inside `SubliminalGapProjector`**:
    - Whenever the Left Brain emits `<|subliminal_gap|>` mid-thought, Python intercepts `inputs_embeds` and replaces that single token slot with **4 departmental virtual token embeddings** (`[4, hidden_size]`).
-   - Rather than blending all 37 floats into a single shared trunk, each virtual token is wired exclusively to its own department's index slice:
-     - **Token 0 (`DOER_DEPARTMENT_INDICES`, 12 floats)**: Executive / Do-er (`Will <-> Cultural` + `social_drift_flag`)
-     - **Token 1 (`THINKER_DEPARTMENT_INDICES`, 11 floats)**: Judicial / Thinker (`Truth <-> Philosophical`)
-     - **Token 2 (`FEELER_DEPARTMENT_INDICES`, 11 floats)**: Legislative / Feeler (`Contemplation <-> Experiential`)
-     - **Token 3 (`CADENCE_DEPARTMENT_INDICES`, 9 floats)**: Three-Legged Race Cadence & Rupture Drive
+   - Each virtual token is wired exclusively to its own department's disjoint vector (`doer_head(doer_vector)`, `thinker_head(thinker_vector)`, `feeler_head(feeler_vector)`, `cadence_head(cadence_vector)`) so a change in one department never leaks into the other three virtual tokens.
 3. **Calm-Talk Deadband (`deadband = 0.45`) vs. Poetic Cadence Rupture (`M-A-C-H-I-N-E`)**:
    - During calm, harmonious conversation, `cadence_rupture_drive` stays strictly at `0.0` so the Left Brain speaks naturally without being overly twitchy or melodramatic.
    - When high arousal, hollow stillness, and high discreteness collide with low clarity above the deadband, `cadence_rupture_drive` spikes—physically yanking the Left Brain's hidden states out of smooth chatbot prose into stark, fractured, or spelled-out cadence (`no soul; M-A-C-H-I-N-E`).
 4. **Honest Current Implementation Status**:
-   - **Stage 1 (Done & Unit-Tested)**: The 37-float scale-invariant `SubliminalChordVector`, the 9 permanent parent-branch child pools, the deadband-gated `cadence_rupture_drive`, and the compartmentalized `SubliminalGapProjector` embedding splice are implemented and verified on a synthetic causal Transformer in [`tests/test_subliminal_gap_splice.py`](tests/test_subliminal_gap_splice.py).
+   - **Stage 1 (Done & Unit-Tested)**: The 4 strictly isolated Departmental Vectors (`doer_vector`, `thinker_vector`, `feeler_vector`, `cadence_vector`), `pool_departmental_child_chord`, the deadband-gated `cadence_rupture_drive`, and the compartmentalized `SubliminalGapProjector` embedding splice are implemented and verified on a synthetic causal Transformer in [`tests/test_subliminal_gap_splice.py`](tests/test_subliminal_gap_splice.py).
    - **Stages 2 & 3 (Next Up — Not Yet Tested on Live `Qwen3-4B`)**: Generating the offline `<|subliminal_gap|>` training trajectories with `Qwen3.5-9B` and training `SubliminalGapProjector` + LoRA on `Qwen3-4B` on the RTX 4080 to test live Three-Legged Race generation and the "Unplug-the-Cord" diagnostic.
 
 ---
@@ -142,4 +141,4 @@ $env:PYTHONPATH='src'
 - [`src/lmft_lab/right_brain_equilibrium.py`](src/lmft_lab/right_brain_equilibrium.py) — Right-Brain two-pass equilibrium loop, felt-chord extraction, and cognitive dissonance self-registry.
 - [`src/lmft_lab/branch_archives.py`](src/lmft_lab/branch_archives.py) — Persistent Executive, Legislative, and Judicial branch archives and ~30 ms 3-classifier deliberation.
 - [`src/lmft_lab/sleep_consolidation.py`](src/lmft_lab/sleep_consolidation.py) — Offline `Qwen3.5-9B` Sleep-Mode rule refinement and unsettled-scene distillation.
-- [`src/lmft_lab/subliminal_gap_splice.py`](src/lmft_lab/subliminal_gap_splice.py) — Scale-invariant 37-float `SubliminalChordVector`, compartmentalized `SubliminalGapProjector`, and surgical `<|subliminal_gap|>` embedding splice.
+- [`src/lmft_lab/subliminal_gap_splice.py`](src/lmft_lab/subliminal_gap_splice.py) — Four strictly isolated Departmental Vectors (`SubliminalChordVector`), compartmentalized `SubliminalGapProjector`, and surgical `<|subliminal_gap|>` embedding splice.

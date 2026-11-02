@@ -27,7 +27,7 @@
      - **Post-Sleep Consolidated (`0` LLM calls)**: Improved to **`7/8` (`[1, 2, 3, 4, 5, 7, 8]`, `65.9 ms`/beat)** on the Parable (holding Beat 6 honestly in `CONTEST_EXCLUSION` via `social_drift`) and **`4/4` (`[1, 2, 3, 4]`, `46.7 ms`/beat)** on the unseen Harbor Bakehouse.
 
 5. **Stage 1 of 'Three-Legged Race' `<|subliminal_gap|>` Embedding Splice (`src/lmft_lab/subliminal_gap_splice.py`, `docs/SUBLIMINAL_GAP_SPLICE_BLUEPRINT.md`)**:
-   - Compiles the Right Brain's non-verbal state into a scale-invariant 37-float `SubliminalChordVector` (`24` founding leaves + `9` permanent parent-branch child-drawer pools that roll up any number of future Tier-2/Tier-3 child leaves without changing the plug size + `4` cadence/ankle-rope signals with a calm-talk deadband) and splices `K = 4` projected virtual token embeddings (`SubliminalGapProjector`) directly into `<|subliminal_gap|>` slots in `inputs_embeds`.
+   - Compiles the Right Brain's non-verbal state into 4 strictly disjoint Departmental Vectors (`doer_vector` 17 floats, `thinker_vector` 16 floats, `feeler_vector` 16 floats, `cadence_vector` 3 floats, using `pool_departmental_child_chord` so sibling child leaves under the same parent branch like `austere_sanctuary`, `hollow_stillness`, and `bittersweet_release` stay 100% distinct without ever changing the department vector sizes) and splices `K = 4` compartmentalized virtual token embeddings (`SubliminalGapProjector`) directly into `<|subliminal_gap|>` slots in `inputs_embeds`.
 
 ## Next Step
 - **Stage 2 & 3 of `<|subliminal_gap|>` Three-Legged Race**: generate paired `<|subliminal_gap|>` thought trajectories offline with the 9B Teacher (`Qwen3.5-9B`) and train `SubliminalGapProjector` + LoRA on `Qwen3-4B` on the RTX 4080.

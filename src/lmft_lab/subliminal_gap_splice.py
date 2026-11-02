@@ -1,28 +1,41 @@
-"""Stage 1 of the 'Three-Legged Race' Architecture: Scale-Invariant `<|subliminal_gap|>` Embedding Splice.
+"""Stage 1 of the 'Three-Legged Race' Architecture: Departmental `<|subliminal_gap|>` Embedding Splice.
 
 Plain-English Purpose:
-Instead of translating the Right Brain's state into English stage directions in a prompt,
-this module compresses the Right Brain's live state into a scale-invariant 37-float
-non-verbal vector (`SubliminalChordVector`, zero words) and surgically splices it
-directly into a PyTorch language model's hidden token embeddings (`inputs_embeds`)
-whenever the Left Brain emits a `<|subliminal_gap|>` token:
+Instead of translating the Right Brain's state into English stage directions in a prompt—or
+crushing child leaves under the same parent branch into a single `max()` number—this module
+organizes the Right Brain's live state into **4 strictly separate Departmental Vectors**
+(zero English words, zero hardcoded feeling slots, zero cross-department index leakage)
+and surgically splices them directly into a PyTorch language model's hidden token embeddings
+(`inputs_embeds`) whenever the Left Brain emits a `<|subliminal_gap|>` token:
 
-1. `SubliminalChordVector` (37 floats in `[0.0, 1.0]` — never changes size as the tree grows):
-   - `[0..11]`: 12 Founding Cultural (6) and Philosophical (6) leaves.
-   - `[12..17]`: 6 Founding Experiential leaves (`Novelty`, `Salience`, `Valence`, `Arousal`,
-     `Resonance`, `Retention`).
-   - `[18..23]`: 6 Founding Psychological leaves (`Clarity`, `Confidence`, `Theory`, `Fact`,
-     `Intention`, `Execution`).
-   - `[24..32]`: 9 Permanent Parent-Branch Child-Drawer Pools (`ALL_GROWABLE_PARENT_BRANCHES`):
-     Whether the tree has 4 learned child leaves today or 10,000 Tier-2/Tier-3 child leaves
-     later, `pool_child_drawers_by_parent_branch` rolls all active child leaves under each
-     founding parent branch (`cultural/efficiency`, `cultural/justice`, `cultural/freedom`,
-     `philosophical/being`, `philosophical/structure`, `philosophical/persistence`,
-     `experiential/reflection`, `experiential/phase`, `experiential/synchronization`) into
-     its permanent parent-branch channel so the plug dimension stays 37 forever.
-   - `[33..36]`: 4 Three-Legged Race Cadence & Ankle-Rope signals:
+1. Four Strictly Disjoint Departmental Vectors (`SubliminalChordVector`):
+   - **Department 0 — `doer_vector` (Executive / Do-er: `Will <-> Cultural`, 17 floats)**:
+     * `6` Founding Cultural leaves (`Power`, `Wastelessness`, `Honor`, `Fairness`,
+       `Self-Sufficiency`, `Needlessness`)
+     * `2` Founding Will leaves (`Intention`, `Execution`)
+     * `1` Longitudinal `social_drift_flag`
+     * `8` Cultural Child-Drawer Chord floats (`pool_departmental_child_chord` over active
+       `cultural/*` Tier-2/Tier-3 child leaves).
+   - **Department 1 — `thinker_vector` (Judicial / Thinker: `Truth <-> Philosophical`, 16 floats)**:
+     * `6` Founding Philosophical leaves (`Agency`, `Existence`, `Order`, `Chaos`,
+       `Continuity`, `Discreteness`)
+     * `2` Founding Truth leaves (`Theory`, `Fact`)
+     * `8` Philosophical Child-Drawer Chord floats (`pool_departmental_child_chord` over active
+       `philosophical/*` Tier-2/Tier-3 child leaves).
+   - **Department 2 — `feeler_vector` (Legislative / Feeler: `Contemplation <-> Experiential`, 16 floats)**:
+     * `6` Founding Experiential leaves (`Novelty`, `Salience`, `Valence`, `Arousal`,
+       `Resonance`, `Retention`)
+     * `2` Founding Contemplation leaves (`Clarity`, `Confidence`)
+     * `8` Experiential Child-Drawer Chord floats (`pool_departmental_child_chord` over active
+       `experiential/*` Tier-2/Tier-3 child leaves).
+       Because every child leaf maps deterministically to an 8-float basis signature inside its
+       own department, sibling child concepts under the same parent branch (such as
+       `experiential/phase/austere_sanctuary`, `experiential/phase/hollow_stillness`, and
+       `experiential/phase/bittersweet_release`, or 10,000 future Tier-2/Tier-3 child leaves)
+       produce **completely distinct Feeler vectors** without ever changing the 16-float Feeler
+       department size.
+   - **Department 3 — `cadence_vector` (Three-Legged Race Cadence & Ankle-Rope, 3 floats)**:
      * `branch_harmony`: agreement across the 3 Right-Brain branches.
-     * `social_drift_flag`: `1.0` when ongoing historical enclosure/drift is active.
      * `dissonance_pressure`: friction from cognitive dissonance or low clarity.
      * `cadence_rupture_drive`: deadband-gated non-verbal tug (`deadband = 0.45`) that stays
        at `0.0` during normal calm speech (preventing twitchiness) and spikes when high
@@ -30,13 +43,13 @@ whenever the Left Brain emits a `<|subliminal_gap|>` token:
        Left Brain to break smooth chatbot syntax into stark or spelled-out cadence (`M-A-C-H-I-N-E`).
 
 2. `SubliminalGapProjector` (`nn.Module`):
-   - Projects a 37-float `SubliminalChordVector` into `K = 4` virtual non-verbal token
-     embeddings of shape `[4, hidden_size]` (`Do-er Pulse`, `Thinker Structure`,
-     `Feeler Chord`, and `Cadence/Rupture`).
+   - Projects each of the 4 disjoint Departmental Vectors through its own dedicated neural head
+     into `K = 4` virtual non-verbal token embeddings of shape `[4, hidden_size]`
+     (`Do-er Pulse`, `Thinker Structure`, `Feeler Chord`, and `Cadence/Rupture`).
 
 3. `splice_subliminal_gaps_into_embeds`:
    - Replaces every `<|subliminal_gap|>` token ID in `input_ids` with the 4 projected
-     non-verbal Fuzzy Tree embeddings in `inputs_embeds` and pads `labels` with `-100`
+     departmental Fuzzy Tree embeddings in `inputs_embeds` and pads `labels` with `-100`
      at those 4 virtual positions so causal LM loss grades only the words while flowing
      gradients straight back through the non-verbal Fuzzy Tree splice.
 """
@@ -45,13 +58,13 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+import hashlib
 import math
 import torch
 from torch import Tensor, nn
 
 from .branch_archives import SocialDriftReport, ThreeClassifierDeliberation
 from .reflection_classifier import (
-    ALL_GROWABLE_PARENT_BRANCHES,
     AROUSAL_LEAF,
     CLARITY_LEAF,
     CONFIDENCE_LEAF,
@@ -73,6 +86,10 @@ SUBLIMINAL_GAP_TOKEN = "<|subliminal_gap|>"
 NUM_VIRTUAL_GAP_TOKENS = 4
 IGNORE_LABEL_INDEX = -100
 DEFAULT_RUPTURE_DEADBAND = 0.45
+DEPARTMENT_CHILD_CHORD_DIM = 8
+
+CULTURAL_FOUNDING_ORDER: tuple[str, ...] = FOUNDATIONAL_LEAVES[:6]
+PHILOSOPHICAL_FOUNDING_ORDER: tuple[str, ...] = FOUNDATIONAL_LEAVES[6:12]
 
 EXPERIENTIAL_FOUNDING_ORDER: tuple[str, ...] = (
     NOVELTY_LEAF,
@@ -83,64 +100,48 @@ EXPERIENTIAL_FOUNDING_ORDER: tuple[str, ...] = (
     RETENTION_LEAF,
 )
 
-PSYCHOLOGICAL_FOUNDING_ORDER: tuple[str, ...] = (
-    CLARITY_LEAF,
-    CONFIDENCE_LEAF,
-    THEORY_LEAF,
-    FACT_LEAF,
-    INTENTION_LEAF,
-    EXECUTION_LEAF,
-)
+DOER_FEATURE_NAMES: tuple[str, ...] = (
+    CULTURAL_FOUNDING_ORDER
+    + (INTENTION_LEAF, EXECUTION_LEAF, "doer/social_drift_flag")
+    + tuple(f"doer/child_chord_{i}" for i in range(DEPARTMENT_CHILD_CHORD_DIM))
+)  # 17 floats
 
-PARENT_BRANCH_POOL_ORDER: tuple[str, ...] = tuple(
-    f"branch_pool/{branch}" for branch in ALL_GROWABLE_PARENT_BRANCHES
-)
+THINKER_FEATURE_NAMES: tuple[str, ...] = (
+    PHILOSOPHICAL_FOUNDING_ORDER
+    + (THEORY_LEAF, FACT_LEAF)
+    + tuple(f"thinker/child_chord_{i}" for i in range(DEPARTMENT_CHILD_CHORD_DIM))
+)  # 16 floats
 
-CADENCE_SIGNAL_ORDER: tuple[str, ...] = (
+FEELER_FEATURE_NAMES: tuple[str, ...] = (
+    EXPERIENTIAL_FOUNDING_ORDER
+    + (CLARITY_LEAF, CONFIDENCE_LEAF)
+    + tuple(f"feeler/child_chord_{i}" for i in range(DEPARTMENT_CHILD_CHORD_DIM))
+)  # 16 floats
+
+CADENCE_FEATURE_NAMES: tuple[str, ...] = (
     "cadence/branch_harmony",
-    "cadence/social_drift_flag",
     "cadence/dissonance_pressure",
     "cadence/cadence_rupture_drive",
-)
+)  # 3 floats
+
+DOER_DEPT_DIM = len(DOER_FEATURE_NAMES)        # 17
+THINKER_DEPT_DIM = len(THINKER_FEATURE_NAMES)  # 16
+FEELER_DEPT_DIM = len(FEELER_FEATURE_NAMES)    # 16
+CADENCE_DEPT_DIM = len(CADENCE_FEATURE_NAMES)  # 3
 
 SUBLIMINAL_FEATURE_NAMES: tuple[str, ...] = (
-    FOUNDATIONAL_LEAVES
-    + EXPERIENTIAL_FOUNDING_ORDER
-    + PSYCHOLOGICAL_FOUNDING_ORDER
-    + PARENT_BRANCH_POOL_ORDER
-    + CADENCE_SIGNAL_ORDER
+    DOER_FEATURE_NAMES
+    + THINKER_FEATURE_NAMES
+    + FEELER_FEATURE_NAMES
+    + CADENCE_FEATURE_NAMES
 )
+SUBLIMINAL_VECTOR_DIM = len(SUBLIMINAL_FEATURE_NAMES)  # 52 total across the 4 disjoint departments
 
-SUBLIMINAL_VECTOR_DIM = len(SUBLIMINAL_FEATURE_NAMES)  # 37 floats (24 + 9 + 4)
-
-# Strict Departmental Slice Indices for the 4 Virtual Tokens in `<|subliminal_gap|>`:
-# 0. Executive / Do-er Department (Will <-> Cultural + Social Drift): 12 floats
-DOER_DEPARTMENT_INDICES: tuple[int, ...] = (
-    0, 1, 2, 3, 4, 5,      # 6 Founding Cultural leaves
-    22, 23,                # 2 Founding Will leaves (Intention, Execution)
-    24, 25, 26,            # 3 Cultural Parent-Branch Child Pools
-    34,                    # 1 Social Drift Flag
-)
-
-# 1. Judicial / Thinker Department (Truth <-> Philosophical): 11 floats
-THINKER_DEPARTMENT_INDICES: tuple[int, ...] = (
-    6, 7, 8, 9, 10, 11,    # 6 Founding Philosophical leaves
-    20, 21,                # 2 Founding Truth leaves (Theory, Fact)
-    27, 28, 29,            # 3 Philosophical Parent-Branch Child Pools
-)
-
-# 2. Legislative / Feeler Department (Contemplation <-> Experiential): 11 floats
-FEELER_DEPARTMENT_INDICES: tuple[int, ...] = (
-    12, 13, 14, 15, 16, 17,  # 6 Founding Experiential leaves
-    18, 19,                  # 2 Founding Contemplation leaves (Clarity, Confidence)
-    30, 31, 32,              # 3 Experiential Parent-Branch Child Pools
-)
-
-# 3. Three-Legged Race Cadence & Struggle Department: 9 floats (4 cadence signals + key tension anchors)
-CADENCE_DEPARTMENT_INDICES: tuple[int, ...] = (
-    11, 14, 15, 18, 31,      # Discreteness, Valence, Arousal, Clarity, Experiential Phase Pool
-    33, 34, 35, 36,          # Branch Harmony, Social Drift, Dissonance Pressure, Cadence Rupture Drive
-)
+# Strictly disjoint departmental index slices (zero overlap between any two departments!):
+DOER_DEPARTMENT_INDICES: tuple[int, ...] = tuple(range(0, 17))
+THINKER_DEPARTMENT_INDICES: tuple[int, ...] = tuple(range(17, 33))
+FEELER_DEPARTMENT_INDICES: tuple[int, ...] = tuple(range(33, 49))
+CADENCE_DEPARTMENT_INDICES: tuple[int, ...] = tuple(range(49, 52))
 
 
 def _clamp01(value: float) -> float:
@@ -149,33 +150,68 @@ def _clamp01(value: float) -> float:
     return round(min(1.0, max(0.0, float(value))), 6)
 
 
-def pool_child_drawers_by_parent_branch(
-    coordinates: Mapping[str, float],
-    extra_notes: Mapping[str, float] | None = None,
-) -> dict[str, float]:
-    """Roll up any number of learned Tier-2/Tier-3 child leaves into the 9 Founding Parent Branches.
+def child_drawer_basis_signature(leaf_id: str) -> tuple[float, ...]:
+    """Compute a deterministic 8-float unit-peak basis signature in `[0.15, 1.0]^8` for a child leaf.
 
-    Whether the tree has 4 child leaves today or 10,000 child leaves across future domains,
-    every learned child leaf (`tier >= 2`) starts with `<parent_branch>/...` and is pooled
-    via `max` into its permanent `branch_pool/<parent_branch>` channel so the subliminal
-    vector dimension never changes.
+    Why this matters:
+    - Sibling child leaves under the same parent branch (e.g., `experiential/phase/austere_sanctuary`,
+      `experiential/phase/hollow_stillness`, and `experiential/phase/bittersweet_release`) have
+      completely distinct 8-float signatures inside their department, without hardcoding any
+      leaf names and without ever changing the department vector's size as 10,000 new leaves grow.
     """
+    digest = hashlib.sha256(leaf_id.strip().encode("utf-8")).digest()
+    raw = [0.15 + 0.85 * (digest[i] / 255.0) for i in range(DEPARTMENT_CHILD_CHORD_DIM)]
+    peak = max(raw)
+    return tuple(round(v / peak, 6) for v in raw)
+
+
+def pool_departmental_child_chord(
+    coordinates: Mapping[str, float],
+    *,
+    department_prefix: str,
+    extra_notes: Mapping[str, float] | None = None,
+) -> tuple[float, ...]:
+    """Pool all active Tier-2/Tier-3 child leaves in a single department into an 8-float chord.
+
+    - Only reads child leaves (`leaf_tier >= 2`) belonging to `department_prefix`
+      (`"cultural/"`, `"philosophical/"`, or `"experiential/"`).
+    - Preserves the distinct identity of sibling child leaves under the same parent branch
+      (unlike a single `max()` number, which would crush `austere_sanctuary` and `hollow_stillness`
+      into the same scalar).
+    - Blends multiple simultaneously active child leaves via activation-weighted superposition
+      scaled by the strongest active child leaf in that department.
+    """
+    if department_prefix not in ("cultural/", "philosophical/", "experiential/"):
+        raise ValueError(f"Invalid department_prefix: {department_prefix!r}")
+
     merged: dict[str, float] = dict(coordinates)
     if extra_notes:
         for k, v in extra_notes.items():
             merged[k] = max(float(merged.get(k, 0.0)), float(v))
 
-    pools: dict[str, float] = {
-        f"branch_pool/{branch}": 0.0 for branch in ALL_GROWABLE_PARENT_BRANCHES
-    }
-    for leaf_id, val in merged.items():
-        if leaf_tier(leaf_id) >= 2:
-            for branch in ALL_GROWABLE_PARENT_BRANCHES:
-                if leaf_id.startswith(branch + "/"):
-                    pool_key = f"branch_pool/{branch}"
-                    pools[pool_key] = _clamp01(max(pools[pool_key], float(val)))
-                    break
-    return pools
+    active_children: list[tuple[str, float]] = []
+    for leaf_id, val in sorted(merged.items()):
+        if leaf_tier(leaf_id) >= 2 and leaf_id.startswith(department_prefix):
+            clamped = _clamp01(float(val))
+            if clamped > 0.0:
+                active_children.append((leaf_id, clamped))
+
+    if not active_children:
+        return (0.0,) * DEPARTMENT_CHILD_CHORD_DIM
+
+    total_weight = sum(weight for _, weight in active_children)
+    peak_activation = max(weight for _, weight in active_children)
+
+    blended = [0.0] * DEPARTMENT_CHILD_CHORD_DIM
+    for leaf_id, weight in active_children:
+        basis = child_drawer_basis_signature(leaf_id)
+        for i in range(DEPARTMENT_CHILD_CHORD_DIM):
+            blended[i] += weight * basis[i]
+
+    return tuple(
+        _clamp01(peak_activation * (blended[i] / total_weight))
+        for i in range(DEPARTMENT_CHILD_CHORD_DIM)
+    )
 
 
 def compute_cadence_rupture_drive(
@@ -184,7 +220,7 @@ def compute_cadence_rupture_drive(
     discreteness: float,
     clarity: float,
     valence: float,
-    experiential_phase_pool: float,
+    feeler_child_peak: float,
     dissonance_pressure: float,
     deadband: float = DEFAULT_RUPTURE_DEADBAND,
     ankle_rope_sensitivity: float = 1.0,
@@ -210,7 +246,7 @@ def compute_cadence_rupture_drive(
         return 0.0
 
     raw_intensity = (
-        0.45 * max(float(arousal), float(experiential_phase_pool))
+        0.45 * max(float(arousal), float(feeler_child_peak))
         + 0.35 * float(discreteness)
         + 0.20 * (1.0 - float(clarity))
     )
@@ -223,30 +259,51 @@ def compute_cadence_rupture_drive(
 
 @dataclass(frozen=True)
 class SubliminalChordVector:
-    """37-float scale-invariant non-verbal Right-Brain snapshot injected into `<|subliminal_gap|>`."""
+    """Four strictly isolated Departmental Vectors injected into `<|subliminal_gap|>`."""
 
-    values: tuple[float, ...]
+    doer_vector: tuple[float, ...]     # 17 floats (Executive / Do-er: Will <-> Cultural)
+    thinker_vector: tuple[float, ...]  # 16 floats (Judicial / Thinker: Truth <-> Philosophical)
+    feeler_vector: tuple[float, ...]   # 16 floats (Legislative / Feeler: Contemplation <-> Experiential)
+    cadence_vector: tuple[float, ...]  #  3 floats (Three-Legged Race Cadence & Ankle-Rope)
 
     def __post_init__(self) -> None:
-        if len(self.values) != SUBLIMINAL_VECTOR_DIM:
-            raise ValueError(
-                f"SubliminalChordVector requires {SUBLIMINAL_VECTOR_DIM} floats, got {len(self.values)}"
-            )
-        cleaned: list[float] = []
-        for idx, v in enumerate(self.values):
-            if type(v) not in (int, float) or not math.isfinite(float(v)):
-                raise ValueError(f"feature[{idx}] ({SUBLIMINAL_FEATURE_NAMES[idx]}) must be finite")
-            fv = float(v)
-            if not (0.0 <= fv <= 1.0):
+        expected_specs = (
+            ("doer_vector", self.doer_vector, DOER_DEPT_DIM, DOER_FEATURE_NAMES),
+            ("thinker_vector", self.thinker_vector, THINKER_DEPT_DIM, THINKER_FEATURE_NAMES),
+            ("feeler_vector", self.feeler_vector, FEELER_DEPT_DIM, FEELER_FEATURE_NAMES),
+            ("cadence_vector", self.cadence_vector, CADENCE_DEPT_DIM, CADENCE_FEATURE_NAMES),
+        )
+        for field_name, vec, expected_len, names in expected_specs:
+            if len(vec) != expected_len:
                 raise ValueError(
-                    f"feature[{idx}] ({SUBLIMINAL_FEATURE_NAMES[idx]}) must be in [0, 1], got {fv}"
+                    f"{field_name} requires {expected_len} floats, got {len(vec)}"
                 )
-            cleaned.append(round(fv, 6))
-        object.__setattr__(self, "values", tuple(cleaned))
+            cleaned: list[float] = []
+            for idx, v in enumerate(vec):
+                if type(v) not in (int, float) or not math.isfinite(float(v)):
+                    raise ValueError(f"{field_name}[{idx}] ({names[idx]}) must be finite")
+                fv = float(v)
+                if not (0.0 <= fv <= 1.0):
+                    raise ValueError(
+                        f"{field_name}[{idx}] ({names[idx]}) must be in [0, 1], got {fv}"
+                    )
+                cleaned.append(round(fv, 6))
+            object.__setattr__(self, field_name, tuple(cleaned))
+
+    @property
+    def values(self) -> tuple[float, ...]:
+        """Concatenation of the 4 disjoint departmental vectors (`17 + 16 + 16 + 3 = 52`)."""
+        return (
+            self.doer_vector
+            + self.thinker_vector
+            + self.feeler_vector
+            + self.cadence_vector
+        )
 
     def to_dict(self) -> dict[str, float]:
+        vals = self.values
         return {
-            name: self.values[idx]
+            name: vals[idx]
             for idx, name in enumerate(SUBLIMINAL_FEATURE_NAMES)
         }
 
@@ -259,31 +316,43 @@ class SubliminalChordVector:
         return torch.tensor(self.values, device=device, dtype=dtype)
 
     def with_zeroed_cord(self) -> "SubliminalChordVector":
-        """Return an all-zero vector for the 'Unplug the Cord' diagnostic test."""
-        return SubliminalChordVector(values=tuple(0.0 for _ in range(SUBLIMINAL_VECTOR_DIM)))
-
-    @property
-    def parent_branch_pools(self) -> dict[str, float]:
-        return {
-            PARENT_BRANCH_POOL_ORDER[i]: self.values[24 + i]
-            for i in range(len(PARENT_BRANCH_POOL_ORDER))
-        }
-
-    @property
-    def branch_harmony(self) -> float:
-        return self.values[33]
+        """Return all-zero departmental vectors for the 'Unplug the Cord' diagnostic test."""
+        return SubliminalChordVector(
+            doer_vector=(0.0,) * DOER_DEPT_DIM,
+            thinker_vector=(0.0,) * THINKER_DEPT_DIM,
+            feeler_vector=(0.0,) * FEELER_DEPT_DIM,
+            cadence_vector=(0.0,) * CADENCE_DEPT_DIM,
+        )
 
     @property
     def social_drift_flag(self) -> float:
-        return self.values[34]
+        return self.doer_vector[8]
+
+    @property
+    def branch_harmony(self) -> float:
+        return self.cadence_vector[0]
 
     @property
     def dissonance_pressure(self) -> float:
-        return self.values[35]
+        return self.cadence_vector[1]
 
     @property
     def cadence_rupture_drive(self) -> float:
-        return self.values[36]
+        return self.cadence_vector[2]
+
+    @classmethod
+    def from_flat_values(cls, flat_values: tuple[float, ...] | list[float]) -> "SubliminalChordVector":
+        if len(flat_values) != SUBLIMINAL_VECTOR_DIM:
+            raise ValueError(
+                f"Expected {SUBLIMINAL_VECTOR_DIM} flat values across the 4 departments, got {len(flat_values)}"
+            )
+        t = tuple(float(x) for x in flat_values)
+        return cls(
+            doer_vector=t[0:17],
+            thinker_vector=t[17:33],
+            feeler_vector=t[33:49],
+            cadence_vector=t[49:52],
+        )
 
     @classmethod
     def from_feature_mapping(cls, mapping: Mapping[str, float]) -> "SubliminalChordVector":
@@ -291,7 +360,7 @@ class SubliminalChordVector:
             _clamp01(float(mapping.get(name, 0.0)))
             for name in SUBLIMINAL_FEATURE_NAMES
         ]
-        return cls(values=tuple(vals))
+        return cls.from_flat_values(vals)
 
     @classmethod
     def from_right_brain_vibe(
@@ -303,45 +372,57 @@ class SubliminalChordVector:
         deadband: float = DEFAULT_RUPTURE_DEADBAND,
         ankle_rope_sensitivity: float = 1.0,
     ) -> "SubliminalChordVector":
-        """Compile all 37 scale-invariant non-verbal floats directly from a live `RightBrainVibe`."""
+        """Compile the 4 strictly isolated Departmental Vectors directly from a live `RightBrainVibe`."""
         coords = vibe.coordinates
         fc_notes = vibe.felt_chord.complex_notes if vibe.felt_chord is not None else {}
 
-        # 1. 12 Founding Cultural & Philosophical leaves
-        founding_12 = [_clamp01(float(coords.get(k, 0.0))) for k in FOUNDATIONAL_LEAVES]
+        # 1. Executive / Do-er Department Vector (17 floats):
+        #    6 Cultural leaves + 2 Will leaves + 1 Social Drift flag + 8-float Cultural Child Chord
+        cult_6 = tuple(_clamp01(float(coords.get(k, 0.0))) for k in CULTURAL_FOUNDING_ORDER)
+        will_2 = (_clamp01(vibe.intention), _clamp01(vibe.execution))
+        drift_flag = (1.0 if (social_drift is not None and social_drift.drift_detected) else 0.0,)
+        cult_child_chord_8 = pool_departmental_child_chord(
+            coords,
+            department_prefix="cultural/",
+            extra_notes=fc_notes,
+        )
+        doer_vec = cult_6 + will_2 + drift_flag + cult_child_chord_8
 
-        # 2. 6 Founding Experiential leaves
-        exp_6 = [
+        # 2. Judicial / Thinker Department Vector (16 floats):
+        #    6 Philosophical leaves + 2 Truth leaves + 8-float Philosophical Child Chord
+        phil_6 = tuple(_clamp01(float(coords.get(k, 0.0))) for k in PHILOSOPHICAL_FOUNDING_ORDER)
+        truth_2 = (_clamp01(vibe.theory), _clamp01(vibe.fact))
+        phil_child_chord_8 = pool_departmental_child_chord(
+            coords,
+            department_prefix="philosophical/",
+            extra_notes=fc_notes,
+        )
+        thinker_vec = phil_6 + truth_2 + phil_child_chord_8
+
+        # 3. Legislative / Feeler Department Vector (16 floats):
+        #    6 Experiential leaves + 2 Contemplation leaves + 8-float Experiential Child Chord
+        exp_6 = (
             _clamp01(vibe.novelty),
             _clamp01(vibe.salience),
             _clamp01(vibe.valence),
             _clamp01(vibe.arousal),
             _clamp01(vibe.resonance),
             _clamp01(vibe.retention),
-        ]
+        )
+        contemp_2 = (_clamp01(vibe.clarity), _clamp01(vibe.confidence))
+        exp_child_chord_8 = pool_departmental_child_chord(
+            coords,
+            department_prefix="experiential/",
+            extra_notes=fc_notes,
+        )
+        feeler_vec = exp_6 + contemp_2 + exp_child_chord_8
 
-        # 3. 6 Founding Psychological leaves
-        psych_6 = [
-            _clamp01(vibe.clarity),
-            _clamp01(vibe.confidence),
-            _clamp01(vibe.theory),
-            _clamp01(vibe.fact),
-            _clamp01(vibe.intention),
-            _clamp01(vibe.execution),
-        ]
-
-        # 4. 9 Permanent Parent-Branch Child-Drawer Pools (handles 10 or 10,000 child leaves!)
-        pooled_by_branch = pool_child_drawers_by_parent_branch(coords, fc_notes)
-        branch_pools_9 = [pooled_by_branch[k] for k in PARENT_BRANCH_POOL_ORDER]
-
-        # 5. 4 Three-Legged Race Cadence & Ankle-Rope signals
+        # 4. Three-Legged Race Cadence & Ankle-Rope Department Vector (3 floats):
         harmony = (
             _clamp01(deliberation.harmony_score)
             if deliberation is not None
             else _clamp01(vibe.synthesis.harmony)
         )
-        drift_flag = 1.0 if (social_drift is not None and social_drift.drift_detected) else 0.0
-
         has_dissonance = bool(vibe.self_registry.dissonance_notes)
         conflict_count = len(vibe.synthesis.conflicts)
         dissonance_pressure = _clamp01(
@@ -349,38 +430,37 @@ class SubliminalChordVector:
             + 0.25 * min(2, conflict_count)
             + max(0.0, 0.50 - vibe.clarity)
         )
-
         discreteness = _clamp01(float(coords.get("philosophical/persistence/discreteness", 0.0)))
-        exp_phase_pool = pooled_by_branch["branch_pool/experiential/phase"]
+        feeler_child_peak = max(exp_child_chord_8, default=0.0)
         rupture_drive = compute_cadence_rupture_drive(
             arousal=vibe.arousal,
             discreteness=discreteness,
             clarity=vibe.clarity,
             valence=vibe.valence,
-            experiential_phase_pool=exp_phase_pool,
+            feeler_child_peak=feeler_child_peak,
             dissonance_pressure=dissonance_pressure,
             deadband=deadband,
             ankle_rope_sensitivity=ankle_rope_sensitivity,
         )
+        cadence_vec = (harmony, dissonance_pressure, rupture_drive)
 
-        all_37 = founding_12 + exp_6 + psych_6 + branch_pools_9 + [
-            harmony,
-            drift_flag,
-            dissonance_pressure,
-            rupture_drive,
-        ]
-        return cls(values=tuple(all_37))
+        return cls(
+            doer_vector=doer_vec,
+            thinker_vector=thinker_vec,
+            feeler_vector=feeler_vec,
+            cadence_vector=cadence_vec,
+        )
 
 
 class SubliminalGapProjector(nn.Module):
-    """Projects a 37-float `SubliminalChordVector` into 4 departmental virtual token embeddings `[4, hidden_size]`.
+    """Projects the 4 strictly disjoint Departmental Vectors into 4 virtual token embeddings `[4, hidden_size]`.
 
-    Each virtual token is strictly wired to its own department's slice of indices so the
-    3 branches and cadence signals never blur into a single undifferentiated mush:
-      - Virtual Token 0 (`doer_head`): Executive / Do-er (`Will <-> Cultural` + `social_drift`, 12 floats)
-      - Virtual Token 1 (`thinker_head`): Judicial / Thinker (`Truth <-> Philosophical`, 11 floats)
-      - Virtual Token 2 (`feeler_head`): Legislative / Feeler (`Contemplation <-> Experiential`, 11 floats)
-      - Virtual Token 3 (`cadence_head`): Three-Legged Race Cadence & Rupture Drive (9 floats)
+    Each virtual token is wired exclusively to its own department's disjoint vector with
+    **zero shared or overlapping indices**:
+      - Virtual Token 0 (`doer_head`): Executive / Do-er (`doer_vector`, 17 floats)
+      - Virtual Token 1 (`thinker_head`): Judicial / Thinker (`thinker_vector`, 16 floats)
+      - Virtual Token 2 (`feeler_head`): Legislative / Feeler (`feeler_vector`, 16 floats)
+      - Virtual Token 3 (`cadence_head`): Three-Legged Race Cadence & Rupture (`cadence_vector`, 3 floats)
     """
 
     def __init__(
@@ -425,7 +505,7 @@ class SubliminalGapProjector(nn.Module):
         self.output_norm = nn.LayerNorm(hidden_size)
 
     def forward(self, chord_vectors: Tensor) -> Tensor:
-        """Map `[..., 37]` float tensor -> `[..., 4, hidden_size]` compartmentalized virtual token embeddings."""
+        """Map `[..., 52]` disjoint departmental tensor -> `[..., 4, hidden_size]` virtual token embeddings."""
         if chord_vectors.shape[-1] != self.input_dim:
             raise ValueError(
                 f"Expected last dimension {self.input_dim}, got {tuple(chord_vectors.shape)}"
@@ -458,17 +538,17 @@ def splice_subliminal_gaps_into_embeds(
     attention_mask: Tensor | None = None,
     labels: Tensor | None = None,
 ) -> SplicedEmbeddingBatch:
-    """Replace every `gap_token_id` in `input_ids` with 4 projected non-verbal Fuzzy Tree embeddings."""
+    """Replace every `gap_token_id` in `input_ids` with 4 projected departmental Fuzzy Tree embeddings."""
     if input_ids.ndim != 2:
         raise ValueError(f"input_ids must have shape [batch, seq_len], got {tuple(input_ids.shape)}")
     batch_size, seq_len = input_ids.shape
     device = input_ids.device
 
     if chord_vectors.ndim == 2:
-        chord_vectors = chord_vectors.unsqueeze(1)  # [batch, 1, 37]
+        chord_vectors = chord_vectors.unsqueeze(1)  # [batch, 1, 52]
     if chord_vectors.ndim != 3 or chord_vectors.shape[0] != batch_size:
         raise ValueError(
-            f"chord_vectors must have shape [batch, num_gaps, 37] or [batch, 37], got {tuple(chord_vectors.shape)}"
+            f"chord_vectors must have shape [batch, num_gaps, {SUBLIMINAL_VECTOR_DIM}] or [batch, {SUBLIMINAL_VECTOR_DIM}], got {tuple(chord_vectors.shape)}"
         )
 
     if attention_mask is None:
