@@ -404,120 +404,57 @@ def test_causal_transformer_flips_continuation_purely_from_nonverbal_gap_vector(
         assert flipped_probs[1, TOKEN_SMOOTH_FLOW].item() > 0.95
 
 
-def test_entrainment_leaf_and_emoji_onomatopoeia_child_drawer_signatures() -> None:
-    """Verify Entrainment is the 6th Experiential leaf and emoji/onomatopoeia drawers project cleanly."""
-    from lmft_lab.reflection_classifier import ENTRAINMENT_LEAF
-    from lmft_lab.subliminal_gap_splice import FEELER_FEATURE_NAMES
+def test_entrainment_leaf_and_birth_scored_anchor_weights() -> None:
+    """Verify Entrainment is the 6th Experiential leaf and LearnedLeaf.anchor_weights works with zero keyword stuffing."""
+    from lmft_lab.neural_bridge_classifiers import MULTILINGUAL_BRIDGE_BACKBONE
+    from lmft_lab.reflection_classifier import ENTRAINMENT_LEAF, LearnedLeaf
+    from lmft_lab.subliminal_gap_splice import (
+        DEPARTMENT_FOUNDING_ANCHORS,
+        FEELER_FEATURE_NAMES,
+        score_leaf_anchor_weights_at_birth,
+    )
 
     assert ENTRAINMENT_LEAF == "experiential/synchronization/entrainment"
     assert FEELER_FEATURE_NAMES[5] == "experiential/synchronization/entrainment"
-
-    # Pure pre-verbal emoji + onomatopoeia descriptions (tipsy/drunken sway vs. electric jolt)
-    tipsy_sig = semantic_child_drawer_signature(
-        "experiential/synchronization/tipsy_sway",
-        department_prefix="experiential/",
-        description="🥴 🍺 hic-hic whirrrr ...",
-    )
-    jolt_sig = semantic_child_drawer_signature(
-        "experiential/phase/jolt_crackle",
-        department_prefix="experiential/",
-        description="⚡ 💥 thump-thump crackle!",
-    )
-    warm_sigh_sig = semantic_child_drawer_signature(
-        "experiential/phase/warm_hearth_sigh",
-        department_prefix="experiential/",
-        description="🕯️ 🍵 ahh sigh",
-    )
-
-    # Specifically: tipsy_sway hits the Entrainment anchor (index 5), jolt_crackle hits Salience/Arousal (1, 3),
-    # and warm_hearth_sigh hits Valence (index 2). All three signatures are distinct.
-    assert tipsy_sig[5] == 1.0
-    assert max(jolt_sig[1], jolt_sig[3]) == 1.0
-    assert warm_sigh_sig[2] == 1.0
-    assert tipsy_sig != jolt_sig
-    assert tipsy_sig != warm_sigh_sig
-
-
-def test_multilingual_and_facial_expression_child_drawer_signatures() -> None:
-    """Verify French, Mandarin, Korean, and rich facial expression drawers project cleanly."""
-    from lmft_lab.neural_bridge_classifiers import MULTILINGUAL_BRIDGE_BACKBONE
-
     assert MULTILINGUAL_BRIDGE_BACKBONE == "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
 
-    # Sanctuary vs. Hollow Stillness described in French, Mandarin, and Korean
-    fr_sanctuary = semantic_child_drawer_signature(
-        "experiential/phase/sanctuaire_sobre",
-        department_prefix="experiential/",
-        description="Un humble sanctuaire et refuge offrant une chaleur sincère.",
+    # Verify DEPARTMENT_FOUNDING_ANCHORS has zero stuffed test phrases
+    all_anchors_text = " ".join(
+        anchor for anchors in DEPARTMENT_FOUNDING_ANCHORS.values() for anchor in anchors
     )
-    zh_sanctuary = semantic_child_drawer_signature(
-        "experiential/phase/zh_sanctuary",
-        department_prefix="experiential/",
-        description="简朴的庇护圣所带来温暖",
-    )
-    ko_sanctuary = semantic_child_drawer_signature(
-        "experiential/phase/ko_sanctuary",
-        department_prefix="experiential/",
-        description="소박한 안식처와 피난처의 온기",
-    )
+    for forbidden_test_phrase in ("Duchenne", "quizzical", "poker-face", "庇护", "안식처", "🥴"):
+        assert forbidden_test_phrase not in all_anchors_text
 
-    fr_hollow = semantic_child_drawer_signature(
-        "experiential/phase/vide_glace",
-        department_prefix="experiential/",
-        description="Un vide froid et une immobilité glaciale.",
+    # Birth-scored anchor weights on a multilingual / emoji / facial-expression LearnedLeaf
+    raw_tipsy_leaf = LearnedLeaf(
+        "experiential/synchronization",
+        "tipsy_sway",
+        "🥴 🍺 hic-hic whirrrr — warm uninhibited sway",
     )
-    zh_hollow = semantic_child_drawer_signature(
-        "experiential/phase/zh_hollow",
-        department_prefix="experiential/",
-        description="冰冷的空虚与死寂",
+    # Simulate the neural bridge or 9B Teacher scoring the new leaf once at birth against the 8 traits
+    born_tipsy_leaf = score_leaf_anchor_weights_at_birth(
+        raw_tipsy_leaf,
+        pair_scorer=lambda anchor, _desc: 0.92 if "entrainment" in anchor.lower() else (
+            0.75 if "warmth" in anchor.lower() else 0.15
+        ),
     )
-    ko_hollow = semantic_child_drawer_signature(
-        "experiential/phase/ko_hollow",
-        department_prefix="experiential/",
-        description="차가운 공허와 정적",
-    )
+    assert born_tipsy_leaf.anchor_weights is not None
+    assert len(born_tipsy_leaf.anchor_weights) == 8
+    assert born_tipsy_leaf.anchor_weights[5] == 1.0  # Peaks on Entrainment (index 5)
 
-    # All 3 sanctuary descriptions peak on Valence (index 2); all 3 hollow descriptions peak on Entrainment/Stillness (index 5)
-    assert fr_sanctuary[2] == 1.0 and zh_sanctuary[2] == 1.0 and ko_sanctuary[2] == 1.0
-    assert fr_hollow[5] == 1.0 and zh_hollow[5] == 1.0 and ko_hollow[5] == 1.0
-    assert fr_sanctuary != fr_hollow
-    assert zh_sanctuary != zh_hollow
-    assert ko_sanctuary != ko_hollow
+    # Round-trip through JSON dict serialization preserves anchor_weights
+    restored_leaf = LearnedLeaf.from_dict(born_tipsy_leaf.to_dict())
+    assert restored_leaf.anchor_weights == born_tipsy_leaf.anchor_weights
 
-    # Rich facial expression imagery across Do-er, Thinker, and Feeler departments
-    smirk_power = semantic_child_drawer_signature(
-        "cultural/efficiency/domineering_smirk",
-        department_prefix="cultural/",
-        description="A cold sneer and raised chin with a clenched jaw 😏 😤",
-    )
-    quizzical_brow = semantic_child_drawer_signature(
-        "philosophical/being/quizzical_squint",
-        department_prefix="philosophical/",
-        description="Furrowed brow and quizzical squint with a slight head tilt 🤔 🧐",
-    )
-    duchenne_warmth = semantic_child_drawer_signature(
-        "experiential/phase/duchenne_smile",
+    # Pooling uses the birth-scored anchor_weights directly in O(1)
+    pooled = pool_departmental_child_chord(
+        {restored_leaf.leaf_id: 0.80},
         department_prefix="experiential/",
-        description="Warm Duchenne smile with crinkled eyes and welcoming relief 😊 🥹",
+        learned_leaves=(restored_leaf,),
     )
-    trembling_lip = semantic_child_drawer_signature(
-        "experiential/reflection/vulnerable_lip_tremble",
-        department_prefix="experiential/",
-        description="Trembling lip and glistening eyes in an urgent weighty moment 🥺 😢",
-    )
-    poker_face_composure = semantic_child_drawer_signature(
-        "cultural/freedom/poker_face_restraint",
-        department_prefix="cultural/",
-        description="Composed poker-face steadiness and self-reliant autonomy",
-    )
+    assert pooled[5] == 0.80
+    assert pooled[2] > 0.50
 
-    assert smirk_power[0] == 1.0            # Peaks on Cultural Power (index 0)
-    assert poker_face_composure[4] == 1.0   # Peaks on Cultural Self-Sufficiency (index 4)
-    assert quizzical_brow[6] == 1.0         # Peaks on Philosophical/Truth Theory (index 6)
-    assert duchenne_warmth[2] == 1.0        # Peaks on Experiential Valence (index 2)
-    assert trembling_lip[1] == 1.0          # Peaks on Experiential Salience (index 1)
-    assert duchenne_warmth != trembling_lip
-    assert smirk_power != poker_face_composure
 
 
 

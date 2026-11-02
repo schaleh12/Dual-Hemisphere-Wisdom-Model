@@ -162,49 +162,34 @@ CADENCE_DEPARTMENT_INDICES: tuple[int, ...] = tuple(range(49, 52))
 # so synonymous child concepts naturally land near each other in 8-float space without any random hashing.
 DEPARTMENT_FOUNDING_ANCHORS: dict[str, tuple[str, ...]] = {
     "cultural/": (
-        DOER_FOUNDING_DESCRIPTIONS["cultural/efficiency/power"]
-        + " command force leverage control authority gatekeeping exclusion smirk sneer glare clenched jaw pouvoir autorité 权力 控制 권력 통제 😏 😤",
-        DOER_FOUNDING_DESCRIPTIONS["cultural/efficiency/wastelessness"]
-        + " careful stewardship conservation thrift preservation restraint understatement economy économie préservation 节俭 守护 절약 보존",
-        DOER_FOUNDING_DESCRIPTIONS["cultural/justice/honor"]
-        + " sincere integrity duty moral responsibility covenant earnestness candor honneur sincérité 荣誉 真诚 명예 진심 🥺",
-        DOER_FOUNDING_DESCRIPTIONS["cultural/justice/fairness"]
-        + " open equitable sharing fair inclusion generous care in need welcoming warmth justice équité partage 公正 公平 공유 공정 😊 🤝",
-        DOER_FOUNDING_DESCRIPTIONS["cultural/freedom/self-sufficiency"]
-        + " independent capability self-reliance autonomy standing alone composed poker-face steadiness autonomie indépendance 自立 独立 자립 독립",
-        DOER_FOUNDING_DESCRIPTIONS["cultural/freedom/needlessness"]
-        + " peaceful contentment sufficiency calm security free from lack unhurried ease sérénité contentement 知足 安宁 평온 만족 😌",
-        "deliberate resolve intention commitment inner purpose aim to act focused gaze volonté 意图 决心 의지 결심",
-        "active execution intervention carrying out concrete step action exécution 执行 行动 실행 행동",
+        DOER_FOUNDING_DESCRIPTIONS["cultural/efficiency/power"],
+        DOER_FOUNDING_DESCRIPTIONS["cultural/efficiency/wastelessness"],
+        DOER_FOUNDING_DESCRIPTIONS["cultural/justice/honor"],
+        DOER_FOUNDING_DESCRIPTIONS["cultural/justice/fairness"],
+        DOER_FOUNDING_DESCRIPTIONS["cultural/freedom/self-sufficiency"],
+        DOER_FOUNDING_DESCRIPTIONS["cultural/freedom/needlessness"],
+        "Deliberate resolve, inner commitment, and purposeful intention to act.",
+        "Active execution, concrete intervention, and carrying an action through.",
     ),
     "philosophical/": (
-        THINKER_FOUNDING_DESCRIPTIONS["philosophical/being/agency"]
-        + " deliberate purposeful choice human actor intervention agence choix 自主 选择 주체 선택",
-        THINKER_FOUNDING_DESCRIPTIONS["philosophical/being/existence"]
-        + " concrete physical presence tangible material reality stone body existence présence 存在 实体 존재 실체",
-        THINKER_FOUNDING_DESCRIPTIONS["philosophical/structure/order"]
-        + " structured arrangement deliberate rules built boundaries discipline composed poker-face neutrality ordre règle 秩序 规则 질서 규칙 😐",
-        THINKER_FOUNDING_DESCRIPTIONS["philosophical/structure/chaos"]
-        + " violent disruption fracture breakdown storm turbulent disorder grimace flinch chaos désordre 混乱 崩裂 혼돈 붕괴 😱 😬",
-        THINKER_FOUNDING_DESCRIPTIONS["philosophical/persistence/continuity"]
-        + " ongoing flow sustained rhythm unbroken endurance shared continuation continuité 延续 持续 연속 지속",
-        THINKER_FOUNDING_DESCRIPTIONS["philosophical/persistence/discreteness"]
-        + " sealed enclosure locked separation rigid isolation sharp boundary guarded reserve deadpan séparation isolement 隔绝 封闭 단절 고립 😶",
-        "working theory hypothesis conceptual synthesis inferred pattern furrowed brow quizzical squint head tilt théorie 理论 假设 이론 가설 🤔 🧐",
-        "verified fact direct external evidence concrete observation clear-eyed recognition fait vérité 事实 证据 사실 증거",
+        THINKER_FOUNDING_DESCRIPTIONS["philosophical/being/agency"],
+        THINKER_FOUNDING_DESCRIPTIONS["philosophical/being/existence"],
+        THINKER_FOUNDING_DESCRIPTIONS["philosophical/structure/order"],
+        THINKER_FOUNDING_DESCRIPTIONS["philosophical/structure/chaos"],
+        THINKER_FOUNDING_DESCRIPTIONS["philosophical/persistence/continuity"],
+        THINKER_FOUNDING_DESCRIPTIONS["philosophical/persistence/discreteness"],
+        "Working theory, conceptual hypothesis, and inferred explanatory pattern.",
+        "Verified external fact, concrete observation, and direct evidence.",
     ),
     "experiential/": (
-        "unfamiliar novelty sudden shift unexpected turn new discovery opening widened eyes nouveauté 新奇 突变 새로움 ✨ ❓ 😮 gasp ooh aha",
-        FEELER_FOUNDING_DESCRIPTIONS[SALIENCE_LEAF]
-        + " poignant ache simultaneous strain urgency weighty moment trembling lip glistening eyes urgence 紧迫 剧痛 절박함 ⚡ ❗ 🥺 😢 throb pang",
-        FEELER_FOUNDING_DESCRIPTIONS[VALENCE_LEAF]
-        + " spare humble shelter sanctuary care offered openly restorative relief warm Duchenne smile crinkled eyes sanctuaire refuge chaleur 庇护 圣所 温暖 안식처 피난처 온기 🕯️ 🍵 🫂 😊 🥹 sigh ahh",
-        FEELER_FOUNDING_DESCRIPTIONS[AROUSAL_LEAF]
-        + " pent-up strain breaking apart intense pressure release tension éclatement 爆发 紧绷 폭발 긴장 💥 🔥 thump crackle",
-        "restored shared rhythm resonance homecoming mutual connection return résonance retour 共鸣 归来 공명 귀환 🎶 🤝 hum chime",
-        "cold sterile airless quiet hollow stillness sealed isolation drained warmth rhythmic entrainment trance sway glassy stare tipsy grin vide immobilité ivresse 空虚 死寂 微醺 催眠 공허 정적 취기 최면 🌀 🥴 🍺 🪨 🫠 hic whirrr shhh ...",
-        "unclouded clarity transparent open understanding clarté 清晰 清醒 명료함 💡 🔍 ding ping",
-        "steady settled confidence assurance grounded trust calm unguarded gaze confiance 自信 笃定 확신 신뢰 🛡️ ⚓ hm mm",
+        "Unfamiliar novelty, sudden shift, unexpected turn, and new discovery.",
+        FEELER_FOUNDING_DESCRIPTIONS[SALIENCE_LEAF],
+        FEELER_FOUNDING_DESCRIPTIONS[VALENCE_LEAF],
+        FEELER_FOUNDING_DESCRIPTIONS[AROUSAL_LEAF],
+        "Restored shared rhythm, mutual connection, phase harmony, and homecoming resonance.",
+        "Rhythmic entrainment, state momentum, absorbed stillness, or sustained cadence capture.",
+        "Unclouded clarity, transparent understanding, and coherent focus.",
+        "Steady settled confidence, inner assurance, and grounded trust.",
     ),
 }
 
@@ -317,20 +302,26 @@ def semantic_child_drawer_signature(
     *,
     department_prefix: str,
     description: str | None = None,
+    anchor_weights: Sequence[float] | None = None,
 ) -> tuple[float, ...]:
     """Project a child leaf onto the 8 Founding Trait Anchors of its department (`[0.10, 1.0]^8`).
 
-    Why this replaces SHA-256 hashing:
-    - Uses the child leaf's actual semantic meaning (`short_name + description` compared against
-      the 8 Founding Trait Anchors of its department) plus its parent-branch structural location.
-    - Sibling child leaves with opposite meanings (e.g. `austere_sanctuary` vs. `hollow_stillness`)
-      project to strongly distinct 8-float signatures.
-    - Newly created child leaves with similar meanings (e.g. `austere_sanctuary` vs. a newly
-      minted `humble_open_refuge`) automatically project to nearly identical 8-float signatures
-      (`cosine_similarity > 0.85`), allowing a maturing LoRA to generalize immediately.
+    - Primary path (`anchor_weights` provided at leaf birth by the 9B Teacher or MiniLM neural
+      bridge): normalizes the 8 birth-scored departmental trait weights in `O(1)` (`0.0 ms` CPU).
+    - Fallback path (when `anchor_weights is None`): compares the leaf's English description
+      against the 8 un-stuffed Founding Trait descriptions in `DEPARTMENT_FOUNDING_ANCHORS`.
     """
     if department_prefix not in DEPARTMENT_FOUNDING_ANCHORS:
         raise ValueError(f"Unknown department_prefix: {department_prefix!r}")
+
+    if anchor_weights is not None:
+        if len(anchor_weights) != DEPARTMENT_CHILD_CHORD_DIM:
+            raise ValueError(
+                f"anchor_weights must have length {DEPARTMENT_CHILD_CHORD_DIM}, got {len(anchor_weights)}"
+            )
+        clamped = [max(0.05, _clamp01(float(w))) for w in anchor_weights]
+        peak_w = max(clamped)
+        return tuple(round(v / peak_w, 6) for v in clamped)
 
     short_name = leaf_id.split("/")[-1].replace("_", " ").replace("-", " ")
     resolved_desc = description or _KNOWN_LEAF_DESCRIPTIONS.get(leaf_id, "")
@@ -339,7 +330,7 @@ def semantic_child_drawer_signature(
 
     anchors = DEPARTMENT_FOUNDING_ANCHORS[department_prefix]
     raw_scores: list[float] = []
-    for idx, anchor_text in enumerate(anchors):
+    for anchor_text in anchors:
         anchor_feats = _extract_semantic_features(anchor_text)
         sim = _cosine_similarity(leaf_feats, anchor_feats)
         raw_scores.append(0.10 + 0.90 * sim)
@@ -367,6 +358,42 @@ def semantic_child_drawer_signature(
     return tuple(round(v / peak, 6) for v in raw_scores)
 
 
+def score_leaf_anchor_weights_at_birth(
+    leaf: LearnedLeaf,
+    *,
+    pair_scorer: Callable[[str, str], float] | None = None,
+) -> LearnedLeaf:
+    """Score a new `LearnedLeaf` once at birth against its department's 8 founding traits.
+
+    - When `pair_scorer` (such as a neural cross-encoder bridge or 9B Teacher scorer) is supplied,
+      it scores `(founding_anchor_description, leaf.description)` across all 8 departmental traits
+      and attaches the resulting 8-float `anchor_weights` tuple to `leaf`.
+    - When `pair_scorer` is None, it uses `semantic_child_drawer_signature` as an offline fallback.
+    """
+    dept_prefix = leaf.leaf_id.split("/")[0] + "/"
+    if dept_prefix not in DEPARTMENT_FOUNDING_ANCHORS:
+        raise ValueError(f"Unknown department for leaf: {leaf.leaf_id!r}")
+
+    if pair_scorer is not None:
+        anchors = DEPARTMENT_FOUNDING_ANCHORS[dept_prefix]
+        raw = [max(0.05, _clamp01(float(pair_scorer(anchor, leaf.description)))) for anchor in anchors]
+        peak = max(raw)
+        weights = tuple(round(v / peak, 6) for v in raw)
+    else:
+        weights = semantic_child_drawer_signature(
+            leaf.leaf_id,
+            department_prefix=dept_prefix,
+            description=leaf.description,
+        )
+
+    return LearnedLeaf(
+        parent_branch=leaf.parent_branch,
+        leaf_name=leaf.leaf_name,
+        description=leaf.description,
+        anchor_weights=weights,
+    )
+
+
 def pool_departmental_child_chord(
     coordinates: Mapping[str, float],
     *,
@@ -374,14 +401,14 @@ def pool_departmental_child_chord(
     extra_notes: Mapping[str, float] | None = None,
     learned_leaves: Sequence[LearnedLeaf] = (),
     leaf_descriptions: Mapping[str, str] | None = None,
+    leaf_anchor_weights: Mapping[str, Sequence[float]] | None = None,
 ) -> tuple[float, ...]:
     """Pool all active Tier-2/Tier-3 child leaves in a single department into an 8-float chord.
 
     - Only reads child leaves (`leaf_tier >= 2`) belonging to `department_prefix`
       (`"cultural/"`, `"philosophical/"`, or `"experiential/"`).
-    - Projects each active child leaf via `semantic_child_drawer_signature` (zero random hashing!)
-      so sibling child leaves with different meanings stay distinct while synonymous child leaves
-      cluster together naturally.
+    - Uses `LearnedLeaf.anchor_weights` (scored once at leaf birth) when available, or
+      `semantic_child_drawer_signature` as an English fallback.
     """
     if department_prefix not in ("cultural/", "philosophical/", "experiential/"):
         raise ValueError(f"Invalid department_prefix: {department_prefix!r}")
@@ -392,10 +419,15 @@ def pool_departmental_child_chord(
             merged[k] = max(float(merged.get(k, 0.0)), float(v))
 
     desc_lookup: dict[str, str] = dict(_KNOWN_LEAF_DESCRIPTIONS)
+    weights_lookup: dict[str, Sequence[float]] = {}
     for ll in learned_leaves:
         desc_lookup[ll.leaf_id] = ll.description
+        if ll.anchor_weights is not None:
+            weights_lookup[ll.leaf_id] = ll.anchor_weights
     if leaf_descriptions:
         desc_lookup.update(leaf_descriptions)
+    if leaf_anchor_weights:
+        weights_lookup.update(leaf_anchor_weights)
 
     active_children: list[tuple[str, float]] = []
     for leaf_id, val in sorted(merged.items()):
@@ -416,6 +448,7 @@ def pool_departmental_child_chord(
             leaf_id,
             department_prefix=department_prefix,
             description=desc_lookup.get(leaf_id),
+            anchor_weights=weights_lookup.get(leaf_id),
         )
         for i in range(DEPARTMENT_CHILD_CHORD_DIM):
             blended[i] += weight * basis[i]

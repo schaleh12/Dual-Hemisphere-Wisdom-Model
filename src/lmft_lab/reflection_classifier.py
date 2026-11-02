@@ -157,6 +157,7 @@ class LearnedLeaf:
     parent_branch: str
     leaf_name: str
     description: str
+    anchor_weights: tuple[float, ...] | None = None
 
     def __post_init__(self):
         if self.parent_branch not in ALL_GROWABLE_PARENT_BRANCHES and leaf_tier(self.parent_branch) != 2:
@@ -169,6 +170,11 @@ class LearnedLeaf:
             raise ValueError(f"learned leaf cannot overwrite founding leaf: {self.leaf_id!r}")
         if not isinstance(self.description, str) or not self.description.strip():
             raise ValueError("description must be a nonempty string")
+        if self.anchor_weights is not None:
+            weights = tuple(round(float(w), 6) for w in self.anchor_weights)
+            if len(weights) != 8 or any(not math.isfinite(w) or not (0.0 <= w <= 1.0) for w in weights):
+                raise ValueError("anchor_weights must be a sequence of 8 finite floats in [0.0, 1.0]")
+            object.__setattr__(self, "anchor_weights", weights)
 
     @property
     def leaf_id(self) -> str:
@@ -179,19 +185,24 @@ class LearnedLeaf:
         return leaf_tier(self.leaf_id)
 
     def to_dict(self) -> dict:
-        return {
+        out = {
             "parent_branch": self.parent_branch,
             "leaf_name": self.leaf_name,
             "description": self.description,
             "leaf_id": self.leaf_id,
         }
+        if self.anchor_weights is not None:
+            out["anchor_weights"] = list(self.anchor_weights)
+        return out
 
     @classmethod
     def from_dict(cls, data: dict) -> "LearnedLeaf":
+        raw_weights = data.get("anchor_weights")
         return cls(
             parent_branch=data["parent_branch"],
             leaf_name=data["leaf_name"],
             description=data["description"],
+            anchor_weights=tuple(float(w) for w in raw_weights) if raw_weights is not None else None,
         )
 
 
