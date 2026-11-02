@@ -438,10 +438,9 @@ def test_entrainment_leaf_and_emoji_onomatopoeia_child_drawer_signatures() -> No
     assert tipsy_sig != warm_sigh_sig
 
 
-def test_multilingual_french_mandarin_korean_child_drawers_and_script_glitch_detector() -> None:
-    """Verify French, Mandarin, and Korean child drawers project cleanly and mid-sentence script glitches are caught."""
+def test_multilingual_and_facial_expression_child_drawer_signatures() -> None:
+    """Verify French, Mandarin, Korean, and rich facial expression drawers project cleanly."""
     from lmft_lab.neural_bridge_classifiers import MULTILINGUAL_BRIDGE_BACKBONE
-    from lmft_lab.subliminal_gap_splice import detect_clause_script_glitch
 
     assert MULTILINGUAL_BRIDGE_BACKBONE == "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
 
@@ -485,25 +484,33 @@ def test_multilingual_french_mandarin_korean_child_drawers_and_script_glitch_det
     assert zh_sanctuary != zh_hollow
     assert ko_sanctuary != ko_hollow
 
-    # Accidental "Piers Morgan" context-pollution language glitch vs. intentional code-switching
-    accidental_glitch = detect_clause_script_glitch(
-        "Well Piers, I think the British public really wants—",
-        "其实我觉得这个问题非常复杂",
-        intention=0.10,
-        clarity=0.25,
+    # Rich facial expression imagery across Do-er, Thinker, and Feeler departments
+    smirk_power = semantic_child_drawer_signature(
+        "cultural/efficiency/domineering_smirk",
+        department_prefix="cultural/",
+        description="A cold sneer and raised chin with a clenched jaw 😏 😤",
     )
-    assert accidental_glitch["script_switched"] is True
-    assert accidental_glitch["unintended_script_glitch"] is True
-    assert accidental_glitch["deliberate_code_switch"] is False
+    quizzical_brow = semantic_child_drawer_signature(
+        "philosophical/being/quizzical_squint",
+        department_prefix="philosophical/",
+        description="Furrowed brow and quizzical squint with a slight head tilt 🤔 🧐",
+    )
+    duchenne_warmth = semantic_child_drawer_signature(
+        "experiential/phase/duchenne_smile",
+        department_prefix="experiential/",
+        description="Warm Duchenne smile with crinkled crow-feet eyes and softened cheeks 😊 🥹",
+    )
+    trembling_lip = semantic_child_drawer_signature(
+        "experiential/reflection/vulnerable_lip_tremble",
+        department_prefix="experiential/",
+        description="Trembling lower lip and glistening eyes biting back tears 🥺 😢",
+    )
 
-    intentional_switch = detect_clause_script_glitch(
-        "As the saying goes in Korean,",
-        "제발 가지 마 — please don't go.",
-        intention=0.85,
-        clarity=0.80,
-    )
-    assert intentional_switch["script_switched"] is True
-    assert intentional_switch["deliberate_code_switch"] is True
-    assert intentional_switch["unintended_script_glitch"] is False
+    assert smirk_power[0] == 1.0       # Peaks on Cultural Power (index 0)
+    assert quizzical_brow[6] == 1.0    # Peaks on Philosophical/Truth Theory (index 6)
+    assert duchenne_warmth[2] == 1.0   # Peaks on Experiential Valence (index 2)
+    assert trembling_lip[1] == 1.0     # Peaks on Experiential Salience (index 1)
+    assert duchenne_warmth != trembling_lip
+
 
 

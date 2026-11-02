@@ -116,19 +116,34 @@ Because `<|subliminal_gap|>` updates **between clauses**:
 
 ---
 
-## 7. Multilingual Support (French, Mandarin, Korean) & Anti-"Piers Morgan" Language-Glitch Immunity
+## 7. Multilingual Fluency (French, Mandarin, Korean) & Purposeful Code-Switching
 
-### A. Zero-Latency Multilingual Support Across the Stack
 1. **Universal 52-Float Departmental Chords**: The 40-node Fuzzy Tree and `SubliminalChordVector` are 100% language-agnostic numbers in `[0.0, 1.0]`.
 2. **Natively Multilingual Left Brain (`Qwen3-4B`) & Teacher (`Qwen3.5-9B`)**: Both models are natively fluent across English, French, Mandarin Chinese (`中文`), Korean (`한국어`), Japanese, Spanish, and 100+ languages.
 3. **Multilingual Child-Drawer Projection & Cross-Encoder Option**:
    - In [`src/lmft_lab/subliminal_gap_splice.py`](../src/lmft_lab/subliminal_gap_splice.py), `_extract_semantic_features` and `DEPARTMENT_FOUNDING_ANCHORS` natively support **Latin accent folding** (French/Spanish cognates like `sanctuaire`, `liberté`, `sincérité`, `immobilité`), **CJK unigrams and bigrams** (Mandarin `庇护`, `圣所`, `空虚`, `死寂`), and **Korean Hangul syllables** (`안식처`, `피난처`, `공허`, `정적`) cleanly separated from Unicode emojis (`unicodedata.category`).
    - In [`src/lmft_lab/neural_bridge_classifiers.py`](../src/lmft_lab/neural_bridge_classifiers.py), `MULTILINGUAL_BRIDGE_BACKBONE` (`cross-encoder/mmarco-mMiniLMv2-L12-H384-v1`) provides the exact same 12-layer, 384-dim MiniLM speed (`~35 ms` on GPU, zero extra transformer depth) across 14+ languages.
+4. **Why It Never Suffers From Prompt-Bloated Language Glitches—While Remaining Free to Shift Languages on Purpose**:
+   - Because the Right Brain's state is delivered through **4 compact non-verbal virtual tokens** at `<|subliminal_gap|>` rather than a 4,000-word "actor roleplay" text prompt, the Left Brain's attention heads are never diluted by prompt bloat.
+   - And because there is **no hardcoded script-blocker**, the model remains 100% free to shift into Mandarin, French, or Korean mid-sentence whenever `Intention`, `Resonance`, or an untranslatable concept (`le mot juste`, `정 / jeong`, `知音 / zhiyin`) genuinely calls for it.
 
-### B. Why Bilingual LLMs Glitch Into Mandarin on Live TV (And How `detect_clause_script_glitch` Catches It)
-When a standard bilingual LLM (`Qwen` / `Yi`) is stuffed with a bloated 4,000-word "actor roleplay" text prompt, attention dilution can tip a single token across the English/Mandarin latent border—and with no Right Brain monitoring its clauses, the LLM blindly keeps speaking Mandarin for the rest of the sentence.
-- First, our `<|subliminal_gap|>` splice replaces bloated text-prompt stage directions with **4 compact virtual tokens**, preventing prompt-bloat context pollution.
-- Second, `detect_clause_script_glitch` in [`src/lmft_lab/subliminal_gap_splice.py`](../src/lmft_lab/subliminal_gap_splice.py) checks script transitions at every `<|subliminal_gap|>` boundary:
-  - **Deliberate Multilingual Flair (`deliberate_code_switch = True`)**: Dropping *"c'est la vie"* or *"제발 가지 마"* when `Intention >= 0.50` and `Clarity >= 0.50` is ratified as intentional expression.
-  - **Accidental Context-Pollution Glitch (`unintended_script_glitch = True`)**: Drifting into another script mid-sentence when `Intention < 0.50` or `Clarity < 0.50` is caught immediately at the clause boundary.
+---
+
+## 8. Rich Facial Expression Imagery: Transcribing a Face Across the Corpus Callosum
+
+In human neurobiology, the **Right Hemisphere** (the right fusiform face area and superior temporal sulcus) is the seat of reading and generating **facial expressions**. In Paul Ekman's Facial Action Coding System (FACS), every human facial expression is a chord across ~44–52 muscle Action Units—almost the exact dimensionality of our **52-float `SubliminalChordVector`**.
+
+A real facial expression is never a flat single word like `"happy"` or `"sad"`. It is a **cross-departmental chord** combining the **Eyes & Brow (`Thinker` + `Contemplation`)** with the **Mouth, Jaw, & Posture (`Do-er` + `Feeler`)**:
+
+| Facial Expression / Micro-Expression | Do-er (`Cultural` + `Will`: Jaw, Chin, Posture) | Thinker (`Philosophical` + `Truth`: Brow, Gaze, Squint) | Feeler (`Experiential` + `Contemplation`: Eyes, Lips, Warmth) |
+| :--- | :--- | :--- | :--- |
+| **Warm Duchenne Smile** (*crinkled crow's-feet eyes, softened cheeks, open posture* `😊 🥹`) | High `Fairness` + `Needlessness` (relaxed shoulders, open palms) | Smooth `Continuity` + `Fact` (clear, unguarded eye contact) | High `Valence` + `Resonance` + `Clarity` |
+| **Cold, Domineering Smirk** (*asymmetrical lip curl that never reaches narrowed eyes, raised chin* `😏 😤`) | High `Power` + `Intention`, low `Fairness` (clenched jaw, raised chin) | High `Order` + `Discreteness` (calculating, guarded stare) | Cold `Valence` + high `Confidence` $\rightarrow$ spikes `dissonance_pressure` |
+| **Vulnerable Pleading / Bitten-Lip Tremble** (*glistening eyes, trembling lower lip, knitted inner brow* `🥺 😢`) | High `Honor` (sincerity) + `Intention`, low `Power` | High `Agency` + `Continuity` (unblinking earnestness) | High `Salience` + `Arousal` + `Resonance`, humble `Confidence` |
+| **Quizzical, Skeptical Squint** (*furrowed brow, one raised eyebrow, slight head tilt* `🤔 🧐 🤨`) | `HOLD_STEADY` (measured, unhurried posture) | High `Theory` + `Agency` (testing a hypothesis against `Fact`) | High `Novelty`, moderate `Clarity` (seeking resolution) |
+| **Thousand-Yard Glassy Stare** (*heavy-lidded or unblinking hollow gaze, slack jaw* `🫠 😶 🪨`) | Low `Execution`, drained `Self-Sufficiency` | High `Discreteness` (sealed off from surroundings) | High `Entrainment` / `hollow_stillness`, drained `Valence` |
+| **Playful Tipsy / Flushed Grin** (*heavy-lidded slow blink, flushed cheeks, crooked grin* `🥴 😌`) | High `Needlessness` (contentment, zero threat) | Relaxed `Order`, smooth `Continuity` | High `Entrainment` + warm `Valence` + `Confidence > Clarity` |
+
+Because `DEPARTMENT_FOUNDING_ANCHORS` in [`src/lmft_lab/subliminal_gap_splice.py`](../src/lmft_lab/subliminal_gap_splice.py) anchors these micro-expressions (jaw, chin, smirk, brow, squint, gaze, crow's-feet, trembling lip, glassy stare, plus facial emojis) across all three departments, the system can natively **transcribe a described face into a 52-float Right-Brain chord**, and **transcribe a 52-float Right-Brain chord back out into vivid facial imagery** on the Left-Brain side.
+
 
