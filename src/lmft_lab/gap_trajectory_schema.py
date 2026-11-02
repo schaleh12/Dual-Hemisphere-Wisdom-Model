@@ -281,8 +281,9 @@ def compile_chess_posture_chords(
     rupture_a = compute_cadence_rupture_drive(
         arousal=arousal_a,
         clarity=clarity_a,
+        valence=feeler_a[2],
         discreteness=thinker_a[5],
-        hollow_stillness=0.0,
+        feeler_child_peak=0.0,
         dissonance_pressure=dissonance_a,
         deadband=rupture_deadband,
     )
@@ -340,8 +341,9 @@ def compile_chess_posture_chords(
     rupture_b = compute_cadence_rupture_drive(
         arousal=arousal_b,
         clarity=clarity_b,
+        valence=feeler_b[2],
         discreteness=thinker_b[5],
-        hollow_stillness=0.0,
+        feeler_child_peak=0.0,
         dissonance_pressure=dissonance_b,
         deadband=rupture_deadband,
     )
