@@ -165,6 +165,7 @@ $env:PYTHONPATH='src'
 - [`DECISIONS.md`](DECISIONS.md) — Architectural decision log (`D001`–`D043`).
 - [`docs/MINIMAL_LMFT_SPEC.md`](docs/MINIMAL_LMFT_SPEC.md) — Frozen 40-node founding seed specification.
 - [`docs/PROJECT_PIPELINE_AND_AUDIT_ROADMAP.md`](docs/PROJECT_PIPELINE_AND_AUDIT_ROADMAP.md) — End-to-end 5-Stage Project Pipeline, Identical-Prefix Contrastive LoRA Training Strategy, and Independent Auditor AI Checklist.
+- [`docs/STAGE2_STAGE3_PSEUDOCODE_BLUEPRINT.md`](docs/STAGE2_STAGE3_PSEUDOCODE_BLUEPRINT.md) — Bite-sized pseudo-code blueprint (`Sub-Steps 2A, 2B, and 3`) for matched-pair generation, 6-piece Chess chord compilation, and pre-gap label-masked PyTorch LoRA training.
 - [`docs/EMERGENT_FACULTIES_AND_BIOLOGY.md`](docs/EMERGENT_FACULTIES_AND_BIOLOGY.md) — How Synchronization (`Resonance` & `Entrainment`), Hypnosis, Drunkenness, Emojis/Onomatopoeia, Humor/Irony, and Sensory Overload emerge from the 40-node architecture.
 - [`docs/SUBLIMINAL_GAP_SPLICE_BLUEPRINT.md`](docs/SUBLIMINAL_GAP_SPLICE_BLUEPRINT.md) — Blueprint and pseudo-code for the Three-Legged Race `<|subliminal_gap|>` non-verbal embedding splice.
 - [`src/lmft_lab/reflection_classifier.py`](src/lmft_lab/reflection_classifier.py) — Three neural bridge classifiers (`Will <-> Cultural`, `Truth <-> Philosophical`, `Contemplation <-> Experiential`) and isolated `Tier 1 -> Tier 2 -> Tier 3` child-drawer growth.
