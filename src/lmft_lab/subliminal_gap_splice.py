@@ -113,6 +113,35 @@ SUBLIMINAL_FEATURE_NAMES: tuple[str, ...] = (
 
 SUBLIMINAL_VECTOR_DIM = len(SUBLIMINAL_FEATURE_NAMES)  # 37 floats (24 + 9 + 4)
 
+# Strict Departmental Slice Indices for the 4 Virtual Tokens in `<|subliminal_gap|>`:
+# 0. Executive / Do-er Department (Will <-> Cultural + Social Drift): 12 floats
+DOER_DEPARTMENT_INDICES: tuple[int, ...] = (
+    0, 1, 2, 3, 4, 5,      # 6 Founding Cultural leaves
+    22, 23,                # 2 Founding Will leaves (Intention, Execution)
+    24, 25, 26,            # 3 Cultural Parent-Branch Child Pools
+    34,                    # 1 Social Drift Flag
+)
+
+# 1. Judicial / Thinker Department (Truth <-> Philosophical): 11 floats
+THINKER_DEPARTMENT_INDICES: tuple[int, ...] = (
+    6, 7, 8, 9, 10, 11,    # 6 Founding Philosophical leaves
+    20, 21,                # 2 Founding Truth leaves (Theory, Fact)
+    27, 28, 29,            # 3 Philosophical Parent-Branch Child Pools
+)
+
+# 2. Legislative / Feeler Department (Contemplation <-> Experiential): 11 floats
+FEELER_DEPARTMENT_INDICES: tuple[int, ...] = (
+    12, 13, 14, 15, 16, 17,  # 6 Founding Experiential leaves
+    18, 19,                  # 2 Founding Contemplation leaves (Clarity, Confidence)
+    30, 31, 32,              # 3 Experiential Parent-Branch Child Pools
+)
+
+# 3. Three-Legged Race Cadence & Struggle Department: 9 floats (4 cadence signals + key tension anchors)
+CADENCE_DEPARTMENT_INDICES: tuple[int, ...] = (
+    11, 14, 15, 18, 31,      # Discreteness, Valence, Arousal, Clarity, Experiential Phase Pool
+    33, 34, 35, 36,          # Branch Harmony, Social Drift, Dissonance Pressure, Cadence Rupture Drive
+)
+
 
 def _clamp01(value: float) -> float:
     if not math.isfinite(value):
@@ -344,15 +373,14 @@ class SubliminalChordVector:
 
 
 class SubliminalGapProjector(nn.Module):
-    """Projects a 37-float `SubliminalChordVector` into 4 virtual token embeddings `[4, hidden_size]`.
+    """Projects a 37-float `SubliminalChordVector` into 4 departmental virtual token embeddings `[4, hidden_size]`.
 
-    Each of the 4 virtual tokens inside a `<|subliminal_gap|>` represents one distinct
-    facet of the Right Brain's non-verbal state so the Left Brain's attention heads can
-    attend selectively to:
-      - Virtual Token 0: Do-er / Will Social Pulse
-      - Virtual Token 1: Thinker / Truth Structural Reality
-      - Virtual Token 2: Feeler / Experiential Felt Chord
-      - Virtual Token 3: Cadence / Struggle Rupture Drive
+    Each virtual token is strictly wired to its own department's slice of indices so the
+    3 branches and cadence signals never blur into a single undifferentiated mush:
+      - Virtual Token 0 (`doer_head`): Executive / Do-er (`Will <-> Cultural` + `social_drift`, 12 floats)
+      - Virtual Token 1 (`thinker_head`): Judicial / Thinker (`Truth <-> Philosophical`, 11 floats)
+      - Virtual Token 2 (`feeler_head`): Legislative / Feeler (`Contemplation <-> Experiential`, 11 floats)
+      - Virtual Token 3 (`cadence_head`): Three-Legged Race Cadence & Rupture Drive (9 floats)
     """
 
     def __init__(
@@ -376,26 +404,36 @@ class SubliminalGapProjector(nn.Module):
         self.num_virtual_tokens = num_virtual_tokens
         mid = intermediate_size or max(64, hidden_size)
 
-        # Shared trunk encodes the full 37-float chord state
-        self.shared_trunk = nn.Sequential(
-            nn.Linear(input_dim, mid),
-            nn.SiLU(),
-            nn.LayerNorm(mid),
+        dept_slices = (
+            DOER_DEPARTMENT_INDICES,
+            THINKER_DEPARTMENT_INDICES,
+            FEELER_DEPARTMENT_INDICES,
+            CADENCE_DEPARTMENT_INDICES,
         )
-        # 4 specialized virtual-token heads (`Do-er`, `Thinker`, `Feeler`, `Cadence/Rupture`)
-        self.token_heads = nn.ModuleList(
-            [nn.Linear(mid, hidden_size) for _ in range(num_virtual_tokens)]
+        self.department_indices = dept_slices
+        self.department_heads = nn.ModuleList(
+            [
+                nn.Sequential(
+                    nn.Linear(len(indices), mid),
+                    nn.SiLU(),
+                    nn.LayerNorm(mid),
+                    nn.Linear(mid, hidden_size),
+                )
+                for indices in dept_slices
+            ]
         )
         self.output_norm = nn.LayerNorm(hidden_size)
 
     def forward(self, chord_vectors: Tensor) -> Tensor:
-        """Map `[..., 37]` float tensor -> `[..., 4, hidden_size]` virtual token embeddings."""
+        """Map `[..., 37]` float tensor -> `[..., 4, hidden_size]` compartmentalized virtual token embeddings."""
         if chord_vectors.shape[-1] != self.input_dim:
             raise ValueError(
                 f"Expected last dimension {self.input_dim}, got {tuple(chord_vectors.shape)}"
             )
-        shared = self.shared_trunk(chord_vectors)
-        per_token = [head(shared) for head in self.token_heads]
+        per_token: list[Tensor] = []
+        for idx_tuple, head in zip(self.department_indices, self.department_heads):
+            dept_slice = chord_vectors[..., list(idx_tuple)]
+            per_token.append(head(dept_slice))
         stacked = torch.stack(per_token, dim=-2)  # [..., 4, hidden_size]
         return self.output_norm(stacked)
 

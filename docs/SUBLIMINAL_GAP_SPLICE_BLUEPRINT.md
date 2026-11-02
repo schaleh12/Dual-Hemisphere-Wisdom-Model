@@ -18,12 +18,12 @@ Instead of treating the Right Brain (the 40-node Fuzzy Tree + 3 neural bridge cl
        - `dissonance_pressure`: friction from cognitive dissonance or low clarity.
        - `cadence_rupture_drive`: non-verbal tug with a built-in **calm-talk deadband (`deadband = 0.45`)** and **`ankle_rope_sensitivity` dial** so normal everyday conversation stays at `0.0` (never twitchy), while genuine high-arousal / hollow-stillness / high-discreteness crises cross the deadband and yank the Left Brain out of smooth chatbot prose into stark or spelled-out cadence (`M-A-C-H-I-N-E`).
 
-2. **The `<|subliminal_gap|>` Token Slot & Surgical Embedding Splice (`SubliminalGapProjector`)**:
-   - Whenever the Left Brain emits `<|subliminal_gap|>`, Python intercepts `inputs_embeds` and replaces that single token slot with **4 virtual non-verbal token embeddings** (`[4, hidden_size]`):
-     1. **Do-er / Will Pulse Token** (social stakes, fairness, drift, action drive)
-     2. **Thinker / Truth Structure Token** (order, chaos, discreteness, fact vs. theory)
-     3. **Feeler / Experiential Chord Token** (valence, arousal, and pooled experiential sub-drawers)
-     4. **Cadence / Struggle Token** (`branch_harmony`, `dissonance_pressure`, and deadband-gated `cadence_rupture_drive`).
+2. **The `<|subliminal_gap|>` Token Slot & Departmental Embedding Splice (`SubliminalGapProjector`)**:
+   - Whenever the Left Brain emits `<|subliminal_gap|>`, Python intercepts `inputs_embeds` and replaces that single token slot with **4 strictly compartmentalized virtual non-verbal token embeddings** (`[4, hidden_size]`). Rather than blending all 37 floats into a single shared trunk, each virtual token is wired exclusively to its own department's index slice (`DOER_DEPARTMENT_INDICES`, `THINKER_DEPARTMENT_INDICES`, `FEELER_DEPARTMENT_INDICES`, `CADENCE_DEPARTMENT_INDICES`) so the branches never blur together:
+     1. **Virtual Token 0 — Executive / Do-er Pulse (`12` floats)**: 6 `Cultural` leaves + 2 `Will` leaves (`Intention`, `Execution`) + 3 `Cultural` Parent-Branch Child Pools + 1 `Social Drift` flag.
+     2. **Virtual Token 1 — Judicial / Thinker Structure (`11` floats)**: 6 `Philosophical` leaves + 2 `Truth` leaves (`Theory`, `Fact`) + 3 `Philosophical` Parent-Branch Child Pools.
+     3. **Virtual Token 2 — Legislative / Feeler Chord (`11` floats)**: 6 `Experiential` leaves + 2 `Contemplation` leaves (`Clarity`, `Confidence`) + 3 `Experiential` Parent-Branch Child Pools (`experiential/reflection`, `experiential/phase`, `experiential/synchronization`).
+     4. **Virtual Token 3 — Three-Legged Race Cadence & Struggle (`9` floats)**: 4 cadence signals (`branch_harmony`, `social_drift_flag`, `dissonance_pressure`, and deadband-gated `cadence_rupture_drive`) + 5 tension anchors (`Discreteness`, `Valence`, `Arousal`, `Clarity`, `Experiential Phase Pool`).
 
 ---
 
@@ -92,8 +92,23 @@ def compile_subliminal_chord_vector(
 
 
 # ============================================================================
-# STEP 2: Surgical Embedding Splice at Every `<|subliminal_gap|>` Slot
+# STEP 2: Departmental Projection & Surgical Embedding Splice
 # ============================================================================
+class SubliminalGapProjector(nn.Module):
+    # Strictly isolates each virtual token to its own department's slice of indices:
+    # - Token 0 (Do-er):   DOER_DEPARTMENT_INDICES    (12 floats -> [1, hidden_size])
+    # - Token 1 (Thinker): THINKER_DEPARTMENT_INDICES (11 floats -> [1, hidden_size])
+    # - Token 2 (Feeler):  FEELER_DEPARTMENT_INDICES  (11 floats -> [1, hidden_size])
+    # - Token 3 (Cadence): CADENCE_DEPARTMENT_INDICES ( 9 floats -> [1, hidden_size])
+    def forward(self, chord_vectors):
+        return output_norm(stack([
+            doer_head(chord_vectors[..., DOER_DEPARTMENT_INDICES]),
+            thinker_head(chord_vectors[..., THINKER_DEPARTMENT_INDICES]),
+            feeler_head(chord_vectors[..., FEELER_DEPARTMENT_INDICES]),
+            cadence_head(chord_vectors[..., CADENCE_DEPARTMENT_INDICES]),
+        ], dim=-2))  # Shape: [..., 4, hidden_size]
+
+
 def splice_subliminal_gaps_into_embeds(
     input_ids,          # [batch, seq_len] token IDs containing GAP_TOKEN_ID
     word_embedding_fn,  # LLM's model.get_input_embeddings()

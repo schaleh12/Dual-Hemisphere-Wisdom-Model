@@ -173,6 +173,21 @@ def test_splice_subliminal_gaps_into_embeds_expands_tokens_and_masks_labels():
     assert spliced.labels[0, 2:6].tolist() == [IGNORE_LABEL_INDEX] * 4
     assert spliced.labels[0, 6:].tolist() == [7, 9]
 
+    # Verify strict departmental containment: changing a Thinker-only coordinate
+    # (index 8: `philosophical/structure/order`) changes ONLY Virtual Token 1 (Thinker)
+    # and never leaks into Virtual Token 0 (Do-er), Token 2 (Feeler), or Token 3 (Cadence).
+    base_chord = torch.full((1, SUBLIMINAL_VECTOR_DIM), 0.25)
+    modified_thinker_chord = base_chord.clone()
+    modified_thinker_chord[0, 8] = 0.95  # philosophical/structure/order (Thinker-only)
+
+    out_base = projector(base_chord)
+    out_mod = projector(modified_thinker_chord)
+
+    assert torch.allclose(out_base[0, 0], out_mod[0, 0])  # Token 0 (Do-er) untouched
+    assert not torch.allclose(out_base[0, 1], out_mod[0, 1])  # Token 1 (Thinker) updated
+    assert torch.allclose(out_base[0, 2], out_mod[0, 2])  # Token 2 (Feeler) untouched
+    assert torch.allclose(out_base[0, 3], out_mod[0, 3])  # Token 3 (Cadence) untouched
+
 
 def test_causal_transformer_flips_continuation_purely_from_nonverbal_gap_vector():
     """Prove that identical English tokens before `<|subliminal_gap|>` produce completely

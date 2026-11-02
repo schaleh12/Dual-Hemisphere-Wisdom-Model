@@ -1,221 +1,141 @@
-# LMFT-Lab
+# Dual-Hemisphere Wisdom Model
 
-## Start here
+> **Bridging a Persistent 40-Node Emotional & Constitutional Right Brain with a Local Language Model Left Brain in a Non-Verbal "Three-Legged Race."**
 
-Fresh development sessions: [AGENTS.md](AGENTS.md) → [PROJECT_STATE.md](PROJECT_STATE.md) → relevant
-[DECISIONS.md](DECISIONS.md) entries → the authoritative specifications, code and reports
-linked there. The snapshot owns current-step guidance; the material below provides project
-background and setup.
+---
 
-Experimental development environment for Language Model Fuzzy Tree (LMFT) based artificial intelligence.
+## 1. Project Vision: Preventing the AI Bubble from Becoming a Tragedy
 
-## Research hypothesis and first milestone
+Today's AI industry is pouring trillions of dollars into building **pure Left-Brain Savants**: giant language models trained almost exclusively to predict the next token on coding puzzles, standardized tests, and encyclopedia trivia.
 
-LMFT investigates whether persistent fuzzy conceptual relationships can develop
-understanding, dispositions, judgments, and independent reasoning through repeated
-interaction with language models. The newborn initially depends on a founding
-LLM; later internalization into structures, classifiers, procedures, or specialized
-small models must be demonstrated experimentally. Antigravity assists development
-externally and is not currently integrated as a runtime teacher.
+When you ask a modern LLM to write a Python sorting function, it is brilliant. When you ask it to navigate a messy human dilemma, notice when a community agreement is quietly sliding into a private lockdown over time, recognize when its own train of thought is looping in anxious circles, or express genuine inner tension without sounding like a hollow corporate press release, the limits of a single-hemisphere text predictor become painfully obvious.
 
-The seed acts like a philosophical or religious constitution, without supernatural
-belief or assumed consciousness. Protect founding principles while revising their
-interpretations through evidence. Contemplation distinguishes Clarity from
-Confidence and may eventually support reactive and internally initiated reflection.
-These are research goals, not implemented cognitive capabilities.
+If the AI bubble bursts or turns into a tragedy, it will be because the industry mistook **verbal fluency and benchmark memorization** for **wisdom, self-awareness, and emotional grounding**.
 
-**First milestone:** make the newborn change its mind in a traceable way, save
-its state to disk, restart, and demonstrate that it remembers why. Keep V0.1
-small and deterministic, with authored evidence or mocked LLM responses. Later
-experiments must compare against an LLM with ordinary structured memory to test
-whether fuzzy activation adds measurable value.
+**`Dual-Hemisphere-Wisdom-Model`** pioneers a fundamentally different architecture—one that runs entirely on a single consumer GPU (`NVIDIA RTX 4080`, 16 GB VRAM) using open local weights:
 
-Genetic search, breeding, crossover, and fitness optimization are no longer
-required. Distinctive personality, relationships, continuous contemplation, and
-authorized real-world agency belong to the long-term roadmap.
+- **The Right Brain (40-Node Language Model Fuzzy Tree + 3 Fast Neural Bridge Classifiers)**:
+  A persistent, inspectable 40-node constitutional and emotional tree paired with three lightweight neural cross-encoders (`~35 ms` total latency, `0` LLM calls). It tracks social fairness, structural order vs. chaos, multi-note emotional chords, longitudinal social drift across time, and cognitive dissonance (`Clarity` vs. `Confidence`).
+- **The Left Brain (`Qwen3-4B`)**:
+  A fast local language model responsible for syntax, spelling, and verbal expression—wired directly to the Right Brain through non-verbal `<|subliminal_gap|>` embedding splices so the two halves finish each other's thoughts in a **Three-Legged Race** rather than a prompt-engineered relay race.
+- **Offline Sleep-Mode Consolidation (`Qwen3.5-9B` Teacher)**:
+  When the Right Brain encounters a situation during the day that triggers internal conflict (`CONTEST_EXCLUSION` or `DEFER_TO_TEACHER`), it refuses to fake certainty. Later, during an offline "REM Sleep" pass, the larger `9B` Teacher audits the day's unresolved scenes, repairs overly broad rules, and distills new domain-general concepts back into the fast Right-Brain classifiers.
 
-The [40-node founding seed](docs/MINIMAL_LMFT_SPEC.md#4-hardcoded-v01-seed-geometry)
-is canonical and frozen for V0.1, including Contemplation. Changes to its names,
-inventory, or parent-child organization require explicit approval. Learned state
-and interpretations remain separate; numerical mechanisms remain experimental.
+---
 
-## Migration and implementation status
+## 2. Core Architectural Breakthroughs
 
-LMFT means **Language Model Fuzzy Tree**. The project is LMFT-Lab, the Python
-package is `lmft_lab`, and the specifications use LMFT filenames. Old `gft_lab`
-imports must be updated; no compatibility import alias is installed. Dependency
-pins are unchanged. DEAP remains a legacy dependency, not a research requirement.
+### Breakthrough 1: The Frozen 40-Node Founding Seed & Isolated Child-Drawer Growth
+At the core of the Right Brain is a frozen [40-node founding seed](docs/MINIMAL_LMFT_SPEC.md#4-hardcoded-v01-seed-geometry) with **24 founding leaves** across four branches:
+- **Cultural (6 leaves — Executive / Social Stakes)**: `Power`, `Wastelessness`, `Honor`, `Fairness`, `Self-Sufficiency`, `Needlessness`
+- **Philosophical (6 leaves — Judicial / Structural Reality)**: `Agency`, `Existence`, `Order`, `Chaos`, `Continuity`, `Discreteness`
+- **Experiential (6 leaves — Legislative / Felt Experience)**: `Novelty`, `Salience`, `Valence`, `Arousal`, `Resonance`, `Retention`
+- **Psychological (6 leaves — Internal Compass)**:
+  - *Contemplation*: `Clarity`, `Confidence`
+  - *Truth*: `Theory`, `Fact`
+  - *Will*: `Intention`, `Execution`
 
-Implemented: canonical 40-node structural birth (`lmft-v0.1-seed-1`), explicit
-historical birth-record conversion, direct activation, and bounded propagation.
-The optional local-model path now provides linguistic interpretation, experience
-digestion, and one bounded contemplation-support call, with temporary activation
-and validated proposals. The [supervised runtime](docs/INTERACTIVE_RUNTIME.md) adds
-inbox/outbox communication, recoverable checkpoints and one separate fixture judgment
-with evidence-backed revision and restart. Full constitutional enforcement and
-general developmental learning remain research work.
+When the model learns nuanced concepts over its lifetime (such as `solitary_autarky`, `shared_stewardship`, `austere_sanctuary`, or `hollow_stillness`), it **never** overwrites the 40 founding nodes. Instead, new concepts grow into isolated **Tier-2 and Tier-3 child drawers** (`src/lmft_lab/reflection_classifier.py`) underneath their founding parent branches, with strict leaf-tier isolation (`Tier 1 -> Tier 2 -> Tier 3`) so child concepts never pollute the founding baseline.
 
-See [Local model setup](docs/LOCAL_MODELS.md) for exact Windows/RTX 4080 commands,
-automatic pinned downloads, offline operation, and the boundary between proposals
-and accepted state changes.
+### Breakthrough 2: Three Separate Right-Brain Neural Classifiers & Three Branch Archives
+Instead of dumping every decision onto one flat classifier—or calling a slow LLM on every turn—the Right Brain splits perception across **three specialized neural bridge classifiers** (`MiniLM-L12-v2` cross-encoders running in `~35 ms` on an RTX 4080) backed by **three persistent JSON branch archives** (`src/lmft_lab/branch_archives.py`):
 
-`lmft_lab.migration.migrate_legacy_birth_record` accepts an exact historical
-neutral birth record (`minimal-v0.1-seed-1`) and returns a new canonical state plus
-migration metadata without altering the input or writing files. It rejects mixed
-versions and developed states. External relationships, traces, and saved files
-are not automatically migrated. See [Minimal Section 4](docs/MINIMAL_LMFT_SPEC.md#4-hardcoded-v01-seed-geometry).
+| Right-Brain Branch | Neural Bridge Classifier | Persistent Branch Archive | What It Does |
+| :--- | :--- | :--- | :--- |
+| **Executive (Do-er)** | `Will <-> Cultural` | `cultural_history.json` | Tracks social fairness, resource stewardship, and **Longitudinal Social Drift** (detecting when a community that once shared openly quietly locks its doors later). |
+| **Legislative (Feeler)** | `Contemplation <-> Experiential` | `experiential_felt_diary.json` | Scores emotional `Valence`, `Arousal`, `Clarity`, and multi-note **Felt Chords** (`austere_sanctuary`, `hollow_stillness`, `bittersweet_release`, `earned_return`). |
+| **Judicial (Thinker)** | `Truth <-> Philosophical` | `philosophical_lexicon.json` | Evaluates structural `Order`, `Chaos`, `Continuity`, `Discreteness`, and ratifies stable cross-branch chords (`harmony_score >= 0.72`). |
 
-The GitHub repository is [LMFT-Lab](https://github.com/schaleh12/LMFT-Lab), and
-the local `origin` remote uses that URL. The workspace is now
-`LMFT based general AI/LMFT-Lab`. Historical GFT references describe old research
-or explicit compatibility records, not the current architecture.
+When a scene arrives, all three classifiers deliberate in `~30 ms` (`deliberate_across_three_classifiers`) and emit a real-time governance verdict (`RATIFY_EQUILIBRIUM`, `CONTEST_EXCLUSION`, or `DEFER_TO_TEACHER`) with **zero LLM calls**.
 
-## Recreate the development environment
+### Breakthrough 3: Offline 9B "REM Sleep" Consolidation
+During live daytime interaction (`experiments/run_dual_hemisphere_soil_eval.py`), the system never pauses for 15 seconds to call a giant Teacher LLM.
+- Unsettled daytime scenes are held honestly in tension (`CONTEST_EXCLUSION` or `DEFER_TO_TEACHER`).
+- During offline **Sleep-Mode Consolidation** (`src/lmft_lab/sleep_consolidation.py`), `Qwen3.5-9B` wakes up, inspects the unsettled daytime scenes alongside the scenes that already settled, diagnoses why existing rules misfired or over-fired, and forges domain-general rules.
+- **Verified Live Results on RTX 4080**:
+  - **Pre-Sleep Daytime Pass (`0` LLM calls)**: Settled `5/8` beats (`71.1 ms`) on the 8-beat Community Seed Bank story and `1/4` (`53.9 ms`) on an unseen domain (the Harbor Sourdough Bakehouse).
+  - **Post-Sleep Daytime Pass (`0` LLM calls)**: After one offline `9B` Sleep-Mode pass, the fast Right-Brain classifiers settled **`7/8` beats (`65.9 ms`)** on the Seed Bank (honestly holding Beat 6 in `CONTEST_EXCLUSION` due to longitudinal `social_drift`) and **`4/4` (`46.7 ms`)** zero-shot on the unseen Harbor Bakehouse.
 
-Use CPython 3.12 (the recorded local baseline is 3.12.3). From the repository
-root on Windows, run:
+### Breakthrough 4: The "Three-Legged Race" `<|subliminal_gap|>` Non-Verbal Embedding Splice
+How do you connect a non-verbal Right Brain to a verbal Left Brain (`Qwen3-4B`) without turning the Left Brain into a theater kid reading stage directions from a text prompt?
 
+We use the exact same neural mechanism that Vision-Language Models use to wire a camera into a blind text model ([`docs/SUBLIMINAL_GAP_SPLICE_BLUEPRINT.md`](docs/SUBLIMINAL_GAP_SPLICE_BLUEPRINT.md), [`src/lmft_lab/subliminal_gap_splice.py`](src/lmft_lab/subliminal_gap_splice.py)):
+1. **Scale-Invariant 37-Float `SubliminalChordVector` (Zero English Words)**:
+   - `[0..23]`: The **24 Frozen Founding Leaves**.
+   - `[24..32]`: The **9 Permanent Founding Parent-Branch Child-Drawer Pools** (`pool_child_drawers_by_parent_branch`). Whether the Fuzzy Tree has `10` learned child leaves today or `10,000` child leaves across dozens of domains in the future, every learned Tier-2/Tier-3 child leaf rolls up into its permanent parent branch (`cultural/efficiency`, `cultural/justice`, `cultural/freedom`, `philosophical/being`, `philosophical/structure`, `philosophical/persistence`, `experiential/reflection`, `experiential/phase`, `experiential/synchronization`). **The 37-float plug never changes shape.**
+   - `[33..36]`: The **4 Three-Legged Race Cadence & Ankle-Rope Signals** (`branch_harmony`, `social_drift_flag`, `dissonance_pressure`, and deadband-gated `cadence_rupture_drive`).
+2. **Strict Departmental Isolation Inside `SubliminalGapProjector`**:
+   - Whenever the Left Brain emits `<|subliminal_gap|>` mid-thought, Python intercepts `inputs_embeds` and replaces that single token slot with **4 departmental virtual token embeddings** (`[4, hidden_size]`).
+   - Rather than blending all 37 floats into a single shared trunk, each virtual token is wired exclusively to its own department's index slice:
+     - **Token 0 (`DOER_DEPARTMENT_INDICES`, 12 floats)**: Executive / Do-er (`Will <-> Cultural` + `social_drift_flag`)
+     - **Token 1 (`THINKER_DEPARTMENT_INDICES`, 11 floats)**: Judicial / Thinker (`Truth <-> Philosophical`)
+     - **Token 2 (`FEELER_DEPARTMENT_INDICES`, 11 floats)**: Legislative / Feeler (`Contemplation <-> Experiential`)
+     - **Token 3 (`CADENCE_DEPARTMENT_INDICES`, 9 floats)**: Three-Legged Race Cadence & Rupture Drive
+3. **Calm-Talk Deadband (`deadband = 0.45`) vs. Poetic Cadence Rupture (`M-A-C-H-I-N-E`)**:
+   - During calm, harmonious conversation, `cadence_rupture_drive` stays strictly at `0.0` so the Left Brain speaks naturally without being overly twitchy or melodramatic.
+   - When high arousal, hollow stillness, and high discreteness collide with low clarity above the deadband, `cadence_rupture_drive` spikes—physically yanking the Left Brain's hidden states out of smooth chatbot prose into stark, fractured, or spelled-out cadence (`no soul; M-A-C-H-I-N-E`).
+
+---
+
+## 3. Workflow & Anti-Delusion Trust Measures
+
+AI research repositories frequently collapse into self-delusion when coding assistants use dense academic jargon, hardcode benchmark answers into grading rubrics, or silently rig math formulas to make every experiment show `100%`.
+
+To prevent this, every session in this repository is governed by strict rules in [`AGENTS.md`](AGENTS.md):
+
+1. **Plain, Everyday English Only**:
+   - All documentation, code comments, and reports are written in clear, normal English. Fake bureaucratic roleplay and impenetrable academic jargon are strictly banned.
+2. **Zero Fake AI / Zero Coordinate or Rubric Rigging**:
+   - Never hardcode words or substrings from test sentences into grading rubrics or classification rules.
+   - Never use `if/else` text templates or pre-written essays to pretend a model is "thinking."
+   - Never put a thumb on the math scale to force a scene to settle (never clamp or overwrite raw sensor coordinates, never zero out competing rules when a favorite rule fires, and never harvest an unsettled `settled=False` scene into the archives as a ratified rule).
+3. **Let Experiments Fail Openly**:
+   - If a model output is inadmissible, a rule fails to generalize, or a benchmark settles `4/8`, `5/8`, `7/8`, or `1/4`, we report that exact score plainly and stop. An honest partial score is a complete scientific success; a rigged `8/8` is a failure.
+4. **Dual-Window Independent AI Auditing**:
+   - Every milestone, benchmark script, and `git diff` is built under the assumption that the project owner will paste the code and commit log into a separate, independent Auditor AI window with zero shared context to verify that no shortcuts or hardcoded tricks were used.
+5. **Strict Context Hygiene**:
+   - Startup files ([`AGENTS.md`](AGENTS.md), [`PROJECT_STATE.md`](PROJECT_STATE.md), [`DECISIONS.md`](DECISIONS.md)) are kept short and clean so the AI assistant's context window stays sharp.
+
+---
+
+## 4. Quickstart & Verification (Windows / RTX 4080)
+
+### Recreate the Python 3.12 Environment
 ```powershell
 py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
 .\.venv\Scripts\python.exe -m pip check
-.\.venv\Scripts\python.exe -c "import numpy, scipy, deap, skfuzzy, networkx, pytest; print('Imports OK')"
 ```
 
-On macOS/Linux, use `python3.12 -m venv .venv` and replace
-`.\.venv\Scripts\python.exe` with `.venv/bin/python` in the remaining commands.
-Activation is optional because these commands use the virtual environment's
-Python explicitly. The local `.venv` directory is ignored by Git.
-
-`pyproject.toml` declares Python 3.12 compatibility and the five direct runtime
-dependencies, with pytest in a separate development dependency group. The
-requirements files pin the installed direct and transitive package versions:
-`requirements.txt` is runtime-only; `requirements-dev.txt` includes runtime and
-test dependencies. Use the latter for reproducible development setup with the
-existing pip 24.0; no additional environment manager is required.
-
-The minimal Python package lives in `src/lmft_lab`. Pytest adds `src` to its import
-path so tests use this checkout. Distribution packaging and a build backend are
-deferred; use the requirements commands above rather than `pip install .`.
-The placeholder project version is `0.0.0`. Outside pytest, importing `lmft_lab`
-currently requires adding `src` to Python's import path.
-
-The pins record the working Windows CPython 3.12.3 environment, not a
-cross-platform, hash-verified lock. Other platforms have not yet been validated;
-the Windows-only colorama dependency has a platform marker. Package versions
-are fixed, but Python patch versions and native numerical libraries can still
-affect experimental results. Record those details alongside experiment seeds
-and configuration when experiments are introduced.
-
-Dependency updates should be deliberate: update the declarations and pinned
-snapshots together, verify imports and `pip check`, and run the relevant tests.
-Run tests with `.\.venv\Scripts\python.exe -m pytest` (or the macOS/Linux
-equivalent). Tests currently cover package import and deterministic structural
-birth: the complete seed hierarchy, provisional numerical bounds, and provenance.
-Direct-activation tests also cover temporary values, reset behavior, input
-validation, and inspectable traces without persistent changes.
-Propagation tests cover synchronous passes, signed influences, bounded cycles,
-deterministic ordering, and invalid relationship/configuration rejection.
-Local-model tests additionally cover validation, cache/offline behavior, role
-flow, failures, and state isolation using mocked inference. Actual model runs
-are recorded separately in [the smoke report](experiments/LOCAL_MODEL_SMOKE.md).
-Runtime tests now cover fixture revision, persistence, actual process restart,
-message handling and post-halt inspection. See the [mechanical and actual-model
-results](experiments/INTERACTIVE_REVISION_RESULTS.md); general action selection
-and cognitive development remain unimplemented.
-
-## Repository layout
-
-```text
-src/lmft_lab/  Seed, activation, local models and supervised persistent runtime
-tests/       Package and structural birth validation tests
-docs/        Research specifications, hypotheses, and design documentation
-experiments/ Controlled experiments and reproducibility records
-```
-
-See [the documentation index](docs/INDEX.md) for established decisions and open
-research questions, and [the experiment guidelines](experiments/README.md) for
-reproducibility requirements. These directories establish places for future work;
-the research documents define their current scope.
-
-The first implemented step is `lmft_lab.birth.create_birth_state`, which takes an
-individual ID plus explicit `birth_event_id` and `random_seed` arguments. It
-constructs the 40 canonical seed records documented in
-[Minimal Section 4](docs/MINIMAL_LMFT_SPEC.md#4-hardcoded-v01-seed-geometry) without file
-I/O or random sampling. See [Experiment 001](experiments/EXPERIMENT_001_PERSISTENT_REVISION.md)
-for the provisional initialization values and remaining experimental decisions.
-This is structural scaffolding, not the complete runtime birth process.
-
-## Inspect one numerical input
-
-Run this from the repository root in PowerShell. The explicit import path is
-needed until distribution packaging is introduced.
-
+### Run the Full Automated Test Suite (`1,331` Passing Tests)
 ```powershell
-@'
-import sys
-sys.path.insert(0, "src")
-from lmft_lab.birth import create_birth_state
-from lmft_lab.activation import activate_direct
-
-state = create_birth_state("seed-a", birth_event_id="birth-a", random_seed=42)
-frame = activate_direct(
-    state,
-    {"philosophical/being/agency": 0.8, "philosophical/being/existence": 0.3},
-    event_id="input-1",
-    source_instance="mechanical-fixture-1",
-)
-print(frame.format_trace())
-'@ | .\.venv\Scripts\python.exe -B -
+$env:PYTHONPATH='src;.'
+.\.venv\Scripts\python.exe -m pytest -q
 ```
 
-The trace lists all 40 nodes and distinguishes supplied values from omitted
-inputs. A new call computes a fresh temporary activation frame; it does not
-accumulate activation or modify the birth state. These are developer-authored
-numbers, not discovered meanings or evidence of understanding. There is no
-propagation, learning, action selection, or automatic file storage.
+### Run the Stage-1 `<|subliminal_gap|>` Embedding Splice & Departmental Isolation Tests
+```powershell
+$env:PYTHONPATH='src'
+.\.venv\Scripts\pytest.exe tests/test_subliminal_gap_splice.py -q
+```
 
-## Bounded propagation
+### Run the Live Dual-Hemisphere & Sleep-Consolidation Evaluation (RTX 4080)
+```powershell
+$env:PYTHONPATH='src'
+.\.venv\Scripts\python.exe experiments/run_dual_hemisphere_soil_eval.py
+```
 
-`lmft_lab.propagation.propagate_activation` extends direct activation over an
-explicit tuple of `Association` records, with a required `relationship_source`
-identifying the authored wiring. The seed hierarchy itself supplies no implicit
-propagation edges. The default `PropagationConfig` uses two passes and gain 0.25.
+---
 
-In the synthetic unit-weight chain A -> B -> C used by the tests:
+## 5. Key Repository Files
 
-| Stage | A | B | C |
-| --- | ---: | ---: | ---: |
-| Direct input | 0.8 | 0 | 0 |
-| Pass 1 | 0.8 | 0.2 | 0 |
-| Pass 2 | 0.8 | 0.2 | 0.05 |
-
-These are numerical test connections, not established conceptual relationships.
-The result's `format_trace()` shows each pass's inputs, weighted contributions,
-and clamping. The result's `activations` property returns the final temporary
-values. No learned or persistent state is changed. See Experiment 001 for the
-diagnostic limits and remaining research decisions.
-
-A second [comparative procedure fixture](docs/COMPARATIVE_RELIABILITY.md) tests
-propagation-enabled, propagation-disabled and structured-memory conditions without
-changing the revision equation. See its [results](experiments/COMPARATIVE_RELIABILITY_RESULTS.md).
-
-The [context-dependent study](docs/CONTEXTUAL_EXPERIMENT.md) adds authored-feature
-lookup, verified clarification and evidence/context deduplication. See
-[its results](experiments/CONTEXTUAL_RESULTS.md); it makes no fuzzy-advantage claim.
-
-The bounded [attention experiment](docs/ATTENTION_EXPERIMENT.md) uses propagation to select verification requests and learns separate route weights. Its [results](experiments/ATTENTION_RESULTS.md) match ordinary memory; no fuzzy superiority is claimed.
-
-The [scoped-support study](docs/SCOPED_ATTENTION.md) tests Fact/Confidence influence with outgoing-edge ablations. Its [results](experiments/SCOPED_ATTENTION_RESULTS.md) preserve a post-hoc counterexample where ordinary memory handles conflict better.
-
-The [consistent-support experiment](docs/CONSISTENT_SUPPORT.md) separates observation coverage from task-specific consistency. Its [results](experiments/CONSISTENT_SUPPORT_RESULTS.md) reproduce the old failure and compare a revised circuit with exact ablations and ordinary memory.
-
-The [correction experiment](docs/CORRECTION_EXPERIMENT.md) preserves erroneous originals while applying authorized, verified replacements through an effective evidence view. Its [results](experiments/CORRECTION_RESULTS.md) demonstrate restart-safe repair and ordinary-memory equivalence.
-
-The [local teacher connection](docs/LOCAL_TEACHER.md) supports one versioned developmental profile and independently validated route lessons. The [first actual offline study](experiments/TEACHER_RESULTS.md) retained a rejected proposal and demonstrated no transfer; it is separate from mocked acceptance tests.
-
-The [bounded teacher briefing follow-up](experiments/TEACHER_BRIEFING_RESULTS.md) accepted one useful route lesson and appropriate no-change recommendations, with ordinary-memory equivalence. The subsequent [outcome-correction experiment](docs/OUTCOME_CORRECTION.md) is now implemented and [evaluated](experiments/OUTCOME_CORRECTION_RESULTS.md): one effective contribution per event, remembered repairs, ordinary-memory equivalence, and no prediction improvement. See the [handoff](docs/EVIDENCE_LEARNING_HANDOFF.md) for the next bounded step.
-
-The [continued-learning study](docs/CONTINUATION_EXPERIMENT.md) verifies fresh outcome revision after correction and restart. Its [results](experiments/CONTINUATION_RESULTS.md) match ordinary memory, with unchanged accuracy and increased abstention.
-
-The [capacity relationship study](docs/CAPACITY_EXPERIMENT.md) selects a bounded length/capacity comparison from training and validates it separately. Its [results](experiments/CAPACITY_RESULTS.md) show unseen-combination transfer equal to ordinary relation-learning memory; no seed activation participates.
+- [`AGENTS.md`](AGENTS.md) — Anti-delusion rules, plain-English requirement, and zero-rigging policy.
+- [`PROJECT_STATE.md`](PROJECT_STATE.md) — Concise snapshot of current progress and next milestone.
+- [`DECISIONS.md`](DECISIONS.md) — Architectural decision log (`D001`–`D043`).
+- [`docs/MINIMAL_LMFT_SPEC.md`](docs/MINIMAL_LMFT_SPEC.md) — Frozen 40-node founding seed specification.
+- [`docs/SUBLIMINAL_GAP_SPLICE_BLUEPRINT.md`](docs/SUBLIMINAL_GAP_SPLICE_BLUEPRINT.md) — Blueprint and pseudo-code for the Three-Legged Race `<|subliminal_gap|>` non-verbal embedding splice.
+- [`src/lmft_lab/reflection_classifier.py`](src/lmft_lab/reflection_classifier.py) — Three neural bridge classifiers (`Will <-> Cultural`, `Truth <-> Philosophical`, `Contemplation <-> Experiential`) and isolated `Tier 1 -> Tier 2 -> Tier 3` child-drawer growth.
+- [`src/lmft_lab/right_brain_equilibrium.py`](src/lmft_lab/right_brain_equilibrium.py) — Right-Brain two-pass equilibrium loop, felt-chord extraction, and cognitive dissonance self-registry.
+- [`src/lmft_lab/branch_archives.py`](src/lmft_lab/branch_archives.py) — Persistent Executive, Legislative, and Judicial branch archives and ~30 ms 3-classifier deliberation.
+- [`src/lmft_lab/sleep_consolidation.py`](src/lmft_lab/sleep_consolidation.py) — Offline `Qwen3.5-9B` Sleep-Mode rule refinement and unsettled-scene distillation.
+- [`src/lmft_lab/subliminal_gap_splice.py`](src/lmft_lab/subliminal_gap_splice.py) — Scale-invariant 37-float `SubliminalChordVector`, compartmentalized `SubliminalGapProjector`, and surgical `<|subliminal_gap|>` embedding splice.
