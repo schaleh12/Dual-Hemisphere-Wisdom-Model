@@ -16,14 +16,31 @@ If the AI bubble bursts or turns into a tragedy, it will be because the industry
 
 - **The Right Brain (40-Node Language Model Fuzzy Tree + 3 Fast Neural Bridge Classifiers)**:
   A persistent, inspectable 40-node constitutional and emotional tree paired with three lightweight neural cross-encoders (`~35 ms` total latency, `0` LLM calls). It tracks social fairness, structural order vs. chaos, multi-note emotional chords, longitudinal social drift across time, and cognitive dissonance (`Clarity` vs. `Confidence`).
-- **The Left Brain (`Qwen3-4B`)**:
-  A fast local language model responsible for syntax, spelling, and verbal expression—wired directly to the Right Brain through non-verbal `<|subliminal_gap|>` embedding splices so the two halves finish each other's thoughts in a **Three-Legged Race** rather than a prompt-engineered relay race.
-- **Offline Sleep-Mode Consolidation (`Qwen3.5-9B` Teacher)**:
-  When the Right Brain encounters a situation during the day that triggers internal conflict (`CONTEST_EXCLUSION` or `DEFER_TO_TEACHER`), it refuses to fake certainty. Later, during an offline "REM Sleep" pass, the larger `9B` Teacher audits the day's unresolved scenes, repairs overly broad rules, and distills new domain-general concepts back into the fast Right-Brain classifiers.
+- **The Corpus Callosum (`SubliminalGapProjector` + `<|subliminal_gap|>` Splice)**:
+  The neural bridge connecting the two hemispheres. Rather than translating feelings into English stage directions, it projects the Right Brain's 4 departmental vectors into non-verbal token embeddings inside the Left Brain's hidden layers between thought clauses.
+- **The Left Brain (`Qwen3-4B` + Incrementally Maturing LoRA)**:
+  A fast local language model in PyTorch responsible for syntax, spelling, and verbal expression—whose lightweight LoRA pathways (`models/left_brain_lora/`) are never just "stapled on once," but instead **grow and mature across Sleep Cycles** alongside the Right Brain.
+- **Offline REM Sleep-Mode Consolidation (`Qwen3.5-9B` Teacher)**:
+  When the system encounters daytime conflict, it refuses to fake certainty. Later, during an offline "REM Sleep" pass, the larger `9B` Teacher updates **both** hemispheres: distilling new domain-general rules into the Right Brain and incrementally training the Left Brain's LoRA + Corpus Callosum checkpoint on the day's corrected thought trajectories.
 
 ---
 
-## 2. Core Architectural Breakthroughs
+## 2. How the Brain Runs Without Becoming an Unwieldy Circus: The 3-Gear Cycle
+
+Just like a real human brain, the Right Brain and Left Brain do **not** chatter over each other every millisecond just to stay busy. Instead, the architecture runs on **three clean gears** that take turns:
+
+1. **Gear 1 — Quiet Subconscious Reflex (Right Brain Alone, `~35 ms`, `0` LLM Calls)**:
+   - When the system is observing routine moments where its 3 neural classifiers and Fuzzy Tree are in harmony (`branch_harmony >= 0.72`), **the 4B Left Brain stays completely asleep**.
+   - The Right Brain logs the moment into its branch archives in ~35 milliseconds and moves on—zero wasted VRAM or rambling internal monologue when nothing is wrong.
+2. **Gear 2 — Conscious Train of Thought via the Corpus Callosum (`<|subliminal_gap|>` Three-Legged Race)**:
+   - Only when speaking with a person—or when the Right Brain hits genuine tension (`Clarity` drops, `Social Drift` triggers, or `Arousal` spikes)—does the **4B Left Brain** wake up.
+   - Instead of splicing vectors into every other word, the Left Brain simply pauses **between thought clauses** (`1–2` `<|subliminal_gap|>` pauses per reply) to receive a non-verbal gut-check across the **Corpus Callosum** (`SubliminalGapProjector`) before finishing its sentence.
+3. **Gear 3 — Nighttime REM Sleep-Mode Maturation (`Qwen3.5-9B` Teacher)**:
+   - When the session ends, the `9B` Teacher wakes up offline to consolidate the day's logs: refining the Right Brain's fuzzy rules (`outputs/sleep_consolidated_ruleset.json`) and running a short incremental PyTorch update on the Left Brain's LoRA + Corpus Callosum checkpoint (`models/left_brain_lora/`) so both hemispheres mature together.
+
+---
+
+## 3. Core Architectural Breakthroughs
 
 ### Breakthrough 1: The Frozen 40-Node Founding Seed & Isolated Child-Drawer Growth
 At the core of the Right Brain is a frozen [40-node founding seed](docs/MINIMAL_LMFT_SPEC.md#4-hardcoded-v01-seed-geometry) with **24 founding leaves** across four branches:
@@ -66,11 +83,12 @@ We use the exact same neural mechanism that Vision-Language Models use to wire a
      - **`doer_vector` — Executive / Do-er (`Will <-> Cultural`, `17` floats)**: `6` Founding Cultural leaves + `2` Founding Will leaves (`Intention`, `Execution`) + `1` Longitudinal `social_drift_flag` + `8` **Cultural Child-Drawer Chord** floats (`pool_departmental_child_chord` over active `cultural/*` Tier-2/Tier-3 child leaves).
      - **`thinker_vector` — Judicial / Thinker (`Truth <-> Philosophical`, `16` floats)**: `6` Founding Philosophical leaves + `2` Founding Truth leaves (`Theory`, `Fact`) + `8` **Philosophical Child-Drawer Chord** floats (`pool_departmental_child_chord` over active `philosophical/*` Tier-2/Tier-3 child leaves).
      - **`feeler_vector` — Legislative / Feeler (`Contemplation <-> Experiential`, `16` floats)**: `6` Founding Experiential leaves + `2` Founding Contemplation leaves (`Clarity`, `Confidence`) + `8` **Experiential Child-Drawer Chord** floats (`pool_departmental_child_chord` over active `experiential/*` Tier-2/Tier-3 child leaves).
-       *Why this matters*: Because every child leaf maps deterministically to an 8-float basis signature inside its own department, sibling child concepts under the exact same parent branch (such as `experiential/phase/austere_sanctuary`, `experiential/phase/hollow_stillness`, and `experiential/phase/bittersweet_release`, or 10,000 future Tier-2/Tier-3 leaves) produce **completely distinct Feeler vectors** without ever changing the 16-float Feeler department size.
+       *Meaning-Preserving Semantic Child Projection (Zero Random Hashing)*: Every child leaf is projected onto the **8 Founding Trait Anchors of its own department** via `semantic_child_drawer_signature` (comparing its natural-language description and word-stems/4-grams against its department's 8 founding trait descriptions). Sibling child leaves with opposite meanings (like `experiential/phase/austere_sanctuary` vs. `experiential/phase/hollow_stillness`) land far apart in 8-float space, while newly born child leaves with similar meanings (like `austere_sanctuary` and a newly minted `humble_open_refuge`) automatically land in the **exact same neighborhood**—allowing the maturing Left-Brain LoRA to immediately feel what a new child leaf means even before the next Sleep Cycle.
      - **`cadence_vector` — Three-Legged Race Cadence & Ankle-Rope (`3` floats)**: `branch_harmony`, `dissonance_pressure`, and deadband-gated `cadence_rupture_drive` (zero index overlap with the 3 branch departments).
-2. **Strict Departmental Isolation Inside `SubliminalGapProjector`**:
-   - Whenever the Left Brain emits `<|subliminal_gap|>` mid-thought, Python intercepts `inputs_embeds` and replaces that single token slot with **4 departmental virtual token embeddings** (`[4, hidden_size]`).
+2. **The Neural Corpus Callosum (`SubliminalGapProjector`) & Incremental LoRA Maturation**:
+   - Whenever the Left Brain emits `<|subliminal_gap|>` between thought clauses, Python intercepts `inputs_embeds` and replaces that single token slot with **4 departmental virtual token embeddings** (`[4, hidden_size]`).
    - Each virtual token is wired exclusively to its own department's disjoint vector (`doer_head(doer_vector)`, `thinker_head(thinker_vector)`, `feeler_head(feeler_vector)`, `cadence_head(cadence_vector)`) so a change in one department never leaks into the other three virtual tokens.
+   - Rather than training the LoRA + `SubliminalGapProjector` once and "stapling it on," its weights are saved to a versioned checkpoint (`models/left_brain_lora/`) that matures incrementally across Sleep Cycles as the `9B` Teacher grades and refines the Left Brain's daytime thought logs.
 3. **Calm-Talk Deadband (`deadband = 0.45`) vs. Poetic Cadence Rupture (`M-A-C-H-I-N-E`)**:
    - During calm, harmonious conversation, `cadence_rupture_drive` stays strictly at `0.0` so the Left Brain speaks naturally without being overly twitchy or melodramatic.
    - When high arousal, hollow stillness, and high discreteness collide with low clarity above the deadband, `cadence_rupture_drive` spikes—physically yanking the Left Brain's hidden states out of smooth chatbot prose into stark, fractured, or spelled-out cadence (`no soul; M-A-C-H-I-N-E`).
@@ -80,7 +98,7 @@ We use the exact same neural mechanism that Vision-Language Models use to wire a
 
 ---
 
-## 3. Workflow & Anti-Delusion Trust Measures
+## 4. Workflow & Anti-Delusion Trust Measures
 
 AI research repositories frequently collapse into self-delusion when coding assistants use dense academic jargon, hardcode benchmark answers into grading rubrics, or silently rig math formulas to make every experiment show `100%`.
 
@@ -101,7 +119,7 @@ To prevent this, every session in this repository is governed by strict rules in
 
 ---
 
-## 4. Quickstart & Verification (Windows / RTX 4080)
+## 5. Quickstart & Verification (Windows / RTX 4080)
 
 ### Recreate the Python 3.12 Environment
 ```powershell
@@ -130,7 +148,7 @@ $env:PYTHONPATH='src'
 
 ---
 
-## 5. Key Repository Files
+## 6. Key Repository Files
 
 - [`AGENTS.md`](AGENTS.md) — Anti-delusion rules, plain-English requirement, and zero-rigging policy.
 - [`PROJECT_STATE.md`](PROJECT_STATE.md) — Concise snapshot of current progress and next milestone.

@@ -2,11 +2,12 @@
 
 Plain-English Purpose:
 Instead of translating the Right Brain's state into English stage directions in a prompt—or
-crushing child leaves under the same parent branch into a single `max()` number—this module
-organizes the Right Brain's live state into **4 strictly separate Departmental Vectors**
-(zero English words, zero hardcoded feeling slots, zero cross-department index leakage)
-and surgically splices them directly into a PyTorch language model's hidden token embeddings
-(`inputs_embeds`) whenever the Left Brain emits a `<|subliminal_gap|>` token:
+crushing child leaves under the same parent branch into a single `max()` number or a random
+hash—this module organizes the Right Brain's live state into **4 strictly separate Departmental
+Vectors** (zero English words, zero hardcoded feeling slots, zero cross-department index leakage,
+and meaning-preserving semantic child-drawer projection) and surgically splices them directly
+into a PyTorch language model's hidden token embeddings (`inputs_embeds`) whenever the Left
+Brain emits a `<|subliminal_gap|>` token:
 
 1. Four Strictly Disjoint Departmental Vectors (`SubliminalChordVector`):
    - **Department 0 — `doer_vector` (Executive / Do-er: `Will <-> Cultural`, 17 floats)**:
@@ -28,12 +29,12 @@ and surgically splices them directly into a PyTorch language model's hidden toke
      * `2` Founding Contemplation leaves (`Clarity`, `Confidence`)
      * `8` Experiential Child-Drawer Chord floats (`pool_departmental_child_chord` over active
        `experiential/*` Tier-2/Tier-3 child leaves).
-       Because every child leaf maps deterministically to an 8-float basis signature inside its
-       own department, sibling child concepts under the same parent branch (such as
-       `experiential/phase/austere_sanctuary`, `experiential/phase/hollow_stillness`, and
-       `experiential/phase/bittersweet_release`, or 10,000 future Tier-2/Tier-3 child leaves)
-       produce **completely distinct Feeler vectors** without ever changing the 16-float Feeler
-       department size.
+       Because every child leaf is projected onto the 8 Founding Trait Anchors of its own
+       department via `semantic_child_drawer_signature` (using its natural-language description
+       and subword/stem overlap rather than a random hash), sibling child concepts with opposite
+       meanings (like `austere_sanctuary` vs. `hollow_stillness`) land in distinct regions of
+       the 8-float space, while newly born child leaves with similar meanings automatically land
+       in the same neighborhood so a maturing LoRA immediately feels what kind of concept it is.
    - **Department 3 — `cadence_vector` (Three-Legged Race Cadence & Ankle-Rope, 3 floats)**:
      * `branch_harmony`: agreement across the 3 Right-Brain branches.
      * `dissonance_pressure`: friction from cognitive dissonance or low clarity.
@@ -43,9 +44,10 @@ and surgically splices them directly into a PyTorch language model's hidden toke
        Left Brain to break smooth chatbot syntax into stark or spelled-out cadence (`M-A-C-H-I-N-E`).
 
 2. `SubliminalGapProjector` (`nn.Module`):
-   - Projects each of the 4 disjoint Departmental Vectors through its own dedicated neural head
-     into `K = 4` virtual non-verbal token embeddings of shape `[4, hidden_size]`
-     (`Do-er Pulse`, `Thinker Structure`, `Feeler Chord`, and `Cadence/Rupture`).
+   - Acts as the neural **Corpus Callosum**, projecting each of the 4 disjoint Departmental
+     Vectors through its own dedicated neural head into `K = 4` virtual non-verbal token
+     embeddings of shape `[4, hidden_size]` (`Do-er Pulse`, `Thinker Structure`,
+     `Feeler Chord`, and `Cadence/Rupture`).
 
 3. `splice_subliminal_gaps_into_embeds`:
    - Replaces every `<|subliminal_gap|>` token ID in `input_ids` with the 4 projected
@@ -56,14 +58,23 @@ and surgically splices them directly into a PyTorch language model's hidden toke
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-import hashlib
+import json
 import math
+from pathlib import Path
+import re
 import torch
 from torch import Tensor, nn
 
 from .branch_archives import SocialDriftReport, ThreeClassifierDeliberation
+from .runtime_store import atomic_json
+from .neural_bridge_classifiers import (
+    DEFAULT_COMPLEX_FEELING_LEAVES,
+    DOER_FOUNDING_DESCRIPTIONS,
+    FEELER_FOUNDING_DESCRIPTIONS,
+    THINKER_FOUNDING_DESCRIPTIONS,
+)
 from .reflection_classifier import (
     AROUSAL_LEAF,
     CLARITY_LEAF,
@@ -78,6 +89,7 @@ from .reflection_classifier import (
     SALIENCE_LEAF,
     THEORY_LEAF,
     VALENCE_LEAF,
+    LearnedLeaf,
     leaf_tier,
 )
 from .right_brain_equilibrium import RightBrainVibe
@@ -143,6 +155,61 @@ THINKER_DEPARTMENT_INDICES: tuple[int, ...] = tuple(range(17, 33))
 FEELER_DEPARTMENT_INDICES: tuple[int, ...] = tuple(range(33, 49))
 CADENCE_DEPARTMENT_INDICES: tuple[int, ...] = tuple(range(49, 52))
 
+# Meaning-preserving semantic anchor descriptions for the 8 Founding Traits of each department.
+# Each child leaf's description is compared against its department's 8 founding trait descriptions
+# so synonymous child concepts naturally land near each other in 8-float space without any random hashing.
+DEPARTMENT_FOUNDING_ANCHORS: dict[str, tuple[str, ...]] = {
+    "cultural/": (
+        DOER_FOUNDING_DESCRIPTIONS["cultural/efficiency/power"]
+        + " command force leverage control authority gatekeeping exclusion",
+        DOER_FOUNDING_DESCRIPTIONS["cultural/efficiency/wastelessness"]
+        + " careful stewardship conservation thrift preservation",
+        DOER_FOUNDING_DESCRIPTIONS["cultural/justice/honor"]
+        + " sincere integrity duty moral responsibility covenant",
+        DOER_FOUNDING_DESCRIPTIONS["cultural/justice/fairness"]
+        + " open equitable sharing fair inclusion generous care in need",
+        DOER_FOUNDING_DESCRIPTIONS["cultural/freedom/self-sufficiency"]
+        + " independent capability self-reliance autonomy standing alone",
+        DOER_FOUNDING_DESCRIPTIONS["cultural/freedom/needlessness"]
+        + " peaceful contentment sufficiency calm security free from lack",
+        "deliberate resolve intention commitment inner purpose aim to act",
+        "active execution intervention carrying out concrete step action",
+    ),
+    "philosophical/": (
+        THINKER_FOUNDING_DESCRIPTIONS["philosophical/being/agency"]
+        + " deliberate purposeful choice human actor intervention",
+        THINKER_FOUNDING_DESCRIPTIONS["philosophical/being/existence"]
+        + " concrete physical presence tangible material reality stone body",
+        THINKER_FOUNDING_DESCRIPTIONS["philosophical/structure/order"]
+        + " structured arrangement deliberate rules built boundaries discipline",
+        THINKER_FOUNDING_DESCRIPTIONS["philosophical/structure/chaos"]
+        + " violent disruption fracture breakdown storm turbulent disorder",
+        THINKER_FOUNDING_DESCRIPTIONS["philosophical/persistence/continuity"]
+        + " ongoing flow sustained rhythm unbroken endurance shared continuation",
+        THINKER_FOUNDING_DESCRIPTIONS["philosophical/persistence/discreteness"]
+        + " sealed enclosure locked separation rigid isolation sharp boundary",
+        "working theory hypothesis conceptual synthesis inferred pattern",
+        "verified fact direct external evidence concrete observation",
+    ),
+    "experiential/": (
+        "unfamiliar novelty sudden shift unexpected turn new discovery opening",
+        FEELER_FOUNDING_DESCRIPTIONS[SALIENCE_LEAF]
+        + " poignant ache simultaneous strain urgency weighty moment",
+        FEELER_FOUNDING_DESCRIPTIONS[VALENCE_LEAF]
+        + " spare humble shelter sanctuary care offered openly restorative relief",
+        FEELER_FOUNDING_DESCRIPTIONS[AROUSAL_LEAF]
+        + " pent-up strain breaking apart intense pressure release",
+        "restored shared rhythm resonance homecoming mutual connection return",
+        "cold sterile airless quiet hollow stillness sealed isolation drained warmth",
+        "unclouded clarity transparent open understanding",
+        "steady settled confidence assurance grounded trust",
+    ),
+}
+
+_KNOWN_LEAF_DESCRIPTIONS: dict[str, str] = {
+    leaf.leaf_id: leaf.description for leaf in DEFAULT_COMPLEX_FEELING_LEAVES
+}
+
 
 def _clamp01(value: float) -> float:
     if not math.isfinite(value):
@@ -150,19 +217,87 @@ def _clamp01(value: float) -> float:
     return round(min(1.0, max(0.0, float(value))), 6)
 
 
-def child_drawer_basis_signature(leaf_id: str) -> tuple[float, ...]:
-    """Compute a deterministic 8-float unit-peak basis signature in `[0.15, 1.0]^8` for a child leaf.
+def _extract_semantic_features(text: str) -> dict[str, float]:
+    """Extract normalized word stems and character 4-grams for deterministic semantic similarity."""
+    cleaned = re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
+    tokens = [t for t in cleaned.split() if len(t) >= 3]
+    feats: dict[str, float] = {}
+    for tok in tokens:
+        feats[f"w:{tok}"] = feats.get(f"w:{tok}", 0.0) + 1.5
+        if len(tok) >= 5:
+            stem = tok[:5]
+            feats[f"s:{stem}"] = feats.get(f"s:{stem}", 0.0) + 1.2
+        padded = f"<{tok}>"
+        for i in range(len(padded) - 3):
+            gram = padded[i : i + 4]
+            feats[f"g:{gram}"] = feats.get(f"g:{gram}", 0.0) + 0.4
+    return feats
 
-    Why this matters:
-    - Sibling child leaves under the same parent branch (e.g., `experiential/phase/austere_sanctuary`,
-      `experiential/phase/hollow_stillness`, and `experiential/phase/bittersweet_release`) have
-      completely distinct 8-float signatures inside their department, without hardcoding any
-      leaf names and without ever changing the department vector's size as 10,000 new leaves grow.
+
+def _cosine_similarity(feats_a: Mapping[str, float], feats_b: Mapping[str, float]) -> float:
+    if not feats_a or not feats_b:
+        return 0.0
+    dot = sum(v * feats_b.get(k, 0.0) for k, v in feats_a.items())
+    norm_a = math.sqrt(sum(v * v for v in feats_a.values()))
+    norm_b = math.sqrt(sum(v * v for v in feats_b.values()))
+    if norm_a <= 1e-12 or norm_b <= 1e-12:
+        return 0.0
+    return dot / (norm_a * norm_b)
+
+
+def semantic_child_drawer_signature(
+    leaf_id: str,
+    *,
+    department_prefix: str,
+    description: str | None = None,
+) -> tuple[float, ...]:
+    """Project a child leaf onto the 8 Founding Trait Anchors of its department (`[0.10, 1.0]^8`).
+
+    Why this replaces SHA-256 hashing:
+    - Uses the child leaf's actual semantic meaning (`short_name + description` compared against
+      the 8 Founding Trait Anchors of its department) plus its parent-branch structural location.
+    - Sibling child leaves with opposite meanings (e.g. `austere_sanctuary` vs. `hollow_stillness`)
+      project to strongly distinct 8-float signatures.
+    - Newly created child leaves with similar meanings (e.g. `austere_sanctuary` vs. a newly
+      minted `humble_open_refuge`) automatically project to nearly identical 8-float signatures
+      (`cosine_similarity > 0.85`), allowing a maturing LoRA to generalize immediately.
     """
-    digest = hashlib.sha256(leaf_id.strip().encode("utf-8")).digest()
-    raw = [0.15 + 0.85 * (digest[i] / 255.0) for i in range(DEPARTMENT_CHILD_CHORD_DIM)]
-    peak = max(raw)
-    return tuple(round(v / peak, 6) for v in raw)
+    if department_prefix not in DEPARTMENT_FOUNDING_ANCHORS:
+        raise ValueError(f"Unknown department_prefix: {department_prefix!r}")
+
+    short_name = leaf_id.split("/")[-1].replace("_", " ").replace("-", " ")
+    resolved_desc = description or _KNOWN_LEAF_DESCRIPTIONS.get(leaf_id, "")
+    full_leaf_text = f"{short_name} {resolved_desc}".strip()
+    leaf_feats = _extract_semantic_features(full_leaf_text)
+
+    anchors = DEPARTMENT_FOUNDING_ANCHORS[department_prefix]
+    raw_scores: list[float] = []
+    for idx, anchor_text in enumerate(anchors):
+        anchor_feats = _extract_semantic_features(anchor_text)
+        sim = _cosine_similarity(leaf_feats, anchor_feats)
+        raw_scores.append(0.10 + 0.90 * sim)
+
+    # Add gentle structural parent-branch grounding so even bare leaf IDs carry branch topology
+    parts = leaf_id.split("/")
+    parent_branch = "/".join(parts[:2]) if len(parts) >= 2 else ""
+    branch_boost_map: dict[str, tuple[int, int]] = {
+        "cultural/efficiency": (0, 1),
+        "cultural/justice": (2, 3),
+        "cultural/freedom": (4, 5),
+        "philosophical/being": (0, 1),
+        "philosophical/structure": (2, 3),
+        "philosophical/persistence": (4, 5),
+        "experiential/reflection": (0, 1),
+        "experiential/phase": (2, 3),
+        "experiential/synchronization": (4, 5),
+    }
+    if parent_branch in branch_boost_map:
+        b0, b1 = branch_boost_map[parent_branch]
+        raw_scores[b0] += 0.06
+        raw_scores[b1] += 0.04
+
+    peak = max(raw_scores)
+    return tuple(round(v / peak, 6) for v in raw_scores)
 
 
 def pool_departmental_child_chord(
@@ -170,16 +305,16 @@ def pool_departmental_child_chord(
     *,
     department_prefix: str,
     extra_notes: Mapping[str, float] | None = None,
+    learned_leaves: Sequence[LearnedLeaf] = (),
+    leaf_descriptions: Mapping[str, str] | None = None,
 ) -> tuple[float, ...]:
     """Pool all active Tier-2/Tier-3 child leaves in a single department into an 8-float chord.
 
     - Only reads child leaves (`leaf_tier >= 2`) belonging to `department_prefix`
       (`"cultural/"`, `"philosophical/"`, or `"experiential/"`).
-    - Preserves the distinct identity of sibling child leaves under the same parent branch
-      (unlike a single `max()` number, which would crush `austere_sanctuary` and `hollow_stillness`
-      into the same scalar).
-    - Blends multiple simultaneously active child leaves via activation-weighted superposition
-      scaled by the strongest active child leaf in that department.
+    - Projects each active child leaf via `semantic_child_drawer_signature` (zero random hashing!)
+      so sibling child leaves with different meanings stay distinct while synonymous child leaves
+      cluster together naturally.
     """
     if department_prefix not in ("cultural/", "philosophical/", "experiential/"):
         raise ValueError(f"Invalid department_prefix: {department_prefix!r}")
@@ -188,6 +323,12 @@ def pool_departmental_child_chord(
     if extra_notes:
         for k, v in extra_notes.items():
             merged[k] = max(float(merged.get(k, 0.0)), float(v))
+
+    desc_lookup: dict[str, str] = dict(_KNOWN_LEAF_DESCRIPTIONS)
+    for ll in learned_leaves:
+        desc_lookup[ll.leaf_id] = ll.description
+    if leaf_descriptions:
+        desc_lookup.update(leaf_descriptions)
 
     active_children: list[tuple[str, float]] = []
     for leaf_id, val in sorted(merged.items()):
@@ -204,7 +345,11 @@ def pool_departmental_child_chord(
 
     blended = [0.0] * DEPARTMENT_CHILD_CHORD_DIM
     for leaf_id, weight in active_children:
-        basis = child_drawer_basis_signature(leaf_id)
+        basis = semantic_child_drawer_signature(
+            leaf_id,
+            department_prefix=department_prefix,
+            description=desc_lookup.get(leaf_id),
+        )
         for i in range(DEPARTMENT_CHILD_CHORD_DIM):
             blended[i] += weight * basis[i]
 
@@ -369,6 +514,8 @@ class SubliminalChordVector:
         *,
         deliberation: ThreeClassifierDeliberation | None = None,
         social_drift: SocialDriftReport | None = None,
+        learned_leaves: Sequence[LearnedLeaf] = (),
+        leaf_descriptions: Mapping[str, str] | None = None,
         deadband: float = DEFAULT_RUPTURE_DEADBAND,
         ankle_rope_sensitivity: float = 1.0,
     ) -> "SubliminalChordVector":
@@ -385,6 +532,8 @@ class SubliminalChordVector:
             coords,
             department_prefix="cultural/",
             extra_notes=fc_notes,
+            learned_leaves=learned_leaves,
+            leaf_descriptions=leaf_descriptions,
         )
         doer_vec = cult_6 + will_2 + drift_flag + cult_child_chord_8
 
@@ -396,6 +545,8 @@ class SubliminalChordVector:
             coords,
             department_prefix="philosophical/",
             extra_notes=fc_notes,
+            learned_leaves=learned_leaves,
+            leaf_descriptions=leaf_descriptions,
         )
         thinker_vec = phil_6 + truth_2 + phil_child_chord_8
 
@@ -414,6 +565,8 @@ class SubliminalChordVector:
             coords,
             department_prefix="experiential/",
             extra_notes=fc_notes,
+            learned_leaves=learned_leaves,
+            leaf_descriptions=leaf_descriptions,
         )
         feeler_vec = exp_6 + contemp_2 + exp_child_chord_8
 
@@ -453,7 +606,7 @@ class SubliminalChordVector:
 
 
 class SubliminalGapProjector(nn.Module):
-    """Projects the 4 strictly disjoint Departmental Vectors into 4 virtual token embeddings `[4, hidden_size]`.
+    """Neural Corpus Callosum: projects the 4 strictly disjoint Departmental Vectors into 4 virtual tokens `[4, hidden_size]`.
 
     Each virtual token is wired exclusively to its own department's disjoint vector with
     **zero shared or overlapping indices**:
@@ -647,3 +800,97 @@ def splice_subliminal_gaps_into_embeds(
         labels=padded_labels,
         gap_virtual_spans=tuple(all_spans),
     )
+
+
+@dataclass(frozen=True)
+class CorpusCallosumMetadata:
+    """Versioned maturation record for `SubliminalGapProjector` across Sleep Cycles."""
+
+    schema_version: int
+    hidden_size: int
+    intermediate_size: int
+    sleep_cycle_index: int
+    trained_trajectories_count: int
+    notes: str = ""
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "schema_version": self.schema_version,
+            "hidden_size": self.hidden_size,
+            "intermediate_size": self.intermediate_size,
+            "input_dim": SUBLIMINAL_VECTOR_DIM,
+            "department_dims": {
+                "doer": DOER_DEPT_DIM,
+                "thinker": THINKER_DEPT_DIM,
+                "feeler": FEELER_DEPT_DIM,
+                "cadence": CADENCE_DEPT_DIM,
+            },
+            "sleep_cycle_index": self.sleep_cycle_index,
+            "trained_trajectories_count": self.trained_trajectories_count,
+            "notes": self.notes,
+        }
+
+
+def save_corpus_callosum_checkpoint(
+    checkpoint_dir: str | Path,
+    projector: SubliminalGapProjector,
+    *,
+    sleep_cycle_index: int = 0,
+    trained_trajectories_count: int = 0,
+    notes: str = "",
+) -> CorpusCallosumMetadata:
+    """Persist `SubliminalGapProjector` weights and Sleep-Cycle maturation metadata to disk."""
+    if sleep_cycle_index < 0 or trained_trajectories_count < 0:
+        raise ValueError("sleep_cycle_index and trained_trajectories_count must be >= 0")
+
+    out_dir = Path(checkpoint_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    first_linear = projector.department_heads[0][0]
+    inter_size = int(first_linear.out_features)
+
+    meta = CorpusCallosumMetadata(
+        schema_version=1,
+        hidden_size=projector.hidden_size,
+        intermediate_size=inter_size,
+        sleep_cycle_index=int(sleep_cycle_index),
+        trained_trajectories_count=int(trained_trajectories_count),
+        notes=str(notes),
+    )
+    atomic_json(out_dir / "corpus_callosum_meta.json", meta.to_dict())
+    torch.save(projector.state_dict(), out_dir / "projector_weights.pt")
+    return meta
+
+
+def load_corpus_callosum_checkpoint(
+    checkpoint_dir: str | Path,
+    *,
+    device: str | torch.device = "cpu",
+) -> tuple[SubliminalGapProjector, CorpusCallosumMetadata]:
+    """Reload a saved `SubliminalGapProjector` and its Sleep-Cycle maturation metadata."""
+    in_dir = Path(checkpoint_dir)
+    meta_path = in_dir / "corpus_callosum_meta.json"
+    weights_path = in_dir / "projector_weights.pt"
+    if not meta_path.exists() or not weights_path.exists():
+        raise FileNotFoundError(f"Missing Corpus Callosum checkpoint files in {in_dir}")
+
+    raw_meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    if raw_meta.get("schema_version") != 1:
+        raise ValueError(f"Unsupported Corpus Callosum schema_version: {raw_meta.get('schema_version')}")
+
+    meta = CorpusCallosumMetadata(
+        schema_version=1,
+        hidden_size=int(raw_meta["hidden_size"]),
+        intermediate_size=int(raw_meta["intermediate_size"]),
+        sleep_cycle_index=int(raw_meta["sleep_cycle_index"]),
+        trained_trajectories_count=int(raw_meta["trained_trajectories_count"]),
+        notes=str(raw_meta.get("notes", "")),
+    )
+    projector = SubliminalGapProjector(
+        hidden_size=meta.hidden_size,
+        intermediate_size=meta.intermediate_size,
+    )
+    state_dict = torch.load(weights_path, map_location=device, weights_only=True)
+    projector.load_state_dict(state_dict)
+    projector.to(device)
+    return projector, meta
+

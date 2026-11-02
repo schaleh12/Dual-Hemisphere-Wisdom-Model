@@ -8,7 +8,11 @@ import torch.nn.functional as F
 
 from lmft_lab.birth import create_birth_state
 from lmft_lab.branch_archives import SocialDriftReport
-from lmft_lab.reflection_classifier import ALL_GROWABLE_PARENT_BRANCHES, FuzzyConceptRule
+from lmft_lab.reflection_classifier import (
+    ALL_GROWABLE_PARENT_BRANCHES,
+    FuzzyConceptRule,
+    LearnedLeaf,
+)
 from lmft_lab.right_brain_equilibrium import compile_right_brain_vibe
 from lmft_lab.subliminal_gap_splice import (
     CADENCE_DEPARTMENT_INDICES,
@@ -24,7 +28,10 @@ from lmft_lab.subliminal_gap_splice import (
     THINKER_DEPT_DIM,
     SubliminalChordVector,
     SubliminalGapProjector,
+    load_corpus_callosum_checkpoint,
     pool_departmental_child_chord,
+    save_corpus_callosum_checkpoint,
+    semantic_child_drawer_signature,
     splice_subliminal_gaps_into_embeds,
 )
 
@@ -117,6 +124,38 @@ def test_departmental_vectors_keep_sibling_child_leaves_distinct_and_scale_invar
     assert vec_sanctuary.thinker_vector == vec_hollow.thinker_vector == vec_release.thinker_vector
     assert vec_sanctuary.cadence_vector == vec_hollow.cadence_vector == vec_release.cadence_vector
 
+    # Verify meaning-preserving Semantic Child Projection (zero random SHA-256 hashing!):
+    # A brand-new unseen child leaf with synonymous meaning (`humble_open_refuge`)
+    # naturally lands much closer to `austere_sanctuary` than `hollow_stillness` does!
+    new_synonym_leaf = LearnedLeaf(
+        "experiential/phase",
+        "humble_open_refuge",
+        "Spare, humble shelter and restorative care offered openly amidst harsh weather.",
+    )
+    sig_sanctuary = torch.tensor(
+        semantic_child_drawer_signature(
+            "experiential/phase/austere_sanctuary",
+            department_prefix="experiential/",
+        )
+    )
+    sig_new_refuge = torch.tensor(
+        semantic_child_drawer_signature(
+            new_synonym_leaf.leaf_id,
+            department_prefix="experiential/",
+            description=new_synonym_leaf.description,
+        )
+    )
+    sig_hollow = torch.tensor(
+        semantic_child_drawer_signature(
+            "experiential/phase/hollow_stillness",
+            department_prefix="experiential/",
+        )
+    )
+    dist_synonym = torch.norm(sig_sanctuary - sig_new_refuge).item()
+    dist_opposite = torch.norm(sig_sanctuary - sig_hollow).item()
+    assert dist_synonym < 0.20
+    assert dist_opposite > 0.65
+
     # 2. Simulate 180 brand-new Tier-2 & Tier-3 child leaves across all 9 parent branches:
     #    Verify each department's child chord stays strictly 8 floats!
     many_future_leaves = dict(base_coords)
@@ -181,7 +220,7 @@ def test_departmental_vectors_keep_sibling_child_leaves_distinct_and_scale_invar
     assert vec_rupture.with_zeroed_cord().values == tuple(0.0 for _ in range(SUBLIMINAL_VECTOR_DIM))
 
 
-def test_splice_subliminal_gaps_into_embeds_and_strict_departmental_isolation():
+def test_splice_subliminal_gaps_into_embeds_and_strict_departmental_isolation(tmp_path):
     torch.manual_seed(42)
     hidden_size = 16
     vocab_size = 30
@@ -232,6 +271,21 @@ def test_splice_subliminal_gaps_into_embeds_and_strict_departmental_isolation():
                 assert not torch.allclose(out_base[0, other_token_idx], out_mod[0, other_token_idx])
             else:
                 assert torch.allclose(out_base[0, other_token_idx], out_mod[0, other_token_idx])
+
+    # Verify Corpus Callosum checkpoint save/reload round-trip across Sleep Cycles:
+    ckpt_dir = tmp_path / "corpus_callosum_v1"
+    saved_meta = save_corpus_callosum_checkpoint(
+        ckpt_dir,
+        projector,
+        sleep_cycle_index=2,
+        trained_trajectories_count=48,
+        notes="Post-Sleep Cycle 2 maturation checkpoint",
+    )
+    reloaded_projector, loaded_meta = load_corpus_callosum_checkpoint(ckpt_dir)
+    assert loaded_meta == saved_meta
+    assert loaded_meta.sleep_cycle_index == 2
+    assert loaded_meta.trained_trajectories_count == 48
+    assert torch.allclose(projector(base_chord), reloaded_projector(base_chord))
 
 
 def test_causal_transformer_flips_continuation_purely_from_nonverbal_gap_vector():
