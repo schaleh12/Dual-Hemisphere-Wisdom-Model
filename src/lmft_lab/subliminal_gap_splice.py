@@ -64,6 +64,7 @@ import json
 import math
 from pathlib import Path
 import re
+import unicodedata
 import torch
 from torch import Tensor, nn
 
@@ -162,48 +163,48 @@ CADENCE_DEPARTMENT_INDICES: tuple[int, ...] = tuple(range(49, 52))
 DEPARTMENT_FOUNDING_ANCHORS: dict[str, tuple[str, ...]] = {
     "cultural/": (
         DOER_FOUNDING_DESCRIPTIONS["cultural/efficiency/power"]
-        + " command force leverage control authority gatekeeping exclusion",
+        + " command force leverage control authority gatekeeping exclusion pouvoir autorité 权力 控制 권력 통제",
         DOER_FOUNDING_DESCRIPTIONS["cultural/efficiency/wastelessness"]
-        + " careful stewardship conservation thrift preservation",
+        + " careful stewardship conservation thrift preservation économie préservation 节俭 守护 절약 보존",
         DOER_FOUNDING_DESCRIPTIONS["cultural/justice/honor"]
-        + " sincere integrity duty moral responsibility covenant",
+        + " sincere integrity duty moral responsibility covenant honneur sincérité 荣誉 真诚 명예 진심",
         DOER_FOUNDING_DESCRIPTIONS["cultural/justice/fairness"]
-        + " open equitable sharing fair inclusion generous care in need",
+        + " open equitable sharing fair inclusion generous care in need justice équité partage 公正 公平 공유 공정",
         DOER_FOUNDING_DESCRIPTIONS["cultural/freedom/self-sufficiency"]
-        + " independent capability self-reliance autonomy standing alone",
+        + " independent capability self-reliance autonomy standing alone autonomie indépendance 自立 独立 자립 독립",
         DOER_FOUNDING_DESCRIPTIONS["cultural/freedom/needlessness"]
-        + " peaceful contentment sufficiency calm security free from lack",
-        "deliberate resolve intention commitment inner purpose aim to act",
-        "active execution intervention carrying out concrete step action",
+        + " peaceful contentment sufficiency calm security free from lack sérénité contentement 知足 安宁 평온 만족",
+        "deliberate resolve intention commitment inner purpose aim to act volonté 意图 决心 의지 결심",
+        "active execution intervention carrying out concrete step action exécution 执行 行动 실행 행동",
     ),
     "philosophical/": (
         THINKER_FOUNDING_DESCRIPTIONS["philosophical/being/agency"]
-        + " deliberate purposeful choice human actor intervention",
+        + " deliberate purposeful choice human actor intervention agence choix 自主 选择 주체 선택",
         THINKER_FOUNDING_DESCRIPTIONS["philosophical/being/existence"]
-        + " concrete physical presence tangible material reality stone body",
+        + " concrete physical presence tangible material reality stone body existence présence 存在 实体 존재 실체",
         THINKER_FOUNDING_DESCRIPTIONS["philosophical/structure/order"]
-        + " structured arrangement deliberate rules built boundaries discipline",
+        + " structured arrangement deliberate rules built boundaries discipline ordre règle 秩序 规则 질서 규칙",
         THINKER_FOUNDING_DESCRIPTIONS["philosophical/structure/chaos"]
-        + " violent disruption fracture breakdown storm turbulent disorder",
+        + " violent disruption fracture breakdown storm turbulent disorder chaos désordre 混乱 崩裂 혼돈 붕괴",
         THINKER_FOUNDING_DESCRIPTIONS["philosophical/persistence/continuity"]
-        + " ongoing flow sustained rhythm unbroken endurance shared continuation",
+        + " ongoing flow sustained rhythm unbroken endurance shared continuation continuité 延续 持续 연속 지속",
         THINKER_FOUNDING_DESCRIPTIONS["philosophical/persistence/discreteness"]
-        + " sealed enclosure locked separation rigid isolation sharp boundary",
-        "working theory hypothesis conceptual synthesis inferred pattern",
-        "verified fact direct external evidence concrete observation",
+        + " sealed enclosure locked separation rigid isolation sharp boundary séparation isolement 隔绝 封闭 단절 고립",
+        "working theory hypothesis conceptual synthesis inferred pattern théorie 理论 假设 이론 가설",
+        "verified fact direct external evidence concrete observation fait vérité 事实 证据 사실 증거",
     ),
     "experiential/": (
-        "unfamiliar novelty sudden shift unexpected turn new discovery opening ✨ ❓ gasp ooh aha",
+        "unfamiliar novelty sudden shift unexpected turn new discovery opening nouveauté 新奇 突变 새로움 ✨ ❓ gasp ooh aha",
         FEELER_FOUNDING_DESCRIPTIONS[SALIENCE_LEAF]
-        + " poignant ache simultaneous strain urgency weighty moment ⚡ ❗ throb pang",
+        + " poignant ache simultaneous strain urgency weighty moment urgence 紧迫 剧痛 절박함 ⚡ ❗ throb pang",
         FEELER_FOUNDING_DESCRIPTIONS[VALENCE_LEAF]
-        + " spare humble shelter sanctuary care offered openly restorative relief 🕯️ 🍵 🫂 sigh ahh",
+        + " spare humble shelter sanctuary care offered openly restorative relief sanctuaire refuge chaleur 庇护 圣所 温暖 안식처 피난처 온기 🕯️ 🍵 🫂 sigh ahh",
         FEELER_FOUNDING_DESCRIPTIONS[AROUSAL_LEAF]
-        + " pent-up strain breaking apart intense pressure release 💥 🔥 thump crackle",
-        "restored shared rhythm resonance homecoming mutual connection return 🎶 🤝 hum chime",
-        "cold sterile airless quiet hollow stillness sealed isolation drained warmth rhythmic entrainment trance sway 🌀 🥴 🍺 🪨 hic whirrr shhh ...",
-        "unclouded clarity transparent open understanding 💡 🔍 ding ping",
-        "steady settled confidence assurance grounded trust 🛡️ ⚓ hm mm",
+        + " pent-up strain breaking apart intense pressure release tension éclatement 爆发 紧绷 폭발 긴장 💥 🔥 thump crackle",
+        "restored shared rhythm resonance homecoming mutual connection return résonance retour 共鸣 归来 공명 귀환 🎶 🤝 hum chime",
+        "cold sterile airless quiet hollow stillness sealed isolation drained warmth rhythmic entrainment trance sway vide immobilité ivresse 空虚 死寂 微醺 催眠 공허 정적 취기 최면 🌀 🥴 🍺 🪨 hic whirrr shhh ...",
+        "unclouded clarity transparent open understanding clarté 清晰 清醒 명료함 💡 🔍 ding ping",
+        "steady settled confidence assurance grounded trust confiance 自信 笃定 확신 신뢰 🛡️ ⚓ hm mm",
     ),
 }
 
@@ -221,14 +222,49 @@ def _clamp01(value: float) -> float:
 _TWO_LETTER_SOUND_TOKENS = frozenset({"ah", "oh", "uh", "hm", "zz", "ha", "eh", "oo", "mm", "sh"})
 
 
+def _is_cjk_or_hangul(ch: str) -> bool:
+    code = ord(ch)
+    return (
+        0x4E00 <= code <= 0x9FFF  # CJK Unified Ideographs (Mandarin/Japanese Kanji)
+        or 0x3400 <= code <= 0x4DBF  # CJK Extension A
+        or 0xAC00 <= code <= 0xD7AF  # Korean Hangul Syllables
+        or 0x3130 <= code <= 0x318F  # Hangul Compatibility Jamo
+        or 0x3040 <= code <= 0x30FF  # Hiragana / Katakana
+    )
+
+
+def _strip_latin_accents(text: str) -> str:
+    """Fold accented Latin characters (e.g. French é, è, ê, ç) into base ASCII letters."""
+    return "".join(
+        ch for ch in unicodedata.normalize("NFKD", text) if unicodedata.category(ch) != "Mn"
+    )
+
+
 def _extract_semantic_features(text: str) -> dict[str, float]:
-    """Extract word stems, 4-grams, emojis, onomatopoeia, and rhythm marks for deterministic similarity."""
+    """Extract multilingual words (English/French/Mandarin/Korean), emojis, onomatopoeia, and rhythm."""
     feats: dict[str, float] = {}
-    # 1. Pre-verbal Unicode emojis and ideograms (outside ASCII, ignoring variation selectors)
+    cjk_hangul_run: list[str] = []
+
+    # 1. Separate pre-verbal Unicode emojis/symbols from CJK/Hangul scripts
     for ch in text:
         code = ord(ch)
-        if code > 127 and code not in (0xFE0E, 0xFE0F, 0x200D) and not ch.isspace():
+        if code <= 127 or ch.isspace() or code in (0xFE0E, 0xFE0F, 0x200D):
+            if len(cjk_hangul_run) >= 2:
+                for i in range(len(cjk_hangul_run) - 1):
+                    pair = cjk_hangul_run[i] + cjk_hangul_run[i + 1]
+                    feats[f"cjk2:{pair}"] = feats.get(f"cjk2:{pair}", 0.0) + 1.8
+            cjk_hangul_run = []
+            continue
+        if _is_cjk_or_hangul(ch):
+            feats[f"cjk:{ch}"] = feats.get(f"cjk:{ch}", 0.0) + 1.5
+            cjk_hangul_run.append(ch)
+        elif unicodedata.category(ch).startswith(("So", "Sm", "Sc", "Sk")):
             feats[f"emoji:{ch}"] = feats.get(f"emoji:{ch}", 0.0) + 2.0
+
+    if len(cjk_hangul_run) >= 2:
+        for i in range(len(cjk_hangul_run) - 1):
+            pair = cjk_hangul_run[i] + cjk_hangul_run[i + 1]
+            feats[f"cjk2:{pair}"] = feats.get(f"cjk2:{pair}", 0.0) + 1.8
 
     # 2. Typographic rhythm and cadence punctuation (ellipses, em-dashes, spelled-out hyphenation)
     if "..." in text or "…" in text:
@@ -240,8 +276,9 @@ def _extract_semantic_features(text: str) -> dict[str, float]:
     if re.search(r"\b([a-z]{2,6})-\1\b", text.lower()):
         feats["rhythm:reduplication"] = 1.5
 
-    # 3. Lexical tokens, short sound words (onomatopoeia), stems, and character 4-grams
-    cleaned = re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
+    # 3. Accent-folded Latin tokens (English, French, Spanish, etc.), short sound words, stems, and 4-grams
+    folded = _strip_latin_accents(text.lower())
+    cleaned = re.sub(r"[^a-z0-9]+", " ", folded).strip()
     raw_tokens = cleaned.split()
     for tok in raw_tokens:
         if len(tok) == 2 and tok in _TWO_LETTER_SOUND_TOKENS:
@@ -262,6 +299,41 @@ def _extract_semantic_features(text: str) -> dict[str, float]:
             gram = padded[i : i + 4]
             feats[f"g:{gram}"] = feats.get(f"g:{gram}", 0.0) + 0.4
     return feats
+
+
+def detect_clause_script_glitch(
+    previous_clause: str,
+    current_clause: str,
+    *,
+    intention: float = 0.0,
+    clarity: float = 1.0,
+) -> dict[str, object]:
+    """Distinguish deliberate multilingual code-switching from an accidental mid-sentence language glitch."""
+    def _dominant_script(clause: str) -> str:
+        # Each CJK ideograph or Hangul syllable block represents a full syllable (~3 Latin letters)
+        cjk = 3 * sum(1 for ch in clause if 0x4E00 <= ord(ch) <= 0x9FFF)
+        hangul = 3 * sum(1 for ch in clause if 0xAC00 <= ord(ch) <= 0xD7AF)
+        latin = sum(1 for ch in _strip_latin_accents(clause) if "a" <= ch.lower() <= "z")
+        counts = {"latin": latin, "cjk": cjk, "hangul": hangul}
+        best = max(counts, key=counts.get)
+        return best if counts[best] > 0 else "neutral"
+
+    prev_script = _dominant_script(previous_clause)
+    curr_script = _dominant_script(current_clause)
+    script_switched = (
+        prev_script != "neutral"
+        and curr_script != "neutral"
+        and prev_script != curr_script
+    )
+    deliberate_code_switch = bool(script_switched and intention >= 0.50 and clarity >= 0.50)
+    unintended_script_glitch = bool(script_switched and not deliberate_code_switch)
+    return {
+        "previous_script": prev_script,
+        "current_script": curr_script,
+        "script_switched": script_switched,
+        "deliberate_code_switch": deliberate_code_switch,
+        "unintended_script_glitch": unintended_script_glitch,
+    }
 
 
 def _cosine_similarity(feats_a: Mapping[str, float], feats_b: Mapping[str, float]) -> float:

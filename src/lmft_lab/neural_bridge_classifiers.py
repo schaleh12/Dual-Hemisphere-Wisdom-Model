@@ -49,6 +49,7 @@ from .right_brain_equilibrium import (
 from .runtime_store import atomic_json
 
 DEFAULT_BRIDGE_BACKBONE = "cross-encoder/ms-marco-MiniLM-L-12-v2"
+MULTILINGUAL_BRIDGE_BACKBONE = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
 
 DOER_BRIDGE = "doer_will_cultural"
 THINKER_BRIDGE = "thinker_truth_philosophical"

@@ -437,3 +437,73 @@ def test_entrainment_leaf_and_emoji_onomatopoeia_child_drawer_signatures() -> No
     assert tipsy_sig != jolt_sig
     assert tipsy_sig != warm_sigh_sig
 
+
+def test_multilingual_french_mandarin_korean_child_drawers_and_script_glitch_detector() -> None:
+    """Verify French, Mandarin, and Korean child drawers project cleanly and mid-sentence script glitches are caught."""
+    from lmft_lab.neural_bridge_classifiers import MULTILINGUAL_BRIDGE_BACKBONE
+    from lmft_lab.subliminal_gap_splice import detect_clause_script_glitch
+
+    assert MULTILINGUAL_BRIDGE_BACKBONE == "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
+
+    # Sanctuary vs. Hollow Stillness described in French, Mandarin, and Korean
+    fr_sanctuary = semantic_child_drawer_signature(
+        "experiential/phase/sanctuaire_sobre",
+        department_prefix="experiential/",
+        description="Un humble sanctuaire et refuge offrant une chaleur sincère.",
+    )
+    zh_sanctuary = semantic_child_drawer_signature(
+        "experiential/phase/zh_sanctuary",
+        department_prefix="experiential/",
+        description="简朴的庇护圣所带来温暖",
+    )
+    ko_sanctuary = semantic_child_drawer_signature(
+        "experiential/phase/ko_sanctuary",
+        department_prefix="experiential/",
+        description="소박한 안식처와 피난처의 온기",
+    )
+
+    fr_hollow = semantic_child_drawer_signature(
+        "experiential/phase/vide_glace",
+        department_prefix="experiential/",
+        description="Un vide froid et une immobilité glaciale.",
+    )
+    zh_hollow = semantic_child_drawer_signature(
+        "experiential/phase/zh_hollow",
+        department_prefix="experiential/",
+        description="冰冷的空虚与死寂",
+    )
+    ko_hollow = semantic_child_drawer_signature(
+        "experiential/phase/ko_hollow",
+        department_prefix="experiential/",
+        description="차가운 공허와 정적",
+    )
+
+    # All 3 sanctuary descriptions peak on Valence (index 2); all 3 hollow descriptions peak on Entrainment/Stillness (index 5)
+    assert fr_sanctuary[2] == 1.0 and zh_sanctuary[2] == 1.0 and ko_sanctuary[2] == 1.0
+    assert fr_hollow[5] == 1.0 and zh_hollow[5] == 1.0 and ko_hollow[5] == 1.0
+    assert fr_sanctuary != fr_hollow
+    assert zh_sanctuary != zh_hollow
+    assert ko_sanctuary != ko_hollow
+
+    # Accidental "Piers Morgan" context-pollution language glitch vs. intentional code-switching
+    accidental_glitch = detect_clause_script_glitch(
+        "Well Piers, I think the British public really wants—",
+        "其实我觉得这个问题非常复杂",
+        intention=0.10,
+        clarity=0.25,
+    )
+    assert accidental_glitch["script_switched"] is True
+    assert accidental_glitch["unintended_script_glitch"] is True
+    assert accidental_glitch["deliberate_code_switch"] is False
+
+    intentional_switch = detect_clause_script_glitch(
+        "As the saying goes in Korean,",
+        "제발 가지 마 — please don't go.",
+        intention=0.85,
+        clarity=0.80,
+    )
+    assert intentional_switch["script_switched"] is True
+    assert intentional_switch["deliberate_code_switch"] is True
+    assert intentional_switch["unintended_script_glitch"] is False
+
+

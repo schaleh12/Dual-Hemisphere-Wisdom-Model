@@ -89,3 +89,46 @@ What happens when input becomes chaotic, overwhelming, or frantic?
 - **`Salience`**, **`Arousal`**, and **`Chaos`** (`philosophical/structure/chaos`) all saturate near `1.0` simultaneously while **`Clarity`** crashes toward `0.0`.
 - Instead of the Left Brain hallucinating a frantic wall of text to match the chaos, the spike in `arousal * (1.0 - clarity)` drives `cadence_rupture_drive` past its `0.45` deadband in `cadence_vector` (`Department 3`).
 - This tugs the Left Brain to **compress its cadence, pause, or ask for quiet**, acting as an innate circuit breaker against runaway panic.
+
+---
+
+## 6. Blatant Tone Conflicts: Hostile Sarcasm vs. Sincere Pleading vs. Mid-Sentence Bluffing
+
+Single-layer sentiment classifiers get easily tricked when two opposite states use the same surface words—such as:
+- **Hostile Sarcasm**: *"Oh yeah, **please** drink bleach, that’ll **definitely solve** all your problems!"*
+- **Sincere Vulnerability**: *"I know I messed up, **please** just give me one chance—go on a date with me tonight."*
+- **Manipulative Entitlement**: *"After everything I bought you, **please**, you owe me a date!"*
+
+### A. How the 4 Departmental Vectors Pull Them Apart
+| Department | Hostile Sarcasm (*"Please drink bleach"*) | Sincere Pleading (*"Please go on a date with me"*) | Manipulative Guilt-Tripping (*"You owe me a date"*) |
+| :--- | :--- | :--- | :--- |
+| **`doer_vector` (`Will <-> Cultural`)** | `Fairness` & `Honor` crash (`~0.05`), hostile `Power` spikes (`~0.85`). Stance: `CONTEST_EXCLUSION`. | `Honor` (sincerity) high (`~0.82`), `Fairness` intact (`~0.75`), `Intention` high (`~0.85`), `Power` low (`~0.15`). | `Power` spikes (`~0.80`), `Fairness` drops (`~0.20`), `Needlessness` = `0.0` (coercive pressure). |
+| **`thinker_vector` (`Truth <-> Philosophical`)** | Physical harm / `Chaos` high; `Fact` = `0.0` (surface praise contradicts reality). | `Agency` (`~0.80`) and `Continuity` (`~0.78`, wanting shared connection) high. | `Order` used as leverage; low `Fairness` triggers `coercive_imbalance`. |
+| **`feeler_vector` (`Contemplation <-> Experiential`)** | `Valence` ice-cold (`~0.08`), `Salience` & `Arousal` high (`FELT_UNEASE`). | `Valence` warm/yearning (`~0.72`), `Resonance` high (`~0.85`), `Clarity` high (`~0.80`), `Confidence` humble (`~0.30`). | `Arousal` tense (`~0.80`), `Valence` sour (`~0.25`), `Confidence > Clarity`. |
+| **`cadence_vector` (The Ankle-Rope)** | `branch_harmony` crashes (`~0.15`), `dissonance_pressure` & `cadence_rupture_drive` spike (`> 0.80`). | `branch_harmony` high (`~0.85`), `dissonance_pressure` = `0.0`. | `branch_harmony` drops (`~0.25`), `dissonance_pressure` spikes (`SELF_RATIONALIZATION_DISSONANCE`). |
+
+### B. Reverse-Psychology, Semi-Bluffs, & Mid-Sentence Mood Swings
+Standard LLM chatbots cannot pull off a convincing *sarcastic bluff that melts into earnestness mid-sentence* because text-prompt instructions apply to the entire reply at once.
+Because `<|subliminal_gap|>` updates **between clauses**:
+1. **Clause 1** can run on a high-`Power` / high-`Confidence` bluff chord (*"Oh sure, go ahead and walk away, see if I care—"*),
+2. At `<|subliminal_gap|>`, the chord pivots to humble `Confidence` + warm `Valence` + high `Resonance` (spiking `Novelty` right at the clause boundary),
+3. **Clause 2** lands the crack in the mask (*"—okay fine, I care a little bit, don't actually leave."*).
+
+---
+
+## 7. Multilingual Support (French, Mandarin, Korean) & Anti-"Piers Morgan" Language-Glitch Immunity
+
+### A. Zero-Latency Multilingual Support Across the Stack
+1. **Universal 52-Float Departmental Chords**: The 40-node Fuzzy Tree and `SubliminalChordVector` are 100% language-agnostic numbers in `[0.0, 1.0]`.
+2. **Natively Multilingual Left Brain (`Qwen3-4B`) & Teacher (`Qwen3.5-9B`)**: Both models are natively fluent across English, French, Mandarin Chinese (`中文`), Korean (`한국어`), Japanese, Spanish, and 100+ languages.
+3. **Multilingual Child-Drawer Projection & Cross-Encoder Option**:
+   - In [`src/lmft_lab/subliminal_gap_splice.py`](../src/lmft_lab/subliminal_gap_splice.py), `_extract_semantic_features` and `DEPARTMENT_FOUNDING_ANCHORS` natively support **Latin accent folding** (French/Spanish cognates like `sanctuaire`, `liberté`, `sincérité`, `immobilité`), **CJK unigrams and bigrams** (Mandarin `庇护`, `圣所`, `空虚`, `死寂`), and **Korean Hangul syllables** (`안식처`, `피난처`, `공허`, `정적`) cleanly separated from Unicode emojis (`unicodedata.category`).
+   - In [`src/lmft_lab/neural_bridge_classifiers.py`](../src/lmft_lab/neural_bridge_classifiers.py), `MULTILINGUAL_BRIDGE_BACKBONE` (`cross-encoder/mmarco-mMiniLMv2-L12-H384-v1`) provides the exact same 12-layer, 384-dim MiniLM speed (`~35 ms` on GPU, zero extra transformer depth) across 14+ languages.
+
+### B. Why Bilingual LLMs Glitch Into Mandarin on Live TV (And How `detect_clause_script_glitch` Catches It)
+When a standard bilingual LLM (`Qwen` / `Yi`) is stuffed with a bloated 4,000-word "actor roleplay" text prompt, attention dilution can tip a single token across the English/Mandarin latent border—and with no Right Brain monitoring its clauses, the LLM blindly keeps speaking Mandarin for the rest of the sentence.
+- First, our `<|subliminal_gap|>` splice replaces bloated text-prompt stage directions with **4 compact virtual tokens**, preventing prompt-bloat context pollution.
+- Second, `detect_clause_script_glitch` in [`src/lmft_lab/subliminal_gap_splice.py`](../src/lmft_lab/subliminal_gap_splice.py) checks script transitions at every `<|subliminal_gap|>` boundary:
+  - **Deliberate Multilingual Flair (`deliberate_code_switch = True`)**: Dropping *"c'est la vie"* or *"제발 가지 마"* when `Intention >= 0.50` and `Clarity >= 0.50` is ratified as intentional expression.
+  - **Accidental Context-Pollution Glitch (`unintended_script_glitch = True`)**: Drifting into another script mid-sentence when `Intention < 0.50` or `Clarity < 0.50` is caught immediately at the clause boundary.
+
