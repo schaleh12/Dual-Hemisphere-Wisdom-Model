@@ -30,4 +30,4 @@
    - Compiles the Right Brain's non-verbal state into 4 strictly disjoint Departmental Vectors (`doer_vector` 17 floats, `thinker_vector` 16 floats, `feeler_vector` 16 floats, `cadence_vector` 3 floats, using `pool_departmental_child_chord` so sibling child leaves under the same parent branch like `austere_sanctuary`, `hollow_stillness`, and `bittersweet_release` stay 100% distinct without ever changing the department vector sizes) and splices `K = 4` compartmentalized virtual token embeddings (`SubliminalGapProjector`) directly into `<|subliminal_gap|>` slots in `inputs_embeds`.
 
 ## Next Step
-- **Stage 2 & 3 of `<|subliminal_gap|>` Three-Legged Race**: generate paired `<|subliminal_gap|>` thought trajectories offline with the 9B Teacher (`Qwen3.5-9B`) and train `SubliminalGapProjector` + LoRA on `Qwen3-4B` on the RTX 4080.
+- **Stage 2 & 3 of `<|subliminal_gap|>` Three-Legged Race** ([`docs/PROJECT_PIPELINE_AND_AUDIT_ROADMAP.md`](docs/PROJECT_PIPELINE_AND_AUDIT_ROADMAP.md)): generate identical-prefix contrastive `<|subliminal_gap|>` thought trajectories offline with `Qwen3.5-9B` and train `SubliminalGapProjector` + LoRA on `Qwen3-4B` on the RTX 4080.
