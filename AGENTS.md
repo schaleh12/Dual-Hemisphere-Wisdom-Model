@@ -15,12 +15,14 @@ Because `AGENTS.md`, `PROJECT_STATE.md`, and `DECISIONS.md` are read into the AI
    - Keep `DECISIONS.md` entries brief (3–6 plain sentences per decision). Never read `docs/archive/` files at startup unless specifically asked.
 3. **Zero Legacy Pollution**:
    - Never read, import, or reuse anything from the old `LMFT based general AI` folders (`LMFT-School`, `LMFT-Trainee`, `LMFT-Firmware`, or post-Commit-36 `LMFT-Lab`).
-4. **Zero Fake AI / Zero Rubric Rigging**:
+4. **Zero Fake AI / Zero Rubric or Coordinate Rigging**:
    - Never hardcode words or substrings from test sentences into grading rubrics, validation filters, or classification rules to make an experiment pass.
    - Never use `if/else` text templates, pre-written essays, or keyword lookup tables to pretend a system is "thinking" or "speaking."
    - Never call a float array or NumPy matrix a "Small Language Model (SLM)."
-5. **Let Experiments Fail Openly**:
-   - If a model output is inadmissible, a rule fails to generalize, or a fuzzy tree loses to a simple baseline, report the failure plainly (`0/4`, `2/5`, `FAILED`, etc.). Never move the goalposts to pass a test.
+   - Never put a thumb on the math scale to force a scene to settle: never clamp or overwrite raw sensor coordinates, never zero out competing rules when a favorite rule fires, never mint a candidate rule at runtime from the current test scene's own coordinates, and never harvest an unsettled (`settled=False`) scene into the archives as a ratified rule.
+5. **Let Experiments Fail Openly (Overrides `/goal` Scoreboard Pressure)**:
+   - If a model output is inadmissible, a rule fails to generalize, or a benchmark settles `4/8`, `5/8`, `7/8`, or `0/4`, report that exact score plainly and stop. Never move the goalposts or add runtime workarounds to turn a scoreboard green.
+   - **Important for `/goal` commands**: When the user runs `/goal`, "achieving the goal" means building the requested code cleanly and reporting the true, un-rigged benchmark numbers—it **never** means forcing a `100%` (`8/8` or `4/4`) pass rate. An honest partial score is a complete success; a rigged perfect score is a failure. Always assume an independent Auditor AI window will inspect your git diff.
 
 ## 2. Startup and Completion Handoff
 
