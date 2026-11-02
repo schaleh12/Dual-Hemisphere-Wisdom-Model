@@ -843,7 +843,11 @@ def splice_subliminal_gaps_into_embeds(
 
     base_embeds = word_embedding_fn(safe_input_ids)  # [batch, seq_len, hidden_size]
     hidden_size = base_embeds.shape[-1]
-    projected_gaps = projector(chord_vectors.to(device=device, dtype=base_embeds.dtype))
+    proj_param = next(projector.parameters(), None)
+    proj_dtype = proj_param.dtype if proj_param is not None else base_embeds.dtype
+    projected_gaps = projector(chord_vectors.to(device=device, dtype=proj_dtype)).to(
+        dtype=base_embeds.dtype
+    )
     k_tokens = projected_gaps.shape[-2]
 
     spliced_embeds_list: list[Tensor] = []
