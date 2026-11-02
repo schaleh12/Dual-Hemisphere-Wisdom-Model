@@ -43,8 +43,8 @@ def test_compile_chess_posture_chords_uses_all_six_piece_archetypes() -> None:
         low_a, low_b = compile_chess_posture_chords(**low_kwargs)
         high_a, high_b = compile_chess_posture_chords(**high_kwargs)
 
-        assert low_a.to_tuple() != high_a.to_tuple(), f"{piece_key} did not affect chord_a"
-        assert low_b.to_tuple() != high_b.to_tuple(), f"{piece_key} did not affect chord_b"
+        assert low_a.values != high_a.values, f"{piece_key} did not affect chord_a"
+        assert low_b.values != high_b.values, f"{piece_key} did not affect chord_b"
         assert low_a.thinker_vector != high_a.thinker_vector, f"{piece_key} did not affect thinker_vector A"
         assert low_b.thinker_vector != high_b.thinker_vector, f"{piece_key} did not affect thinker_vector B"
 

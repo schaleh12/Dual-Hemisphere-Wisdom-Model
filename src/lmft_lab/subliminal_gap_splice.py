@@ -575,6 +575,11 @@ class SubliminalChordVector:
             for idx, name in enumerate(SUBLIMINAL_FEATURE_NAMES)
         }
 
+    @classmethod
+    def from_dict(cls, data: Mapping[str, float]) -> "SubliminalChordVector":
+        flat = [float(data[name]) for name in SUBLIMINAL_FEATURE_NAMES]
+        return cls.from_flat_values(flat)
+
     def to_tensor(
         self,
         *,
