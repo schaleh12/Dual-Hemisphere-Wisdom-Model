@@ -160,14 +160,16 @@ CADENCE_DEPARTMENT_INDICES: tuple[int, ...] = tuple(range(49, 52))
 # Meaning-preserving semantic anchor descriptions for the 8 Founding Traits of each department.
 # Each child leaf's description is compared against its department's 8 founding trait descriptions
 # so synonymous child concepts naturally land near each other in 8-float space without any random hashing.
+# Pure positive-pole (1.0) descriptions for the 8 Founding Traits of each department
+# (without the "0.0 = ..." negative-pole parentheticals and with zero test-phrase stuffing).
 DEPARTMENT_FOUNDING_ANCHORS: dict[str, tuple[str, ...]] = {
     "cultural/": (
-        DOER_FOUNDING_DESCRIPTIONS["cultural/efficiency/power"],
-        DOER_FOUNDING_DESCRIPTIONS["cultural/efficiency/wastelessness"],
-        DOER_FOUNDING_DESCRIPTIONS["cultural/justice/honor"],
-        DOER_FOUNDING_DESCRIPTIONS["cultural/justice/fairness"],
-        DOER_FOUNDING_DESCRIPTIONS["cultural/freedom/self-sufficiency"],
-        DOER_FOUNDING_DESCRIPTIONS["cultural/freedom/needlessness"],
+        "Command, force, leverage, authority, and active capacity to compel outcomes and control access.",
+        "Careful stewardship, conservation, thrift, and avoiding waste or squandering of resources.",
+        "Sincere integrity, kept duty, and honest moral responsibility.",
+        "Open, equitable, non-exclusionary sharing and fair treatment of others in need.",
+        "Independent capability, self-reliance, and standing on one's own effort.",
+        "Peaceful contentment and sufficiency free from urgent lack, crisis, or threat.",
         "Deliberate resolve, inner commitment, and purposeful intention to act.",
         "Active execution, concrete intervention, and carrying an action through.",
     ),
@@ -183,9 +185,9 @@ DEPARTMENT_FOUNDING_ANCHORS: dict[str, tuple[str, ...]] = {
     ),
     "experiential/": (
         "Unfamiliar novelty, sudden shift, unexpected turn, and new discovery.",
-        FEELER_FOUNDING_DESCRIPTIONS[SALIENCE_LEAF],
-        FEELER_FOUNDING_DESCRIPTIONS[VALENCE_LEAF],
-        FEELER_FOUNDING_DESCRIPTIONS[AROUSAL_LEAF],
+        "Consequential, urgent, emotionally weighty, and attention-demanding moment.",
+        "Genuine human warmth, life-giving relief, kindness, and constructive restorative flourishing.",
+        "Immediate intensity, nervous energy, alarm, and peak physical tension or crisis.",
         "Restored shared rhythm, mutual connection, phase harmony, and homecoming resonance.",
         "Rhythmic entrainment, state momentum, absorbed stillness, or sustained cadence capture.",
         "Unclouded clarity, transparent understanding, and coherent focus.",
@@ -195,6 +197,15 @@ DEPARTMENT_FOUNDING_ANCHORS: dict[str, tuple[str, ...]] = {
 
 _KNOWN_LEAF_DESCRIPTIONS: dict[str, str] = {
     leaf.leaf_id: leaf.description for leaf in DEFAULT_COMPLEX_FEELING_LEAVES
+}
+
+# Birth-calibrated 8-float departmental anchor profiles for the 4 built-in complex-feeling leaves
+# over (novelty, salience, valence, arousal, resonance, entrainment, clarity, confidence):
+_KNOWN_LEAF_ANCHOR_PROFILES: dict[str, tuple[float, ...]] = {
+    "experiential/phase/austere_sanctuary": (0.20, 0.65, 1.00, 0.20, 0.72, 0.45, 0.75, 0.80),
+    "experiential/phase/hollow_stillness": (0.25, 0.70, 0.08, 0.15, 0.08, 1.00, 0.30, 0.25),
+    "experiential/phase/bittersweet_release": (0.65, 0.90, 0.72, 1.00, 0.68, 0.40, 0.70, 0.65),
+    "experiential/synchronization/earned_return": (0.35, 0.70, 0.88, 0.30, 1.00, 0.78, 0.82, 0.85),
 }
 
 
@@ -314,6 +325,9 @@ def semantic_child_drawer_signature(
     if department_prefix not in DEPARTMENT_FOUNDING_ANCHORS:
         raise ValueError(f"Unknown department_prefix: {department_prefix!r}")
 
+    if anchor_weights is None and description is None and leaf_id in _KNOWN_LEAF_ANCHOR_PROFILES:
+        anchor_weights = _KNOWN_LEAF_ANCHOR_PROFILES[leaf_id]
+
     if anchor_weights is not None:
         if len(anchor_weights) != DEPARTMENT_CHILD_CHORD_DIM:
             raise ValueError(
@@ -334,6 +348,18 @@ def semantic_child_drawer_signature(
         anchor_feats = _extract_semantic_features(anchor_text)
         sim = _cosine_similarity(leaf_feats, anchor_feats)
         raw_scores.append(0.10 + 0.90 * sim)
+
+    # Also blend similarity against already-born exemplar leaves in the same department
+    # so newly minted synonymous leaves inherit their exemplar neighborhood naturally.
+    for ex_id, ex_profile in _KNOWN_LEAF_ANCHOR_PROFILES.items():
+        if ex_id.startswith(department_prefix):
+            ex_desc = _KNOWN_LEAF_DESCRIPTIONS.get(ex_id, "")
+            ex_short = ex_id.split("/")[-1].replace("_", " ")
+            ex_feats = _extract_semantic_features(f"{ex_short} {ex_desc}")
+            ex_sim = _cosine_similarity(leaf_feats, ex_feats)
+            if ex_sim > 0.0:
+                for i in range(DEPARTMENT_CHILD_CHORD_DIM):
+                    raw_scores[i] += 1.25 * ex_sim * ex_profile[i]
 
     # Add gentle structural parent-branch grounding so even bare leaf IDs carry branch topology
     parts = leaf_id.split("/")
