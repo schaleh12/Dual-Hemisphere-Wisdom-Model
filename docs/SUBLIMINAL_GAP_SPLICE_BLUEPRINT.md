@@ -1,23 +1,29 @@
 # Three-Legged Race Blueprint: Splicing Non-Verbal Fuzzy-Tree Chords Into `<|subliminal_gap|>` LLM Embeddings
 
-## 1. Plain-English Goal
+## 1. Plain-English Goal & Anti-Bloat Scalability Design
 
 Instead of treating the Right Brain (the 40-node Fuzzy Tree + 3 neural bridge classifiers) and the Left Brain (the 4B LLM) like a relay race—or translating the Fuzzy Tree's feelings into English stage directions—we tie their ankles together in a **Three-Legged Race** using the same neural surgery that Vision-Language Models use to give a blind text LLM "eyes":
 
-1. **The Non-Verbal Organ (`SubliminalChordVector`, 32 raw floats, zero English words)**:
-   - At any moment in a thought stream, the Right Brain compresses its entire live state into a 32-float vector in `[0.0, 1.0]`:
-     - **24 Founding Leaves** (12 `Cultural` & `Philosophical` + 6 `Experiential` + 6 `Psychological`—100% faithful to the frozen 40-node seed).
-     - **4 Complex Feeling Chord Notes** (`austere_sanctuary`, `hollow_stillness`, `bittersweet_release`, `earned_return`).
-     - **4 Three-Legged Race Cadence & Friction Signals** (`branch_harmony`, `social_drift_flag`, `dissonance_pressure`, `cadence_rupture_drive`).
-2. **The `<|subliminal_gap|>` Token Slot**:
-   - While the Left Brain is generating a train of thought, it pauses mid-thought and emits a special `<|subliminal_gap|>` token where it **cannot** continue on words alone.
-3. **The Surgical Embedding Splice (`SubliminalGapProjector`)**:
-   - Whenever the token stream hits `<|subliminal_gap|>`, Python intercepts the transformer's raw token embeddings (`inputs_embeds`) before they enter the attention layers.
-   - A trainable PyTorch projector (`SubliminalGapProjector`) maps the 32-float `SubliminalChordVector` into **4 virtual non-verbal token embeddings** (`[4, hidden_size]`):
+1. **The Non-Verbal Organ (`SubliminalChordVector`, 37 raw floats, zero English words, 100% scale-invariant)**:
+   - To make sure the plug **never changes shape** even when the tree grows from `10` child leaves to `10,000` child leaves across dozens of domains, we never hardcode individual learned child leaves into fixed vector slots. Instead, every learned Tier-2/Tier-3 child leaf rolls up into its permanent Founding Parent Branch:
+     - **`[0..23]` — The 24 Frozen Founding Leaves**: 12 `Cultural` & `Philosophical` + 6 `Experiential` + 6 `Psychological` (100% faithful to the frozen 40-node seed).
+     - **`[24..32]` — The 9 Permanent Parent-Branch Child-Drawer Pools**:
+       - `cultural/efficiency`, `cultural/justice`, `cultural/freedom` (3)
+       - `philosophical/being`, `philosophical/structure`, `philosophical/persistence` (3)
+       - `experiential/reflection`, `experiential/phase`, `experiential/synchronization` (3)
+       - Whether a parent branch has `1` child drawer or `1,000` child drawers, `pool_child_drawers_by_parent_branch` rolls the active child drawers under that branch into a single `[0.0, 1.0]` parent-branch channel. The vector dimension stays **37 floats forever**.
+     - **`[33..36]` — The 4 Three-Legged Race Cadence & Ankle-Rope Signals**:
+       - `branch_harmony`: agreement across the 3 Right-Brain branches.
+       - `social_drift_flag`: `1.0` when ongoing historical enclosure/drift is active.
+       - `dissonance_pressure`: friction from cognitive dissonance or low clarity.
+       - `cadence_rupture_drive`: non-verbal tug with a built-in **calm-talk deadband (`deadband = 0.45`)** and **`ankle_rope_sensitivity` dial** so normal everyday conversation stays at `0.0` (never twitchy), while genuine high-arousal / hollow-stillness / high-discreteness crises cross the deadband and yank the Left Brain out of smooth chatbot prose into stark or spelled-out cadence (`M-A-C-H-I-N-E`).
+
+2. **The `<|subliminal_gap|>` Token Slot & Surgical Embedding Splice (`SubliminalGapProjector`)**:
+   - Whenever the Left Brain emits `<|subliminal_gap|>`, Python intercepts `inputs_embeds` and replaces that single token slot with **4 virtual non-verbal token embeddings** (`[4, hidden_size]`):
      1. **Do-er / Will Pulse Token** (social stakes, fairness, drift, action drive)
      2. **Thinker / Truth Structure Token** (order, chaos, discreteness, fact vs. theory)
-     3. **Feeler / Experiential Chord Token** (valence, arousal, sanctuary, hollow stillness, release)
-     4. **Cadence / Struggle Token** (harmony vs. dissonance, looping, and `cadence_rupture_drive`—the exact jolt that breaks smooth chatbot prose into stark, fragmented, or letter-by-letter cadence like `M-A-C-H-I-N-E` when internal tension is sharp).
+     3. **Feeler / Experiential Chord Token** (valence, arousal, and pooled experiential sub-drawers)
+     4. **Cadence / Struggle Token** (`branch_harmony`, `dissonance_pressure`, and deadband-gated `cadence_rupture_drive`).
 
 ---
 
@@ -25,9 +31,15 @@ Instead of treating the Right Brain (the 40-node Fuzzy Tree + 3 neural bridge cl
 
 ```python
 # ============================================================================
-# STEP 1: Compile the 32-Float Non-Verbal Subliminal Chord Vector (0 Words)
+# STEP 1: Compile the 37-Float Scale-Invariant Subliminal Chord Vector (0 Words)
 # ============================================================================
-def compile_subliminal_chord_vector(vibe, deliberation=None, social_drift=None, prev_vibe=None):
+def compile_subliminal_chord_vector(
+    vibe,
+    deliberation=None,
+    social_drift=None,
+    deadband=0.45,
+    ankle_rope_sensitivity=1.0,
+):
     # 1. Pack the 24 frozen founding leaves in canonical order (24 floats)
     founding_24 = [
         # Cultural (6): power, wastelessness, honor, fairness, self-sufficiency, needlessness
@@ -36,28 +48,47 @@ def compile_subliminal_chord_vector(vibe, deliberation=None, social_drift=None, 
         # Psychological (6): clarity, confidence, theory, fact, intention, execution
     ]
 
-    # 2. Pack the 4 complex feeling chord notes (4 floats)
-    chord_4 = [austere_sanctuary, hollow_stillness, bittersweet_release, earned_return]
+    # 2. Roll up ANY number of learned Tier-2/Tier-3 child leaves (10 or 10,000)
+    #    into their 9 permanent Founding Parent Branches (9 floats -> never changes size!)
+    parent_branch_pools_9 = [
+        max_child_activation_under("cultural/efficiency"),
+        max_child_activation_under("cultural/justice"),
+        max_child_activation_under("cultural/freedom"),
+        max_child_activation_under("philosophical/being"),
+        max_child_activation_under("philosophical/structure"),
+        max_child_activation_under("philosophical/persistence"),
+        max_child_activation_under("experiential/reflection"),
+        max_child_activation_under("experiential/phase"),
+        max_child_activation_under("experiential/synchronization"),
+    ]
 
-    # 3. Pack the 4 Three-Legged Race Cadence & Struggle signals (4 floats)
+    # 3. Pack the 4 Three-Legged Race Cadence & Ankle-Rope signals (4 floats)
     branch_harmony = deliberation.harmony_score if deliberation else vibe.synthesis.harmony
     social_drift_flag = 1.0 if (social_drift and social_drift.drift_detected) else 0.0
-    dissonance_pressure = 1.0 if (vibe.self_registry.dissonance_notes or vibe.clarity < 0.35) else 0.0
+    dissonance_pressure = compute_dissonance_pressure(vibe)
 
-    # Cadence Rupture Drive: spikes when high arousal/discreteness or hollow stillness
-    # collides with low clarity or dissonance -> yanks the Left Brain out of smooth prose!
-    cadence_rupture_drive = clamp01(
-        0.45 * max(arousal, hollow_stillness)
-        + 0.35 * discreteness
-        + 0.20 * (1.0 - clarity)
-    ) * (1.0 if (dissonance_pressure > 0.0 or valence <= 0.40 or hollow_stillness >= 0.45) else 0.35)
+    # Deadband-gated Cadence Rupture Drive:
+    # - Stays strictly 0.0 during normal calm conversation (raw_strain <= deadband)
+    #   so the Left Brain is never overly twitchy or melodramatic!
+    # - Ramps up smoothly above `deadband` when high arousal / experiential phase strain
+    #   and discreteness collide with low clarity or dissonance.
+    cadence_rupture_drive = compute_cadence_rupture_drive(
+        arousal=vibe.arousal,
+        discreteness=vibe.coordinates["philosophical/persistence/discreteness"],
+        clarity=vibe.clarity,
+        valence=vibe.valence,
+        experiential_phase_pool=parent_branch_pools_9[7],
+        dissonance_pressure=dissonance_pressure,
+        deadband=deadband,
+        sensitivity=ankle_rope_sensitivity,
+    )
 
-    return FloatTensor(founding_24 + chord_4 + [
+    return FloatTensor(founding_24 + parent_branch_pools_9 + [
         branch_harmony,
         social_drift_flag,
         dissonance_pressure,
         cadence_rupture_drive,
-    ])  # Shape: [32]
+    ])  # Permanent Shape: [37] regardless of how many thousands of child leaves exist!
 
 
 # ============================================================================
@@ -66,8 +97,8 @@ def compile_subliminal_chord_vector(vibe, deliberation=None, social_drift=None, 
 def splice_subliminal_gaps_into_embeds(
     input_ids,          # [batch, seq_len] token IDs containing GAP_TOKEN_ID
     word_embedding_fn,  # LLM's model.get_input_embeddings()
-    projector,          # SubliminalGapProjector: [32] -> [4, hidden_size]
-    chord_vectors,      # [batch, num_gaps, 32] raw non-verbal Fuzzy Tree states
+    projector,          # SubliminalGapProjector: [37] -> [4, hidden_size]
+    chord_vectors,      # [batch, num_gaps, 37] raw non-verbal Fuzzy Tree states
     gap_token_id,
     labels=None,        # Optional training target token IDs
 ):
@@ -90,22 +121,21 @@ def run_three_legged_thought_stream(llm, projector, right_brain_tree, prompt_tex
     # 2. Left Brain begins generating thought tokens until it emits `<|subliminal_gap|>`.
     # 3. The instant `<|subliminal_gap|>` appears:
     #    - Right Brain scores the Left Brain's partial thought alongside the scene (35 ms),
-    #      updating `Arousal`, `Clarity`, `Hollow Stillness`, and `Cadence Rupture Drive`.
+    #      updating the 24 founding leaves, the 9 parent-branch child pools, and the
+    #      deadband-gated `Cadence Rupture Drive`.
     #    - `projector(chord_vector_t)` injects the 4 non-verbal embeddings into `<|subliminal_gap|>`.
-    # 4. Left Brain continues generating from the spliced `inputs_embeds`—bending its
-    #    next words and cadence around the non-verbal Fuzzy Tree signal!
+    # 4. Left Brain continues generating from the spliced `inputs_embeds`—staying smooth
+    #    when `cadence_rupture_drive == 0.0` and fracturing its cadence when tension spikes!
 ```
 
 ---
 
-## 3. Staged Implementation Plan (So We Never Bite Off Too Much at Once)
+## 3. Staged Implementation Plan
 
 - **Stage 1 (Done Today — `src/lmft_lab/subliminal_gap_splice.py` + `tests/test_subliminal_gap_splice.py`)**:
-  - Build the 32-float `SubliminalChordVector` compiler from `RightBrainVibe`.
-  - Build the PyTorch `SubliminalGapProjector` (`32 -> [4, hidden_size]`) with 4 specialized sub-heads (`Do-er`, `Thinker`, `Feeler`, `Cadence/Rupture`).
-  - Build `splice_subliminal_gaps_into_embeds` (handling variable gap counts, attention masks, and `-100` label alignment for training).
-  - Verify with a real PyTorch causal-attention unit test that holding the English words **100% identical** while flipping only the `32`-float `SubliminalChordVector` inside `<|subliminal_gap|>` flips the model's post-gap token prediction (e.g., from smooth prose to `M-A-C-H-I-N-E` cadence).
+  - Build the scale-invariant 37-float `SubliminalChordVector` compiler with 9 permanent Parent-Branch Child-Drawer Pools (`pool_child_drawers_by_parent_branch`) and the deadband-gated `compute_cadence_rupture_drive`.
+  - Verify that adding 100+ brand-new Tier-2 and Tier-3 child leaves across any branch automatically rolls up into the 9 parent-branch channels without changing the 37-float vector size, that everyday calm scenes stay at `cadence_rupture_drive == 0.0` (zero twitchiness), and that swapping only the 37-float vector inside `<|subliminal_gap|>` flips a causal PyTorch Transformer's post-gap token prediction.
 - **Stage 2 (Next Session — Offline 9B Teacher Trajectory Generation)**:
-  - Use `Qwen3.5-9B` offline to generate a clean dataset of `(Prompt + Partial Thought + <SUBLIMINAL_GAP>[32-float vector] -> Post-Gap Continuation)` pairs covering calm synthesis, self-correction of looping/anxiety, and high-rupture poetic/existential cadence breaks.
+  - Use `Qwen3.5-9B` offline to generate a clean dataset of `(Prompt + Partial Thought + <SUBLIMINAL_GAP>[37-float vector] -> Post-Gap Continuation)` pairs covering calm synthesis (`rupture == 0.0`), self-correction of looping/anxiety, and high-rupture poetic/existential cadence breaks (`M-A-C-H-I-N-E`).
 - **Stage 3 (Next Session — RTX 4080 PyTorch Training & "Unplug-the-Cord" Live Eval)**:
   - Train `SubliminalGapProjector` + LoRA on `Qwen3-4B` on the RTX 4080 (`gradient_checkpointing=True`, ~11 GB VRAM) and run the live **Unplug-the-Cord / Swap-the-Chord** verification.

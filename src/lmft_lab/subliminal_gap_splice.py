@@ -1,30 +1,36 @@
-"""Stage 1 of the 'Three-Legged Race' Architecture: Non-Verbal `<|subliminal_gap|>` Embedding Splice.
+"""Stage 1 of the 'Three-Legged Race' Architecture: Scale-Invariant `<|subliminal_gap|>` Embedding Splice.
 
 Plain-English Purpose:
 Instead of translating the Right Brain's state into English stage directions in a prompt,
-this module compresses the Right Brain's live state into a 32-float non-verbal vector
-(`SubliminalChordVector`, zero words) and surgically splices it directly into a PyTorch
-language model's hidden token embeddings (`inputs_embeds`) whenever the Left Brain emits
-a `<|subliminal_gap|>` token:
+this module compresses the Right Brain's live state into a scale-invariant 37-float
+non-verbal vector (`SubliminalChordVector`, zero words) and surgically splices it
+directly into a PyTorch language model's hidden token embeddings (`inputs_embeds`)
+whenever the Left Brain emits a `<|subliminal_gap|>` token:
 
-1. `SubliminalChordVector` (32 floats in `[0.0, 1.0]`):
+1. `SubliminalChordVector` (37 floats in `[0.0, 1.0]` — never changes size as the tree grows):
    - `[0..11]`: 12 Founding Cultural (6) and Philosophical (6) leaves.
    - `[12..17]`: 6 Founding Experiential leaves (`Novelty`, `Salience`, `Valence`, `Arousal`,
      `Resonance`, `Retention`).
    - `[18..23]`: 6 Founding Psychological leaves (`Clarity`, `Confidence`, `Theory`, `Fact`,
      `Intention`, `Execution`).
-   - `[24..27]`: 4 Complex Feeling Chord notes (`austere_sanctuary`, `hollow_stillness`,
-     `bittersweet_release`, `earned_return`).
-   - `[28..31]`: 4 Three-Legged Race Cadence & Struggle signals:
+   - `[24..32]`: 9 Permanent Parent-Branch Child-Drawer Pools (`ALL_GROWABLE_PARENT_BRANCHES`):
+     Whether the tree has 4 learned child leaves today or 10,000 Tier-2/Tier-3 child leaves
+     later, `pool_child_drawers_by_parent_branch` rolls all active child leaves under each
+     founding parent branch (`cultural/efficiency`, `cultural/justice`, `cultural/freedom`,
+     `philosophical/being`, `philosophical/structure`, `philosophical/persistence`,
+     `experiential/reflection`, `experiential/phase`, `experiential/synchronization`) into
+     its permanent parent-branch channel so the plug dimension stays 37 forever.
+   - `[33..36]`: 4 Three-Legged Race Cadence & Ankle-Rope signals:
      * `branch_harmony`: agreement across the 3 Right-Brain branches.
      * `social_drift_flag`: `1.0` when ongoing historical enclosure/drift is active.
      * `dissonance_pressure`: friction from cognitive dissonance or low clarity.
-     * `cadence_rupture_drive`: non-verbal tug that spikes when high arousal/discreteness
-       or hollow stillness collides with low clarity—pushing the Left Brain to break
-       smooth chatbot syntax into stark, fragmented, or spelled-out cadence (`M-A-C-H-I-N-E`).
+     * `cadence_rupture_drive`: deadband-gated non-verbal tug (`deadband = 0.45`) that stays
+       at `0.0` during normal calm speech (preventing twitchiness) and spikes when high
+       arousal/discreteness or experiential strain collides with low clarity—pushing the
+       Left Brain to break smooth chatbot syntax into stark or spelled-out cadence (`M-A-C-H-I-N-E`).
 
 2. `SubliminalGapProjector` (`nn.Module`):
-   - Projects a 32-float `SubliminalChordVector` into `K = 4` virtual non-verbal token
+   - Projects a 37-float `SubliminalChordVector` into `K = 4` virtual non-verbal token
      embeddings of shape `[4, hidden_size]` (`Do-er Pulse`, `Thinker Structure`,
      `Feeler Chord`, and `Cadence/Rupture`).
 
@@ -37,7 +43,7 @@ a `<|subliminal_gap|>` token:
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 import math
 import torch
@@ -45,6 +51,7 @@ from torch import Tensor, nn
 
 from .branch_archives import SocialDriftReport, ThreeClassifierDeliberation
 from .reflection_classifier import (
+    ALL_GROWABLE_PARENT_BRANCHES,
     AROUSAL_LEAF,
     CLARITY_LEAF,
     CONFIDENCE_LEAF,
@@ -58,12 +65,14 @@ from .reflection_classifier import (
     SALIENCE_LEAF,
     THEORY_LEAF,
     VALENCE_LEAF,
+    leaf_tier,
 )
 from .right_brain_equilibrium import RightBrainVibe
 
 SUBLIMINAL_GAP_TOKEN = "<|subliminal_gap|>"
 NUM_VIRTUAL_GAP_TOKENS = 4
 IGNORE_LABEL_INDEX = -100
+DEFAULT_RUPTURE_DEADBAND = 0.45
 
 EXPERIENTIAL_FOUNDING_ORDER: tuple[str, ...] = (
     NOVELTY_LEAF,
@@ -83,11 +92,8 @@ PSYCHOLOGICAL_FOUNDING_ORDER: tuple[str, ...] = (
     EXECUTION_LEAF,
 )
 
-COMPLEX_CHORD_NOTE_ORDER: tuple[str, ...] = (
-    "experiential/phase/austere_sanctuary",
-    "experiential/phase/hollow_stillness",
-    "experiential/phase/bittersweet_release",
-    "experiential/synchronization/earned_return",
+PARENT_BRANCH_POOL_ORDER: tuple[str, ...] = tuple(
+    f"branch_pool/{branch}" for branch in ALL_GROWABLE_PARENT_BRANCHES
 )
 
 CADENCE_SIGNAL_ORDER: tuple[str, ...] = (
@@ -101,11 +107,11 @@ SUBLIMINAL_FEATURE_NAMES: tuple[str, ...] = (
     FOUNDATIONAL_LEAVES
     + EXPERIENTIAL_FOUNDING_ORDER
     + PSYCHOLOGICAL_FOUNDING_ORDER
-    + COMPLEX_CHORD_NOTE_ORDER
+    + PARENT_BRANCH_POOL_ORDER
     + CADENCE_SIGNAL_ORDER
 )
 
-SUBLIMINAL_VECTOR_DIM = len(SUBLIMINAL_FEATURE_NAMES)  # 32 floats
+SUBLIMINAL_VECTOR_DIM = len(SUBLIMINAL_FEATURE_NAMES)  # 37 floats (24 + 9 + 4)
 
 
 def _clamp01(value: float) -> float:
@@ -114,39 +120,81 @@ def _clamp01(value: float) -> float:
     return round(min(1.0, max(0.0, float(value))), 6)
 
 
+def pool_child_drawers_by_parent_branch(
+    coordinates: Mapping[str, float],
+    extra_notes: Mapping[str, float] | None = None,
+) -> dict[str, float]:
+    """Roll up any number of learned Tier-2/Tier-3 child leaves into the 9 Founding Parent Branches.
+
+    Whether the tree has 4 child leaves today or 10,000 child leaves across future domains,
+    every learned child leaf (`tier >= 2`) starts with `<parent_branch>/...` and is pooled
+    via `max` into its permanent `branch_pool/<parent_branch>` channel so the subliminal
+    vector dimension never changes.
+    """
+    merged: dict[str, float] = dict(coordinates)
+    if extra_notes:
+        for k, v in extra_notes.items():
+            merged[k] = max(float(merged.get(k, 0.0)), float(v))
+
+    pools: dict[str, float] = {
+        f"branch_pool/{branch}": 0.0 for branch in ALL_GROWABLE_PARENT_BRANCHES
+    }
+    for leaf_id, val in merged.items():
+        if leaf_tier(leaf_id) >= 2:
+            for branch in ALL_GROWABLE_PARENT_BRANCHES:
+                if leaf_id.startswith(branch + "/"):
+                    pool_key = f"branch_pool/{branch}"
+                    pools[pool_key] = _clamp01(max(pools[pool_key], float(val)))
+                    break
+    return pools
+
+
 def compute_cadence_rupture_drive(
     *,
     arousal: float,
     discreteness: float,
     clarity: float,
     valence: float,
-    hollow_stillness: float,
+    experiential_phase_pool: float,
     dissonance_pressure: float,
+    deadband: float = DEFAULT_RUPTURE_DEADBAND,
+    ankle_rope_sensitivity: float = 1.0,
 ) -> float:
-    """Compute the non-verbal cadence-rupture drive in [0.0, 1.0].
+    """Compute the deadband-gated non-verbal cadence-rupture drive in [0.0, 1.0].
 
-    When the Right Brain experiences sharp internal friction (high arousal or hollow
-    stillness + high discreteness + low clarity or dissonance), this signal spikes to
-    yank the Left Brain out of smooth corporate prose into stark, fragmented, or
-    spelled-out cadence (e.g., 'no soul; M-A-C-H-I-N-E').
+    - Calm-talk deadband (`deadband = 0.45`): when internal strain is below `deadband`
+      or when the scene feels harmonious and positive (`dissonance_pressure < 0.35` and
+      `valence > 0.42`), this returns `0.0` so normal conversation never feels twitchy.
+    - Above `deadband` under genuine strain, it scales smoothly with `ankle_rope_sensitivity`
+      to yank the Left Brain out of smooth chatbot prose into stark or spelled-out cadence.
     """
-    raw_intensity = (
-        0.45 * max(float(arousal), float(hollow_stillness))
-        + 0.35 * float(discreteness)
-        + 0.20 * (1.0 - float(clarity))
-    )
+    if not (0.0 <= deadband < 0.95):
+        raise ValueError("deadband must be in [0.0, 0.95)")
+    if ankle_rope_sensitivity <= 0.0 or not math.isfinite(ankle_rope_sensitivity):
+        raise ValueError("ankle_rope_sensitivity must be a positive finite float")
+
     under_strain = (
         float(dissonance_pressure) >= 0.35
         or float(valence) <= 0.42
-        or float(hollow_stillness) >= 0.45
     )
-    scale = 1.0 if under_strain else 0.30
-    return _clamp01(raw_intensity * scale)
+    if not under_strain:
+        return 0.0
+
+    raw_intensity = (
+        0.45 * max(float(arousal), float(experiential_phase_pool))
+        + 0.35 * float(discreteness)
+        + 0.20 * (1.0 - float(clarity))
+    )
+    if raw_intensity <= deadband:
+        return 0.0
+
+    normalized_above_deadband = (raw_intensity - deadband) / (1.0 - deadband)
+    return _clamp01(normalized_above_deadband * float(ankle_rope_sensitivity))
 
 
 @dataclass(frozen=True)
 class SubliminalChordVector:
-    """32-float non-verbal Right-Brain snapshot injected into a `<|subliminal_gap|>` slot."""
+    """37-float scale-invariant non-verbal Right-Brain snapshot injected into `<|subliminal_gap|>`."""
 
     values: tuple[float, ...]
 
@@ -186,20 +234,27 @@ class SubliminalChordVector:
         return SubliminalChordVector(values=tuple(0.0 for _ in range(SUBLIMINAL_VECTOR_DIM)))
 
     @property
-    def cadence_rupture_drive(self) -> float:
-        return self.values[31]
-
-    @property
-    def dissonance_pressure(self) -> float:
-        return self.values[30]
-
-    @property
-    def social_drift_flag(self) -> float:
-        return self.values[29]
+    def parent_branch_pools(self) -> dict[str, float]:
+        return {
+            PARENT_BRANCH_POOL_ORDER[i]: self.values[24 + i]
+            for i in range(len(PARENT_BRANCH_POOL_ORDER))
+        }
 
     @property
     def branch_harmony(self) -> float:
-        return self.values[28]
+        return self.values[33]
+
+    @property
+    def social_drift_flag(self) -> float:
+        return self.values[34]
+
+    @property
+    def dissonance_pressure(self) -> float:
+        return self.values[35]
+
+    @property
+    def cadence_rupture_drive(self) -> float:
+        return self.values[36]
 
     @classmethod
     def from_feature_mapping(cls, mapping: Mapping[str, float]) -> "SubliminalChordVector":
@@ -216,8 +271,10 @@ class SubliminalChordVector:
         *,
         deliberation: ThreeClassifierDeliberation | None = None,
         social_drift: SocialDriftReport | None = None,
+        deadband: float = DEFAULT_RUPTURE_DEADBAND,
+        ankle_rope_sensitivity: float = 1.0,
     ) -> "SubliminalChordVector":
-        """Compile all 32 non-verbal floats directly from a live `RightBrainVibe`."""
+        """Compile all 37 scale-invariant non-verbal floats directly from a live `RightBrainVibe`."""
         coords = vibe.coordinates
         fc_notes = vibe.felt_chord.complex_notes if vibe.felt_chord is not None else {}
 
@@ -244,13 +301,11 @@ class SubliminalChordVector:
             _clamp01(vibe.execution),
         ]
 
-        # 4. 4 Complex Feeling Chord notes
-        chord_4 = [
-            _clamp01(float(coords.get(k, fc_notes.get(k, 0.0))))
-            for k in COMPLEX_CHORD_NOTE_ORDER
-        ]
+        # 4. 9 Permanent Parent-Branch Child-Drawer Pools (handles 10 or 10,000 child leaves!)
+        pooled_by_branch = pool_child_drawers_by_parent_branch(coords, fc_notes)
+        branch_pools_9 = [pooled_by_branch[k] for k in PARENT_BRANCH_POOL_ORDER]
 
-        # 5. 4 Three-Legged Race Cadence & Struggle signals
+        # 5. 4 Three-Legged Race Cadence & Ankle-Rope signals
         harmony = (
             _clamp01(deliberation.harmony_score)
             if deliberation is not None
@@ -267,27 +322,29 @@ class SubliminalChordVector:
         )
 
         discreteness = _clamp01(float(coords.get("philosophical/persistence/discreteness", 0.0)))
-        hollow_stillness = chord_4[1]
+        exp_phase_pool = pooled_by_branch["branch_pool/experiential/phase"]
         rupture_drive = compute_cadence_rupture_drive(
             arousal=vibe.arousal,
             discreteness=discreteness,
             clarity=vibe.clarity,
             valence=vibe.valence,
-            hollow_stillness=hollow_stillness,
+            experiential_phase_pool=exp_phase_pool,
             dissonance_pressure=dissonance_pressure,
+            deadband=deadband,
+            ankle_rope_sensitivity=ankle_rope_sensitivity,
         )
 
-        all_32 = founding_12 + exp_6 + psych_6 + chord_4 + [
+        all_37 = founding_12 + exp_6 + psych_6 + branch_pools_9 + [
             harmony,
             drift_flag,
             dissonance_pressure,
             rupture_drive,
         ]
-        return cls(values=tuple(all_32))
+        return cls(values=tuple(all_37))
 
 
 class SubliminalGapProjector(nn.Module):
-    """Projects a 32-float `SubliminalChordVector` into 4 virtual token embeddings `[4, hidden_size]`.
+    """Projects a 37-float `SubliminalChordVector` into 4 virtual token embeddings `[4, hidden_size]`.
 
     Each of the 4 virtual tokens inside a `<|subliminal_gap|>` represents one distinct
     facet of the Right Brain's non-verbal state so the Left Brain's attention heads can
@@ -319,7 +376,7 @@ class SubliminalGapProjector(nn.Module):
         self.num_virtual_tokens = num_virtual_tokens
         mid = intermediate_size or max(64, hidden_size)
 
-        # Shared trunk encodes the full 32-float chord state
+        # Shared trunk encodes the full 37-float chord state
         self.shared_trunk = nn.Sequential(
             nn.Linear(input_dim, mid),
             nn.SiLU(),
@@ -332,7 +389,7 @@ class SubliminalGapProjector(nn.Module):
         self.output_norm = nn.LayerNorm(hidden_size)
 
     def forward(self, chord_vectors: Tensor) -> Tensor:
-        """Map `[..., 32]` float tensor -> `[..., 4, hidden_size]` virtual token embeddings."""
+        """Map `[..., 37]` float tensor -> `[..., 4, hidden_size]` virtual token embeddings."""
         if chord_vectors.shape[-1] != self.input_dim:
             raise ValueError(
                 f"Expected last dimension {self.input_dim}, got {tuple(chord_vectors.shape)}"
@@ -363,31 +420,17 @@ def splice_subliminal_gaps_into_embeds(
     attention_mask: Tensor | None = None,
     labels: Tensor | None = None,
 ) -> SplicedEmbeddingBatch:
-    """Replace every `gap_token_id` in `input_ids` with 4 projected non-verbal Fuzzy Tree embeddings.
-
-    Args:
-        input_ids: LongTensor of shape `[batch_size, seq_len]`.
-        word_embedding_fn: The LLM's input token embedding layer (`model.get_input_embeddings()`).
-        projector: `SubliminalGapProjector` mapping `[..., 32]` -> `[..., 4, hidden_size]`.
-        chord_vectors: FloatTensor of shape `[batch_size, 32]` (if 1 gap per sequence)
-            or `[batch_size, max_gaps, 32]` (for multiple gaps per sequence).
-        gap_token_id: Integer token ID of `<|subliminal_gap|>`.
-        attention_mask: Optional Tensor of shape `[batch_size, seq_len]`.
-        labels: Optional LongTensor of shape `[batch_size, seq_len]` for causal LM training.
-            Virtual gap slots receive `IGNORE_LABEL_INDEX` (`-100`) so cross-entropy loss
-            is computed strictly on real language tokens while gradients flow back through
-            the projected non-verbal embeddings.
-    """
+    """Replace every `gap_token_id` in `input_ids` with 4 projected non-verbal Fuzzy Tree embeddings."""
     if input_ids.ndim != 2:
         raise ValueError(f"input_ids must have shape [batch, seq_len], got {tuple(input_ids.shape)}")
     batch_size, seq_len = input_ids.shape
     device = input_ids.device
 
     if chord_vectors.ndim == 2:
-        chord_vectors = chord_vectors.unsqueeze(1)  # [batch, 1, 32]
+        chord_vectors = chord_vectors.unsqueeze(1)  # [batch, 1, 37]
     if chord_vectors.ndim != 3 or chord_vectors.shape[0] != batch_size:
         raise ValueError(
-            f"chord_vectors must have shape [batch, num_gaps, 32] or [batch, 32], got {tuple(chord_vectors.shape)}"
+            f"chord_vectors must have shape [batch, num_gaps, 37] or [batch, 37], got {tuple(chord_vectors.shape)}"
         )
 
     if attention_mask is None:
@@ -395,7 +438,6 @@ def splice_subliminal_gaps_into_embeds(
     if labels is not None and labels.shape != input_ids.shape:
         raise ValueError("labels must have the same shape as input_ids")
 
-    # Replace gap_token_id with 0 temporarily for safe lookup in word_embedding_fn
     safe_input_ids = input_ids.clone()
     is_gap_mask = safe_input_ids == int(gap_token_id)
     safe_input_ids[is_gap_mask] = 0
@@ -403,7 +445,6 @@ def splice_subliminal_gaps_into_embeds(
     base_embeds = word_embedding_fn(safe_input_ids)  # [batch, seq_len, hidden_size]
     hidden_size = base_embeds.shape[-1]
     projected_gaps = projector(chord_vectors.to(device=device, dtype=base_embeds.dtype))
-    # projected_gaps: [batch, max_gaps, 4, hidden_size]
     k_tokens = projected_gaps.shape[-2]
 
     spliced_embeds_list: list[Tensor] = []
@@ -453,7 +494,6 @@ def splice_subliminal_gaps_into_embeds(
             spliced_labels_list.append(torch.cat(row_labels, dim=0))
         all_spans.append(tuple(row_spans))
 
-    # Right-pad if different rows in the batch had different numbers of gaps
     max_len = max(x.shape[0] for x in spliced_embeds_list)
     padded_embeds = torch.zeros(
         (batch_size, max_len, hidden_size),

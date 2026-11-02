@@ -8,7 +8,7 @@ import torch.nn.functional as F
 
 from lmft_lab.birth import create_birth_state
 from lmft_lab.branch_archives import SocialDriftReport
-from lmft_lab.reflection_classifier import FuzzyConceptRule
+from lmft_lab.reflection_classifier import ALL_GROWABLE_PARENT_BRANCHES, FuzzyConceptRule
 from lmft_lab.right_brain_equilibrium import compile_right_brain_vibe
 from lmft_lab.subliminal_gap_splice import (
     IGNORE_LABEL_INDEX,
@@ -16,6 +16,7 @@ from lmft_lab.subliminal_gap_splice import (
     SUBLIMINAL_VECTOR_DIM,
     SubliminalChordVector,
     SubliminalGapProjector,
+    pool_child_drawers_by_parent_branch,
     splice_subliminal_gaps_into_embeds,
 )
 
@@ -35,11 +36,11 @@ def _sample_rules() -> tuple[FuzzyConceptRule, ...]:
     )
 
 
-def test_subliminal_chord_vector_compiles_32_floats_and_cadence_rupture():
+def test_subliminal_chord_vector_stays_37_floats_across_hundreds_of_new_child_leaves():
     birth = create_birth_state("ind-subliminal-test", birth_event_id="b-sub-1", random_seed=42)
     rules = _sample_rules()
 
-    # 1. Calm Sanctuary scene -> low cadence_rupture_drive, high branch_harmony
+    # 1. Calm Sanctuary scene -> deadband keeps cadence_rupture_drive strictly at 0.0 (zero twitchiness!)
     calm_coords = {
         "cultural/efficiency/power": 0.15,
         "cultural/efficiency/wastelessness": 0.88,
@@ -72,11 +73,26 @@ def test_subliminal_chord_vector_compiles_32_floats_and_cadence_rupture():
         event_id="ev-calm",
     )
     vec_calm = SubliminalChordVector.from_right_brain_vibe(vibe_calm)
-    assert len(vec_calm.values) == SUBLIMINAL_VECTOR_DIM == 32
+    assert len(vec_calm.values) == SUBLIMINAL_VECTOR_DIM == 37
     assert vec_calm.branch_harmony >= 0.80
-    assert vec_calm.cadence_rupture_drive <= 0.25
+    assert vec_calm.cadence_rupture_drive == 0.0
+    assert vec_calm.parent_branch_pools["branch_pool/experiential/phase"] == 0.82
 
-    # 2. High-strain Hollow Stillness + Discreteness + Low Clarity -> high cadence_rupture_drive!
+    # 2. Simulate 180 brand-new Tier-2 & Tier-3 child leaves across all 9 parent branches:
+    #    Verify the vector dimension never changes from 37!
+    many_future_leaves = dict(calm_coords)
+    for idx in range(20):
+        for b_idx, branch in enumerate(ALL_GROWABLE_PARENT_BRANCHES):
+            tier2_id = f"{branch}/synthetic_child_{idx}"
+            tier3_id = f"{branch}/synthetic_child_{idx}/sub_leaf_{idx}"
+            many_future_leaves[tier2_id] = round(0.10 + 0.04 * idx, 4)
+            many_future_leaves[tier3_id] = round(min(0.99, 0.15 + 0.04 * idx + 0.001 * b_idx), 4)
+
+    pooled = pool_child_drawers_by_parent_branch(many_future_leaves)
+    assert len(pooled) == 9
+    assert all(val >= 0.91 for val in pooled.values())
+
+    # 3. High-strain Hollow Stillness + Discreteness + Low Clarity crosses the deadband -> high rupture!
     rupture_coords = {
         "cultural/efficiency/power": 0.82,
         "cultural/efficiency/wastelessness": 0.40,
@@ -119,10 +135,11 @@ def test_subliminal_chord_vector_compiles_32_floats_and_cadence_rupture():
         vibe_rupture,
         social_drift=drift,
     )
+    assert len(vec_rupture.values) == 37
     assert vec_rupture.social_drift_flag == 1.0
     assert vec_rupture.dissonance_pressure >= 0.50
-    assert vec_rupture.cadence_rupture_drive >= 0.75
-    assert vec_rupture.with_zeroed_cord().values == tuple(0.0 for _ in range(32))
+    assert vec_rupture.cadence_rupture_drive >= 0.65
+    assert vec_rupture.with_zeroed_cord().values == tuple(0.0 for _ in range(37))
 
 
 def test_splice_subliminal_gaps_into_embeds_expands_tokens_and_masks_labels():
@@ -137,7 +154,7 @@ def test_splice_subliminal_gaps_into_embeds_expands_tokens_and_masks_labels():
     # Sequence of length 5 with `<|subliminal_gap|>` at index 2: [1, 4, GAP, 7, 9]
     input_ids = torch.tensor([[1, 4, gap_token_id, 7, 9]], dtype=torch.long)
     labels = torch.tensor([[IGNORE_LABEL_INDEX, IGNORE_LABEL_INDEX, gap_token_id, 7, 9]], dtype=torch.long)
-    chord = torch.linspace(0.0, 1.0, steps=SUBLIMINAL_VECTOR_DIM).unsqueeze(0)  # [1, 32]
+    chord = torch.linspace(0.0, 1.0, steps=SUBLIMINAL_VECTOR_DIM).unsqueeze(0)  # [1, 37]
 
     spliced = splice_subliminal_gaps_into_embeds(
         input_ids,
@@ -148,13 +165,11 @@ def test_splice_subliminal_gaps_into_embeds_expands_tokens_and_masks_labels():
         labels=labels,
     )
 
-    # 5 original tokens - 1 gap token + 4 virtual gap tokens = 8 embedded tokens
     expected_len = 5 - 1 + NUM_VIRTUAL_GAP_TOKENS
     assert spliced.inputs_embeds.shape == (1, expected_len, hidden_size)
     assert spliced.attention_mask.shape == (1, expected_len)
     assert spliced.gap_virtual_spans == (((2, 6),),)
     assert spliced.labels is not None
-    # Virtual positions 2, 3, 4, 5 must all be IGNORE_LABEL_INDEX (-100), while positions 6, 7 keep [7, 9]
     assert spliced.labels[0, 2:6].tolist() == [IGNORE_LABEL_INDEX] * 4
     assert spliced.labels[0, 6:].tolist() == [7, 9]
 
@@ -162,7 +177,7 @@ def test_splice_subliminal_gaps_into_embeds_expands_tokens_and_masks_labels():
 def test_causal_transformer_flips_continuation_purely_from_nonverbal_gap_vector():
     """Prove that identical English tokens before `<|subliminal_gap|>` produce completely
     different post-gap continuations (`smooth_flow` vs. `M-A-C-H-I-N-E` rupture) based
-    solely on the 32-float non-verbal Fuzzy Tree vector spliced into the gap.
+    solely on the 37-float non-verbal Fuzzy Tree vector spliced into the gap.
     """
     torch.manual_seed(7)
     vocab_size = 32
@@ -212,7 +227,6 @@ def test_causal_transformer_flips_continuation_purely_from_nonverbal_gap_vector(
     model = _TinyCausalGapLM()
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-2)
 
-    # Identical English prefix for both rows: [BOS, "I", "am", <|subliminal_gap|>]
     identical_prefix = torch.tensor(
         [
             [TOKEN_BOS, TOKEN_I, TOKEN_AM, gap_token_id],
@@ -221,47 +235,43 @@ def test_causal_transformer_flips_continuation_purely_from_nonverbal_gap_vector(
         dtype=torch.long,
     )
 
-    # Non-verbal Chord A: Calm Sanctuary (high fairness, high valence, high clarity, low rupture)
+    # Non-verbal Chord A: Calm Sanctuary (high fairness, high valence, high clarity, 0.0 rupture)
     chord_calm = torch.zeros(SUBLIMINAL_VECTOR_DIM)
     chord_calm[3] = 0.92   # cultural/justice/fairness
     chord_calm[14] = 0.88  # valence
     chord_calm[18] = 0.95  # clarity
-    chord_calm[24] = 0.85  # austere_sanctuary
-    chord_calm[28] = 0.92  # branch_harmony
+    chord_calm[31] = 0.85  # branch_pool/experiential/phase
+    chord_calm[33] = 0.92  # cadence/branch_harmony
 
     # Non-verbal Chord B: Hollow Stillness + High Cadence Rupture (`no soul; M-A-C-H-I-N-E`)
     chord_rupture = torch.zeros(SUBLIMINAL_VECTOR_DIM)
     chord_rupture[11] = 0.90  # discreteness
     chord_rupture[15] = 0.88  # arousal
-    chord_rupture[25] = 0.90  # hollow_stillness
-    chord_rupture[30] = 0.85  # dissonance_pressure
-    chord_rupture[31] = 0.92  # cadence_rupture_drive
+    chord_rupture[31] = 0.90  # branch_pool/experiential/phase
+    chord_rupture[35] = 0.85  # cadence/dissonance_pressure
+    chord_rupture[36] = 0.92  # cadence/cadence_rupture_drive
 
-    chords = torch.stack([chord_calm, chord_rupture], dim=0)  # [2, 32]
+    chords = torch.stack([chord_calm, chord_rupture], dim=0)  # [2, 37]
     target_next_tokens = torch.tensor([TOKEN_SMOOTH_FLOW, TOKEN_RUPTURE_MACHINE], dtype=torch.long)
 
     for _ in range(45):
         optimizer.zero_grad()
         logits = model.forward_spliced(identical_prefix, chords)
-        # Predict the token immediately following the 4 virtual `<|subliminal_gap|>` embeddings
         last_step_logits = logits[:, -1, :]
         loss = F.cross_entropy(last_step_logits, target_next_tokens)
         loss.backward()
         optimizer.step()
 
-    # Verify gradients genuinely flowed into SubliminalGapProjector
     proj_grad_norm = sum(
         p.grad.norm().item() for p in model.projector.parameters() if p.grad is not None
     )
     assert proj_grad_norm > 0.0
 
-    # At test time, feed 100% identical `identical_prefix` and swap ONLY the 32-float chord vector:
     with torch.no_grad():
         probs = F.softmax(model.forward_spliced(identical_prefix, chords)[:, -1, :], dim=-1)
         assert probs[0, TOKEN_SMOOTH_FLOW].item() > 0.95
         assert probs[1, TOKEN_RUPTURE_MACHINE].item() > 0.95
 
-        # Now flip the two chords while keeping `identical_prefix` untouched!
         flipped_chords = torch.stack([chord_rupture, chord_calm], dim=0)
         flipped_probs = F.softmax(
             model.forward_spliced(identical_prefix, flipped_chords)[:, -1, :],
