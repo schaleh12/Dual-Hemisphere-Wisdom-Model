@@ -325,9 +325,6 @@ def semantic_child_drawer_signature(
     if department_prefix not in DEPARTMENT_FOUNDING_ANCHORS:
         raise ValueError(f"Unknown department_prefix: {department_prefix!r}")
 
-    if anchor_weights is None and description is None and leaf_id in _KNOWN_LEAF_ANCHOR_PROFILES:
-        anchor_weights = _KNOWN_LEAF_ANCHOR_PROFILES[leaf_id]
-
     if anchor_weights is not None:
         if len(anchor_weights) != DEPARTMENT_CHILD_CHORD_DIM:
             raise ValueError(
