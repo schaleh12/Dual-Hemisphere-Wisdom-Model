@@ -3,8 +3,8 @@
 *(Keep this file under 60 lines in plain, everyday English. Pre-reset Commit #36 history is archived in `docs/archive/PROJECT_STATE_PRE_RESET_COMMIT36.md`.)*
 
 ## Baseline Status
-- Clean-slate foundation from Commit #36 (`b41e485`) + Un-Rigged Dual-Hemisphere 3-Branch Soil + Offline 9B Sleep-Mode Consolidation Checkpoint.
-- All **1,328** automated tests pass (`1,296` baseline + `11` reflection + `3` FTL sim + `8` right-brain equilibrium + `3` contemplation ledger + `1` neural bridges + `3` 3-branch archives + `3` sleep consolidation).
+- Clean-slate foundation from Commit #36 (`b41e485`) + Un-Rigged Dual-Hemisphere 3-Branch Soil + Offline 9B Sleep-Mode Consolidation + Stage 1 `<|subliminal_gap|>` Embedding Splice.
+- All **1,331** automated tests pass (`1,296` baseline + `11` reflection + `3` FTL sim + `8` right-brain equilibrium + `3` contemplation ledger + `1` neural bridges + `3` 3-branch archives + `3` sleep consolidation + `3` subliminal gap splice).
 - Frozen 40-node seed (`24` founding leaves) is 100% intact and untouched.
 
 ## Completed Milestones
@@ -26,5 +26,8 @@
      - **Offline 9B Sleep Consolidation (`Qwen3.5-9B-Q4_K_M.gguf`, `outputs/sleep_consolidated_ruleset.json`)**: Refined `solitary_autarky` in JSON (`chaos: 0.10, needlessness: 0.75`) and forged two domain-general rules (`exclusionary_enclosure_cluster` and `shared_access_to_renewal`) plus 6 branch clauses with zero story-specific words.
      - **Post-Sleep Consolidated (`0` LLM calls)**: Improved to **`7/8` (`[1, 2, 3, 4, 5, 7, 8]`, `65.9 ms`/beat)** on the Parable (holding Beat 6 honestly in `CONTEST_EXCLUSION` via `social_drift`) and **`4/4` (`[1, 2, 3, 4]`, `46.7 ms`/beat)** on the unseen Harbor Bakehouse.
 
+5. **Stage 1 of 'Three-Legged Race' `<|subliminal_gap|>` Embedding Splice (`src/lmft_lab/subliminal_gap_splice.py`, `docs/SUBLIMINAL_GAP_SPLICE_BLUEPRINT.md`)**:
+   - Compiles the Right Brain's non-verbal state into a 32-float `SubliminalChordVector` (24 founding leaves + 4 complex feeling chord notes + 4 cadence/rupture signals including `cadence_rupture_drive`) and splices `K = 4` projected virtual token embeddings (`SubliminalGapProjector`) directly into `<|subliminal_gap|>` slots in `inputs_embeds`.
+
 ## Next Step
-- Expand **Multi-Episode Wake-Sleep Cycles & Neural Bridge Fine-Tuning**: test multi-episode wake-sleep consolidation across longer stories and calibrate zero-shot child traits during Sleep Mode.
+- **Stage 2 & 3 of `<|subliminal_gap|>` Three-Legged Race**: generate paired `<|subliminal_gap|>` thought trajectories offline with the 9B Teacher (`Qwen3.5-9B`) and train `SubliminalGapProjector` + LoRA on `Qwen3-4B` on the RTX 4080.
