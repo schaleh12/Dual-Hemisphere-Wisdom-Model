@@ -528,6 +528,11 @@ class RightBrainVibe:
         if self.posture not in RIGHT_BRAIN_POSTURES:
             raise ValueError(f"invalid Right-Brain posture: {self.posture!r}")
 
+    @property
+    def entrainment(self) -> float:
+        """Synchronization -> Entrainment leaf activation (alias for retention field)."""
+        return self.retention
+
 
 def _detect_structural_value_tensions(coords: Mapping[str, float]) -> list[str]:
     """Spot sharp internal Right-Brain tensions without dictating an interpretation."""

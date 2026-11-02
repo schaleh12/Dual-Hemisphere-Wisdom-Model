@@ -16,7 +16,7 @@ Instead of treating the Right Brain (the 40-node Fuzzy Tree + 3 neural bridge cl
         - `2` Founding Truth leaves (`theory`, `fact`)
         - `8` **Philosophical Child-Drawer Chord** floats (`pool_departmental_child_chord` over active `philosophical/*` Tier-2/Tier-3 child drawers).
      3. **`feeler_vector` — Legislative / Feeler Department (`Contemplation <-> Experiential`, `16` floats)**:
-        - `6` Founding Experiential leaves (`novelty`, `salience`, `valence`, `arousal`, `resonance`, `retention`)
+        - `6` Founding Experiential leaves (`novelty`, `salience`, `valence`, `arousal`, `resonance`, `entrainment`)
         - `2` Founding Contemplation leaves (`clarity`, `confidence`)
         - `8` **Experiential Child-Drawer Chord** floats (`pool_departmental_child_chord` over active `experiential/*` Tier-2/Tier-3 child drawers).
         - **Meaning-Preserving Semantic Child Projection (Zero Random Hashing)**: Each child drawer is projected onto the **8 Founding Trait Anchors of its own department** (`semantic_child_drawer_signature`) using its plain-English description and subword/stem overlap. Sibling child leaves with opposite meanings (like `experiential/phase/austere_sanctuary` vs. `experiential/phase/hollow_stillness`) land far apart in 8-float space, while newly born child leaves with similar meanings (like `austere_sanctuary` and an unseen `humble_open_refuge`) automatically land in the **same 8-float neighborhood**—so a maturing LoRA immediately feels what kind of concept a new child leaf is while the Feeler vector stays **16 floats forever**.

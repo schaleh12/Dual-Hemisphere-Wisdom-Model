@@ -46,7 +46,7 @@ Just like a real human brain, the Right Brain and Left Brain do **not** chatter 
 At the core of the Right Brain is a frozen [40-node founding seed](docs/MINIMAL_LMFT_SPEC.md#4-hardcoded-v01-seed-geometry) with **24 founding leaves** across four branches:
 - **Cultural (6 leaves — Executive / Social Stakes)**: `Power`, `Wastelessness`, `Honor`, `Fairness`, `Self-Sufficiency`, `Needlessness`
 - **Philosophical (6 leaves — Judicial / Structural Reality)**: `Agency`, `Existence`, `Order`, `Chaos`, `Continuity`, `Discreteness`
-- **Experiential (6 leaves — Legislative / Felt Experience)**: `Novelty`, `Salience`, `Valence`, `Arousal`, `Resonance`, `Retention`
+- **Experiential (6 leaves — Legislative / Felt Experience)**: `Novelty`, `Salience`, `Valence`, `Arousal`, `Resonance`, `Entrainment`
 - **Psychological (6 leaves — Internal Compass)**:
   - *Contemplation*: `Clarity`, `Confidence`
   - *Truth*: `Theory`, `Fact`
@@ -95,6 +95,14 @@ We use the exact same neural mechanism that Vision-Language Models use to wire a
 4. **Honest Current Implementation Status**:
    - **Stage 1 (Done & Unit-Tested)**: The 4 strictly isolated Departmental Vectors (`doer_vector`, `thinker_vector`, `feeler_vector`, `cadence_vector`), `pool_departmental_child_chord`, the deadband-gated `cadence_rupture_drive`, and the compartmentalized `SubliminalGapProjector` embedding splice are implemented and verified on a synthetic causal Transformer in [`tests/test_subliminal_gap_splice.py`](tests/test_subliminal_gap_splice.py).
    - **Stages 2 & 3 (Next Up — Not Yet Tested on Live `Qwen3-4B`)**: Generating the offline `<|subliminal_gap|>` training trajectories with `Qwen3.5-9B` and training `SubliminalGapProjector` + LoRA on `Qwen3-4B` on the RTX 4080 to test live Three-Legged Race generation and the "Unplug-the-Cord" diagnostic.
+
+### Breakthrough 5: Emergent Human Faculties, Deliberate Vulnerability, & Innate Immunity
+Rather than bolting on one-off patch scripts for human quirks, complex states of mind emerge from the **innate balance of the 40-node tree and its 3 independent Right-Brain departments** (detailed in [`docs/EMERGENT_FACULTIES_AND_BIOLOGY.md`](docs/EMERGENT_FACULTIES_AND_BIOLOGY.md)):
+- **Hemisphere Synchronization (`Resonance` & `Entrainment`)**: Under `EXPERIENTIAL -> Synchronization`, `Resonance` tracks spatial phase agreement between the Left and Right hemispheres, while `Entrainment` (replacing the legacy term `Retention`) tracks rhythmic capture and state momentum (being pulled into a musical beat, poetic cadence, or mood).
+- **Hypnosis & Trance (Feeler Vulnerability + Do-er/Thinker Immunity)**: The Feeler (`feeler_vector`) is deliberately allowed to be entranced by rhythm and poetry (`Entrainment` + `Resonance` high). Innate immunity comes from the **Do-er (`Justice/Fairness`)** and **Thinker (`Truth/Fact`)** sitting in separate departments—so any coercive or false command inside a hypnotic prompt triggers a cross-department split (`branch_harmony` crash + `cadence_rupture_drive` spike) that snaps the brain awake organically.
+- **"Drunkenness" & Playful Loosening vs. Coercive Delusion**: Both involve `Confidence > Clarity` with high `Entrainment` and relaxed `Order`. When paired with high `Needlessness` (contentment), warm `Valence`, and high `Fairness`, the tree recognizes harmless playful/creative loosening (and `Needlessness`'s `-0.8` inhibitory edge on `Will -> Execution` prevents reckless actions). When paired with high `Power` and low `Fairness`, it is immediately caught as arrogant `SELF_RATIONALIZATION_DISSONANCE`.
+- **Emojis, Onomatopoeia, & Typographic Cadence**: `_extract_semantic_features` and `DEPARTMENT_FOUNDING_ANCHORS` natively preserve Unicode emojis (`🥴`, `🕯️`, `🪨`, `⚡`), sound-symbolism (`hic-hic`, `whirrrr`, `thump-thump`, `shhh`), and rhythm punctuation (`...`, `—`, `M-A-C-H-I-N-E`) so the Right Brain can grow and project pre-verbal emoji/onomatopoeia child drawers alongside prose drawers.
+- **Humor / Irony & Sensory Overload**: Benign structural inversions (`Novelty` + `Clarity` under warm `Valence`) register as wit/irony rather than threat, while chaotic overload (`Salience` + `Arousal` + `Chaos` with crashing `Clarity`) crosses the `0.45` rupture deadband to compress cadence into a protective pause.
 
 ---
 
@@ -154,6 +162,7 @@ $env:PYTHONPATH='src'
 - [`PROJECT_STATE.md`](PROJECT_STATE.md) — Concise snapshot of current progress and next milestone.
 - [`DECISIONS.md`](DECISIONS.md) — Architectural decision log (`D001`–`D043`).
 - [`docs/MINIMAL_LMFT_SPEC.md`](docs/MINIMAL_LMFT_SPEC.md) — Frozen 40-node founding seed specification.
+- [`docs/EMERGENT_FACULTIES_AND_BIOLOGY.md`](docs/EMERGENT_FACULTIES_AND_BIOLOGY.md) — How Synchronization (`Resonance` & `Entrainment`), Hypnosis, Drunkenness, Emojis/Onomatopoeia, Humor/Irony, and Sensory Overload emerge from the 40-node architecture.
 - [`docs/SUBLIMINAL_GAP_SPLICE_BLUEPRINT.md`](docs/SUBLIMINAL_GAP_SPLICE_BLUEPRINT.md) — Blueprint and pseudo-code for the Three-Legged Race `<|subliminal_gap|>` non-verbal embedding splice.
 - [`src/lmft_lab/reflection_classifier.py`](src/lmft_lab/reflection_classifier.py) — Three neural bridge classifiers (`Will <-> Cultural`, `Truth <-> Philosophical`, `Contemplation <-> Experiential`) and isolated `Tier 1 -> Tier 2 -> Tier 3` child-drawer growth.
 - [`src/lmft_lab/right_brain_equilibrium.py`](src/lmft_lab/right_brain_equilibrium.py) — Right-Brain two-pass equilibrium loop, felt-chord extraction, and cognitive dissonance self-registry.

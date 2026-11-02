@@ -79,6 +79,7 @@ from .reflection_classifier import (
     AROUSAL_LEAF,
     CLARITY_LEAF,
     CONFIDENCE_LEAF,
+    ENTRAINMENT_LEAF,
     EXECUTION_LEAF,
     FACT_LEAF,
     FOUNDATIONAL_LEAVES,
@@ -109,7 +110,7 @@ EXPERIENTIAL_FOUNDING_ORDER: tuple[str, ...] = (
     VALENCE_LEAF,
     AROUSAL_LEAF,
     RESONANCE_LEAF,
-    RETENTION_LEAF,
+    ENTRAINMENT_LEAF,
 )
 
 DOER_FEATURE_NAMES: tuple[str, ...] = (
@@ -192,17 +193,17 @@ DEPARTMENT_FOUNDING_ANCHORS: dict[str, tuple[str, ...]] = {
         "verified fact direct external evidence concrete observation",
     ),
     "experiential/": (
-        "unfamiliar novelty sudden shift unexpected turn new discovery opening",
+        "unfamiliar novelty sudden shift unexpected turn new discovery opening ✨ ❓ gasp ooh aha",
         FEELER_FOUNDING_DESCRIPTIONS[SALIENCE_LEAF]
-        + " poignant ache simultaneous strain urgency weighty moment",
+        + " poignant ache simultaneous strain urgency weighty moment ⚡ ❗ throb pang",
         FEELER_FOUNDING_DESCRIPTIONS[VALENCE_LEAF]
-        + " spare humble shelter sanctuary care offered openly restorative relief",
+        + " spare humble shelter sanctuary care offered openly restorative relief 🕯️ 🍵 🫂 sigh ahh",
         FEELER_FOUNDING_DESCRIPTIONS[AROUSAL_LEAF]
-        + " pent-up strain breaking apart intense pressure release",
-        "restored shared rhythm resonance homecoming mutual connection return",
-        "cold sterile airless quiet hollow stillness sealed isolation drained warmth",
-        "unclouded clarity transparent open understanding",
-        "steady settled confidence assurance grounded trust",
+        + " pent-up strain breaking apart intense pressure release 💥 🔥 thump crackle",
+        "restored shared rhythm resonance homecoming mutual connection return 🎶 🤝 hum chime",
+        "cold sterile airless quiet hollow stillness sealed isolation drained warmth rhythmic entrainment trance sway 🌀 🥴 🍺 🪨 hic whirrr shhh ...",
+        "unclouded clarity transparent open understanding 💡 🔍 ding ping",
+        "steady settled confidence assurance grounded trust 🛡️ ⚓ hm mm",
     ),
 }
 
@@ -217,17 +218,46 @@ def _clamp01(value: float) -> float:
     return round(min(1.0, max(0.0, float(value))), 6)
 
 
+_TWO_LETTER_SOUND_TOKENS = frozenset({"ah", "oh", "uh", "hm", "zz", "ha", "eh", "oo", "mm", "sh"})
+
+
 def _extract_semantic_features(text: str) -> dict[str, float]:
-    """Extract normalized word stems and character 4-grams for deterministic semantic similarity."""
-    cleaned = re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
-    tokens = [t for t in cleaned.split() if len(t) >= 3]
+    """Extract word stems, 4-grams, emojis, onomatopoeia, and rhythm marks for deterministic similarity."""
     feats: dict[str, float] = {}
-    for tok in tokens:
-        feats[f"w:{tok}"] = feats.get(f"w:{tok}", 0.0) + 1.5
-        if len(tok) >= 5:
-            stem = tok[:5]
+    # 1. Pre-verbal Unicode emojis and ideograms (outside ASCII, ignoring variation selectors)
+    for ch in text:
+        code = ord(ch)
+        if code > 127 and code not in (0xFE0E, 0xFE0F, 0x200D) and not ch.isspace():
+            feats[f"emoji:{ch}"] = feats.get(f"emoji:{ch}", 0.0) + 2.0
+
+    # 2. Typographic rhythm and cadence punctuation (ellipses, em-dashes, spelled-out hyphenation)
+    if "..." in text or "…" in text:
+        feats["rhythm:ellipsis"] = 1.5
+    if "—" in text or "--" in text:
+        feats["rhythm:dash"] = 1.2
+    if re.search(r"\b[a-zA-Z](?:-[a-zA-Z]){2,}\b", text):
+        feats["rhythm:spelled_cadence"] = 1.8
+    if re.search(r"\b([a-z]{2,6})-\1\b", text.lower()):
+        feats["rhythm:reduplication"] = 1.5
+
+    # 3. Lexical tokens, short sound words (onomatopoeia), stems, and character 4-grams
+    cleaned = re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
+    raw_tokens = cleaned.split()
+    for tok in raw_tokens:
+        if len(tok) == 2 and tok in _TWO_LETTER_SOUND_TOKENS:
+            feats[f"sound:{tok}"] = feats.get(f"sound:{tok}", 0.0) + 1.5
+            continue
+        if len(tok) < 3:
+            continue
+        # Compress stretched onomatopoeic tails (e.g. "whirrrr" -> "whirr", "shhhh" -> "shh")
+        canonical = re.sub(r"(.)\1{2,}", r"\1\1", tok)
+        feats[f"w:{canonical}"] = feats.get(f"w:{canonical}", 0.0) + 1.5
+        if canonical != tok:
+            feats["rhythm:stretched_sound"] = feats.get("rhythm:stretched_sound", 0.0) + 1.0
+        if len(canonical) >= 5:
+            stem = canonical[:5]
             feats[f"s:{stem}"] = feats.get(f"s:{stem}", 0.0) + 1.2
-        padded = f"<{tok}>"
+        padded = f"<{canonical}>"
         for i in range(len(padded) - 3):
             gram = padded[i : i + 4]
             feats[f"g:{gram}"] = feats.get(f"g:{gram}", 0.0) + 0.4

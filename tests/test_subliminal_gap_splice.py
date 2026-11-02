@@ -402,3 +402,38 @@ def test_causal_transformer_flips_continuation_purely_from_nonverbal_gap_vector(
         )
         assert flipped_probs[0, TOKEN_RUPTURE_MACHINE].item() > 0.95
         assert flipped_probs[1, TOKEN_SMOOTH_FLOW].item() > 0.95
+
+
+def test_entrainment_leaf_and_emoji_onomatopoeia_child_drawer_signatures() -> None:
+    """Verify Entrainment is the 6th Experiential leaf and emoji/onomatopoeia drawers project cleanly."""
+    from lmft_lab.reflection_classifier import ENTRAINMENT_LEAF
+    from lmft_lab.subliminal_gap_splice import FEELER_FEATURE_NAMES
+
+    assert ENTRAINMENT_LEAF == "experiential/synchronization/entrainment"
+    assert FEELER_FEATURE_NAMES[5] == "experiential/synchronization/entrainment"
+
+    # Pure pre-verbal emoji + onomatopoeia descriptions (tipsy/drunken sway vs. electric jolt)
+    tipsy_sig = semantic_child_drawer_signature(
+        "experiential/synchronization/tipsy_sway",
+        department_prefix="experiential/",
+        description="🥴 🍺 hic-hic whirrrr ...",
+    )
+    jolt_sig = semantic_child_drawer_signature(
+        "experiential/phase/jolt_crackle",
+        department_prefix="experiential/",
+        description="⚡ 💥 thump-thump crackle!",
+    )
+    warm_sigh_sig = semantic_child_drawer_signature(
+        "experiential/phase/warm_hearth_sigh",
+        department_prefix="experiential/",
+        description="🕯️ 🍵 ahh sigh",
+    )
+
+    # Specifically: tipsy_sway hits the Entrainment anchor (index 5), jolt_crackle hits Salience/Arousal (1, 3),
+    # and warm_hearth_sigh hits Valence (index 2). All three signatures are distinct.
+    assert tipsy_sig[5] == 1.0
+    assert max(jolt_sig[1], jolt_sig[3]) == 1.0
+    assert warm_sigh_sig[2] == 1.0
+    assert tipsy_sig != jolt_sig
+    assert tipsy_sig != warm_sigh_sig
+
