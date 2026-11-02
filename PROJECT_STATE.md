@@ -3,9 +3,9 @@
 *(Keep this file under 60 lines in plain, everyday English. Pre-reset Commit #36 history is archived in `docs/archive/PROJECT_STATE_PRE_RESET_COMMIT36.md`.)*
 
 ## Baseline Status
-- Clean-slate foundation from Commit #36 (`b41e485`) + Un-Rigged Dual-Hemisphere 3-Branch Soil + Offline 9B Sleep-Mode Consolidation + Stage 1 `<|subliminal_gap|>` Embedding Splice.
-- All **1,331** automated tests pass (`1,296` baseline + `11` reflection + `3` FTL sim + `8` right-brain equilibrium + `3` contemplation ledger + `1` neural bridges + `3` 3-branch archives + `3` sleep consolidation + `3` subliminal gap splice).
-- Frozen 40-node seed (`24` founding leaves) is 100% intact and untouched.
+- Clean-slate foundation from Commit #36 (`b41e485`) + Un-Rigged Dual-Hemisphere 3-Branch Soil + Offline 9B Sleep-Mode Consolidation + Stage 1 `<|subliminal_gap|>` Embedding Splice + Stage 2 (`2A` & `2B`) Offline Contrastive `<|subliminal_gap|>` Trajectory Dataset.
+- All **1,341** automated tests pass (`1,296` baseline + `11` reflection + `3` FTL sim + `8` right-brain equilibrium + `3` contemplation ledger + `1` neural bridges + `3` 3-branch archives + `3` sleep consolidation + `3` subliminal gap splice + `5` gap trajectory schema + `5` gap trajectory generator).
+- Frozen 40-node seed (`24` founding leaves, with leaf #18 updated from `Retention` to `Entrainment`) is 100% intact.
 
 ## Completed Milestones
 1. **Core Fuzzy Rules, Multi-Tier Sub-Drawers, & Continuous Memory (`src/lmft_lab/reflection_classifier.py`)**:
@@ -29,5 +29,9 @@
 5. **Stage 1 of 'Three-Legged Race' `<|subliminal_gap|>` Embedding Splice (`src/lmft_lab/subliminal_gap_splice.py`, `docs/SUBLIMINAL_GAP_SPLICE_BLUEPRINT.md`)**:
    - Compiles the Right Brain's non-verbal state into 4 strictly disjoint Departmental Vectors (`doer_vector` 17 floats, `thinker_vector` 16 floats, `feeler_vector` 16 floats, `cadence_vector` 3 floats, using `pool_departmental_child_chord` so sibling child leaves under the same parent branch like `austere_sanctuary`, `hollow_stillness`, and `bittersweet_release` stay 100% distinct without ever changing the department vector sizes) and splices `K = 4` compartmentalized virtual token embeddings (`SubliminalGapProjector`) directly into `<|subliminal_gap|>` slots in `inputs_embeds`.
 
+6. **Stage 2 (`2A` & `2B`) Offline Contrastive `<|subliminal_gap|>` Trajectory Dataset (`gap_trajectory_schema.py`, `gap_trajectory_generator.py`)**:
+   - **Sub-Step 2A (`src/lmft_lab/gap_trajectory_schema.py`)**: Locked the `ContrastiveGapPair` data contract (`L2 >= 0.35`, disjoint train/holdout validation, and 6-piece Chess <-> 6 Philosophical Leaves mapping `compile_chess_posture_chords`).
+   - **Sub-Step 2B (`src/lmft_lab/gap_trajectory_generator.py`, `outputs/gap_trajectory_generation_report.json`)**: Generated `outputs/gap_trajectories_train.jsonl` (`17/18` seeds accepted, `mean L2 = 1.9055`, `1` seed `train-tone-01` openly rejected after 3 attempts with zero pre-written fallback) and `outputs/gap_trajectories_holdout.jsonl` (`6/6` unseen seeds accepted, `mean L2 = 2.1851`) using `Qwen3.5-9B` (`DirectGGUFTeacher`) and the 3 Right-Brain MiniLM Bridge Classifiers (`models/right_brain_bridges/*`), then unloaded `Qwen3.5-9B` so 100% of VRAM is free.
+
 ## Next Step
-- **Stage 2 & 3 of `<|subliminal_gap|>` Three-Legged Race** ([`docs/PROJECT_PIPELINE_AND_AUDIT_ROADMAP.md`](docs/PROJECT_PIPELINE_AND_AUDIT_ROADMAP.md)): generate identical-prefix contrastive `<|subliminal_gap|>` thought trajectories offline with `Qwen3.5-9B` and train `SubliminalGapProjector` + LoRA on `Qwen3-4B` on the RTX 4080.
+- **Sub-Step 3 (`src/lmft_lab/train_left_brain_lora.py`)** ([`docs/STAGE2_STAGE3_PSEUDOCODE_BLUEPRINT.md`](docs/STAGE2_STAGE3_PSEUDOCODE_BLUEPRINT.md)): train `SubliminalGapProjector` + LoRA on `Qwen3-4B` with `-100` pre-gap label masking and evaluate unseen holdout log-likelihood margin (`margin > 0.0`).
