@@ -36,6 +36,16 @@ from pathlib import Path
 import re
 
 from .birth import BirthState
+from .branch_archives import (
+    OpenThreadTrigger,
+    SocialDriftReport,
+    ThreeBranchArchives,
+    ThreeClassifierDeliberation,
+    build_three_branch_chord_rule,
+    check_open_thread_trigger,
+    deliberate_across_three_branches,
+    harvest_into_branch_archives,
+)
 from .chord_memory import (
     ChordEchoReport,
     ChordMemoryBank,
@@ -551,6 +561,8 @@ def _compile_three_way_synthesis(
     execution: float,
     raw_tensions: list[str],
     dissonance_notes: list[str],
+    *,
+    matched_ratified_chord: bool = False,
 ) -> ThreeWaySynthesis:
     """Evaluate competing Do-er, Thinker, and Feeler bids and their harmony."""
     power = float(external_coords.get("cultural/efficiency/power", 0.0))
@@ -573,7 +585,12 @@ def _compile_three_way_synthesis(
         thinker_stance = "VERIFIED_EXTERNAL_FACT"
         thinker_strength = round(fact, 4)
         thinker_summary = f"Outside world directly matches a known instinct (fact={fact:.2f})."
-    elif theory >= CONFUSION_THRESHOLD and clarity >= CONFUSION_THRESHOLD and not dissonance_notes and not raw_tensions:
+    elif (
+        theory >= CONFUSION_THRESHOLD
+        and clarity >= CONFUSION_THRESHOLD
+        and not dissonance_notes
+        and (not raw_tensions or matched_ratified_chord)
+    ):
         thinker_stance = "CANDIDATE_THEORY_FIT"
         thinker_strength = round(theory, 4)
         thinker_summary = f"Left-Brain Theory hypothesis resolves ambiguous context (theory={theory:.2f}, fact={fact:.2f})."
@@ -609,7 +626,7 @@ def _compile_three_way_synthesis(
 
     if conflicts:
         harmony = round(max(0.0, 0.35 - 0.10 * len(conflicts)), 4)
-    elif thinker_stance == "CANDIDATE_THEORY_FIT" and feeler_stance == "FELT_UNEASE":
+    elif thinker_stance == "CANDIDATE_THEORY_FIT" and feeler_stance == "FELT_UNEASE" and not matched_ratified_chord:
         conflicts.append("feeler_unease_vetoes_tone_deaf_theory")
         harmony = 0.25
     elif thinker_stance in ("VERIFIED_EXTERNAL_FACT", "CANDIDATE_THEORY_FIT"):
@@ -643,10 +660,25 @@ def compile_right_brain_vibe(
     queried_child_leaves: tuple[str, ...] = (),
     skipped_child_leaves: tuple[str, ...] = (),
     silence_salience_threshold: float = SILENCE_SALIENCE_THRESHOLD,
+    social_drift: SocialDriftReport | None = None,
+    ratified_chords: tuple[FuzzyConceptRule, ...] = (),
 ) -> tuple[RightBrainVibe, ContinuousMemoryState]:
     """Compile all 24 founding leaves while keeping external Fact separate from internal Theory."""
     locked_external = dict(external_coords)
     raw_rule_activations = _evaluate_rules_with_inhibition(rules, locked_external)
+    if (
+        float(locked_external.get("philosophical/structure/chaos", 0.0)) >= 0.45
+        or float(locked_external.get("experiential/phase/bittersweet_release", 0.0)) >= 0.45
+    ) and "solitary_autarky" in raw_rule_activations:
+        raw_rule_activations["solitary_autarky"] = 0.0
+    if social_drift is not None and social_drift.drift_detected:
+        for constructive_rule_name in (
+            "solitary_autarky",
+            "fair_structured_cooperation",
+            "honorable_stewardship",
+        ):
+            if constructive_rule_name in raw_rule_activations:
+                raw_rule_activations[constructive_rule_name] = 0.0
 
     salience = round(float(external_experiential[SALIENCE_LEAF]), 6)
     raw_valence = float(external_experiential[VALENCE_LEAF])
@@ -706,6 +738,9 @@ def compile_right_brain_vibe(
     )
 
     raw_tensions = _detect_structural_value_tensions(locked_external)
+    if social_drift is not None and social_drift.drift_detected:
+        raw_tensions.append("social_drift_ongoing_enclosure")
+
     dissonance_notes: list[str] = []
     theory_candidate_coords = dict(memory_coords)
 
@@ -713,7 +748,12 @@ def compile_right_brain_vibe(
         for k, l_raw in internal_theory_coords.items():
             r_val = float(locked_external.get(k, 0.0))
             l_val = float(l_raw)
-            if raw_tensions and k in CONSTRUCTIVE_THEORY_LEAVES and r_val <= 0.25 and (l_val - r_val) >= 0.45:
+            if (
+                raw_tensions
+                and k == "cultural/justice/fairness"
+                and r_val <= 0.25
+                and (l_val - r_val) >= 0.45
+            ):
                 dissonance_notes.append(
                     f"cognitive_dissonance({k.split('/')[-1]}:external={r_val:.2f},theory={l_val:.2f})"
                 )
@@ -726,9 +766,62 @@ def compile_right_brain_vibe(
                 # Restorative diary framing can calm ambiguous turbulence slightly
                 if internal_theory_experiential and float(internal_theory_experiential[VALENCE_LEAF]) > raw_valence:
                     theory_candidate_coords[k] = round(0.50 * r_val + 0.50 * l_val, 4)
+            elif k not in FOUNDATIONAL_LEAVES and not dissonance_notes:
+                theory_candidate_coords[k] = max(
+                    float(theory_candidate_coords.get(k, 0.0)),
+                    round(0.50 * r_val + 0.50 * l_val, 4),
+                )
+        if social_drift is not None and social_drift.drift_detected:
+            theory_candidate_coords["cultural/justice/fairness"] = min(
+                float(theory_candidate_coords.get("cultural/justice/fairness", 0.0)),
+                0.22,
+            )
 
-    theory_rule_activations = _evaluate_rules_with_inhibition(rules, theory_candidate_coords)
+    ratified_chord_names: set[str] = set()
+    active_theory_rules = list(rules)
+    if internal_theory_coords is not None and ratified_chords:
+        existing_names = {r.concept_name for r in active_theory_rules}
+        for rc in ratified_chords:
+            ratified_chord_names.add(rc.concept_name)
+            for req_leaf in rc.target_leaves:
+                if req_leaf not in theory_candidate_coords:
+                    theory_candidate_coords[req_leaf] = float(locked_external.get(req_leaf, 0.0))
+            if rc.concept_name not in existing_names:
+                active_theory_rules.append(rc)
+                existing_names.add(rc.concept_name)
+
+    theory_rule_activations = _evaluate_rules_with_inhibition(tuple(active_theory_rules), theory_candidate_coords)
+    if (
+        float(locked_external.get("philosophical/structure/chaos", 0.0)) >= 0.45
+        or float(locked_external.get("experiential/phase/bittersweet_release", 0.0)) >= 0.45
+    ) and "solitary_autarky" in theory_rule_activations:
+        theory_rule_activations["solitary_autarky"] = 0.0
+    if raw_tensions:
+        for constructive_rule_name in (
+            "solitary_autarky",
+            "fair_structured_cooperation",
+            "honorable_stewardship",
+        ):
+            if constructive_rule_name in theory_rule_activations and constructive_rule_name not in ratified_chord_names:
+                theory_rule_activations[constructive_rule_name] = 0.0
+
+    if ratified_chord_names:
+        max_ratified = max(
+            (theory_rule_activations.get(name, 0.0) for name in ratified_chord_names),
+            default=0.0,
+        )
+        if max_ratified >= CONFUSION_THRESHOLD:
+            for r_name in list(theory_rule_activations.keys()):
+                if r_name not in ratified_chord_names:
+                    theory_rule_activations[r_name] = 0.0
+
     th_clarity, th_confidence, th_matched, th_confused, th_reason = compute_contemplation(theory_rule_activations)
+    matched_ratified_chord = bool(
+        internal_theory_coords is not None
+        and not th_confused
+        and th_matched in ratified_chord_names
+        and not dissonance_notes
+    )
 
     if dissonance_notes:
         # Veto rationalizing theories that contradict stark raw sensory deficits
@@ -749,8 +842,8 @@ def compile_right_brain_vibe(
         is_confused = False
         confusion_reason = "clear_match"
         valence = round(raw_valence, 6)
-    elif not th_confused and not raw_tensions:
-        # Left-Brain Theory / working memory resolved an ambiguous external scene!
+    elif not th_confused and (not raw_tensions or matched_ratified_chord):
+        # Left-Brain Theory / 3-Branch Deliberation resolved an ambiguous or ratified scene!
         # Fact stays honestly low while Theory carries the synthesized match.
         theory_gain = max(th_confidence - raw_confidence, min(th_confidence, th_clarity))
         theory = round(min(1.0, max(0.0, theory_gain)), 6)
@@ -759,7 +852,7 @@ def compile_right_brain_vibe(
         matched_concept = th_matched
         is_confused = False
         confusion_reason = "theory_synthesis_match"
-        if internal_theory_experiential is not None:
+        if internal_theory_experiential is not None and not raw_tensions:
             th_val = float(internal_theory_experiential[VALENCE_LEAF])
             valence = round(max(raw_valence, 0.45 * raw_valence + 0.55 * th_val), 6)
         else:
@@ -824,6 +917,7 @@ def compile_right_brain_vibe(
         execution,
         raw_tensions,
         dissonance_notes,
+        matched_ratified_chord=matched_ratified_chord,
     )
 
     chaos = float(locked_external.get("philosophical/structure/chaos", 0.0))
@@ -834,7 +928,7 @@ def compile_right_brain_vibe(
     urgent_drive = chaos >= 0.45 or learned_active or intention >= 0.25
 
     tug_reasons: list[str] = []
-    if raw_tensions and (is_confused or salience >= silence_salience_threshold):
+    if raw_tensions and not matched_ratified_chord and (is_confused or salience >= silence_salience_threshold):
         tug_reasons.extend(raw_tensions)
     if is_confused and (salience >= silence_salience_threshold or urgent_drive):
         tug_reasons.append(confusion_reason)
@@ -1351,6 +1445,11 @@ class EquilibriumResult:
     raw_thoughts: tuple[RawThoughtRecord, ...] = ()
     next_chord_memory: ChordMemoryBank = ChordMemoryBank()
     next_ledger: ContemplationLedger = ContemplationLedger()
+    deliberation: ThreeClassifierDeliberation | None = None
+    social_drift: SocialDriftReport | None = None
+    open_thread: OpenThreadTrigger | None = None
+    audience_mode: str = "PASS1_REFLEX_OR_EASE"
+    next_archives: ThreeBranchArchives = ThreeBranchArchives()
 
 
 def _top_key_coordinates(coords: Mapping[str, float], limit: int = 4) -> dict[str, float]:
@@ -1379,13 +1478,16 @@ def settle_scenario(
     diary: SettledDiary | None = None,
     chord_memory: ChordMemoryBank | None = None,
     contemplation_ledger: ContemplationLedger | None = None,
+    branch_archives: ThreeBranchArchives | None = None,
     raw_thought_stream_path: str | Path | None = None,
     contemplation_ledger_path: str | Path | None = None,
+    branch_archives_dir: str | Path | None = None,
+    require_self_critique: bool = False,
     max_passes: int = 3,
     equilibrium_tolerance: float = DEFAULT_EQUILIBRIUM_TOLERANCE,
     branch_gating: bool = True,
 ) -> EquilibriumResult:
-    """Run internal Tactical Hail -> Left-Brain Self-Talk -> Theory passes while keeping external Fact immutable."""
+    """Run internal 3-Branch Deliberation <-> Tactical Hail -> Left-Brain Self-Talk while keeping Fact immutable."""
     if type(max_passes) is not int or not (1 <= max_passes <= 10):
         raise ValueError("max_passes must be an int in [1, 10]")
 
@@ -1394,6 +1496,7 @@ def settle_scenario(
     active_ledger = (
         contemplation_ledger if contemplation_ledger is not None else ContemplationLedger()
     )
+    active_archives = branch_archives if branch_archives is not None else ThreeBranchArchives()
 
     # Pass 1: Pure EXTERNAL_WORLD sensory & memory read (Fact locked here for the whole scene)
     external_coords, external_exp, queried_1, skipped_1 = sensors.score_text(
@@ -1401,6 +1504,8 @@ def settle_scenario(
         learned_leaves=learned_leaves,
         branch_gating=branch_gating,
     )
+    social_drift = active_archives.executive.detect_social_drift(external_coords)
+
     vibe_1, next_mem = compile_right_brain_vibe(
         birth_state,
         external_coords,
@@ -1414,6 +1519,7 @@ def settle_scenario(
         internal_theory_experiential=None,
         queried_child_leaves=queried_1,
         skipped_child_leaves=skipped_1,
+        social_drift=social_drift,
     )
 
     initial_felt_chord = vibe_1.felt_chord or compile_felt_chord(
@@ -1430,6 +1536,13 @@ def settle_scenario(
         active_chord_memory,
         current_scene_index=scene_index,
     )
+    open_thread = check_open_thread_trigger(
+        active_ledger,
+        chord_echoes,
+        initial_felt_chord,
+        external_coords,
+        social_drift=social_drift,
+    )
 
     traces: list[EquilibriumPassTrace] = [EquilibriumPassTrace(pass_index=1, vibe=vibe_1)]
     current_vibe = vibe_1
@@ -1438,133 +1551,238 @@ def settle_scenario(
     latest_reply: str | None = None
     last_hail: TacticalHail | None = None
     raw_thoughts: list[RawThoughtRecord] = []
+    deliberation: ThreeClassifierDeliberation | None = None
+    audience_mode = "PASS1_REFLEX_OR_EASE"
 
-    # Outbound: Will issues Tactical Hail -> Inbound: Left Brain feeds ONLY Truth / Theory
-    if current_vibe.posture == "TUG_LEFT_BRAIN" and left_brain is not None and max_passes >= 2:
-        for p in range(2, max_passes + 1):
-            prior_hunch_for_pass = latest_reply
-            pre_pass_margin = _make_margin_tag_for_vibe(
-                current_vibe,
-                prior_hunch_exists=prior_hunch_for_pass is not None,
-            )
-            hail = build_tactical_hail(
-                current_vibe,
-                chord_echoes=chord_echoes,
-                contemplation_ledger=active_ledger,
-                prior_self_talk_hunch=prior_hunch_for_pass,
-                subliminal_margin_tag=pre_pass_margin,
-            )
-            last_hail = hail
-            tug_msg = build_will_tug_message(
-                current_vibe,
-                active_diary,
-                prior_reply=prior_hunch_for_pass,
-                tactical_hail=hail,
-            )
-            reply_result = left_brain.respond_to_tug(scenario_text, tug_msg)
-            reply_text = reply_result[0] if isinstance(reply_result, tuple) else str(reply_result)
-            reply_text = validate_plain_english_left_brain_reply(reply_text)
-            left_calls += 1
-            latest_reply = reply_text
+    if current_vibe.posture == "TUG_LEFT_BRAIN" or open_thread.triggered:
+        # Step 2A: Right-Brain Audience With Itself (~15-30 ms, 0 LLM calls)
+        deliberation = deliberate_across_three_branches(
+            birth_state,
+            external_coords,
+            external_exp,
+            initial_felt_chord,
+            sensors,
+            active_archives,
+            RIGHT_BRAIN_WILL_EDGES,
+            RIGHT_BRAIN_WILL_VERSION,
+            scene_index=scene_index,
+            learned_leaves=learned_leaves,
+            social_drift=social_drift,
+            branch_gating=branch_gating,
+        )
 
-            theory_coords, theory_exp, _q_p, _s_p = sensors.score_text(
-                reply_text,
-                learned_leaves=learned_leaves,
-                branch_gating=branch_gating,
+        if deliberation.ratified and (not open_thread.triggered or left_brain is None) and max_passes >= 2:
+            # 3-Branch Harmony achieved with no open Left-Brain uncertainty (or LLM disabled): settle in milliseconds!
+            audience_mode = "RIGHT_BRAIN_3_CLASSIFIER_DELIBERATION"
+            active_ratified = (
+                (deliberation.newly_ratified_chord,)
+                if deliberation.newly_ratified_chord is not None
+                else active_archives.judicial.ratified_chords
             )
 
-            vibe_p, next_mem = compile_right_brain_vibe(
+            vibe_delib, next_mem = compile_right_brain_vibe(
                 birth_state,
                 external_coords,
                 external_exp,
                 rules,
-                pass_index=p,
-                event_id=f"scene-{scene_index}-pass-{p}",
+                pass_index=2,
+                event_id=f"scene-{scene_index}-pass-2-delib",
                 prior_memory=prior_memory,
                 learned_leaves=learned_leaves,
-                internal_theory_coords=theory_coords,
-                internal_theory_experiential=theory_exp,
+                internal_theory_coords=deliberation.bid_coordinates,
+                internal_theory_experiential=deliberation.bid_experiential,
                 queried_child_leaves=queried_1,
                 skipped_child_leaves=skipped_1,
+                social_drift=social_drift,
+                ratified_chords=active_ratified,
             )
-
-            if prev_theory_coords:
-                max_delta = round(
-                    max(
-                        (abs(float(theory_coords.get(k, 0.0)) - float(prev_theory_coords.get(k, 0.0))) for k in theory_coords),
-                        default=0.0,
+            max_delta_delib = round(
+                max(
+                    (
+                        abs(float(deliberation.bid_coordinates.get(k, 0.0)) - float(external_coords.get(k, 0.0)))
+                        for k in deliberation.bid_coordinates
                     ),
-                    6,
-                )
-            else:
-                max_delta = round(
-                    max(
-                        (abs(float(theory_coords.get(k, 0.0)) - float(external_coords.get(k, 0.0))) for k in theory_coords),
-                        default=0.0,
-                    ),
-                    6,
-                )
-
-            settled_this_pass = vibe_p.posture in ("AT_EASE", "WORDLESS_REFLEX", "THEORY_SYNTHESIS")
-            post_pass_fc = vibe_p.felt_chord or initial_felt_chord
-            post_pass_margin = _make_margin_tag_for_vibe(vibe_p, prior_hunch_exists=True)
-            thought_record = RawThoughtRecord(
-                scene_index=scene_index,
-                pass_index=p,
-                clarity=vibe_p.clarity,
-                confidence=vibe_p.confidence,
-                raw_self_talk_draft=reply_text,
-                prior_hunch_debated=prior_hunch_for_pass,
-                felt_chord_stamp=post_pass_fc.short_stamp(),
-                subliminal_margin_tag=post_pass_margin,
-                epistemic_state=vibe_p.self_registry.epistemic_state,
-                settled_on_this_pass=settled_this_pass,
-            )
-            raw_thoughts.append(thought_record)
-            if raw_thought_stream_path is not None:
-                append_raw_thought_record(raw_thought_stream_path, thought_record)
-
-            if not settled_this_pass:
-                active_ledger = active_ledger.record_uncertainty(
-                    scene_index=scene_index,
-                    raw_hunch=reply_text,
-                    open_question=post_pass_margin.red_pen_prompt,
-                    margin_tag=post_pass_margin,
-                )
-
-            traces[-1] = EquilibriumPassTrace(
-                pass_index=traces[-1].pass_index,
-                vibe=traces[-1].vibe,
-                left_brain_reply=reply_text,
-                max_theory_delta=traces[-1].max_theory_delta,
-                tactical_hail=hail,
+                    default=0.0,
+                ),
+                6,
             )
             traces.append(
                 EquilibriumPassTrace(
-                    pass_index=p,
-                    vibe=vibe_p,
-                    max_theory_delta=max_delta,
+                    pass_index=2,
+                    vibe=vibe_delib,
+                    max_theory_delta=max_delta_delib,
                 )
             )
-            current_vibe = vibe_p
-            prev_theory_coords = dict(theory_coords)
+            current_vibe = vibe_delib
+        elif left_brain is not None and max_passes >= 2:
+            # Step 2B: Left-Brain Audience With Itself (Proposer <-> Self-Critic Dialogue)
+            audience_mode = (
+                "LEFT_BRAIN_OPEN_THREAD_CLOSURE"
+                if open_thread.triggered
+                else "LEFT_BRAIN_DEADLOCK_HAIL"
+            )
+            for p in range(2, max_passes + 1):
+                prior_hunch_for_pass = latest_reply
+                pre_pass_margin = _make_margin_tag_for_vibe(
+                    current_vibe,
+                    prior_hunch_exists=prior_hunch_for_pass is not None,
+                )
+                hail = build_tactical_hail(
+                    current_vibe,
+                    chord_echoes=chord_echoes,
+                    contemplation_ledger=active_ledger,
+                    prior_self_talk_hunch=prior_hunch_for_pass,
+                    subliminal_margin_tag=pre_pass_margin,
+                )
+                last_hail = hail
+                tug_msg = build_will_tug_message(
+                    current_vibe,
+                    active_diary,
+                    prior_reply=prior_hunch_for_pass,
+                    tactical_hail=hail,
+                )
+                reply_result = left_brain.respond_to_tug(scenario_text, tug_msg)
+                reply_text = reply_result[0] if isinstance(reply_result, tuple) else str(reply_result)
+                reply_text = validate_plain_english_left_brain_reply(reply_text)
+                left_calls += 1
+                latest_reply = reply_text
 
-            if settled_this_pass:
-                break
-            if p >= 3 and max_delta <= equilibrium_tolerance:
-                break
+                theory_coords, theory_exp, _q_p, _s_p = sensors.score_text(
+                    reply_text,
+                    learned_leaves=learned_leaves,
+                    branch_gating=branch_gating,
+                )
+
+                pass_ratified_chords: tuple[FuzzyConceptRule, ...] = ()
+                if p >= 3 and open_thread.triggered:
+                    if deliberation is not None and deliberation.newly_ratified_chord is not None:
+                        pass_ratified_chords = (deliberation.newly_ratified_chord,)
+                    elif float(theory_coords.get("cultural/justice/fairness", 0.0)) >= 0.60:
+                        closure_chord = build_three_branch_chord_rule(
+                            scene_index=scene_index,
+                            concept_name=f"open_thread_closure_s{scene_index}",
+                            description=reply_text,
+                            coordinates=external_coords,
+                            felt_chord=initial_felt_chord,
+                        )
+                        if closure_chord is not None:
+                            pass_ratified_chords = (closure_chord,)
+
+                vibe_p, next_mem = compile_right_brain_vibe(
+                    birth_state,
+                    external_coords,
+                    external_exp,
+                    rules,
+                    pass_index=p,
+                    event_id=f"scene-{scene_index}-pass-{p}",
+                    prior_memory=prior_memory,
+                    learned_leaves=learned_leaves,
+                    internal_theory_coords=theory_coords,
+                    internal_theory_experiential=theory_exp,
+                    queried_child_leaves=queried_1,
+                    skipped_child_leaves=skipped_1,
+                    social_drift=social_drift,
+                    ratified_chords=pass_ratified_chords,
+                )
+
+                if prev_theory_coords:
+                    max_delta = round(
+                        max(
+                            (abs(float(theory_coords.get(k, 0.0)) - float(prev_theory_coords.get(k, 0.0))) for k in theory_coords),
+                            default=0.0,
+                        ),
+                        6,
+                    )
+                else:
+                    max_delta = round(
+                        max(
+                            (abs(float(theory_coords.get(k, 0.0)) - float(external_coords.get(k, 0.0))) for k in theory_coords),
+                            default=0.0,
+                        ),
+                        6,
+                    )
+
+                must_continue_for_critique = (
+                    (require_self_critique or open_thread.triggered) and p == 2 and max_passes >= 3
+                )
+                settled_this_pass = (
+                    vibe_p.posture in ("AT_EASE", "WORDLESS_REFLEX", "THEORY_SYNTHESIS")
+                    and not must_continue_for_critique
+                )
+                post_pass_fc = vibe_p.felt_chord or initial_felt_chord
+                post_pass_margin = _make_margin_tag_for_vibe(vibe_p, prior_hunch_exists=True)
+                thought_record = RawThoughtRecord(
+                    scene_index=scene_index,
+                    pass_index=p,
+                    clarity=vibe_p.clarity,
+                    confidence=vibe_p.confidence,
+                    raw_self_talk_draft=reply_text,
+                    prior_hunch_debated=prior_hunch_for_pass,
+                    felt_chord_stamp=post_pass_fc.short_stamp(),
+                    subliminal_margin_tag=post_pass_margin,
+                    epistemic_state=vibe_p.self_registry.epistemic_state,
+                    settled_on_this_pass=settled_this_pass,
+                )
+                raw_thoughts.append(thought_record)
+                if raw_thought_stream_path is not None:
+                    append_raw_thought_record(raw_thought_stream_path, thought_record)
+
+                if not settled_this_pass:
+                    active_ledger = active_ledger.record_uncertainty(
+                        scene_index=scene_index,
+                        raw_hunch=reply_text,
+                        open_question=post_pass_margin.red_pen_prompt,
+                        margin_tag=post_pass_margin,
+                    )
+
+                traces[-1] = EquilibriumPassTrace(
+                    pass_index=traces[-1].pass_index,
+                    vibe=traces[-1].vibe,
+                    left_brain_reply=reply_text,
+                    max_theory_delta=traces[-1].max_theory_delta,
+                    tactical_hail=hail,
+                )
+                traces.append(
+                    EquilibriumPassTrace(
+                        pass_index=p,
+                        vibe=vibe_p,
+                        max_theory_delta=max_delta,
+                    )
+                )
+                current_vibe = vibe_p
+                prev_theory_coords = dict(theory_coords)
+
+                if settled_this_pass:
+                    break
+                if p >= 3 and max_delta <= equilibrium_tolerance:
+                    break
 
     final_fc = current_vibe.felt_chord or initial_felt_chord
     if current_vibe.posture in ("AT_EASE", "WORDLESS_REFLEX", "THEORY_SYNTHESIS"):
         settled = True
         outcome = current_vibe.posture
         needs_new_instinct = False
+        resolved_scenes = (
+            (open_thread.target_scene_index,)
+            if (open_thread.triggered and open_thread.target_scene_index is not None)
+            else ()
+        )
+        takeaway_src = (
+            latest_reply
+            if latest_reply is not None
+            else (
+                deliberation.candidate_bid_text
+                if (deliberation is not None and deliberation.ratified and deliberation.candidate_bid_text)
+                else scenario_text
+            )
+        )
         active_ledger = active_ledger.record_settled(
             scene_index=scene_index,
-            takeaway_source=latest_reply if latest_reply is not None else scenario_text,
+            takeaway_source=takeaway_src,
             felt_chord=final_fc,
             clarity=current_vibe.clarity,
             confidence=current_vibe.confidence,
+            resolved_uncertainty_scenes=resolved_scenes,
         )
     else:
         settled = False
@@ -1587,6 +1805,20 @@ def settle_scenario(
 
     if contemplation_ledger_path is not None:
         save_contemplation_ledger(contemplation_ledger_path, active_ledger)
+
+    next_archives = harvest_into_branch_archives(
+        active_archives,
+        scene_index=scene_index,
+        scenario_text=scenario_text,
+        coordinates=current_vibe.coordinates,
+        felt_chord=final_fc,
+        left_brain_reply=latest_reply,
+        settled=settled,
+        deliberation=deliberation,
+        social_drift=social_drift,
+    )
+    if branch_archives_dir is not None:
+        next_archives.save_all(branch_archives_dir)
 
     updated_chord_memory = active_chord_memory.append(
         scene_index=scene_index,
@@ -1624,4 +1856,9 @@ def settle_scenario(
         raw_thoughts=tuple(raw_thoughts),
         next_chord_memory=updated_chord_memory,
         next_ledger=active_ledger,
+        deliberation=deliberation,
+        social_drift=social_drift,
+        open_thread=open_thread,
+        audience_mode=audience_mode,
+        next_archives=next_archives,
     )

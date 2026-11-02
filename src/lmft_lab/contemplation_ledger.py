@@ -292,8 +292,9 @@ class ContemplationLedger:
         felt_chord: FeltChord,
         clarity: float,
         confidence: float,
+        resolved_uncertainty_scenes: tuple[int, ...] = (),
     ) -> "ContemplationLedger":
-        """Compact a settled scene into a 1-line certainty and clear any uncertainty for that scene."""
+        """Compact a settled scene into a 1-line certainty and clear any resolved uncertainties."""
         cert = SettledCertainty(
             scene_index=scene_index,
             takeaway=_compact_one_line(takeaway_source),
@@ -301,8 +302,9 @@ class ContemplationLedger:
             clarity=round(float(clarity), 4),
             confidence=round(float(confidence), 4),
         )
+        cleared_ids = {scene_index, *resolved_uncertainty_scenes}
         kept_certs = tuple(c for c in self.settled_certainties if c.scene_index != scene_index) + (cert,)
-        remaining_unc = tuple(u for u in self.active_uncertainties if u.scene_index != scene_index)
+        remaining_unc = tuple(u for u in self.active_uncertainties if u.scene_index not in cleared_ids)
         return ContemplationLedger(
             settled_certainties=kept_certs[-self.max_certainties :],
             active_uncertainties=remaining_unc[-self.max_uncertainties :],

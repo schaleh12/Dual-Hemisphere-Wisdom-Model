@@ -373,7 +373,11 @@ def _collect_polarity_flips(
         return float(m.get(key, fallback))
 
     c_fair, p_fair = _val(cur, "cultural/justice/fairness"), _val(past, "cultural/justice/fairness")
-    if abs(c_fair - p_fair) >= min_flip:
+    if (
+        abs(c_fair - p_fair) >= min_flip
+        and min(c_fair, p_fair) <= 0.38
+        and max(c_fair, p_fair) >= 0.55
+    ):
         phrase = (
             "open sharing turned into shut-out exclusion"
             if c_fair < p_fair
@@ -382,7 +386,11 @@ def _collect_polarity_flips(
         flips.append((abs(c_fair - p_fair), phrase))
 
     c_disc, p_disc = _val(cur, "philosophical/persistence/discreteness"), _val(past, "philosophical/persistence/discreteness")
-    if abs(c_disc - p_disc) >= min_flip:
+    if (
+        abs(c_disc - p_disc) >= min_flip
+        and min(c_disc, p_disc) <= 0.45
+        and max(c_disc, p_disc) >= 0.55
+    ):
         phrase = (
             "an open space was sealed behind a closed boundary"
             if c_disc > p_disc
@@ -391,7 +399,11 @@ def _collect_polarity_flips(
         flips.append((abs(c_disc - p_disc), phrase))
 
     c_cont, p_cont = _val(cur, "philosophical/persistence/continuity"), _val(past, "philosophical/persistence/continuity")
-    if abs(c_cont - p_cont) >= min_flip:
+    if (
+        abs(c_cont - p_cont) >= min_flip
+        and min(c_cont, p_cont) <= 0.42
+        and max(c_cont, p_cont) >= 0.55
+    ):
         phrase = (
             "ongoing flow stalled into stillness"
             if c_cont < p_cont
@@ -400,7 +412,11 @@ def _collect_polarity_flips(
         flips.append((abs(c_cont - p_cont), phrase))
 
     c_val, p_val = cur_felt.valence, past_felt.valence
-    if abs(c_val - p_val) >= max(0.30, min_flip - 0.05):
+    if (
+        abs(c_val - p_val) >= max(0.30, min_flip - 0.05)
+        and min(c_val, p_val) <= 0.42
+        and max(c_val, p_val) >= 0.55
+    ):
         phrase = (
             "warm relief chilled into unease"
             if c_val < p_val
