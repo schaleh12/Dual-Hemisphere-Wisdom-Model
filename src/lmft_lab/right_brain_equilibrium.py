@@ -36,6 +36,21 @@ from pathlib import Path
 import re
 
 from .birth import BirthState
+from .chord_memory import (
+    ChordEchoReport,
+    ChordMemoryBank,
+    FeltChord,
+    compile_felt_chord,
+    retrieve_chord_echoes,
+)
+from .contemplation_ledger import (
+    ContemplationLedger,
+    RawThoughtRecord,
+    SubliminalMarginTag,
+    append_raw_thought_record,
+    build_subliminal_margin_tag,
+    save_contemplation_ledger,
+)
 from .local_models import strict_json
 from .model_assets import ModelError
 from .propagation import Association, PropagationConfig, PropagationResult, propagate_activation
@@ -497,6 +512,7 @@ class RightBrainVibe:
     propagation: PropagationResult
     queried_child_leaves: tuple[str, ...] = ()
     skipped_child_leaves: tuple[str, ...] = ()
+    felt_chord: FeltChord | None = None
 
     def __post_init__(self):
         if self.posture not in RIGHT_BRAIN_POSTURES:
@@ -871,6 +887,15 @@ def compile_right_brain_vibe(
         retention_decay=decay,
     )
 
+    felt_chord = compile_felt_chord(
+        locked_external,
+        salience=salience,
+        valence=valence,
+        arousal=arousal,
+        resonance=resonance,
+        learned_leaves=learned_leaves,
+    )
+
     vibe = RightBrainVibe(
         pass_index=pass_index,
         posture=posture,
@@ -897,8 +922,138 @@ def compile_right_brain_vibe(
         propagation=propagation,
         queried_child_leaves=queried_child_leaves,
         skipped_child_leaves=skipped_child_leaves,
+        felt_chord=felt_chord,
     )
     return vibe, next_memory
+
+
+@dataclass(frozen=True)
+class TacticalHail:
+    """Commander hail from Will to the Left Brain carrying pure Felt Chords and Memory Echoes."""
+
+    pass_index: int
+    commander_directive: str
+    felt_chord: FeltChord
+    chord_echoes: ChordEchoReport
+    contemplation_ledger: ContemplationLedger
+    prior_self_talk_hunch: str | None = None
+    subliminal_margin_tag: SubliminalMarginTag | None = None
+
+    def to_dict(self) -> dict:
+        return {
+            "pass_index": self.pass_index,
+            "commander_directive": self.commander_directive,
+            "felt_chord": self.felt_chord.to_dict(),
+            "chord_echoes": self.chord_echoes.to_dict(),
+            "contemplation_ledger": self.contemplation_ledger.to_dict(),
+            "prior_self_talk_hunch": self.prior_self_talk_hunch,
+            "subliminal_margin_tag": (
+                self.subliminal_margin_tag.to_dict() if self.subliminal_margin_tag else None
+            ),
+        }
+
+    def render_for_left_brain(self, scenario_text: str) -> str:
+        """Render clean human-readable tactical prompt with zero dry bureaucratic debug labels."""
+        blocks = [
+            f"CURRENT SCENE:\n{scenario_text}",
+            f"TACTICAL HAIL:\n{self.commander_directive}",
+            f"FELT CHORD:\n{self.felt_chord.render_for_left_brain()}",
+            f"PRE-VERBAL MEMORY ECHO:\n{self.chord_echoes.render_for_left_brain()}",
+            f"CONTEMPLATION LEDGER:\n{self.contemplation_ledger.render_for_left_brain()}",
+        ]
+        if self.prior_self_talk_hunch is not None:
+            revision_lines = [
+                "YOUR PRIOR HUNCH ON THIS SCENE (debate and revise—do not repeat verbatim):",
+                f"\"{self.prior_self_talk_hunch}\"",
+            ]
+            if self.subliminal_margin_tag is not None:
+                revision_lines.append(self.subliminal_margin_tag.render_for_left_brain())
+            blocks.append("\n".join(revision_lines))
+        elif self.subliminal_margin_tag is not None:
+            blocks.append(f"SUBLIMINAL MARGIN STAMP:\n{self.subliminal_margin_tag.render_for_left_brain()}")
+        return "\n\n".join(blocks)
+
+
+def _make_margin_tag_for_vibe(
+    vibe: RightBrainVibe,
+    *,
+    prior_hunch_exists: bool,
+) -> SubliminalMarginTag:
+    fc = vibe.felt_chord or compile_felt_chord(
+        vibe.coordinates,
+        salience=vibe.salience,
+        valence=vibe.valence,
+        arousal=vibe.arousal,
+        resonance=vibe.resonance,
+    )
+    has_dissonance = bool(vibe.self_registry.dissonance_notes)
+    has_feeler_veto = "feeler_unease_vetoes_tone_deaf_theory" in vibe.synthesis.conflicts
+    has_exclusion = vibe.synthesis.doer.stance == "CONTEST_EXCLUSION"
+    return build_subliminal_margin_tag(
+        clarity=vibe.clarity,
+        confidence=vibe.confidence,
+        felt_chord=fc,
+        has_dissonance=has_dissonance,
+        has_feeler_veto=has_feeler_veto,
+        has_exclusion_tension=has_exclusion,
+        prior_hunch_exists=prior_hunch_exists,
+    )
+
+
+def build_tactical_hail(
+    vibe: RightBrainVibe,
+    *,
+    chord_echoes: ChordEchoReport | None = None,
+    contemplation_ledger: ContemplationLedger | None = None,
+    prior_self_talk_hunch: str | None = None,
+    subliminal_margin_tag: SubliminalMarginTag | None = None,
+) -> TacticalHail:
+    """Build Will's explicit Tactical Hail carrying pure Felt Chords and Memory Echoes."""
+    fc = vibe.felt_chord or compile_felt_chord(
+        vibe.coordinates,
+        salience=vibe.salience,
+        valence=vibe.valence,
+        arousal=vibe.arousal,
+        resonance=vibe.resonance,
+    )
+    echoes = chord_echoes if chord_echoes is not None else ChordEchoReport()
+    ledger = contemplation_ledger if contemplation_ledger is not None else ContemplationLedger()
+    margin = (
+        subliminal_margin_tag
+        if subliminal_margin_tag is not None
+        else _make_margin_tag_for_vibe(vibe, prior_hunch_exists=prior_self_talk_hunch is not None)
+    )
+
+    if prior_self_talk_hunch is not None:
+        directive = (
+            "Your first hunch did not settle the room's tension. Question your previous reading "
+            "against the Red-Pen Margin Note and Felt Chord below, then offer a sharper 2-sentence revision."
+        )
+    elif vibe.synthesis.doer.stance == "CONTEST_EXCLUSION":
+        directive = (
+            "Hold up—the room's surface rules or control are clashing sharply with human need. "
+            "Weigh the Felt Chord and Memory Echo below, then articulate what is really happening and who is shut out."
+        )
+    elif vibe.synthesis.feeler.stance == "FELT_UNEASE":
+        directive = (
+            "A heavy chill in the room refuses to settle into routine. Read the concrete scene alongside "
+            "the Felt Chord and Memory Echo, then state in 2 grounded sentences what shifted here."
+        )
+    else:
+        directive = (
+            "Our fast instincts do not harmonize on this moment alone. Use the Felt Chord and Memory Echo "
+            "as perspective to articulate a grounded 2-sentence theory of what is unfolding right now."
+        )
+
+    return TacticalHail(
+        pass_index=vibe.pass_index,
+        commander_directive=directive,
+        felt_chord=fc,
+        chord_echoes=echoes,
+        contemplation_ledger=ledger,
+        prior_self_talk_hunch=prior_self_talk_hunch,
+        subliminal_margin_tag=margin,
+    )
 
 
 def build_will_tug_message(
@@ -906,8 +1061,13 @@ def build_will_tug_message(
     diary: SettledDiary,
     *,
     prior_reply: str | None = None,
+    tactical_hail: TacticalHail | None = None,
 ) -> dict:
-    """Outbound message authored by Will (with Feeler emotion) targeting Left-Brain Theory."""
+    """Outbound message authored by Will (with Tactical Hail + telemetry for internal audit)."""
+    hail = tactical_hail if tactical_hail is not None else build_tactical_hail(
+        vibe,
+        prior_self_talk_hunch=prior_reply,
+    )
     strong_external = {
         k: v for k, v in sorted(vibe.coordinates.items(), key=lambda kv: (-kv[1], kv[0]))
         if v >= 0.50
@@ -922,6 +1082,7 @@ def build_will_tug_message(
         "pass": vibe.pass_index,
         "sender_branch": "psychological/will",
         "target_channel": "psychological/truth/theory",
+        "tactical_hail": hail,
         "will_opinion": {
             "stance": vibe.synthesis.doer.stance,
             "intention": round(vibe.intention, 3),
@@ -1103,37 +1264,46 @@ class QwenLeftBrain:
         self.role = role
         self.max_tokens = max_tokens
 
-    def respond_to_tug(self, scenario_text: str, tug_packet: Mapping) -> tuple[str, dict]:
-        """Answer a Will-authored sleeve-tug with a fresh 2-sentence Theory proposal."""
-        gen = self.models.config["generation"]
+    def build_prompt_messages(
+        self,
+        scenario_text: str,
+        tug_packet_or_hail: Mapping | TacticalHail,
+    ) -> list[dict[str, str]]:
+        """Build pure human-readable Left-Brain messages stripped of dry debug tokens."""
+        if isinstance(tug_packet_or_hail, TacticalHail):
+            hail = tug_packet_or_hail
+        elif isinstance(tug_packet_or_hail, Mapping) and isinstance(
+            tug_packet_or_hail.get("tactical_hail"), TacticalHail
+        ):
+            hail = tug_packet_or_hail["tactical_hail"]
+        else:
+            raise TypeError("QwenLeftBrain requires a TacticalHail or packet containing tactical_hail")
+
         system = (
-            "You are the conscious Left Brain of a bounded 40-node Right-Brain AI system. "
-            "Your Right Brain's Will branch sent you a tug (with interjected Feeler emotion "
-            "and Do-er/Thinker/Feeler bids) because this scene has not settled. Your reply "
-            "feeds ONLY into Truth -> Theory. Write 2 concise plain-English sentences about "
-            "the concrete action in CURRENT_SCENE right now (name the actual details "
-            "happening in CURRENT_SCENE and who is helped or shut out). Never repeat wording "
-            "from earlier diary gists, and never output JSON, lists, or numbers. /no_think"
+            "You are the conscious Left Brain answering a Tactical Hail from your Right Brain. "
+            "Read CURRENT SCENE alongside the Felt Chord, any Pre-Verbal Memory Echo, and your "
+            "Contemplation Ledger. If a prior hunch and Red-Pen Margin Note appear, actively "
+            "debate and revise that earlier hunch rather than repeating it. Write 2 concise, "
+            "grounded plain-English sentences about what is concretely happening in CURRENT SCENE "
+            "and what it means for the people or creatures involved. Never copy wording from "
+            "earlier ledger entries, and never output JSON, bullet lists, or raw numbers. /no_think"
         )
-        diary_lines = "\n".join(
-            f"- Scene {d['scene']} [{d['posture']}]: signals={d['dominant_signals']}"
-            + (f" | gist: {d['brief_gist']}" if d.get("brief_gist") else "")
-            for d in tug_packet.get("settled_diary", ())
-        ) or "(none yet)"
-        user_text = (
-            f"CURRENT_SCENE:\n{scenario_text}\n\n"
-            f"WILL_OPINION: {tug_packet.get('will_opinion', {}).get('stance')} — "
-            f"{tug_packet.get('will_opinion', {}).get('summary')}\n"
-            f"FEELER_EMOTION: {tug_packet.get('interjected_emotion', {}).get('stance')} — "
-            f"{tug_packet.get('interjected_emotion', {}).get('summary')}\n"
-            f"UNRESOLVED_TENSIONS: {tug_packet.get('unresolved_tensions')}\n"
-            f"PRIOR_DIARY_SUMMARY (context only, do not copy):\n{diary_lines}"
-        )
+        user_text = hail.render_for_left_brain(scenario_text)
+        return [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user_text},
+        ]
+
+    def respond_to_tug(
+        self,
+        scenario_text: str,
+        tug_packet: Mapping | TacticalHail,
+    ) -> tuple[str, dict]:
+        """Answer a Will Tactical Hail with a fresh 2-sentence plain-English Theory proposal."""
+        gen = self.models.config["generation"]
+        messages = self.build_prompt_messages(scenario_text, tug_packet)
         request = {
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": user_text},
-            ],
+            "messages": messages,
             "temperature": gen["temperature"],
             "seed": gen["seed"],
             "max_tokens": min(self.max_tokens, gen["max_tokens"]),
@@ -1157,6 +1327,7 @@ class EquilibriumPassTrace:
     vibe: RightBrainVibe
     left_brain_reply: str | None = None
     max_theory_delta: float = 0.0
+    tactical_hail: TacticalHail | None = None
 
 
 @dataclass(frozen=True)
@@ -1174,6 +1345,12 @@ class EquilibriumResult:
     needs_new_instinct: bool
     next_memory: ContinuousMemoryState
     next_diary: SettledDiary
+    felt_chord: FeltChord | None = None
+    chord_echoes: ChordEchoReport | None = None
+    last_tactical_hail: TacticalHail | None = None
+    raw_thoughts: tuple[RawThoughtRecord, ...] = ()
+    next_chord_memory: ChordMemoryBank = ChordMemoryBank()
+    next_ledger: ContemplationLedger = ContemplationLedger()
 
 
 def _top_key_coordinates(coords: Mapping[str, float], limit: int = 4) -> dict[str, float]:
@@ -1200,15 +1377,23 @@ def settle_scenario(
     learned_leaves: tuple[LearnedLeaf, ...] = (),
     prior_memory: ContinuousMemoryState | None = None,
     diary: SettledDiary | None = None,
+    chord_memory: ChordMemoryBank | None = None,
+    contemplation_ledger: ContemplationLedger | None = None,
+    raw_thought_stream_path: str | Path | None = None,
+    contemplation_ledger_path: str | Path | None = None,
     max_passes: int = 3,
     equilibrium_tolerance: float = DEFAULT_EQUILIBRIUM_TOLERANCE,
     branch_gating: bool = True,
 ) -> EquilibriumResult:
-    """Run internal Will -> Left-Brain -> Theory passes while keeping external Fact immutable."""
+    """Run internal Tactical Hail -> Left-Brain Self-Talk -> Theory passes while keeping external Fact immutable."""
     if type(max_passes) is not int or not (1 <= max_passes <= 10):
         raise ValueError("max_passes must be an int in [1, 10]")
 
     active_diary = diary if diary is not None else SettledDiary()
+    active_chord_memory = chord_memory if chord_memory is not None else ChordMemoryBank()
+    active_ledger = (
+        contemplation_ledger if contemplation_ledger is not None else ContemplationLedger()
+    )
 
     # Pass 1: Pure EXTERNAL_WORLD sensory & memory read (Fact locked here for the whole scene)
     external_coords, external_exp, queried_1, skipped_1 = sensors.score_text(
@@ -1231,19 +1416,50 @@ def settle_scenario(
         skipped_child_leaves=skipped_1,
     )
 
+    initial_felt_chord = vibe_1.felt_chord or compile_felt_chord(
+        external_coords,
+        salience=vibe_1.salience,
+        valence=vibe_1.valence,
+        arousal=vibe_1.arousal,
+        resonance=vibe_1.resonance,
+        learned_leaves=learned_leaves,
+    )
+    chord_echoes = retrieve_chord_echoes(
+        external_coords,
+        initial_felt_chord,
+        active_chord_memory,
+        current_scene_index=scene_index,
+    )
+
     traces: list[EquilibriumPassTrace] = [EquilibriumPassTrace(pass_index=1, vibe=vibe_1)]
     current_vibe = vibe_1
     prev_theory_coords: dict[str, float] = {}
     left_calls = 0
     latest_reply: str | None = None
+    last_hail: TacticalHail | None = None
+    raw_thoughts: list[RawThoughtRecord] = []
 
-    # Outbound: Will sends tug message -> Inbound: Left Brain feeds ONLY Truth / Theory
+    # Outbound: Will issues Tactical Hail -> Inbound: Left Brain feeds ONLY Truth / Theory
     if current_vibe.posture == "TUG_LEFT_BRAIN" and left_brain is not None and max_passes >= 2:
         for p in range(2, max_passes + 1):
+            prior_hunch_for_pass = latest_reply
+            pre_pass_margin = _make_margin_tag_for_vibe(
+                current_vibe,
+                prior_hunch_exists=prior_hunch_for_pass is not None,
+            )
+            hail = build_tactical_hail(
+                current_vibe,
+                chord_echoes=chord_echoes,
+                contemplation_ledger=active_ledger,
+                prior_self_talk_hunch=prior_hunch_for_pass,
+                subliminal_margin_tag=pre_pass_margin,
+            )
+            last_hail = hail
             tug_msg = build_will_tug_message(
                 current_vibe,
                 active_diary,
-                prior_reply=latest_reply,
+                prior_reply=prior_hunch_for_pass,
+                tactical_hail=hail,
             )
             reply_result = left_brain.respond_to_tug(scenario_text, tug_msg)
             reply_text = reply_result[0] if isinstance(reply_result, tuple) else str(reply_result)
@@ -1289,11 +1505,39 @@ def settle_scenario(
                     6,
                 )
 
+            settled_this_pass = vibe_p.posture in ("AT_EASE", "WORDLESS_REFLEX", "THEORY_SYNTHESIS")
+            post_pass_fc = vibe_p.felt_chord or initial_felt_chord
+            post_pass_margin = _make_margin_tag_for_vibe(vibe_p, prior_hunch_exists=True)
+            thought_record = RawThoughtRecord(
+                scene_index=scene_index,
+                pass_index=p,
+                clarity=vibe_p.clarity,
+                confidence=vibe_p.confidence,
+                raw_self_talk_draft=reply_text,
+                prior_hunch_debated=prior_hunch_for_pass,
+                felt_chord_stamp=post_pass_fc.short_stamp(),
+                subliminal_margin_tag=post_pass_margin,
+                epistemic_state=vibe_p.self_registry.epistemic_state,
+                settled_on_this_pass=settled_this_pass,
+            )
+            raw_thoughts.append(thought_record)
+            if raw_thought_stream_path is not None:
+                append_raw_thought_record(raw_thought_stream_path, thought_record)
+
+            if not settled_this_pass:
+                active_ledger = active_ledger.record_uncertainty(
+                    scene_index=scene_index,
+                    raw_hunch=reply_text,
+                    open_question=post_pass_margin.red_pen_prompt,
+                    margin_tag=post_pass_margin,
+                )
+
             traces[-1] = EquilibriumPassTrace(
                 pass_index=traces[-1].pass_index,
                 vibe=traces[-1].vibe,
                 left_brain_reply=reply_text,
                 max_theory_delta=traces[-1].max_theory_delta,
+                tactical_hail=hail,
             )
             traces.append(
                 EquilibriumPassTrace(
@@ -1305,19 +1549,52 @@ def settle_scenario(
             current_vibe = vibe_p
             prev_theory_coords = dict(theory_coords)
 
-            if current_vibe.posture in ("AT_EASE", "WORDLESS_REFLEX", "THEORY_SYNTHESIS"):
+            if settled_this_pass:
                 break
             if p >= 3 and max_delta <= equilibrium_tolerance:
                 break
 
+    final_fc = current_vibe.felt_chord or initial_felt_chord
     if current_vibe.posture in ("AT_EASE", "WORDLESS_REFLEX", "THEORY_SYNTHESIS"):
         settled = True
         outcome = current_vibe.posture
         needs_new_instinct = False
+        active_ledger = active_ledger.record_settled(
+            scene_index=scene_index,
+            takeaway_source=latest_reply if latest_reply is not None else scenario_text,
+            felt_chord=final_fc,
+            clarity=current_vibe.clarity,
+            confidence=current_vibe.confidence,
+        )
     else:
         settled = False
         outcome = "UNRESOLVED_TENSION"
         needs_new_instinct = True
+        final_margin = _make_margin_tag_for_vibe(
+            current_vibe,
+            prior_hunch_exists=latest_reply is not None,
+        )
+        active_ledger = active_ledger.record_uncertainty(
+            scene_index=scene_index,
+            raw_hunch=(
+                latest_reply
+                if latest_reply is not None
+                else f"Unresolved scene tension: {scenario_text}"
+            ),
+            open_question=final_margin.red_pen_prompt,
+            margin_tag=final_margin,
+        )
+
+    if contemplation_ledger_path is not None:
+        save_contemplation_ledger(contemplation_ledger_path, active_ledger)
+
+    updated_chord_memory = active_chord_memory.append(
+        scene_index=scene_index,
+        scene_text_or_gist=scenario_text,
+        coordinates=current_vibe.coordinates,
+        felt_chord=final_fc,
+        settled=settled,
+    )
 
     diary_entry = DiaryEntry(
         scene_index=scene_index,
@@ -1341,4 +1618,10 @@ def settle_scenario(
         needs_new_instinct=needs_new_instinct,
         next_memory=next_mem,
         next_diary=updated_diary,
+        felt_chord=final_fc,
+        chord_echoes=chord_echoes,
+        last_tactical_hail=last_hail,
+        raw_thoughts=tuple(raw_thoughts),
+        next_chord_memory=updated_chord_memory,
+        next_ledger=active_ledger,
     )
