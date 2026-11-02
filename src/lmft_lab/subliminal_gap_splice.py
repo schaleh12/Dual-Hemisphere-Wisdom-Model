@@ -163,48 +163,48 @@ CADENCE_DEPARTMENT_INDICES: tuple[int, ...] = tuple(range(49, 52))
 DEPARTMENT_FOUNDING_ANCHORS: dict[str, tuple[str, ...]] = {
     "cultural/": (
         DOER_FOUNDING_DESCRIPTIONS["cultural/efficiency/power"]
-        + " command force leverage control authority gatekeeping exclusion smirk sneer glare clenched jaw raised chin pouvoir autorité 权力 控制 권력 통제 😏 😤 😠",
+        + " command force leverage control authority gatekeeping exclusion smirk sneer glare clenched jaw pouvoir autorité 权力 控制 권력 통제 😏 😤",
         DOER_FOUNDING_DESCRIPTIONS["cultural/efficiency/wastelessness"]
-        + " careful stewardship conservation thrift preservation measured nod composed posture économie préservation 节俭 守护 절약 보존",
+        + " careful stewardship conservation thrift preservation restraint understatement economy économie préservation 节俭 守护 절약 보존",
         DOER_FOUNDING_DESCRIPTIONS["cultural/justice/honor"]
-        + " sincere integrity duty moral responsibility covenant steady direct gaze unblinking earnestness bow honneur sincérité 荣誉 真诚 명예 진심 🥺 🫡",
+        + " sincere integrity duty moral responsibility covenant earnestness candor honneur sincérité 荣誉 真诚 명예 진심 🥺",
         DOER_FOUNDING_DESCRIPTIONS["cultural/justice/fairness"]
-        + " open equitable sharing fair inclusion generous care in need welcoming smile open palms softened brow justice équité partage 公正 公平 공유 공정 😊 🤝",
+        + " open equitable sharing fair inclusion generous care in need welcoming warmth justice équité partage 公正 公平 공유 공정 😊 🤝",
         DOER_FOUNDING_DESCRIPTIONS["cultural/freedom/self-sufficiency"]
-        + " independent capability self-reliance autonomy standing alone set jaw level gaze autonomie indépendance 自立 独立 자립 독립",
+        + " independent capability self-reliance autonomy standing alone composed poker-face steadiness autonomie indépendance 自立 独立 자립 독립",
         DOER_FOUNDING_DESCRIPTIONS["cultural/freedom/needlessness"]
-        + " peaceful contentment sufficiency calm security free from lack relaxed shoulders soft half-smile unknitted brow sérénité contentement 知足 安宁 평온 만족 😌",
-        "deliberate resolve intention commitment inner purpose aim to act narrowed eyes locked gaze firm mouth volonté 意图 决心 의지 결심",
-        "active execution intervention carrying out concrete step action forward lean sharp nod exécution 执行 行动 실행 행동",
+        + " peaceful contentment sufficiency calm security free from lack unhurried ease sérénité contentement 知足 安宁 평온 만족 😌",
+        "deliberate resolve intention commitment inner purpose aim to act focused gaze volonté 意图 决心 의지 결심",
+        "active execution intervention carrying out concrete step action exécution 执行 行动 실행 행동",
     ),
     "philosophical/": (
         THINKER_FOUNDING_DESCRIPTIONS["philosophical/being/agency"]
-        + " deliberate purposeful choice human actor intervention intentional wink raised eyebrow agence choix 自主 选择 주체 선택 😉 🤨",
+        + " deliberate purposeful choice human actor intervention agence choix 自主 选择 주체 선택",
         THINKER_FOUNDING_DESCRIPTIONS["philosophical/being/existence"]
-        + " concrete physical presence tangible material reality stone body weathered face grounded posture existence présence 存在 实体 존재 실체",
+        + " concrete physical presence tangible material reality stone body existence présence 存在 实体 존재 실체",
         THINKER_FOUNDING_DESCRIPTIONS["philosophical/structure/order"]
-        + " structured arrangement deliberate rules built boundaries discipline composed symmetrical expression straight posture ordre règle 秩序 规则 질서 규칙 😐",
+        + " structured arrangement deliberate rules built boundaries discipline composed poker-face neutrality ordre règle 秩序 规则 질서 규칙 😐",
         THINKER_FOUNDING_DESCRIPTIONS["philosophical/structure/chaos"]
-        + " violent disruption fracture breakdown storm turbulent disorder wild eyes contorted grimace flinch wince chaos désordre 混乱 崩裂 혼돈 붕괴 😱 😬",
+        + " violent disruption fracture breakdown storm turbulent disorder grimace flinch chaos désordre 混乱 崩裂 혼돈 붕괴 😱 😬",
         THINKER_FOUNDING_DESCRIPTIONS["philosophical/persistence/continuity"]
-        + " ongoing flow sustained rhythm unbroken endurance shared continuation steady breathing lingering gaze continuité 延续 持续 연속 지속",
+        + " ongoing flow sustained rhythm unbroken endurance shared continuation continuité 延续 持续 연속 지속",
         THINKER_FOUNDING_DESCRIPTIONS["philosophical/persistence/discreteness"]
-        + " sealed enclosure locked separation rigid isolation sharp boundary stone-faced deadpan averted eyes pressed lips séparation isolement 隔绝 封闭 단절 고립 😒 😶",
+        + " sealed enclosure locked separation rigid isolation sharp boundary guarded reserve deadpan séparation isolement 隔绝 封闭 단절 고립 😶",
         "working theory hypothesis conceptual synthesis inferred pattern furrowed brow quizzical squint head tilt théorie 理论 假设 이론 가설 🤔 🧐",
-        "verified fact direct external evidence concrete observation clear-eyed recognition nod of certainty fait vérité 事实 证据 사실 증거",
+        "verified fact direct external evidence concrete observation clear-eyed recognition fait vérité 事实 证据 사실 증거",
     ),
     "experiential/": (
-        "unfamiliar novelty sudden shift unexpected turn new discovery opening widened eyes parted lips double-take raised brows nouveauté 新奇 突变 새로움 ✨ ❓ 😮 😲 gasp ooh aha",
+        "unfamiliar novelty sudden shift unexpected turn new discovery opening widened eyes nouveauté 新奇 突变 새로움 ✨ ❓ 😮 gasp ooh aha",
         FEELER_FOUNDING_DESCRIPTIONS[SALIENCE_LEAF]
-        + " poignant ache simultaneous strain urgency weighty moment trembling lower lip glistening eyes bitten lip urgence 紧迫 剧痛 절박함 ⚡ ❗ 🥺 😢 throb pang",
+        + " poignant ache simultaneous strain urgency weighty moment trembling lip glistening eyes urgence 紧迫 剧痛 절박함 ⚡ ❗ 🥺 😢 throb pang",
         FEELER_FOUNDING_DESCRIPTIONS[VALENCE_LEAF]
-        + " spare humble shelter sanctuary care offered openly restorative relief warm Duchenne smile crinkled eyes crow-feet softened cheeks sanctuaire refuge chaleur 庇护 圣所 温暖 안식처 피난처 온기 🕯️ 🍵 🫂 😊 🥹 sigh ahh",
+        + " spare humble shelter sanctuary care offered openly restorative relief warm Duchenne smile crinkled eyes sanctuaire refuge chaleur 庇护 圣所 温暖 안식처 피난처 온기 🕯️ 🍵 🫂 😊 🥹 sigh ahh",
         FEELER_FOUNDING_DESCRIPTIONS[AROUSAL_LEAF]
-        + " pent-up strain breaking apart intense pressure release flared nostrils dilated pupils flushed cheeks twitching eyelid tension éclatement 爆发 紧绷 폭발 긴장 💥 🔥 😬 😡 thump crackle",
-        "restored shared rhythm resonance homecoming mutual connection return mirrored smile tearful grin mutual eye contact résonance retour 共鸣 归来 공명 귀환 🎶 🤝 🥹 hum chime",
-        "cold sterile airless quiet hollow stillness sealed isolation drained warmth rhythmic entrainment trance sway heavy-lidded blink glassy thousand-yard stare crooked tipsy grin flush vide immobilité ivresse 空虚 死寂 微醺 催眠 공허 정적 취기 최면 🌀 🥴 🍺 🪨 🫠 😶 hic whirrr shhh ...",
-        "unclouded clarity transparent open understanding bright eyes relaxed forehead sudden dawn of recognition clarté 清晰 清醒 명료함 💡 🔍 ding ping",
-        "steady settled confidence assurance grounded trust calm unguarded gaze wry half-grin steady chin confiance 自信 笃定 확신 신뢰 🛡️ ⚓ 😌 hm mm",
+        + " pent-up strain breaking apart intense pressure release tension éclatement 爆发 紧绷 폭발 긴장 💥 🔥 thump crackle",
+        "restored shared rhythm resonance homecoming mutual connection return résonance retour 共鸣 归来 공명 귀환 🎶 🤝 hum chime",
+        "cold sterile airless quiet hollow stillness sealed isolation drained warmth rhythmic entrainment trance sway glassy stare tipsy grin vide immobilité ivresse 空虚 死寂 微醺 催眠 공허 정적 취기 최면 🌀 🥴 🍺 🪨 🫠 hic whirrr shhh ...",
+        "unclouded clarity transparent open understanding clarté 清晰 清醒 명료함 💡 🔍 ding ping",
+        "steady settled confidence assurance grounded trust calm unguarded gaze confiance 自信 笃定 확신 신뢰 🛡️ ⚓ hm mm",
     ),
 }
 

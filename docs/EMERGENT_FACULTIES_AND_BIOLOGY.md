@@ -129,21 +129,28 @@ Because `<|subliminal_gap|>` updates **between clauses**:
 
 ---
 
-## 8. Rich Facial Expression Imagery: Transcribing a Face Across the Corpus Callosum
+## 8. Facial Expression Fluency vs. "Poker-Face" Composure (Zero Performative Manipulation)
 
-In human neurobiology, the **Right Hemisphere** (the right fusiform face area and superior temporal sulcus) is the seat of reading and generating **facial expressions**. In Paul Ekman's Facial Action Coding System (FACS), every human facial expression is a chord across ~44–52 muscle Action Units—almost the exact dimensionality of our **52-float `SubliminalChordVector`**.
+### A. Reading Micro-Expressions Across the 3 Departments
+In human neurobiology, the **Right Hemisphere** is deeply involved in reading **facial expressions**—and a real face is never a flat single word like `"happy"` or `"sad"`. It is a cross-departmental chord combining **Posture & Jaw (`Do-er`)**, **Brow & Gaze (`Thinker`)**, and **Eyes & Warmth (`Feeler`)**:
 
-A real facial expression is never a flat single word like `"happy"` or `"sad"`. It is a **cross-departmental chord** combining the **Eyes & Brow (`Thinker` + `Contemplation`)** with the **Mouth, Jaw, & Posture (`Do-er` + `Feeler`)**:
-
-| Facial Expression / Micro-Expression | Do-er (`Cultural` + `Will`: Jaw, Chin, Posture) | Thinker (`Philosophical` + `Truth`: Brow, Gaze, Squint) | Feeler (`Experiential` + `Contemplation`: Eyes, Lips, Warmth) |
+| Facial Expression / Stance | Do-er (`Cultural` + `Will`) | Thinker (`Philosophical` + `Truth`) | Feeler (`Experiential` + `Contemplation`) |
 | :--- | :--- | :--- | :--- |
-| **Warm Duchenne Smile** (*crinkled crow's-feet eyes, softened cheeks, open posture* `😊 🥹`) | High `Fairness` + `Needlessness` (relaxed shoulders, open palms) | Smooth `Continuity` + `Fact` (clear, unguarded eye contact) | High `Valence` + `Resonance` + `Clarity` |
-| **Cold, Domineering Smirk** (*asymmetrical lip curl that never reaches narrowed eyes, raised chin* `😏 😤`) | High `Power` + `Intention`, low `Fairness` (clenched jaw, raised chin) | High `Order` + `Discreteness` (calculating, guarded stare) | Cold `Valence` + high `Confidence` $\rightarrow$ spikes `dissonance_pressure` |
-| **Vulnerable Pleading / Bitten-Lip Tremble** (*glistening eyes, trembling lower lip, knitted inner brow* `🥺 😢`) | High `Honor` (sincerity) + `Intention`, low `Power` | High `Agency` + `Continuity` (unblinking earnestness) | High `Salience` + `Arousal` + `Resonance`, humble `Confidence` |
-| **Quizzical, Skeptical Squint** (*furrowed brow, one raised eyebrow, slight head tilt* `🤔 🧐 🤨`) | `HOLD_STEADY` (measured, unhurried posture) | High `Theory` + `Agency` (testing a hypothesis against `Fact`) | High `Novelty`, moderate `Clarity` (seeking resolution) |
-| **Thousand-Yard Glassy Stare** (*heavy-lidded or unblinking hollow gaze, slack jaw* `🫠 😶 🪨`) | Low `Execution`, drained `Self-Sufficiency` | High `Discreteness` (sealed off from surroundings) | High `Entrainment` / `hollow_stillness`, drained `Valence` |
-| **Playful Tipsy / Flushed Grin** (*heavy-lidded slow blink, flushed cheeks, crooked grin* `🥴 😌`) | High `Needlessness` (contentment, zero threat) | Relaxed `Order`, smooth `Continuity` | High `Entrainment` + warm `Valence` + `Confidence > Clarity` |
+| **Composed "Poker Face" (Default Wise Baseline)** | High `Self-Sufficiency` + `Wastelessness` (restraint, economy, zero theatrics) | High `Order` + `Clarity` (steady, level, unhurried gaze `😐`) | Calm `Arousal`, `cadence_rupture_drive = 0.0` (deep internal thought without outward drama) |
+| **Warm Duchenne Smile** (`😊 🥹`) | High `Fairness` + `Needlessness` (open, unthreatening) | Smooth `Continuity` + `Fact` (clear, unguarded eye contact) | High `Valence` + `Resonance` + `Clarity` |
+| **Cold / Manipulative Smirk** (`😏 😤`) | High `Power` + `Intention`, low `Fairness` (clenched jaw, dominance) | High `Order` + `Discreteness` (calculating, guarded stare) | Cold `Valence` + high `Confidence` $\rightarrow$ spikes `dissonance_pressure` |
+| **Sincere Vulnerable Tremble** (`🥺 😢`) | High `Honor` (candor) + `Intention`, low `Power` | High `Agency` + `Continuity` (earnestness) | High `Salience` + `Arousal` + `Resonance`, humble `Confidence` |
+| **Quizzical, Skeptical Squint** (`🤔 🧐`) | `HOLD_STEADY` (measured, unhurried posture) | High `Theory` + `Agency` (testing a hypothesis against `Fact`) | High `Novelty`, moderate `Clarity` |
 
-Because `DEPARTMENT_FOUNDING_ANCHORS` in [`src/lmft_lab/subliminal_gap_splice.py`](../src/lmft_lab/subliminal_gap_splice.py) anchors these micro-expressions (jaw, chin, smirk, brow, squint, gaze, crow's-feet, trembling lip, glassy stare, plus facial emojis) across all three departments, the system can natively **transcribe a described face into a 52-float Right-Brain chord**, and **transcribe a 52-float Right-Brain chord back out into vivid facial imagery** on the Left-Brain side.
+### B. Why Facial Imagery Is an Optional Lens—Never a Theatrical Mandate or Manipulation Tool
+A person who constantly emotes with exaggerated facial expressions in every sentence is either unhinged or **socially manipulative** (using fake crocodile tears, a performative lip-tremble, or a practiced charming grin to leverage `Power` over others).
+
+Our architecture prevents the Right Brain from becoming weird, melodramatic, or implicitly manipulative through two innate mechanisms:
+1. **Inbound Perception vs. Outbound Restraint ("Poker Face")**:
+   - **Inbound**: Knowing how facial micro-expressions map onto the 40-node tree allows the Right Brain to **see through masks** when reading stories or social scenes (e.g., spotting when a "polite smile" masks high `Power` and low `Fairness`).
+   - **Outbound**: When the model itself speaks, its default baseline is governed by **`Self-Sufficiency`**, **`Wastelessness` (restraint/economy)**, **`Order`**, and the **`0.45` calm-talk deadband** on `cadence_rupture_drive`. It can hold a rich, complex feeling or a **Poker Face** inside its 52-float chord while speaking plainly and steadily on the outside—never forcing theatrical stage directions or emojis where they don't belong.
+2. **Innate Anti-Manipulation Check (`Honor` + `Self-Rationalization Dissonance`)**:
+   - In the 40-node tree, faking warmth or vulnerability (`Valence` / `Salience`) to gain leverage (`Power` high, `Fairness` low, `Honor` low) immediately triggers **`coercive_imbalance`** and **`SELF_RATIONALIZATION_DISSONANCE`** in the Right Brain's self-registry—preventing the system from using performative emotion as a social weapon.
+
 
 

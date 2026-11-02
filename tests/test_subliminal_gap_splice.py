@@ -498,19 +498,26 @@ def test_multilingual_and_facial_expression_child_drawer_signatures() -> None:
     duchenne_warmth = semantic_child_drawer_signature(
         "experiential/phase/duchenne_smile",
         department_prefix="experiential/",
-        description="Warm Duchenne smile with crinkled crow-feet eyes and softened cheeks 😊 🥹",
+        description="Warm Duchenne smile with crinkled eyes and welcoming relief 😊 🥹",
     )
     trembling_lip = semantic_child_drawer_signature(
         "experiential/reflection/vulnerable_lip_tremble",
         department_prefix="experiential/",
-        description="Trembling lower lip and glistening eyes biting back tears 🥺 😢",
+        description="Trembling lip and glistening eyes in an urgent weighty moment 🥺 😢",
+    )
+    poker_face_composure = semantic_child_drawer_signature(
+        "cultural/freedom/poker_face_restraint",
+        department_prefix="cultural/",
+        description="Composed poker-face steadiness and self-reliant autonomy",
     )
 
-    assert smirk_power[0] == 1.0       # Peaks on Cultural Power (index 0)
-    assert quizzical_brow[6] == 1.0    # Peaks on Philosophical/Truth Theory (index 6)
-    assert duchenne_warmth[2] == 1.0   # Peaks on Experiential Valence (index 2)
-    assert trembling_lip[1] == 1.0     # Peaks on Experiential Salience (index 1)
+    assert smirk_power[0] == 1.0            # Peaks on Cultural Power (index 0)
+    assert poker_face_composure[4] == 1.0   # Peaks on Cultural Self-Sufficiency (index 4)
+    assert quizzical_brow[6] == 1.0         # Peaks on Philosophical/Truth Theory (index 6)
+    assert duchenne_warmth[2] == 1.0        # Peaks on Experiential Valence (index 2)
+    assert trembling_lip[1] == 1.0          # Peaks on Experiential Salience (index 1)
     assert duchenne_warmth != trembling_lip
+    assert smirk_power != poker_face_composure
 
 
 
