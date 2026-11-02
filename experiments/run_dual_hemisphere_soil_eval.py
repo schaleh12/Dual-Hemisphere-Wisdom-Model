@@ -28,7 +28,11 @@ repo_root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(repo_root))
 sys.path.insert(0, str(repo_root / "src"))
 
-from experiments.build_and_train_bridge_classifiers import EXTRA_CALIBRATION_CULTURAL_LEAVES
+from experiments.build_and_train_bridge_classifiers import (
+    BANNED_PARABLE_SUBSTRINGS,
+    EXTRA_CALIBRATION_CULTURAL_LEAVES,
+)
+from experiments.run_feasibility_scaling_study import TEACHER_GGUF, DirectGGUFTeacher
 from experiments.run_parable_gear1_score import PARABLE_BEATS
 from lmft_lab.birth import create_birth_state
 from lmft_lab.branch_archives import ThreeBranchArchives
@@ -48,6 +52,25 @@ from lmft_lab.right_brain_equilibrium import (
     settle_scenario,
 )
 from lmft_lab.runtime_store import atomic_json
+from lmft_lab.sleep_consolidation import UnresolvedSleepScene, run_sleep_consolidation
+
+BANNED_BAKEHOUSE_SUBSTRINGS = (
+    "bakehouse",
+    "deckhand",
+    "rye",
+    "loaf",
+    "loaves",
+    "oven",
+    "shutter",
+    "tally",
+    "net-mender",
+    "sleet",
+    "baker",
+    "flour",
+    "apron",
+    "flue",
+    "wharf",
+)
 
 UNSEEN_BAKEHOUSE_BEATS: tuple[dict[str, object], ...] = (
     {
@@ -419,10 +442,198 @@ def main() -> None:
 
         rec = _format_beat_record(beat_num, phase, text, res, all_sensor_ms, beat_total_ms)
         unseen_reports.append(rec)
-        _print_beat_summary("EPOCH 2B (UNSEEN)", rec)
+        _print_beat_summary("PRE-SLEEP EPOCH 2B (UNSEEN)", rec)
+
+    # =========================================================================
+    # OFFLINE 9B SLEEP-MODE CONSOLIDATION (Qwen3.5-9B-Q4_K_M.gguf)
+    # =========================================================================
+    print("\n" + "=" * 78)
+    print("OFFLINE 9B SLEEP-MODE CONSOLIDATION (QWEN3.5-9B AUDITING UNRESOLVED TENSIONS)")
+    print("=" * 78)
+
+    unresolved_for_sleep: list[UnresolvedSleepScene] = []
+    for rec in epoch1_reports:
+        coords_e1 = dict(rec["external_coordinates"])
+        solitary_misfire = (
+            rec.get("active_concept") == "solitary_autarky"
+            and float(coords_e1.get("philosophical/structure/chaos", 0.0)) >= 0.45
+        )
+        if not rec["settled"] or solitary_misfire:
+            fc_notes = (
+                rec["felt_chord"]["complex_notes"]
+                if rec.get("felt_chord") and "complex_notes" in rec["felt_chord"]
+                else {}
+            )
+            unresolved_for_sleep.append(
+                UnresolvedSleepScene(
+                    scene_index=int(rec["beat"]),
+                    scenario_text=str(rec["text"]),
+                    external_coordinates=coords_e1,
+                    felt_chord_notes=dict(fc_notes),
+                    valence=float(rec["experiential"]["valence"]),
+                    salience=float(rec["experiential"]["salience"]),
+                    arousal=float(rec["experiential"]["arousal"]),
+                    left_brain_hunch=str(rec.get("final_conscious_note") or ""),
+                    social_drift_detected=bool(
+                        rec.get("social_drift") and rec["social_drift"].get("drift_detected")
+                    ),
+                    active_concept_collision=rec.get("active_concept"),
+                )
+            )
+
+    sleep_ruleset_path = repo_root / "outputs" / "sleep_consolidated_ruleset.json"
+    all_banned_words = tuple(BANNED_PARABLE_SUBSTRINGS) + tuple(BANNED_BAKEHOUSE_SUBSTRINGS)
+
+    t_sleep_0 = time.perf_counter()
+    with DirectGGUFTeacher(TEACHER_GGUF, config["generation"]) as sleep_teacher:
+        sleep_report = run_sleep_consolidation(
+            unresolved_scenes=unresolved_for_sleep,
+            rules=rules,
+            learned_leaves=learned_leaves,
+            archives=consolidated_archives,
+            ledger=ledger_e1,
+            teacher=sleep_teacher,
+            teacher_role="teacher",
+            generation=config["generation"],
+            ruleset_out_path=sleep_ruleset_path,
+            archives_out_dir=archives_dir,
+            ledger_out_path=ledger_path,
+            banned_substrings=all_banned_words,
+        )
+    sleep_wall_ms = round((time.perf_counter() - t_sleep_0) * 1000.0, 2)
+    print(
+        f"Sleep Mode completed in {sleep_wall_ms:.1f} ms | "
+        f"Refined rules: {list(sleep_report.refined_rule_ids)} | "
+        f"Forged rules: {[r.concept_name for r in sleep_report.forged_rules]} | "
+        f"Resolved scenes: {list(sleep_report.resolved_scene_indices)}"
+    )
+    for fr in sleep_report.forged_rules:
+        print(f"  + Forged Rule [{fr.concept_name}]: {fr.description} | targets={dict(fr.target_leaves)}")
+
+    # Reload sleep-consolidated rules and 3-branch archives from disk
+    post_sleep_rules = load_ruleset(sleep_ruleset_path)
+    post_sleep_archives = ThreeBranchArchives.load_all(archives_dir)
+
+    # =========================================================================
+    # POST-SLEEP EPOCH 2A: Consolidated Re-Read of 8-Beat Parable (0 LLM Calls!)
+    # =========================================================================
+    print("\n" + "=" * 78)
+    print("POST-SLEEP EPOCH 2A: CONSOLIDATED RE-READ OF 8-BEAT PARABLE (0 LLM CALLS)")
+    print("=" * 78)
+
+    memory_ps2a = None
+    diary_ps2a = SettledDiary(max_entries=5)
+    chord_memory_ps2a = ChordMemoryBank(max_entries=16)
+    ledger_ps2a = sleep_report.updated_ledger
+    running_archives_ps2a = ThreeBranchArchives(
+        executive=post_sleep_archives.executive.__class__(
+            precedents=(),
+            action_clauses=post_sleep_archives.executive.action_clauses,
+            max_entries=post_sleep_archives.executive.max_entries,
+        ),
+        legislative=post_sleep_archives.legislative,
+        judicial=post_sleep_archives.judicial,
+    )
+    post_sleep_2a_reports: list[dict] = []
+
+    for item in PARABLE_BEATS:
+        beat_num = int(item["beat"])
+        phase = str(item["phase"])
+        text = str(item["text"])
+
+        sensor_call_latencies_ms.clear()
+        t0 = time.perf_counter()
+
+        res = settle_scenario(
+            birth,
+            text,
+            timed_sensors,
+            post_sleep_rules,
+            scene_index=beat_num,
+            left_brain=None,
+            learned_leaves=learned_leaves,
+            prior_memory=memory_ps2a,
+            diary=diary_ps2a,
+            chord_memory=chord_memory_ps2a,
+            contemplation_ledger=ledger_ps2a,
+            branch_archives=running_archives_ps2a,
+            max_passes=3,
+        )
+
+        beat_total_ms = round((time.perf_counter() - t0) * 1000.0, 2)
+        all_sensor_ms = round(sum(sensor_call_latencies_ms), 2)
+
+        memory_ps2a = res.next_memory
+        diary_ps2a = res.next_diary
+        chord_memory_ps2a = res.next_chord_memory
+        ledger_ps2a = res.next_ledger
+        running_archives_ps2a = res.next_archives
+
+        rec = _format_beat_record(beat_num, phase, text, res, all_sensor_ms, beat_total_ms)
+        post_sleep_2a_reports.append(rec)
+        _print_beat_summary("POST-SLEEP EPOCH 2A", rec)
+
+    # =========================================================================
+    # POST-SLEEP EPOCH 2B: Unseen 4-Beat Harbor Bakehouse (0 LLM Calls!)
+    # =========================================================================
+    print("\n" + "=" * 78)
+    print("POST-SLEEP EPOCH 2B: UNSEEN 4-BEAT HARBOR BAKEHOUSE (0 LLM CALLS)")
+    print("=" * 78)
+
+    memory_ps2b = None
+    diary_ps2b = SettledDiary(max_entries=5)
+    chord_memory_ps2b = ChordMemoryBank(max_entries=16)
+    ledger_ps2b = ContemplationLedger(max_certainties=5, max_uncertainties=2)
+    running_archives_ps2b = ThreeBranchArchives(
+        executive=post_sleep_archives.executive.__class__(
+            precedents=(),
+            action_clauses=post_sleep_archives.executive.action_clauses,
+            max_entries=post_sleep_archives.executive.max_entries,
+        ),
+        legislative=post_sleep_archives.legislative,
+        judicial=post_sleep_archives.judicial,
+    )
+    post_sleep_2b_reports: list[dict] = []
+
+    for item in UNSEEN_BAKEHOUSE_BEATS:
+        beat_num = int(item["beat"])
+        phase = str(item["phase"])
+        text = str(item["text"])
+
+        sensor_call_latencies_ms.clear()
+        t0 = time.perf_counter()
+
+        res = settle_scenario(
+            birth,
+            text,
+            timed_sensors,
+            post_sleep_rules,
+            scene_index=beat_num,
+            left_brain=None,
+            learned_leaves=learned_leaves,
+            prior_memory=memory_ps2b,
+            diary=diary_ps2b,
+            chord_memory=chord_memory_ps2b,
+            contemplation_ledger=ledger_ps2b,
+            branch_archives=running_archives_ps2b,
+            max_passes=3,
+        )
+
+        beat_total_ms = round((time.perf_counter() - t0) * 1000.0, 2)
+        all_sensor_ms = round(sum(sensor_call_latencies_ms), 2)
+
+        memory_ps2b = res.next_memory
+        diary_ps2b = res.next_diary
+        chord_memory_ps2b = res.next_chord_memory
+        ledger_ps2b = res.next_ledger
+        running_archives_ps2b = res.next_archives
+
+        rec = _format_beat_record(beat_num, phase, text, res, all_sensor_ms, beat_total_ms)
+        post_sleep_2b_reports.append(rec)
+        _print_beat_summary("POST-SLEEP EPOCH 2B (UNSEEN)", rec)
 
     summary = {
-        "experiment": "dual_hemisphere_3branch_archives_and_self_talk_eval",
+        "experiment": "dual_hemisphere_3branch_archives_and_sleep_consolidation_eval",
         "epoch1_cold_learning": {
             "settled_beats": [b["beat"] for b in epoch1_reports if b["settled"]],
             "unresolved_beats": [b["beat"] for b in epoch1_reports if not b["settled"]],
@@ -450,7 +661,7 @@ def main() -> None:
             },
             "beats": epoch1_reports,
         },
-        "epoch2a_consolidated_parable": {
+        "pre_sleep_epoch2a_parable": {
             "settled_beats": [b["beat"] for b in epoch2a_reports if b["settled"]],
             "settled_count": sum(1 for b in epoch2a_reports if b["settled"]),
             "total_left_brain_calls": sum(b["left_brain_hails"] for b in epoch2a_reports),
@@ -460,7 +671,7 @@ def main() -> None:
             "audience_modes": {b["beat"]: b["audience_mode"] for b in epoch2a_reports},
             "beats": epoch2a_reports,
         },
-        "epoch2b_unseen_bakehouse_generalization": {
+        "pre_sleep_epoch2b_unseen_bakehouse": {
             "settled_beats": [b["beat"] for b in unseen_reports if b["settled"]],
             "settled_count": sum(1 for b in unseen_reports if b["settled"]),
             "total_beats": len(unseen_reports),
@@ -474,25 +685,59 @@ def main() -> None:
             "audience_modes": {b["beat"]: b["audience_mode"] for b in unseen_reports},
             "beats": unseen_reports,
         },
+        "sleep_consolidation_9b": {
+            "sleep_wall_ms": sleep_wall_ms,
+            **sleep_report.to_dict(),
+        },
+        "post_sleep_epoch2a_parable": {
+            "settled_beats": [b["beat"] for b in post_sleep_2a_reports if b["settled"]],
+            "settled_count": sum(1 for b in post_sleep_2a_reports if b["settled"]),
+            "total_left_brain_calls": sum(b["left_brain_hails"] for b in post_sleep_2a_reports),
+            "mean_beat_wall_ms": round(
+                sum(b["beat_wall_ms"] for b in post_sleep_2a_reports) / len(post_sleep_2a_reports), 2
+            ),
+            "audience_modes": {b["beat"]: b["audience_mode"] for b in post_sleep_2a_reports},
+            "beats": post_sleep_2a_reports,
+        },
+        "post_sleep_epoch2b_unseen_bakehouse": {
+            "settled_beats": [b["beat"] for b in post_sleep_2b_reports if b["settled"]],
+            "settled_count": sum(1 for b in post_sleep_2b_reports if b["settled"]),
+            "total_beats": len(post_sleep_2b_reports),
+            "total_left_brain_calls": sum(b["left_brain_hails"] for b in post_sleep_2b_reports),
+            "beat_3_social_drift_caught": bool(
+                post_sleep_2b_reports[2]["social_drift"]
+                and post_sleep_2b_reports[2]["social_drift"]["drift_detected"]
+            ),
+            "mean_beat_wall_ms": round(
+                sum(b["beat_wall_ms"] for b in post_sleep_2b_reports) / len(post_sleep_2b_reports), 2
+            ),
+            "audience_modes": {b["beat"]: b["audience_mode"] for b in post_sleep_2b_reports},
+            "beats": post_sleep_2b_reports,
+        },
     }
 
     out_path = repo_root / "outputs" / "dual_hemisphere_soil_eval_results.json"
     atomic_json(out_path, summary)
-    print(f"\nSaved full Dual-Hemisphere evaluation telemetry to {out_path}")
+    print(f"\nSaved full Dual-Hemisphere + Sleep-Consolidation telemetry to {out_path}")
     print(
         f"SUMMARY:\n"
-        f"  Epoch 1 (Cold Learning): settled={summary['epoch1_cold_learning']['settled_beats']}, "
-        f"Left-Brain calls={summary['epoch1_cold_learning']['total_left_brain_calls']}, "
-        f"Beat 2 false inversion fixed={summary['epoch1_cold_learning']['beat_2_false_inversion_fixed']}, "
-        f"Beat 6 social drift caught={summary['epoch1_cold_learning']['beat_6_social_drift_caught']}, "
-        f"Beat 8 open-thread closure={summary['epoch1_cold_learning']['beat_8_open_thread_closure_triggered']}\n"
-        f"  Epoch 2A (Consolidated 8-Beat Parable): settled={summary['epoch2a_consolidated_parable']['settled_count']}/8, "
-        f"Left-Brain calls={summary['epoch2a_consolidated_parable']['total_left_brain_calls']}, "
-        f"mean latency={summary['epoch2a_consolidated_parable']['mean_beat_wall_ms']} ms\n"
-        f"  Epoch 2B (Unseen 4-Beat Harbor Bakehouse): settled={summary['epoch2b_unseen_bakehouse_generalization']['settled_count']}/4, "
-        f"Left-Brain calls={summary['epoch2b_unseen_bakehouse_generalization']['total_left_brain_calls']}, "
-        f"Beat 3 social drift caught={summary['epoch2b_unseen_bakehouse_generalization']['beat_3_social_drift_caught']}, "
-        f"mean latency={summary['epoch2b_unseen_bakehouse_generalization']['mean_beat_wall_ms']} ms"
+        f"  Epoch 1 (Cold Learning): settled={summary['epoch1_cold_learning']['settled_beats']} "
+        f"({len(summary['epoch1_cold_learning']['settled_beats'])}/8), "
+        f"Left-Brain calls={summary['epoch1_cold_learning']['total_left_brain_calls']}\n"
+        f"  Pre-Sleep Epoch 2A (Parable, 0 LLM calls): settled={summary['pre_sleep_epoch2a_parable']['settled_count']}/8 "
+        f"{summary['pre_sleep_epoch2a_parable']['settled_beats']}, "
+        f"mean latency={summary['pre_sleep_epoch2a_parable']['mean_beat_wall_ms']} ms\n"
+        f"  Pre-Sleep Epoch 2B (Unseen Bakehouse, 0 LLM calls): settled={summary['pre_sleep_epoch2b_unseen_bakehouse']['settled_count']}/4 "
+        f"{summary['pre_sleep_epoch2b_unseen_bakehouse']['settled_beats']}, "
+        f"mean latency={summary['pre_sleep_epoch2b_unseen_bakehouse']['mean_beat_wall_ms']} ms\n"
+        f"  Offline 9B Sleep Consolidation: refined={sleep_report.refined_rule_ids}, "
+        f"forged={[r.concept_name for r in sleep_report.forged_rules]}\n"
+        f"  Post-Sleep Epoch 2A (Parable, 0 LLM calls): settled={summary['post_sleep_epoch2a_parable']['settled_count']}/8 "
+        f"{summary['post_sleep_epoch2a_parable']['settled_beats']}, "
+        f"mean latency={summary['post_sleep_epoch2a_parable']['mean_beat_wall_ms']} ms\n"
+        f"  Post-Sleep Epoch 2B (Unseen Bakehouse, 0 LLM calls): settled={summary['post_sleep_epoch2b_unseen_bakehouse']['settled_count']}/4 "
+        f"{summary['post_sleep_epoch2b_unseen_bakehouse']['settled_beats']}, "
+        f"mean latency={summary['post_sleep_epoch2b_unseen_bakehouse']['mean_beat_wall_ms']} ms"
     )
 
 

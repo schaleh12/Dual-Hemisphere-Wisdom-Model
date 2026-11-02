@@ -581,7 +581,7 @@ def _compile_three_way_synthesis(
         doer_strength = round(max(0.0, 1.0 - intention), 4)
         doer_summary = f"No urgent intervention needed (execution={execution:.2f})."
 
-    if fact >= CONFUSION_THRESHOLD and clarity >= CONFUSION_THRESHOLD and not raw_tensions:
+    if fact >= CONFUSION_THRESHOLD and clarity >= CONFUSION_THRESHOLD and (not raw_tensions or matched_ratified_chord):
         thinker_stance = "VERIFIED_EXTERNAL_FACT"
         thinker_strength = round(fact, 4)
         thinker_summary = f"Outside world directly matches a known instinct (fact={fact:.2f})."
@@ -666,11 +666,6 @@ def compile_right_brain_vibe(
     """Compile all 24 founding leaves while keeping external Fact separate from internal Theory."""
     locked_external = dict(external_coords)
     raw_rule_activations = _evaluate_rules_with_inhibition(rules, locked_external)
-    if (
-        float(locked_external.get("philosophical/structure/chaos", 0.0)) >= 0.45
-        or float(locked_external.get("experiential/phase/bittersweet_release", 0.0)) >= 0.45
-    ) and "solitary_autarky" in raw_rule_activations:
-        raw_rule_activations["solitary_autarky"] = 0.0
 
     salience = round(float(external_experiential[SALIENCE_LEAF]), 6)
     raw_valence = float(external_experiential[VALENCE_LEAF])
@@ -765,31 +760,35 @@ def compile_right_brain_vibe(
                 )
 
     ratified_chord_names: set[str] = set()
+    tension_resolving_chord_names: set[str] = set()
     active_theory_rules = list(rules)
-    if internal_theory_coords is not None and ratified_chords:
+    if ratified_chords:
         existing_names = {r.concept_name for r in active_theory_rules}
         for rc in ratified_chords:
             ratified_chord_names.add(rc.concept_name)
-            for req_leaf in rc.target_leaves:
-                if req_leaf not in theory_candidate_coords:
-                    theory_candidate_coords[req_leaf] = float(locked_external.get(req_leaf, 0.0))
-            if rc.concept_name not in existing_names:
-                active_theory_rules.append(rc)
-                existing_names.add(rc.concept_name)
+            if (
+                float(rc.target_leaves.get("cultural/justice/fairness", 1.0)) <= 0.35
+                or float(rc.target_leaves.get("cultural/justice/exclusionary_gatekeeping", 0.0)) >= 0.40
+            ):
+                tension_resolving_chord_names.add(rc.concept_name)
+            if internal_theory_coords is not None:
+                for req_leaf in rc.target_leaves:
+                    if req_leaf not in theory_candidate_coords:
+                        theory_candidate_coords[req_leaf] = float(locked_external.get(req_leaf, 0.0))
+                if rc.concept_name not in existing_names:
+                    active_theory_rules.append(rc)
+                    existing_names.add(rc.concept_name)
 
     theory_rule_activations = _evaluate_rules_with_inhibition(tuple(active_theory_rules), theory_candidate_coords)
-    if (
-        float(locked_external.get("philosophical/structure/chaos", 0.0)) >= 0.45
-        or float(locked_external.get("experiential/phase/bittersweet_release", 0.0)) >= 0.45
-    ) and "solitary_autarky" in theory_rule_activations:
-        theory_rule_activations["solitary_autarky"] = 0.0
 
     th_clarity, th_confidence, th_matched, th_confused, th_reason = compute_contemplation(theory_rule_activations)
+    allowed_chord_names = tension_resolving_chord_names if raw_tensions else ratified_chord_names
     matched_ratified_chord = bool(
-        internal_theory_coords is not None
-        and not th_confused
-        and th_matched in ratified_chord_names
-        and not dissonance_notes
+        not dissonance_notes
+        and (
+            (not raw_confused and raw_matched in allowed_chord_names)
+            or (internal_theory_coords is not None and not th_confused and th_matched in allowed_chord_names)
+        )
     )
 
     if dissonance_notes:
@@ -1489,6 +1488,7 @@ def settle_scenario(
         queried_child_leaves=queried_1,
         skipped_child_leaves=skipped_1,
         social_drift=social_drift,
+        ratified_chords=active_archives.judicial.ratified_chords,
     )
 
     initial_felt_chord = vibe_1.felt_chord or compile_felt_chord(

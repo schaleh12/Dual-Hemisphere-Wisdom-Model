@@ -1,0 +1,213 @@
+"""Unit tests for Offline 9B Sleep-Mode Consolidation (`sleep_consolidation.py`)."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+import pytest
+
+from lmft_lab.branch_archives import ThreeBranchArchives
+from lmft_lab.contemplation_ledger import ContemplationLedger, SubliminalMarginTag
+from lmft_lab.model_assets import ModelError
+from lmft_lab.reflection_classifier import FuzzyConceptRule, load_ruleset
+from lmft_lab.sleep_consolidation import (
+    UnresolvedSleepScene,
+    assert_domain_general_text,
+    refine_colliding_rules_during_sleep,
+    run_sleep_consolidation,
+)
+
+
+def test_assert_domain_general_text_rejects_banned_substrings():
+    banned = ("mason", "bakehouse", "lintel", "rye", "shutter")
+    assert (
+        assert_domain_general_text(
+            "An enclosed space restricts shared access behind rigid rules.",
+            banned_substrings=banned,
+        )
+        == "An enclosed space restricts shared access behind rigid rules."
+    )
+    with pytest.raises(ValueError, match="story-specific term"):
+        assert_domain_general_text(
+            "The mason carved rules into the lintel.",
+            banned_substrings=banned,
+        )
+
+
+def test_refine_colliding_rules_during_sleep_tightens_solitary_autarky():
+    rules = (
+        FuzzyConceptRule(
+            rule_id="rule-solitary-autarky",
+            concept_name="solitary_autarky",
+            description="Self-reliant individual existence without external dependencies.",
+            target_leaves={
+                "cultural/freedom/needlessness": 0.45,
+                "cultural/freedom/self-sufficiency": 0.65,
+                "philosophical/being/agency": 0.70,
+                "philosophical/persistence/continuity": 0.65,
+            },
+            low=0.60,
+            high=0.85,
+        ),
+    )
+    unresolved = (
+        UnresolvedSleepScene(
+            scene_index=5,
+            scenario_text="High-order enclosed scene where solitary_autarky misfired.",
+            external_coordinates={"philosophical/structure/chaos": 0.14},
+            felt_chord_notes={},
+            valence=0.40,
+            salience=0.80,
+            arousal=0.50,
+            left_brain_hunch="Rigid barrier blocks communal sharing.",
+            active_concept_collision="solitary_autarky",
+        ),
+    )
+    refined, refined_ids = refine_colliding_rules_during_sleep(rules, unresolved)
+    assert refined_ids == ("rule-solitary-autarky",)
+    r = refined[0]
+    assert r.target_leaves["philosophical/structure/chaos"] == 0.10
+    assert r.target_leaves["cultural/freedom/needlessness"] == 0.75
+    assert r.target_leaves["cultural/freedom/self-sufficiency"] == 0.75
+    assert r.low == 0.72
+    assert r.high == 0.88
+
+
+class _FakeSleepTeacher:
+    def __init__(self, payload_by_cluster: dict[str, dict[str, str]]):
+        self.payload_by_cluster = payload_by_cluster
+        self.calls = 0
+
+    def generate(self, role, request, prompt_version, validator):
+        self.calls += 1
+        user_msg = json.loads(request["messages"][1]["content"])
+        ckey = user_msg["pattern_id"]
+        raw = json.dumps(self.payload_by_cluster[ckey])
+        validated = validator(raw)
+        return validated, {"role": role, "prompt_version": prompt_version}
+
+
+def test_run_sleep_consolidation_forges_general_rules_and_rejects_story_nouns(tmp_path: Path):
+    base_rules = (
+        FuzzyConceptRule(
+            rule_id="rule-fair-cooperation",
+            concept_name="fair_structured_cooperation",
+            description="Orderly, fair cooperation where resources are shared equitably.",
+            target_leaves={
+                "cultural/justice/fairness": 0.90,
+                "philosophical/structure/order": 0.85,
+                "philosophical/structure/chaos": 0.10,
+            },
+        ),
+    )
+    unresolved = (
+        UnresolvedSleepScene(
+            scene_index=4,
+            scenario_text="A rigid gatekeeper enforces arbitrary entry rules that exclude outsiders.",
+            external_coordinates={
+                "cultural/efficiency/power": 0.67,
+                "cultural/efficiency/wastelessness": 0.61,
+                "cultural/justice/honor": 0.64,
+                "cultural/justice/fairness": 0.16,
+                "cultural/freedom/self-sufficiency": 0.35,
+                "cultural/freedom/needlessness": 0.25,
+                "cultural/justice/exclusionary_gatekeeping": 0.56,
+                "philosophical/being/agency": 0.70,
+                "philosophical/being/existence": 0.94,
+                "philosophical/structure/order": 0.84,
+                "philosophical/structure/chaos": 0.08,
+                "philosophical/persistence/continuity": 0.48,
+                "philosophical/persistence/discreteness": 0.78,
+            },
+            felt_chord_notes={
+                "experiential/phase/austere_sanctuary": 0.10,
+                "experiential/phase/hollow_stillness": 0.48,
+                "experiential/phase/bittersweet_release": 0.08,
+                "experiential/synchronization/earned_return": 0.15,
+            },
+            valence=0.35,
+            salience=0.80,
+            arousal=0.45,
+            left_brain_hunch="Rigid authority creates an exclusionary boundary that shuts out shared access.",
+            social_drift_detected=True,
+        ),
+    )
+
+    margin = SubliminalMarginTag(
+        clarity=0.25,
+        confidence=0.30,
+        felt_reaction="unsettled chill",
+        red_pen_prompt="What is missing?",
+    )
+    ledger = ContemplationLedger().record_uncertainty(
+        scene_index=4,
+        raw_hunch="Rigid authority creates an exclusionary boundary.",
+        open_question="What is missing?",
+        margin_tag=margin,
+    )
+    archives = ThreeBranchArchives()
+    banned = ("mason", "bakehouse", "lintel")
+
+    # 1. Verify that story-specific nouns from a Teacher are rejected
+    bad_teacher = _FakeSleepTeacher(
+        {
+            "exclusionary_enclosure_cluster": {
+                "concept_name": "rigid_exclusionary_enclosure",
+                "description": "The mason blocks access behind a carved lintel.",
+                "executive_clause_text": "Access is denied through strict gatekeeping.",
+                "legislative_clause_text": "Cold isolation replaces shared warmth.",
+                "judicial_clause_text": "A discrete physical boundary seals the interior.",
+            }
+        }
+    )
+    with pytest.raises(ModelError, match="story-specific term"):
+        run_sleep_consolidation(
+            unresolved_scenes=unresolved,
+            rules=base_rules,
+            learned_leaves=(),
+            archives=archives,
+            ledger=ledger,
+            teacher=bad_teacher,
+            banned_substrings=banned,
+        )
+
+    # 2. Verify that domain-general Teacher definitions succeed and persist to disk
+    good_teacher = _FakeSleepTeacher(
+        {
+            "exclusionary_enclosure_cluster": {
+                "concept_name": "rigid_exclusionary_enclosure",
+                "description": "Ordered authority erects a strict boundary that denies equitable access to shared resources.",
+                "executive_clause_text": "Strict access conditions exclude outsiders from a previously shared resource.",
+                "legislative_clause_text": "Cold, isolated stillness replaces warm communal relief.",
+                "judicial_clause_text": "High structural order and discrete boundaries seal the space from external flow.",
+            }
+        }
+    )
+    ruleset_out = tmp_path / "sleep_rules.json"
+    archives_dir = tmp_path / "archives"
+    ledger_out = tmp_path / "ledger.json"
+
+    report = run_sleep_consolidation(
+        unresolved_scenes=unresolved,
+        rules=base_rules,
+        learned_leaves=(),
+        archives=archives,
+        ledger=ledger,
+        teacher=good_teacher,
+        ruleset_out_path=ruleset_out,
+        archives_out_dir=archives_dir,
+        ledger_out_path=ledger_out,
+        banned_substrings=banned,
+    )
+    assert len(report.forged_rules) == 1
+    forged = report.forged_rules[0]
+    assert forged.concept_name == "rigid_exclusionary_enclosure"
+    assert forged.target_leaves["cultural/justice/fairness"] == 0.20
+    assert forged.target_leaves["philosophical/structure/order"] == 0.75
+    assert forged.target_leaves["philosophical/persistence/discreteness"] == 0.70
+    assert report.resolved_scene_indices == (4,)
+    assert len(report.updated_ledger.active_uncertainties) == 0
+    assert len(report.updated_archives.judicial.ratified_chords) == 1
+
+    reloaded = load_ruleset(ruleset_out)
+    assert len(reloaded) == 2
