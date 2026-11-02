@@ -46,17 +46,18 @@ Instead of dumping every decision onto one flat classifier—or calling a slow L
 | **Legislative (Feeler)** | `Contemplation <-> Experiential` | `experiential_felt_diary.json` | Scores emotional `Valence`, `Arousal`, `Clarity`, and multi-note **Felt Chords** (`austere_sanctuary`, `hollow_stillness`, `bittersweet_release`, `earned_return`). |
 | **Judicial (Thinker)** | `Truth <-> Philosophical` | `philosophical_lexicon.json` | Evaluates structural `Order`, `Chaos`, `Continuity`, `Discreteness`, and ratifies stable cross-branch chords (`harmony_score >= 0.72`). |
 
-When a scene arrives, all three classifiers deliberate in `~30 ms` (`deliberate_across_three_classifiers`) and emit a real-time governance verdict (`RATIFY_EQUILIBRIUM`, `CONTEST_EXCLUSION`, or `DEFER_TO_TEACHER`) with **zero LLM calls**.
+Instead of acting as a standalone decision-maker that replaces the language model—or dumping complex reasoning onto a single flat classifier—these three fast neural sensors (`~35 ms` total) act as the **non-verbal sensory and emotional organs** of the Right Brain. They continuously score incoming text and the Left Brain's own partial thoughts so that:
+1. Live emotional chords, social-drift warnings, and structural tensions can be spliced directly into the Left Brain's `<|subliminal_gap|>` thought stream during the **Three-Legged Race**, and
+2. Scenes where the three branches strongly disagree can be flagged for **Offline Sleep-Mode Consolidation**.
 
-### Breakthrough 3: Offline 9B "REM Sleep" Consolidation
-During live daytime interaction (`experiments/run_dual_hemisphere_soil_eval.py`), the system never pauses for 15 seconds to call a giant Teacher LLM.
-- Unsettled daytime scenes are held honestly in tension (`CONTEST_EXCLUSION` or `DEFER_TO_TEACHER`).
-- During offline **Sleep-Mode Consolidation** (`src/lmft_lab/sleep_consolidation.py`), `Qwen3.5-9B` wakes up, inspects the unsettled daytime scenes alongside the scenes that already settled, diagnoses why existing rules misfired or over-fired, and forges domain-general rules.
-- **Verified Live Results on RTX 4080**:
-  - **Pre-Sleep Daytime Pass (`0` LLM calls)**: Settled `5/8` beats (`71.1 ms`) on the 8-beat Community Seed Bank story and `1/4` (`53.9 ms`) on an unseen domain (the Harbor Sourdough Bakehouse).
-  - **Post-Sleep Daytime Pass (`0` LLM calls)**: After one offline `9B` Sleep-Mode pass, the fast Right-Brain classifiers settled **`7/8` beats (`65.9 ms`)** on the Seed Bank (honestly holding Beat 6 in `CONTEST_EXCLUSION` due to longitudinal `social_drift`) and **`4/4` (`46.7 ms`)** zero-shot on the unseen Harbor Bakehouse.
+### Breakthrough 3: Offline 9B "REM Sleep" Consolidation (Early Prototype Verified)
+During live daytime interaction, the system never pauses for 15 seconds to call a giant Teacher LLM.
+- Instead, unresolved daytime tensions are logged so that during an offline **Sleep-Mode Consolidation** pass (`src/lmft_lab/sleep_consolidation.py`), `Qwen3.5-9B` wakes up, inspects the scenes that confused the Right Brain alongside the scenes that settled cleanly, diagnoses why existing fuzzy rules misfired or over-fired, and forges domain-general rules.
+- **Initial Prototype Check (`experiments/run_dual_hemisphere_soil_eval.py`)**:
+  - In our initial small-scale test (an 8-beat Community Seed Bank story and an unseen 4-beat Harbor Bakehouse story), one offline `9B` Sleep-Mode pass repaired an overly broad `solitary_autarky` rule and improved the Right-Brain sensor's rule settlement from `5/8` to `7/8` on the Seed Bank and `1/4` to `4/4` on the unseen Bakehouse.
+  - **Why We Pivoted Beyond Standalone Classifiers**: While that prototype proved the offline Sleep-Mode concept, asking flat classifiers to carry the whole burden of evolving language and final verdicts is a dead end. That realization led directly to our core architecture below: **The Three-Legged Race**.
 
-### Breakthrough 4: The "Three-Legged Race" `<|subliminal_gap|>` Non-Verbal Embedding Splice
+### Breakthrough 4: The "Three-Legged Race" `<|subliminal_gap|>` Non-Verbal Embedding Splice (Active R&D — Stage 1 Complete, Stages 2–3 Next)
 How do you connect a non-verbal Right Brain to a verbal Left Brain (`Qwen3-4B`) without turning the Left Brain into a theater kid reading stage directions from a text prompt?
 
 We use the exact same neural mechanism that Vision-Language Models use to wire a camera into a blind text model ([`docs/SUBLIMINAL_GAP_SPLICE_BLUEPRINT.md`](docs/SUBLIMINAL_GAP_SPLICE_BLUEPRINT.md), [`src/lmft_lab/subliminal_gap_splice.py`](src/lmft_lab/subliminal_gap_splice.py)):
@@ -74,6 +75,9 @@ We use the exact same neural mechanism that Vision-Language Models use to wire a
 3. **Calm-Talk Deadband (`deadband = 0.45`) vs. Poetic Cadence Rupture (`M-A-C-H-I-N-E`)**:
    - During calm, harmonious conversation, `cadence_rupture_drive` stays strictly at `0.0` so the Left Brain speaks naturally without being overly twitchy or melodramatic.
    - When high arousal, hollow stillness, and high discreteness collide with low clarity above the deadband, `cadence_rupture_drive` spikes—physically yanking the Left Brain's hidden states out of smooth chatbot prose into stark, fractured, or spelled-out cadence (`no soul; M-A-C-H-I-N-E`).
+4. **Honest Current Implementation Status**:
+   - **Stage 1 (Done & Unit-Tested)**: The 37-float scale-invariant `SubliminalChordVector`, the 9 permanent parent-branch child pools, the deadband-gated `cadence_rupture_drive`, and the compartmentalized `SubliminalGapProjector` embedding splice are implemented and verified on a synthetic causal Transformer in [`tests/test_subliminal_gap_splice.py`](tests/test_subliminal_gap_splice.py).
+   - **Stages 2 & 3 (Next Up — Not Yet Tested on Live `Qwen3-4B`)**: Generating the offline `<|subliminal_gap|>` training trajectories with `Qwen3.5-9B` and training `SubliminalGapProjector` + LoRA on `Qwen3-4B` on the RTX 4080 to test live Three-Legged Race generation and the "Unplug-the-Cord" diagnostic.
 
 ---
 
