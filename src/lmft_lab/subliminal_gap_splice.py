@@ -582,7 +582,7 @@ class SubliminalChordVector:
 
         # 4. Three-Legged Race Cadence & Ankle-Rope Department Vector (3 floats):
         harmony = (
-            _clamp01(deliberation.harmony_score)
+            min(_clamp01(deliberation.harmony_score), _clamp01(vibe.synthesis.harmony))
             if deliberation is not None
             else _clamp01(vibe.synthesis.harmony)
         )

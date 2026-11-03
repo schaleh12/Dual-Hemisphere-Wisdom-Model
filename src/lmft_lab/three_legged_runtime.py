@@ -800,6 +800,7 @@ def run_three_legged_turn(
                 else active_archives.judicial.ratified_chords
             )
             cached_clause_1_prefix: str | None = clause_1_prefix
+            cached_comma_scores: dict[str, tuple[dict[str, float], dict[str, float]]] = {}
 
             for p in range(2, max_passes + 1):
                 prior_hunch_for_pass = latest_reply
@@ -823,11 +824,15 @@ def run_three_legged_turn(
                     _pass_idx: int = p,
                     _base_vibe: RightBrainVibe = current_vibe,
                 ) -> tuple[SubliminalChordVector, str | None, tuple[str, ...]]:
-                    comma_coords, comma_exp, _q_c, _s_c = sensors.score_text(
-                        comma_prefix,
-                        learned_leaves=learned_tuple,
-                        branch_gating=branch_gating,
-                    )
+                    if comma_prefix in cached_comma_scores:
+                        comma_coords, comma_exp = cached_comma_scores[comma_prefix]
+                    else:
+                        comma_coords, comma_exp, _q_c, _s_c = sensors.score_text(
+                            comma_prefix,
+                            learned_leaves=learned_tuple,
+                            branch_gating=branch_gating,
+                        )
+                        cached_comma_scores[comma_prefix] = (dict(comma_coords), dict(comma_exp))
                     raw_comma_vibe, _ = compile_right_brain_vibe(
                         birth_state,
                         external_coords,
