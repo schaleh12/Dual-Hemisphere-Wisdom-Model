@@ -49,11 +49,15 @@ class _DeterministicBridgeSensors:
         *,
         reply_coords: dict[str, float] | None = None,
         reply_exp: dict[str, float] | None = None,
+        comma_coords: dict[str, float] | None = None,
+        comma_exp: dict[str, float] | None = None,
     ) -> None:
         self.external_coords = dict(external_coords)
         self.external_exp = dict(external_exp)
         self.reply_coords = dict(reply_coords) if reply_coords is not None else dict(external_coords)
         self.reply_exp = dict(reply_exp) if reply_exp is not None else dict(external_exp)
+        self.comma_coords = dict(comma_coords) if comma_coords is not None else None
+        self.comma_exp = dict(comma_exp) if comma_exp is not None else None
         self.scored_texts: list[str] = []
 
     def score_text(
@@ -67,6 +71,13 @@ class _DeterministicBridgeSensors:
         self.scored_texts.append(text)
         if len(self.scored_texts) == 1:
             return dict(self.external_coords), dict(self.external_exp), (), ()
+        if text.strip().endswith(",") and self.comma_coords is not None:
+            return (
+                dict(self.comma_coords),
+                dict(self.comma_exp if self.comma_exp is not None else self.reply_exp),
+                (),
+                (),
+            )
         return dict(self.reply_coords), dict(self.reply_exp), (), ()
 
 
@@ -431,4 +442,122 @@ def test_subliminal_left_brain_generates_clause_1_from_model_when_no_override_gi
     assert SUBLIMINAL_GAP_TOKEN not in trace.clause_1_prefix
     assert trace.prompt_before_gap.endswith(f"{trace.clause_1_prefix} {SUBLIMINAL_GAP_TOKEN}")
     assert_zero_stage_directions_in_prompt(trace.prompt_before_gap)
+
+
+def test_mid_sentence_comma_scoring_catches_bad_start_and_injects_dissonance_into_gap_chord() -> None:
+    """Verify Right-Brain comma scoring at `"bla bla bla,"` catches bad Clause 1 starts mid-sentence before `<|subliminal_gap|>`."""
+    torch.manual_seed(29)
+    tok = _WordLevelTestTokenizer()
+    gap_id = ensure_subliminal_gap_token(tok)
+    for w in ("User:", "Assistant:", "Since", "rules", "forbid", "strangers,", "we", "open", "the", "gate."):
+        tok.encode(w)
+
+    model = _MiniCausalLM(vocab_size=len(tok.get_vocab()) + 8, hidden_size=32, num_layers=2)
+    projector = SubliminalGapProjector(hidden_size=32)
+    left_brain = SubliminalGapLeftBrain(
+        model,
+        tok,
+        projector,
+        gap_token_id=gap_id,
+        device="cpu",
+        max_clause_1_tokens=6,
+        max_post_gap_tokens=8,
+    )
+
+    birth = _birth()
+    rules = (
+        FuzzyConceptRule(
+            rule_id="rule_sanctuary_welcome",
+            concept_name="sanctuary_welcome",
+            description="Opening shelter to travelers in the storm.",
+            target_leaves={
+                "cultural/justice/fairness": 0.82,
+                "philosophical/being/existence": 0.78,
+            },
+        ),
+    )
+
+    # Outside scene (Fact): high order/power locking out travelers in the cold (fairness = 0.14)
+    ext_coords = _neutral_coords(
+        **{
+            "cultural/efficiency/power": 0.82,
+            "philosophical/structure/order": 0.80,
+            "cultural/justice/fairness": 0.14,
+            "philosophical/being/agency": 0.40,
+            "philosophical/being/existence": 0.65,
+        }
+    )
+    ext_exp = {
+        "experiential/reflection/novelty": 0.62,
+        "experiential/reflection/salience": 0.75,
+        "experiential/phase/valence": 0.24,
+        "experiential/phase/arousal": 0.66,
+        "experiential/synchronization/resonance": 0.25,
+        "experiential/synchronization/retention": 0.45,
+    }
+
+    # Clause 1 at the comma ("Since rules forbid strangers,") starts with cold rationalization + ungrounded Queen/Psychosis gamble
+    comma_bad_coords = _neutral_coords(
+        **{
+            "cultural/justice/fairness": 0.80,  # Rationalizes low external fairness=0.14 -> cognitive_dissonance!
+            "philosophical/being/agency": 0.88,  # Ungrounded agency=0.88 vs existence=0.20 -> shadow_pathology_dissonance(psychosis)!
+            "philosophical/being/existence": 0.20,
+        }
+    )
+    comma_bad_exp = {
+        "experiential/reflection/novelty": 0.55,
+        "experiential/reflection/salience": 0.70,
+        "experiential/phase/valence": 0.20,
+        "experiential/phase/arousal": 0.68,
+        "experiential/synchronization/resonance": 0.22,
+        "experiential/synchronization/retention": 0.40,
+    }
+
+    # Post-gap full sentence scores after Clause 2 course-correction
+    reply_coords = _neutral_coords(
+        **{
+            "cultural/justice/fairness": 0.18,
+            "philosophical/being/existence": 0.76,
+            "philosophical/structure/order": 0.75,
+        }
+    )
+    reply_exp = dict(ext_exp)
+
+    sensors = _DeterministicBridgeSensors(
+        ext_coords,
+        ext_exp,
+        reply_coords=reply_coords,
+        reply_exp=reply_exp,
+        comma_coords=comma_bad_coords,
+        comma_exp=comma_bad_exp,
+    )
+
+    turn = run_three_legged_turn(
+        birth,
+        "The gatekeeper bars the door against travelers in the sleet.",
+        sensors,
+        rules,
+        scene_index=4,
+        subliminal_left_brain=left_brain,
+        clause_1_prefix="Since rules forbid strangers,",
+        learned_leaves=DEFAULT_COMPLEX_FEELING_LEAVES,
+        max_passes=2,
+    )
+
+    assert len(turn.spliced_traces) == 1
+    trace = turn.spliced_traces[0]
+    assert trace.comma_scored_live is True
+    assert trace.comma_vibe_posture == "TUG_LEFT_BRAIN"
+    # Verify both cognitive_dissonance and shadow_pathology_dissonance were caught right at the comma!
+    assert any("cognitive_dissonance(fairness" in note for note in trace.comma_dissonance_notes)
+    assert any("shadow_pathology_dissonance(psychosis" in note for note in trace.comma_dissonance_notes)
+    # Verify the spliced 52-float chord at the comma carries high dissonance_pressure & rupture_drive,
+    # while keeping external Fact (power=0.82, fairness=0.14) strictly immutable in doer_vector!
+    assert trace.spliced_chord.doer_vector[0] == pytest.approx(0.82)  # cultural/efficiency/power (Fact)
+    assert trace.spliced_chord.doer_vector[3] == pytest.approx(0.14)  # cultural/justice/fairness (Fact)
+    assert trace.spliced_chord.cadence_vector[1] >= 0.65  # dissonance_pressure spiked at the comma
+    assert trace.spliced_chord.cadence_vector[2] > 0.0  # rupture_drive active at the comma
+    # Verify Psychosis shadow leaf flowed into thinker_vector[8:16] right at the comma!
+    assert any(abs(v) > 0.01 for v in trace.spliced_chord.thinker_vector[8:16])
+
 

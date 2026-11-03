@@ -31,8 +31,8 @@ directions in the LLM prompt:
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass, replace
 from pathlib import Path
 import re
 
@@ -149,6 +149,9 @@ class SplicedThoughtTrace:
     spliced_chord: SubliminalChordVector
     post_gap_continuation: str
     full_thought: str
+    comma_vibe_posture: str | None = None
+    comma_dissonance_notes: tuple[str, ...] = ()
+    comma_scored_live: bool = False
 
     def __post_init__(self) -> None:
         assert_zero_stage_directions_in_prompt(self.prompt_before_gap)
@@ -163,6 +166,9 @@ class SplicedThoughtTrace:
             "spliced_chord": self.spliced_chord.to_dict(),
             "post_gap_continuation": self.post_gap_continuation,
             "full_thought": self.full_thought,
+            "comma_vibe_posture": self.comma_vibe_posture,
+            "comma_dissonance_notes": list(self.comma_dissonance_notes),
+            "comma_scored_live": self.comma_scored_live,
         }
 
 
@@ -330,12 +336,19 @@ class SubliminalGapLeftBrain:
     def generate_two_clause_thought(
         self,
         scenario_text: str,
-        chord: SubliminalChordVector,
+        chord: SubliminalChordVector | None = None,
         *,
         pass_index: int = 2,
         clause_1_prefix: str | None = None,
+        chord_builder_at_comma: Callable[
+            [str],
+            SubliminalChordVector | tuple[SubliminalChordVector, str | None, tuple[str, ...]],
+        ]
+        | None = None,
     ) -> SplicedThoughtTrace:
-        """Step 2a-2c: Generate Clause 1, splice 52-float `chord` into `<|subliminal_gap|>`, and generate Clause 2."""
+        """Step 2a-2c: Generate Clause 1, assemble (or accept) 52-float `chord` right at the comma, splice into `<|subliminal_gap|>`, and generate Clause 2."""
+        if chord is None and chord_builder_at_comma is None:
+            raise ValueError("Either chord or chord_builder_at_comma must be provided")
         was_model_training = self.model.training
         was_proj_training = self.projector.training
         self.model.eval()
@@ -345,6 +358,20 @@ class SubliminalGapLeftBrain:
                 scenario_text,
                 clause_1_override=clause_1_prefix,
             )
+            comma_vibe_posture: str | None = None
+            comma_dissonance_notes: tuple[str, ...] = ()
+            comma_scored_live = False
+            if chord_builder_at_comma is not None:
+                built = chord_builder_at_comma(prefix)
+                comma_scored_live = True
+                if isinstance(built, tuple):
+                    active_chord, comma_vibe_posture, comma_dissonance_notes = built
+                else:
+                    active_chord = built
+            else:
+                assert chord is not None
+                active_chord = chord
+
             prompt_before_gap = (
                 f"User: {scenario_text.strip()}\n"
                 f"Assistant: {prefix} {SUBLIMINAL_GAP_TOKEN}"
@@ -359,7 +386,7 @@ class SubliminalGapLeftBrain:
 
             embed_layer = self.model.get_input_embeddings()
             embed_dtype = next(embed_layer.parameters()).dtype
-            chord_batch = chord.to_tensor(device=self.device, dtype=torch.float32).unsqueeze(0)
+            chord_batch = active_chord.to_tensor(device=self.device, dtype=torch.float32).unsqueeze(0)
 
             spliced = splice_subliminal_gaps_into_embeds(
                 pre_ids,
@@ -419,9 +446,12 @@ class SubliminalGapLeftBrain:
                 pass_index=pass_index,
                 clause_1_prefix=prefix,
                 prompt_before_gap=prompt_before_gap,
-                spliced_chord=chord,
+                spliced_chord=active_chord,
                 post_gap_continuation=post_gap_text,
                 full_thought=full_thought,
+                comma_vibe_posture=comma_vibe_posture,
+                comma_dissonance_notes=comma_dissonance_notes,
+                comma_scored_live=comma_scored_live,
             )
             self.last_traces.append(trace)
             return trace
@@ -494,6 +524,91 @@ class ThreeLeggedTurnResult:
         from .philosophical_abstraction_matrix import inspect_vibe_abstraction_profile
 
         return inspect_vibe_abstraction_profile(self.final_vibe)
+
+
+def _compile_mid_sentence_comma_vibe(
+    current_vibe: RightBrainVibe,
+    comma_vibe: RightBrainVibe,
+) -> RightBrainVibe:
+    """Combine pre-pass `current_vibe` with live mid-sentence `comma_vibe` at the comma before `<|subliminal_gap|>`.
+
+    - External `Fact` (`coordinates`, `fact`) remains strictly locked to the outside scene.
+    - `Theory` (`theory`, `theory_coordinates`) incorporates the live MiniLM reading of Clause 1 (`"bla bla bla,"`),
+      including any active Shadow Pathology leaves triggered by Clause 1.
+    - Any `dissonance_notes` or `synthesis.conflicts` triggered by Clause 1 at the comma immediately raise
+      `dissonance_pressure` and `rupture_drive` inside the 52-float nerve cord.
+    - While the sentence is only half spoken at the comma, `clarity` and `harmony` are capped at
+      `min(current_vibe, comma_vibe)` so a neutral setup clause never prematurely relaxes the tug before Clause 2.
+    """
+    merged_dissonance = tuple(
+        dict.fromkeys(
+            list(current_vibe.self_registry.dissonance_notes)
+            + list(comma_vibe.self_registry.dissonance_notes)
+        )
+    )
+    merged_conflicts = tuple(
+        dict.fromkeys(
+            list(current_vibe.synthesis.conflicts)
+            + list(comma_vibe.synthesis.conflicts)
+        )
+    )
+    merged_harmony = round(
+        min(float(current_vibe.synthesis.harmony), float(comma_vibe.synthesis.harmony)),
+        6,
+    )
+    merged_clarity = round(
+        min(float(current_vibe.clarity), float(comma_vibe.clarity)),
+        6,
+    )
+
+    merged_theory_coords = dict(current_vibe.theory_coordinates)
+    for tk, tv in comma_vibe.theory_coordinates.items():
+        if tk not in merged_theory_coords or tk.startswith("philosophical/"):
+            merged_theory_coords[tk] = max(float(merged_theory_coords.get(tk, 0.0)), float(tv))
+
+    merged_theory = (
+        0.0
+        if merged_dissonance
+        else round(max(float(current_vibe.theory), float(comma_vibe.theory)), 6)
+    )
+    merged_epistemic = (
+        "SELF_RATIONALIZATION_DISSONANCE"
+        if merged_dissonance
+        else comma_vibe.self_registry.epistemic_state
+    )
+    merged_registry = replace(
+        comma_vibe.self_registry,
+        epistemic_state=merged_epistemic,
+        dissonance_notes=merged_dissonance,
+    )
+    merged_synthesis = replace(
+        comma_vibe.synthesis,
+        harmony=merged_harmony,
+        conflicts=merged_conflicts,
+    )
+    merged_tug_reasons = tuple(
+        dict.fromkeys(
+            list(current_vibe.tug_reasons)
+            + list(comma_vibe.tug_reasons)
+            + list(merged_dissonance)
+        )
+    )
+    merged_posture = (
+        "TUG_LEFT_BRAIN"
+        if (merged_dissonance or current_vibe.posture == "TUG_LEFT_BRAIN" or comma_vibe.posture == "TUG_LEFT_BRAIN")
+        else comma_vibe.posture
+    )
+
+    return replace(
+        comma_vibe,
+        posture=merged_posture,
+        tug_reasons=merged_tug_reasons,
+        theory_coordinates=merged_theory_coords,
+        synthesis=merged_synthesis,
+        self_registry=merged_registry,
+        clarity=merged_clarity,
+        theory=merged_theory,
+    )
 
 
 def run_three_legged_turn(
@@ -679,6 +794,13 @@ def run_three_legged_turn(
                 if open_thread.triggered
                 else "LEFT_BRAIN_SUBLIMINAL_GAP_SPLICE"
             )
+            pass_ratified_chords = (
+                (deliberation.newly_ratified_chord,)
+                if (deliberation is not None and deliberation.newly_ratified_chord is not None)
+                else active_archives.judicial.ratified_chords
+            )
+            cached_clause_1_prefix: str | None = clause_1_prefix
+
             for p in range(2, max_passes + 1):
                 prior_hunch_for_pass = latest_reply
                 pre_pass_margin = _make_margin_tag_for_vibe(
@@ -695,18 +817,54 @@ def run_three_legged_turn(
                 )
                 last_hail = hail
 
-                chord_p = SubliminalChordVector.from_right_brain_vibe(
-                    current_vibe,
-                    deliberation=deliberation,
-                    social_drift=social_drift,
-                    learned_leaves=learned_tuple,
-                )
+                def _build_chord_at_comma(
+                    comma_prefix: str,
+                    *,
+                    _pass_idx: int = p,
+                    _base_vibe: RightBrainVibe = current_vibe,
+                ) -> tuple[SubliminalChordVector, str | None, tuple[str, ...]]:
+                    comma_coords, comma_exp, _q_c, _s_c = sensors.score_text(
+                        comma_prefix,
+                        learned_leaves=learned_tuple,
+                        branch_gating=branch_gating,
+                    )
+                    raw_comma_vibe, _ = compile_right_brain_vibe(
+                        birth_state,
+                        external_coords,
+                        external_exp,
+                        rules,
+                        pass_index=_pass_idx,
+                        event_id=f"scene-{scene_index}-pass-{_pass_idx}-comma",
+                        prior_memory=prior_memory,
+                        learned_leaves=learned_tuple,
+                        internal_theory_coords=comma_coords,
+                        internal_theory_experiential=comma_exp,
+                        queried_child_leaves=queried_1,
+                        skipped_child_leaves=skipped_1,
+                        social_drift=social_drift,
+                        ratified_chords=pass_ratified_chords,
+                    )
+                    mid_comma_vibe = _compile_mid_sentence_comma_vibe(_base_vibe, raw_comma_vibe)
+                    chord_at_comma = SubliminalChordVector.from_right_brain_vibe(
+                        mid_comma_vibe,
+                        deliberation=deliberation,
+                        social_drift=social_drift,
+                        learned_leaves=learned_tuple,
+                    )
+                    return (
+                        chord_at_comma,
+                        mid_comma_vibe.posture,
+                        mid_comma_vibe.self_registry.dissonance_notes,
+                    )
+
                 spliced_trace = subliminal_left_brain.generate_two_clause_thought(
                     scenario_text,
-                    chord_p,
                     pass_index=p,
-                    clause_1_prefix=clause_1_prefix,
+                    clause_1_prefix=cached_clause_1_prefix,
+                    chord_builder_at_comma=_build_chord_at_comma,
                 )
+                if clause_1_prefix is None:
+                    cached_clause_1_prefix = spliced_trace.clause_1_prefix
                 spliced_traces.append(spliced_trace)
                 reply_text = validate_plain_english_left_brain_reply(spliced_trace.full_thought)
                 left_calls += 1
@@ -718,12 +876,6 @@ def run_three_legged_turn(
                     reply_text,
                     learned_leaves=learned_tuple,
                     branch_gating=branch_gating,
-                )
-
-                pass_ratified_chords = (
-                    (deliberation.newly_ratified_chord,)
-                    if (deliberation is not None and deliberation.newly_ratified_chord is not None)
-                    else active_archives.judicial.ratified_chords
                 )
 
                 vibe_p, next_mem = compile_right_brain_vibe(

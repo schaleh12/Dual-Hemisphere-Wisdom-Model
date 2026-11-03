@@ -546,10 +546,15 @@ class SubliminalChordVector:
         #    6 Philosophical leaves + 2 Truth leaves + 8-float Philosophical Child Chord
         phil_6 = tuple(_clamp01(float(coords.get(k, 0.0))) for k in PHILOSOPHICAL_FOUNDING_ORDER)
         truth_2 = (_clamp01(vibe.theory), _clamp01(vibe.fact))
+        phil_extra_notes = dict(fc_notes)
+        if vibe.theory_coordinates:
+            for tk, tv in vibe.theory_coordinates.items():
+                if tk.startswith("philosophical/") and tk not in PHILOSOPHICAL_FOUNDING_ORDER:
+                    phil_extra_notes[tk] = max(float(phil_extra_notes.get(tk, 0.0)), float(tv))
         phil_child_chord_8 = pool_departmental_child_chord(
             coords,
             department_prefix="philosophical/",
-            extra_notes=fc_notes,
+            extra_notes=phil_extra_notes,
             learned_leaves=learned_leaves,
             leaf_descriptions=leaf_descriptions,
         )

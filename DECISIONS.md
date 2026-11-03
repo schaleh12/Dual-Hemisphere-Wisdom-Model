@@ -104,11 +104,9 @@
 - **Design Choice**: Defined `PHILOSOPHICAL_SHADOW_LEAVES` (`philosophical/being/psychosis`, `philosophical/being/paranoia`, `philosophical/structure/prejudice`, `philosophical/structure/corruption`, `philosophical/persistence/mania_greed`, `philosophical/persistence/narcissism`) as real Tier-2 `LearnedLeaf` child drawers with 8-float `anchor_weights` registered in `subliminal_gap_splice.py` (`_DEFAULT_LEAF_ANCHOR_WEIGHTS`); wired `sibling_color_balances` and `shadow_pathology_warnings` directly into `compile_right_brain_vibe` (`right_brain_equilibrium.py`) so active Shadow Pathologies populate `vibe.coordinates` (flowing into `thinker_vector[8:16]` inside `<|subliminal_gap|>`) and ungrounded Left-Brain shadow theories trigger `shadow_pathology_dissonance` in `dissonance_notes`; unified Chess-to-Leaf mappings (`CHESS_PIECE_TO_LEAF_ID`) and `PHILOSOPHICAL_SHADOW_LEAVES` in `gap_trajectory_schema.py`; and exposed live color/shadow telemetry on `ThreeLeggedTurnResult` (`three_legged_runtime.py`).
 - **Result**: Verified by 4 unit tests in `tests/test_philosophical_abstraction_matrix.py` (**`1,361`** total passing tests), confirming exact 5-tier metadata alignment, RGB/CMY complementary sum `(1.0, 1.0, 1.0)`, automatic routing of Shadow Pathology Tier-2 leaves into `thinker_vector[8:16]`, dissonance escalation on ungrounded Left-Brain shadow theories, and live telemetry on `ThreeLeggedTurnResult`.
 
+## D050: Live Mid-Sentence Comma Scoring at `<|subliminal_gap|>` (`three_legged_runtime.py`, `subliminal_gap_splice.py`, 2026-11-03)
 
-
-
-
-
-
-
+- **Context**: Previously in Gear 2 (`run_three_legged_turn`), the 52-float `SubliminalChordVector` was compiled *before* Clause 1 (`"bla bla bla,"`) was written, meaning the Right Brain never read how the Left Brain started its sentence before pulling the ankle-rope at the comma—and if Pass 2 failed, Pass 3 re-ran the 4B LLM from scratch on the identical greedy prompt to regenerate the same Clause 1 prefix.
+- **Design Choice**: Added `chord_builder_at_comma` to `SubliminalGapLeftBrain.generate_two_clause_thought` and `_compile_mid_sentence_comma_vibe` to `run_three_legged_turn` so that as soon as Clause 1 stops at the comma (`"bla bla bla,"`), the 3 MiniLM bridges score Clause 1 (~35 ms) as live `Theory` against immutable `Fact`, merge any Clause 1 `dissonance_notes`, `conflicts`, and `vibe.theory_coordinates` Shadow Pathology leaves into the 52-float `SubliminalChordVector` right before `<|subliminal_gap|>` (while capping `clarity` and `harmony` at `min(current_vibe, comma_vibe)` so a neutral setup clause never prematurely relaxes the tug), and cache `clause_1_prefix` across passes.
+- **Result**: Verified by `test_mid_sentence_comma_scoring_catches_bad_start_and_injects_dissonance_into_gap_chord` in `tests/test_three_legged_runtime.py` (**`1,362`** total passing tests), confirming that rationalizing or shadow-pathology Clause 1 starts immediately spike `dissonance_pressure`, `rupture_drive`, and `thinker_vector[8:16]` at the comma while keeping external `Fact` untouched.
 
