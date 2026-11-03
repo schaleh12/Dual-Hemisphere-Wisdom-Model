@@ -99,37 +99,37 @@ def build_subliminal_margin_tag(
     has_exclusion_tension: bool = False,
     prior_hunch_exists: bool = False,
 ) -> SubliminalMarginTag:
-    """Translate Right-Brain disagreement into a plain-English subliminal red-pen note."""
+    """Translate Right-Brain disagreement into a concise, domain-general coordinate margin note."""
     felt_reaction = felt_chord.short_stamp()
     if has_dissonance:
         red_pen = (
-            "That comforting explanation clashed with the cold reality in the room—"
-            "stop excusing the barrier and name who is actually being shut out."
+            f"Candidate framing clashed with depressed external coordinates "
+            f"(clarity={clarity:.2f}, confidence={confidence:.2f}); ground the revision in observed facts."
         )
     elif has_feeler_veto:
         red_pen = (
-            "Your framing sounded tidy on paper, yet a bleak emotional chill stayed unresolved—"
-            "revise your hunch to account for the human cost underneath the rules."
+            f"Candidate framing left low-valence experiential tension unresolved ({felt_reaction}); "
+            f"revise to account for the felt impact."
         )
     elif has_exclusion_tension and prior_hunch_exists:
         red_pen = (
-            "Tight structure is colliding with shut-out need—"
-            "sharpen your earlier hunch around how protection turned into exclusion."
+            f"High control/structure is colliding with a depressed value coordinate ({felt_reaction}); "
+            f"sharpen your earlier draft around that imbalance."
         )
     elif has_exclusion_tension:
         red_pen = (
-            "Surface order feels at odds with human fairness here—"
-            "ask whom this rule or barrier serves and whom it turns away."
+            f"Cross-branch value tension detected ({felt_reaction}); "
+            f"weigh the structural control against the human impact."
         )
     elif prior_hunch_exists:
         red_pen = (
-            "Your first hunch left lingering fog—"
-            "question what shifted in the scene and state a sharper, grounded revision."
+            f"Prior draft left low clarity ({clarity:.2f}); "
+            f"question what shifted in the scene and state a sharper revision."
         )
     else:
         red_pen = (
-            "Familiar habits do not cleanly settle this moment—"
-            "weigh the felt atmosphere against the memory echo to frame what changed."
+            f"Known rules do not cleanly settle this coordinate profile ({felt_reaction}); "
+            f"weigh the felt atmosphere against the memory echo."
         )
 
     return SubliminalMarginTag(

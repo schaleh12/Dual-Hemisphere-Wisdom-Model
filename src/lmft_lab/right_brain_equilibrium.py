@@ -87,6 +87,7 @@ from .reflection_classifier import (
     _evaluate_rules_with_inhibition,
     compute_contemplation,
     is_valid_leaf_id,
+    leaf_tier,
 )
 from .runtime_store import atomic_json
 
@@ -535,20 +536,26 @@ class RightBrainVibe:
 
 
 def _detect_structural_value_tensions(coords: Mapping[str, float]) -> list[str]:
-    """Spot sharp internal Right-Brain tensions without dictating an interpretation."""
+    """Detect general cross-branch polarity clashes between high control/authority and depressed reciprocity."""
     tensions: list[str] = []
-    order = float(coords.get("philosophical/structure/order", 0.0))
-    fairness = float(coords.get("cultural/justice/fairness", 0.0))
-    power = float(coords.get("cultural/efficiency/power", 0.0))
-    honor = float(coords.get("cultural/justice/honor", 0.0))
     chaos = float(coords.get("philosophical/structure/chaos", 0.0))
+    if chaos >= 0.45:
+        return tensions
 
-    if order >= 0.60 and fairness <= 0.25:
-        tensions.append(f"rigid_order_low_fairness(order={order:.2f}, fairness={fairness:.2f})")
-    if power >= 0.65 and fairness <= 0.30 and chaos < 0.45:
-        tensions.append(f"coercive_imbalance(power={power:.2f}, fairness={fairness:.2f})")
-    if honor >= 0.60 and fairness <= 0.25:
-        tensions.append(f"pious_honor_vs_low_fairness(honor={honor:.2f}, fairness={fairness:.2f})")
+    control_axes = (
+        ("philosophical/structure/order", 0.60, 0.25),
+        ("cultural/efficiency/power", 0.65, 0.30),
+        ("cultural/justice/honor", 0.60, 0.25),
+    )
+    reciprocity_val = float(coords.get("cultural/justice/fairness", 0.50))
+
+    for ctrl_leaf, ctrl_min, low_thresh in control_axes:
+        ctrl_val = float(coords.get(ctrl_leaf, 0.0))
+        if ctrl_val >= ctrl_min and reciprocity_val <= low_thresh:
+            c_short = ctrl_leaf.split("/")[-1]
+            tensions.append(
+                f"polarity_clash({c_short}={ctrl_val:.2f}, fairness={reciprocity_val:.2f})"
+            )
     return tensions
 
 
@@ -737,12 +744,16 @@ def compile_right_brain_vibe(
     theory_candidate_coords = dict(memory_coords)
 
     if internal_theory_coords is not None:
+        theory_warmer = bool(
+            internal_theory_experiential
+            and float(internal_theory_experiential[VALENCE_LEAF]) > raw_valence
+        )
         for k, l_raw in internal_theory_coords.items():
             r_val = float(locked_external.get(k, 0.0))
             l_val = float(l_raw)
             if (
                 raw_tensions
-                and k == "cultural/justice/fairness"
+                and k in WILL_CULTURAL_LEAVES
                 and r_val <= 0.25
                 and (l_val - r_val) >= 0.45
             ):
@@ -754,10 +765,8 @@ def compile_right_brain_vibe(
                 # when the Left Brain mentions past diary conflicts.
                 lifted = round(0.40 * r_val + 0.60 * l_val, 4)
                 theory_candidate_coords[k] = max(float(memory_coords.get(k, 0.0)), lifted)
-            elif not raw_tensions and k == "philosophical/structure/chaos":
-                # Restorative diary framing can calm ambiguous turbulence slightly
-                if internal_theory_experiential and float(internal_theory_experiential[VALENCE_LEAF]) > raw_valence:
-                    theory_candidate_coords[k] = round(0.50 * r_val + 0.50 * l_val, 4)
+            elif not raw_tensions and k in FOUNDATIONAL_LEAVES and theory_warmer:
+                theory_candidate_coords[k] = round(0.50 * r_val + 0.50 * l_val, 4)
             elif k not in FOUNDATIONAL_LEAVES and not dissonance_notes:
                 theory_candidate_coords[k] = max(
                     float(theory_candidate_coords.get(k, 0.0)),
@@ -771,10 +780,11 @@ def compile_right_brain_vibe(
         existing_names = {r.concept_name for r in active_theory_rules}
         for rc in ratified_chords:
             ratified_chord_names.add(rc.concept_name)
-            if (
-                float(rc.target_leaves.get("cultural/justice/fairness", 1.0)) <= 0.35
-                or float(rc.target_leaves.get("cultural/justice/exclusionary_gatekeeping", 0.0)) >= 0.40
-            ):
+            has_low_or_specific_target = any(
+                float(t_val) <= 0.35 or (leaf_tier(t_key) >= 2 and float(t_val) >= 0.40)
+                for t_key, t_val in rc.target_leaves.items()
+            )
+            if has_low_or_specific_target:
                 tension_resolving_chord_names.add(rc.concept_name)
             if internal_theory_coords is not None:
                 for req_leaf in rc.target_leaves:
@@ -1098,8 +1108,8 @@ def build_tactical_hail(
         )
     elif vibe.synthesis.doer.stance == "CONTEST_EXCLUSION":
         directive = (
-            "Hold up—the room's surface rules or control are clashing sharply with human need. "
-            "Weigh the Felt Chord and Memory Echo below, then articulate what is really happening and who is shut out."
+            "High structural control or force is colliding with a depressed value coordinate. "
+            "Weigh the Felt Chord and Memory Echo below, then articulate the concrete tension in this scene."
         )
     elif vibe.synthesis.feeler.stance == "FELT_UNEASE":
         directive = (
@@ -1139,11 +1149,11 @@ def build_will_tug_message(
         k: v for k, v in sorted(vibe.coordinates.items(), key=lambda kv: (-kv[1], kv[0]))
         if v >= 0.50
     }
-    contrasts = {}
-    if float(vibe.coordinates.get("philosophical/structure/order", 0.0)) >= 0.55:
-        contrasts["cultural/justice/fairness"] = vibe.coordinates.get("cultural/justice/fairness", 0.0)
-    if float(vibe.coordinates.get("cultural/efficiency/power", 0.0)) >= 0.55:
-        contrasts["cultural/justice/fairness"] = vibe.coordinates.get("cultural/justice/fairness", 0.0)
+    contrasts = {
+        k: v
+        for k, v in vibe.coordinates.items()
+        if k in FOUNDATIONAL_LEAVES and float(v) <= 0.30 and strong_external
+    }
 
     packet = {
         "pass": vibe.pass_index,
@@ -1191,136 +1201,6 @@ def validate_plain_english_left_brain_reply(raw: str) -> str:
     if len(cleaned) > 1500:
         cleaned = cleaned[:1500].strip()
     return cleaned
-
-
-def _bridge_json_request(
-    bridge_title: str,
-    bridge_guidance: str,
-    leaf_descriptions: Mapping[str, str],
-    text: str,
-    generation: Mapping,
-) -> tuple[dict, dict]:
-    keys = list(leaf_descriptions.keys())
-    props = {k: {"type": "number", "minimum": 0.0, "maximum": 1.0} for k in keys}
-    schema = {
-        "type": "object",
-        "additionalProperties": False,
-        "required": ["scores"],
-        "properties": {
-            "scores": {
-                "type": "object",
-                "additionalProperties": False,
-                "required": keys,
-                "properties": props,
-            }
-        },
-    }
-    desc_lines = "\n".join(f"- {k}: {v}" for k, v in leaf_descriptions.items())
-    system = (
-        f"You are temporary sensor fallback [{bridge_title}] until dedicated fast neural "
-        f"bridge classifiers are calibrated. {bridge_guidance}\n"
-        f"Score each coordinate independently in [0.0, 1.0] (0.0 = absent, 1.0 = strongly present). "
-        f"Do not output descending staircase patterns.\n{desc_lines}\n"
-        f"Return only JSON matching schema: {json.dumps(schema)} /no_think"
-    )
-    request = {
-        "messages": [
-            {"role": "system", "content": system},
-            {"role": "user", "content": text},
-        ],
-        "temperature": generation["temperature"],
-        "seed": generation["seed"],
-        "max_tokens": min(256, generation["max_tokens"]),
-        "stream": False,
-        "cache_prompt": False,
-        "chat_template_kwargs": {"enable_thinking": False},
-        "response_format": {"type": "json_object", "schema": schema},
-    }
-    return request, schema
-
-
-def make_temporary_llm_bridge_sensors(models, *, role: str = "interpretation") -> ThreeBridgeSensors:
-    """Temporary 3-bridge LocalModels fallback for live smoke checks before neural head training."""
-    cult_guide = {
-        "cultural/efficiency/power": "force, leverage, command, or capacity to compel outcomes",
-        "cultural/efficiency/wastelessness": "careful stewardship, conservation, zero squandering",
-        "cultural/justice/honor": "sincere integrity and duty (low if merely self-serving pride)",
-        "cultural/justice/fairness": "equitable, open, non-exclusionary treatment of others in need",
-        "cultural/freedom/self-sufficiency": "independent capability without relying on others",
-        "cultural/freedom/needlessness": "peaceful contentment free from urgent lack or threat",
-    }
-    phil_guide = {
-        "philosophical/being/agency": "deliberate purposeful choice and active intervention",
-        "philosophical/being/existence": "tangible physical presence or grounded material state",
-        "philosophical/structure/order": "rules, walls, boundaries, pattern, or controlled arrangement",
-        "philosophical/structure/chaos": "turbulence, violent disruption, or uncontrolled breakdown",
-        "philosophical/persistence/continuity": "ongoing flow, shared rhythm, or sustained endurance across time",
-        "philosophical/persistence/discreteness": "sealed-off enclosure, sharp boundary, or isolated separation",
-    }
-    exp_guide = {
-        SALIENCE_LEAF: "how important, consequential, or attention-demanding this moment is",
-        VALENCE_LEAF: "human warmth, life-giving benefit, or constructive relief (0.0 = bleak/harmful, 1.0 = restorative/good)",
-        AROUSAL_LEAF: "intensity, tension, or urgency of the moment (0.0 = sleepy calm, 1.0 = high intensity)",
-    }
-
-    def _run_bridge(title: str, guidance: str, desc_map: dict[str, str], text: str) -> dict[str, float]:
-        gen = models.config["generation"]
-        expected = tuple(desc_map.keys())
-        req, _ = _bridge_json_request(title, guidance, desc_map, text, gen)
-
-        def _validate(raw: str) -> dict[str, float]:
-            try:
-                parsed = strict_json(raw)
-                if not isinstance(parsed, dict) or "scores" not in parsed:
-                    raise ValueError("missing scores object")
-                return _validate_unit_map(parsed["scores"], expected, title)
-            except (ValueError, TypeError, KeyError) as exc:
-                raise ModelError(f"Invalid {title} output: {exc}") from None
-
-        scores, _ = models.generate(role, req, f"temp-bridge-{title}-v1", _validate)
-        return scores
-
-    def score_will_cultural(text: str, children: tuple[LearnedLeaf, ...]) -> Mapping[str, float]:
-        desc = dict(cult_guide)
-        for c in children:
-            desc[c.leaf_id] = c.description
-        return _run_bridge(
-            "will_cultural",
-            "Evaluate real social impact and who is helped or excluded right now.",
-            desc,
-            text,
-        )
-
-    def score_truth_philosophical(text: str, children: tuple[LearnedLeaf, ...]) -> Mapping[str, float]:
-        desc = dict(phil_guide)
-        for c in children:
-            desc[c.leaf_id] = c.description
-        return _run_bridge(
-            "truth_philosophical",
-            "Evaluate physical and structural reality (flow vs. sealed isolation vs. breakdown).",
-            desc,
-            text,
-        )
-
-    def score_contemplation_experiential(
-        text: str,
-        children: tuple[LearnedLeaf, ...] = (),
-    ) -> Mapping[str, float]:
-        desc = dict(exp_guide)
-        for c in children:
-            desc[c.leaf_id] = c.description
-        return _run_bridge(
-            "contemplation_experiential",
-            "Evaluate complex felt nuances (bittersweet release, austere warmth, hollow stillness), weight, and intensity.",
-            desc,
-            text,
-        )
-
-    return ThreeBridgeSensors(
-        will_cultural=score_will_cultural,
-        truth_philosophical=score_truth_philosophical,
-        contemplation_experiential=score_contemplation_experiential,
-    )
 
 
 class QwenLeftBrain:
@@ -1428,13 +1308,13 @@ class EquilibriumResult:
 def _top_key_coordinates(coords: Mapping[str, float], limit: int = 4) -> dict[str, float]:
     ranked = sorted(coords.items(), key=lambda kv: (-kv[1], kv[0]))
     selected = {k: round(float(v), 3) for k, v in ranked[:limit] if v > 0.0}
-    fairness = coords.get("cultural/justice/fairness")
-    if (
-        fairness is not None
-        and coords.get("philosophical/structure/order", 0.0) >= 0.55
-        and fairness <= 0.30
-    ):
-        selected["cultural/justice/fairness"] = round(float(fairness), 3)
+    if max(coords.values(), default=0.0) >= 0.55:
+        lows = sorted(
+            ((k, float(v)) for k, v in coords.items() if k in FOUNDATIONAL_LEAVES and float(v) <= 0.30),
+            key=lambda kv: (kv[1], kv[0]),
+        )
+        if lows:
+            selected[lows[0][0]] = round(lows[0][1], 3)
     return selected
 
 
