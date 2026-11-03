@@ -340,6 +340,48 @@ def compute_post_gap_continuation_nll(
     )
 
 
+def compute_no_gap_continuation_nll(
+    model: nn.Module,
+    tokenizer,
+    pair: ContrastiveGapPair,
+    *,
+    continuation_text: str,
+    device: str | torch.device,
+) -> Tensor:
+    """Compute the pure text-only NLL on `continuation_text` right after `clause_1_prefix` with `<|subliminal_gap|>` omitted."""
+    pre_str = f"User: {pair.user_prompt.strip()}\nAssistant: {pair.clause_1_prefix.strip()}"
+    pre_ids: list[int] = list(tokenizer.encode(pre_str, add_special_tokens=True))
+    cont_ids: list[int] = list(tokenizer.encode(" " + continuation_text.strip(), add_special_tokens=False))
+    if not cont_ids:
+        raise ValueError(f"Continuation tokenized to empty sequence: {continuation_text!r}")
+    if getattr(tokenizer, "eos_token_id", None) is not None:
+        cont_ids.append(int(tokenizer.eos_token_id))
+
+    full_ids = torch.tensor([pre_ids + cont_ids], dtype=torch.long, device=device)
+    attn_mask = torch.ones_like(full_ids, dtype=torch.long, device=device)
+    labels = full_ids.clone()
+    labels[:, : len(pre_ids)] = IGNORE_LABEL_INDEX
+
+    word_embed_fn = model.get_input_embeddings()
+    embeds = word_embed_fn(full_ids)
+    out = model(
+        inputs_embeds=embeds,
+        attention_mask=attn_mask,
+        labels=labels,
+        use_cache=False,
+    )
+    if out.loss is not None:
+        return out.loss
+
+    logits = out.logits[:, :-1, :].contiguous()
+    shift_labels = labels[:, 1:].contiguous()
+    return F.cross_entropy(
+        logits.view(-1, logits.size(-1)),
+        shift_labels.view(-1),
+        ignore_index=IGNORE_LABEL_INDEX,
+    )
+
+
 def compute_contrastive_pair_loss(
     model: nn.Module,
     tokenizer,
@@ -528,6 +570,14 @@ class HoldoutPairEvalResult:
     generated_continuation_b: str
     greedy_text_changed: bool
     generated_sensor_l2: float
+    zero_chord_prior_bias: float = 0.0
+    zero_calibrated_margin_under_chord_a: float = 0.0
+    zero_calibrated_margin_under_chord_b: float = 0.0
+    zero_calibrated_both_flipped: bool = False
+    no_gap_prior_bias: float = 0.0
+    no_gap_calibrated_margin_under_chord_a: float = 0.0
+    no_gap_calibrated_margin_under_chord_b: float = 0.0
+    no_gap_calibrated_both_flipped: bool = False
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -543,6 +593,14 @@ class HoldoutPairEvalResult:
             "margin_under_chord_b": self.margin_under_chord_b,
             "net_chord_swap_margin": self.net_chord_swap_margin,
             "both_branches_flipped": self.both_branches_flipped,
+            "zero_chord_prior_bias": self.zero_chord_prior_bias,
+            "zero_calibrated_margin_under_chord_a": self.zero_calibrated_margin_under_chord_a,
+            "zero_calibrated_margin_under_chord_b": self.zero_calibrated_margin_under_chord_b,
+            "zero_calibrated_both_flipped": self.zero_calibrated_both_flipped,
+            "no_gap_prior_bias": self.no_gap_prior_bias,
+            "no_gap_calibrated_margin_under_chord_a": self.no_gap_calibrated_margin_under_chord_a,
+            "no_gap_calibrated_margin_under_chord_b": self.no_gap_calibrated_margin_under_chord_b,
+            "no_gap_calibrated_both_flipped": self.no_gap_calibrated_both_flipped,
             "positive_chord_swap_shift": self.positive_chord_swap_shift,
             "unplugged_chord_swap_shift": self.unplugged_chord_swap_shift,
             "generated_continuation_a": self.generated_continuation_a,
@@ -566,11 +624,15 @@ class HoldoutEvaluationSummary:
     greedy_text_changed_count: int
     mean_generated_sensor_l2: float
     pair_results: tuple[HoldoutPairEvalResult, ...]
+    zero_calibrated_both_flipped_count: int = 0
+    no_gap_calibrated_both_flipped_count: int = 0
 
     def to_dict(self) -> dict[str, object]:
         return {
             "total_holdout_pairs": self.total_holdout_pairs,
             "both_branches_flipped_count": self.both_branches_flipped_count,
+            "zero_calibrated_both_flipped_count": self.zero_calibrated_both_flipped_count,
+            "no_gap_calibrated_both_flipped_count": self.no_gap_calibrated_both_flipped_count,
             "positive_chord_swap_shift_count": self.positive_chord_swap_shift_count,
             "mean_margin_under_chord_a": self.mean_margin_under_chord_a,
             "mean_margin_under_chord_b": self.mean_margin_under_chord_b,
@@ -720,6 +782,33 @@ def evaluate_holdout_pairs(
                 abs(nll_zero_ba - nll_zero_aa) + abs(nll_zero_ab - nll_zero_bb), 6
             )
 
+            # Unplugged zero-chord baseline bias and text-only no-gap LLM prior bias
+            zero_prior_bias = round(nll_zero_ab - nll_zero_aa, 6)
+            zero_cal_ma = round(margin_a - zero_prior_bias, 6)
+            zero_cal_mb = round(margin_b + zero_prior_bias, 6)
+
+            nll_nogap_a = float(
+                compute_no_gap_continuation_nll(
+                    model,
+                    tokenizer,
+                    pair,
+                    continuation_text=pair.continuation_a,
+                    device=device,
+                ).item()
+            )
+            nll_nogap_b = float(
+                compute_no_gap_continuation_nll(
+                    model,
+                    tokenizer,
+                    pair,
+                    continuation_text=pair.continuation_b,
+                    device=device,
+                ).item()
+            )
+            nogap_prior_bias = round(nll_nogap_b - nll_nogap_a, 6)
+            nogap_cal_ma = round(margin_a - nogap_prior_bias, 6)
+            nogap_cal_mb = round(margin_b + nogap_prior_bias, 6)
+
             # --- Check C: Greedy Post-Gap Generation + 3-Bridge MiniLM Sensor Verification ---
             gen_a = generate_post_gap_continuation_greedy(
                 model,
@@ -784,6 +873,14 @@ def evaluate_holdout_pairs(
                     generated_continuation_b=gen_b,
                     greedy_text_changed=text_changed,
                     generated_sensor_l2=round(gen_l2, 6),
+                    zero_chord_prior_bias=zero_prior_bias,
+                    zero_calibrated_margin_under_chord_a=zero_cal_ma,
+                    zero_calibrated_margin_under_chord_b=zero_cal_mb,
+                    zero_calibrated_both_flipped=(zero_cal_ma > 0.0 and zero_cal_mb > 0.0),
+                    no_gap_prior_bias=nogap_prior_bias,
+                    no_gap_calibrated_margin_under_chord_a=nogap_cal_ma,
+                    no_gap_calibrated_margin_under_chord_b=nogap_cal_mb,
+                    no_gap_calibrated_both_flipped=(nogap_cal_ma > 0.0 and nogap_cal_mb > 0.0),
                 )
             )
     finally:
@@ -800,6 +897,8 @@ def evaluate_holdout_pairs(
     max_unplug = round(max((r.unplugged_chord_swap_shift for r in results), default=0.0), 6)
     changed_cnt = sum(1 for r in results if r.greedy_text_changed)
     mean_gen_l2 = round(sum(r.generated_sensor_l2 for r in results) / n_total, 6) if n_total else 0.0
+    zero_cal_flipped = sum(1 for r in results if r.zero_calibrated_both_flipped)
+    nogap_cal_flipped = sum(1 for r in results if r.no_gap_calibrated_both_flipped)
 
     return HoldoutEvaluationSummary(
         total_holdout_pairs=n_total,
@@ -812,6 +911,8 @@ def evaluate_holdout_pairs(
         greedy_text_changed_count=changed_cnt,
         mean_generated_sensor_l2=mean_gen_l2,
         pair_results=tuple(results),
+        zero_calibrated_both_flipped_count=zero_cal_flipped,
+        no_gap_calibrated_both_flipped_count=nogap_cal_flipped,
     )
 
 

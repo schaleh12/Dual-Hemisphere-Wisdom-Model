@@ -262,6 +262,17 @@ def test_train_and_holdout_eval_flips_branches_and_unplugs_cleanly(tmp_path: Pat
     # Unplug-the-Cord Check: zeroed 52-float chord produces 0.0 difference between A and B chord slots
     assert res.unplugged_chord_swap_shift == 0.0
     assert res.greedy_text_changed is True
+    # Prior-calibrated fields must be populated and consistent with net_chord_swap_margin
+    assert abs(
+        (res.zero_calibrated_margin_under_chord_a + res.zero_calibrated_margin_under_chord_b)
+        - res.net_chord_swap_margin
+    ) < 1e-4
+    assert abs(
+        (res.no_gap_calibrated_margin_under_chord_a + res.no_gap_calibrated_margin_under_chord_b)
+        - res.net_chord_swap_margin
+    ) < 1e-4
+    assert isinstance(summary.zero_calibrated_both_flipped_count, int)
+    assert isinstance(summary.no_gap_calibrated_both_flipped_count, int)
 
     # Verify checkpoint save & reload round-trip (sleep_cycle_index = 1)
     ckpt_dir = tmp_path / "left_brain_lora"
@@ -318,5 +329,8 @@ def test_saved_stage3_gpu_report_and_checkpoint_artifacts_exist() -> None:
 
     post = report["post_training_holdout_evaluation"]
     assert post["max_unplugged_chord_swap_shift"] == 0.0
+    assert post["both_branches_flipped_count"] == 0
+    assert post["zero_calibrated_both_flipped_count"] == 3
+    assert post["no_gap_calibrated_both_flipped_count"] == 4
     assert len(post["pair_results"]) == 6
 

@@ -222,6 +222,8 @@ def main() -> None:
     print("=" * 78)
     print(f"Peak VRAM allocated                 : {peak_vram_gb:.3f} GB")
     print(f"Check A (Both Branches Flipped)     : {post_train_summary.both_branches_flipped_count} / {post_train_summary.total_holdout_pairs}")
+    print(f"Check A (Zero-Chord Calibrated Flip): {post_train_summary.zero_calibrated_both_flipped_count} / {post_train_summary.total_holdout_pairs}")
+    print(f"Check A (No-Gap Calibrated Flip)    : {post_train_summary.no_gap_calibrated_both_flipped_count} / {post_train_summary.total_holdout_pairs}")
     print(f"Check A (Positive Chord-Swap Shift) : {post_train_summary.positive_chord_swap_shift_count} / {post_train_summary.total_holdout_pairs}")
     print(f"Check A (Mean Net Chord-Swap Margin): {post_train_summary.mean_net_chord_swap_margin:+.4f} (pre-train: {pre_train_summary.mean_net_chord_swap_margin:+.4f})")
     print(f"Check B (Max Unplugged Shift)       : {post_train_summary.max_unplugged_chord_swap_shift:.6f}")
