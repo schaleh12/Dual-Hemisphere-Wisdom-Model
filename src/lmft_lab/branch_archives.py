@@ -100,16 +100,22 @@ def _coord_similarity(a: Mapping[str, float], b: Mapping[str, float], min_active
 def classify_access_state(coordinates: Mapping[str, float]) -> str:
     """Classify a scene's social access posture from its Right-Brain coordinates."""
     fairness = float(coordinates.get("cultural/justice/fairness", 0.0))
-    gatekeeping = float(coordinates.get("cultural/justice/exclusionary_gatekeeping", 0.0))
     discreteness = float(coordinates.get("philosophical/persistence/discreteness", 0.0))
+    continuity = float(coordinates.get("philosophical/persistence/continuity", 0.0))
     order = float(coordinates.get("philosophical/structure/order", 0.0))
-    hollow = float(coordinates.get("experiential/phase/hollow_stillness", 0.0))
-    sanctuary = float(coordinates.get("experiential/phase/austere_sanctuary", 0.0))
-    release = float(coordinates.get("experiential/phase/bittersweet_release", 0.0))
+    valence = float(coordinates.get(VALENCE_LEAF, 0.50))
 
-    if fairness >= 0.65 and gatekeeping < 0.25 and hollow < 0.35 and (sanctuary >= 0.45 or release >= 0.45 or discreteness < 0.72):
+    # Any active Tier-2/3 child leaf under cultural/justice when fairness is not high signals justice friction
+    justice_child_active = any(
+        float(v) >= 0.35
+        for k, v in coordinates.items()
+        if k.startswith("cultural/justice/")
+        and k not in ("cultural/justice/fairness", "cultural/justice/honor")
+    )
+
+    if fairness >= 0.65 and not justice_child_active and (continuity >= 0.45 or discreteness < 0.72 or valence >= 0.55):
         return "OPEN_SHARED"
-    if fairness <= 0.38 or gatekeeping >= 0.35 or hollow >= 0.45:
+    if fairness <= 0.38 or justice_child_active:
         return "SEALED_EXCLUSIONARY"
     if order >= 0.70 and discreteness >= 0.65 and fairness < 0.65:
         return "GATED_CONDITIONAL"
@@ -253,11 +259,11 @@ class ExecutiveCulturalArchive:
         cur_disc = float(current_coordinates.get("philosophical/persistence/discreteness", 0.0))
         cur_order = float(current_coordinates.get("philosophical/structure/order", 0.0))
         cur_chaos = float(current_coordinates.get("philosophical/structure/chaos", 0.0))
+        cur_cont = float(current_coordinates.get("philosophical/persistence/continuity", 0.0))
         cur_fair = float(current_coordinates.get("cultural/justice/fairness", 0.0))
-        cur_release = float(current_coordinates.get("experiential/phase/bittersweet_release", 0.0))
 
         # If current moment breaks the barrier open or restores high open sharing, drift ends
-        if cur_chaos >= 0.45 or cur_release >= 0.45 or (cur_fair >= 0.78 and cur_disc < 0.55):
+        if cur_chaos >= 0.45 or (cur_fair >= 0.70 and cur_cont >= 0.55) or (cur_fair >= 0.78 and cur_disc < 0.55):
             return SocialDriftReport(drift_detected=False)
 
         if cur_disc >= 0.65 and cur_order >= 0.60:
@@ -573,15 +579,10 @@ def _executive_clause_compatible(
     clause_sig: Mapping[str, float],
 ) -> bool:
     s_fair = float(scene_cult.get("cultural/justice/fairness", 0.50))
-    s_gate = float(scene_cult.get("cultural/justice/exclusionary_gatekeeping", 0.0))
     c_fair = float(clause_sig.get("cultural/justice/fairness", 0.50))
-    c_gate = float(clause_sig.get("cultural/justice/exclusionary_gatekeeping", 0.0))
-
-    scene_excl = s_fair <= 0.38 or s_gate >= 0.35
-    clause_excl = c_fair <= 0.38 or c_gate >= 0.35
-    if scene_excl != clause_excl:
+    if (s_fair <= 0.38) != (c_fair <= 0.38):
         return False
-    return True
+    return abs(s_fair - c_fair) <= 0.45
 
 
 def _legislative_clause_compatible(
@@ -589,15 +590,10 @@ def _legislative_clause_compatible(
     clause_sig: Mapping[str, float],
 ) -> bool:
     s_val = float(scene_exp.get(VALENCE_LEAF, 0.50))
-    s_hollow = float(scene_exp.get("experiential/phase/hollow_stillness", 0.0))
     c_val = float(clause_sig.get(VALENCE_LEAF, 0.50))
-    c_hollow = float(clause_sig.get("experiential/phase/hollow_stillness", 0.0))
-
-    scene_bleak = s_hollow >= 0.45 or s_val <= 0.42
-    clause_bleak = c_hollow >= 0.45 or c_val <= 0.42
-    if scene_bleak != clause_bleak:
+    if (s_val <= 0.42) != (c_val <= 0.42):
         return False
-    return True
+    return abs(s_val - c_val) <= 0.42
 
 
 def _judicial_clause_compatible(
@@ -652,15 +648,17 @@ def build_three_branch_chord_rule(
 
     target_leaves: dict[str, float] = {}
 
-    # 1. Executive (Cultural) anchor: include fairness polarity from the archived Executive clause
-    fairness = float(cult.get("cultural/justice/fairness", 0.50))
-    gatekeeping = float(cult.get("cultural/justice/exclusionary_gatekeeping", 0.0))
-    if fairness <= 0.38 or gatekeeping >= 0.35:
-        target_leaves["cultural/justice/fairness"] = round(min(0.28, fairness), 2)
-        if gatekeeping >= 0.45:
-            target_leaves["cultural/justice/exclusionary_gatekeeping"] = round(min(0.65, gatekeeping), 2)
-    else:
-        target_leaves["cultural/justice/fairness"] = round(min(0.75, fairness), 2)
+    # 1. Executive (Cultural) anchor: select strongest extreme or salient leaf in cultural/
+    low_cult = sorted((kv for kv in cult.items() if kv[1] <= 0.38), key=lambda kv: (kv[1], kv[0]))
+    high_cult = sorted((kv for kv in cult.items() if kv[1] >= 0.50), key=lambda kv: (-kv[1], kv[0]))
+    if low_cult:
+        target_leaves[low_cult[0][0]] = round(min(0.28, low_cult[0][1]), 2)
+        for k, v in high_cult:
+            if k not in FOUNDATIONAL_LEAVES and v >= 0.45:
+                target_leaves[k] = round(min(0.65, v), 2)
+                break
+    elif high_cult:
+        target_leaves[high_cult[0][0]] = round(min(0.75, high_cult[0][1]), 2)
 
     # 2. Judicial (Philosophical) anchor: pick strongest structural leaf from the archived Judicial clause
     chaos = float(phil.get("philosophical/structure/chaos", 0.0))
@@ -812,13 +810,11 @@ def deliberate_across_three_branches(
     # 1. Executive (Do-er): archive precedent similarity + active intention
     #    If social history drift is active (ongoing enclosure of a formerly shared space),
     #    the Executive branch vetoes innocent/open action clauses that ignore the sealed gate.
-    clause_fair = float(exec_clause.signature_coords.get("cultural/justice/fairness", 0.50))
-    clause_gate = float(exec_clause.signature_coords.get("cultural/justice/exclusionary_gatekeeping", 0.0))
+    clause_state = classify_access_state(exec_clause.signature_coords)
     drift_conflict = bool(
         social_drift is not None
         and social_drift.drift_detected
-        and clause_fair > 0.38
-        and clause_gate < 0.35
+        and clause_state != "SEALED_EXCLUSIONARY"
     )
     exec_vote = exec_sim >= min_branch_similarity and tested_intention >= 0.12 and not drift_conflict
 
@@ -932,15 +928,17 @@ def check_open_thread_trigger(
             reason=f"Scene chord sharply inverts open Left-Brain uncertainty from Scene {target}.",
         )
 
-    release = float(coordinates.get("experiential/phase/bittersweet_release", 0.0))
-    earned_ret = float(coordinates.get("experiential/synchronization/earned_return", 0.0))
-    if release >= 0.48 or earned_ret >= 0.48:
+    # General positive experiential shift or restorative resolution
+    has_positive_complex_note = any(
+        float(v) >= 0.48 for v in felt_chord.complex_notes.values()
+    ) and felt_chord.valence >= 0.55
+    if has_positive_complex_note:
         latest_u = ledger.active_uncertainties[-1]
         return OpenThreadTrigger(
             triggered=True,
             target_scene_index=latest_u.scene_index,
             reason=(
-                f"Restorative release resolves the open Left-Brain tension carried from Scene {latest_u.scene_index}."
+                f"Restorative shift resolves the open Left-Brain tension carried from Scene {latest_u.scene_index}."
             ),
         )
 
@@ -952,29 +950,28 @@ def _derive_concept_tags(
     felt_chord: FeltChord,
 ) -> tuple[str, str, str]:
     """Derive plain-English branch concept tags from observed coordinates without hardcoded scene words."""
-    fairness = float(coordinates.get("cultural/justice/fairness", 0.50))
-    gatekeeping = float(coordinates.get("cultural/justice/exclusionary_gatekeeping", 0.0))
-    order = float(coordinates.get("philosophical/structure/order", 0.0))
-    discreteness = float(coordinates.get("philosophical/persistence/discreteness", 0.0))
-    chaos = float(coordinates.get("philosophical/structure/chaos", 0.0))
+    cult = _branch_subset(coordinates, "cultural/")
+    phil = _branch_subset(coordinates, "philosophical/")
 
-    if fairness <= 0.35 or gatekeeping >= 0.38:
-        exec_tag = "exclusionary_barrier"
-    elif fairness >= 0.68:
-        exec_tag = "shared_open_access"
+    low_cult = sorted((kv for kv in cult.items() if kv[1] <= 0.35), key=lambda kv: (kv[1], kv[0]))
+    high_cult = sorted(cult.items(), key=lambda kv: (-kv[1], kv[0]))
+    if low_cult:
+        exec_tag = f"low_{low_cult[0][0].split('/')[-1].replace('-', '_')}"
+    elif high_cult and high_cult[0][1] >= 0.55:
+        exec_tag = f"high_{high_cult[0][0].split('/')[-1].replace('-', '_')}"
     else:
-        exec_tag = "guarded_threshold"
+        exec_tag = "moderate_cultural_balance"
 
-    if chaos >= 0.38 and fairness >= 0.65:
-        jud_tag = "wall_fracture_into_flow"
-    elif chaos >= 0.38:
-        jud_tag = "structural_fracture"
-    elif order >= 0.70 and discreteness >= 0.65:
-        jud_tag = "sealed_structural_enclosure"
-    elif order >= 0.60 and fairness >= 0.60:
-        jud_tag = "grounded_stewardship"
+    high_phil = sorted(phil.items(), key=lambda kv: (-kv[1], kv[0]))
+    if high_phil and high_phil[0][1] >= 0.50:
+        top_p_name = high_phil[0][0].split("/")[-1].replace("-", "_")
+        if len(high_phil) >= 2 and high_phil[1][1] >= 0.55:
+            sec_p_name = high_phil[1][0].split("/")[-1].replace("-", "_")
+            jud_tag = f"{top_p_name}_{sec_p_name}"
+        else:
+            jud_tag = f"high_{top_p_name}"
     else:
-        jud_tag = "structural_tension"
+        jud_tag = "moderate_structure"
 
     if felt_chord.complex_notes:
         top_note = max(felt_chord.complex_notes.items(), key=lambda kv: kv[1])

@@ -29,12 +29,17 @@ from .branch_archives import (
     LEGISLATIVE_BRANCH,
     BranchClauseEntry,
     ThreeBranchArchives,
+    _derive_concept_tags,
 )
 from .contemplation_ledger import ContemplationLedger, save_contemplation_ledger
 from .local_models import strict_json
 from .model_assets import ModelError
 from .reflection_classifier import (
     AROUSAL_LEAF,
+    FOUNDATIONAL_LEAVES,
+    NOVELTY_LEAF,
+    RESONANCE_LEAF,
+    RETENTION_LEAF,
     SALIENCE_LEAF,
     VALENCE_LEAF,
     FuzzyConceptRule,
@@ -99,24 +104,69 @@ class SleepConsolidationReport:
 
 
 def _cluster_key_for_unresolved(scene: UnresolvedSleepScene) -> str | None:
-    """Group unresolved Epoch 1 scenes by their structural/social coordinate signature.
+    """Group any unresolved wake-cycle scene by its coordinate profile across departments.
 
-    Note: If a scene's raw external coordinates look calm and moderate (`fairness >= 0.40`
-    and `chaos < 0.35`) and it was only held back by historical `social_drift`, we do NOT
-    forge a static coordinate rule from it (since a static rule on `fairness ~ 0.51` would
-    falsely fire on normal peaceful rooms).
+    Note: If a scene was only held back by historical `social_drift_detected` while its raw
+    external coordinates look moderate across all cultural leaves (`> 0.35`) and low-chaos
+    (`< 0.35`), we do NOT forge a static coordinate rule from it (since a static rule on
+    moderate coordinates would falsely fire on normal peaceful rooms).
     """
-    fairness = float(scene.external_coordinates.get("cultural/justice/fairness", 0.50))
-    gatekeeping = float(scene.external_coordinates.get("cultural/justice/exclusionary_gatekeeping", 0.0))
-    chaos = float(scene.external_coordinates.get("philosophical/structure/chaos", 0.0))
-    order = float(scene.external_coordinates.get("philosophical/structure/order", 0.0))
-    discreteness = float(scene.external_coordinates.get("philosophical/persistence/discreteness", 0.0))
+    coords = scene.external_coordinates
+    cult = {
+        k: float(v)
+        for k, v in coords.items()
+        if k.startswith("cultural/") and is_valid_leaf_id(k)
+    }
+    phil = {
+        k: float(v)
+        for k, v in coords.items()
+        if k.startswith("philosophical/") and is_valid_leaf_id(k)
+    }
 
-    if (fairness <= 0.35 or gatekeeping >= 0.38) and order >= 0.65 and discreteness >= 0.65:
-        return "exclusionary_enclosure_cluster"
-    if fairness >= 0.65 and chaos >= 0.45:
-        return "restorative_fracture_cluster"
-    return None
+    low_cult = sorted(
+        ((k, v) for k, v in cult.items() if k in FOUNDATIONAL_LEAVES and v <= 0.35),
+        key=lambda kv: (kv[1], kv[0]),
+    )
+    high_cult = sorted(
+        ((k, v) for k, v in cult.items() if v >= 0.45),
+        key=lambda kv: (-kv[1], kv[0]),
+    )
+    chaos = float(phil.get("philosophical/structure/chaos", 0.0))
+
+    if scene.social_drift_detected and not low_cult and chaos < 0.35:
+        best_non_founding_cult = max(
+            (v for k, v in cult.items() if k not in FOUNDATIONAL_LEAVES),
+            default=0.0,
+        )
+        if best_non_founding_cult < 0.38:
+            return None
+
+    if low_cult and high_cult:
+        low_extremity = 0.50 - low_cult[0][1]
+        high_extremity = high_cult[0][1] - 0.50
+        if low_extremity >= high_extremity:
+            cult_tag = f"low_{low_cult[0][0].split('/')[-1].replace('-', '_')}"
+        else:
+            cult_tag = f"high_{high_cult[0][0].split('/')[-1].replace('-', '_')}"
+    elif low_cult:
+        cult_tag = f"low_{low_cult[0][0].split('/')[-1].replace('-', '_')}"
+    elif high_cult:
+        cult_tag = f"high_{high_cult[0][0].split('/')[-1].replace('-', '_')}"
+    else:
+        cult_tag = "moderate_cultural"
+
+    if chaos >= 0.42:
+        phil_tag = "chaos"
+    else:
+        high_phil = sorted(
+            ((k, v) for k, v in phil.items() if k != "philosophical/being/existence" and v >= 0.45),
+            key=lambda kv: (-kv[1], kv[0]),
+        )
+        if not high_phil:
+            high_phil = sorted(phil.items(), key=lambda kv: (-kv[1], kv[0]))
+        phil_tag = high_phil[0][0].split("/")[-1].replace("-", "_") if high_phil else "structure"
+
+    return f"{cult_tag}_{phil_tag}_cluster"
 
 
 def _average_cluster_coordinates(scenes: Sequence[UnresolvedSleepScene]) -> dict[str, float]:
@@ -217,73 +267,143 @@ def _anchor_target_leaves_from_cluster(
     cluster_key: str,
     avg_coords: Mapping[str, float],
 ) -> dict[str, float]:
-    """Anchor a Sleep-Mode rule's target_leaves strictly to the observed Epoch 1 cluster coordinates."""
+    """Anchor a Sleep-Mode rule's target_leaves from the cluster's genuine extreme/salient leaves."""
+    _ = cluster_key
     target_leaves: dict[str, float] = {}
-    fairness = float(avg_coords.get("cultural/justice/fairness", 0.50))
-    order = float(avg_coords.get("philosophical/structure/order", 0.50))
-    discreteness = float(avg_coords.get("philosophical/persistence/discreteness", 0.50))
-    chaos = float(avg_coords.get("philosophical/structure/chaos", 0.0))
 
-    if cluster_key == "exclusionary_enclosure_cluster":
-        # Anchored to Epoch 1 Beats 4-5 (Fair ~0.16, Ord ~0.83, Dsc ~0.78)
-        target_leaves["cultural/justice/fairness"] = round(min(0.20, max(0.14, fairness + 0.04)), 2)
-        target_leaves["philosophical/structure/order"] = round(min(0.75, order), 2)
-        target_leaves["philosophical/persistence/discreteness"] = round(min(0.70, discreteness), 2)
-    elif cluster_key == "restorative_fracture_cluster":
-        # Anchored to Epoch 1 Beat 8 (Fair ~0.92, Cha ~0.87, Sanctuary ~0.69, Release ~0.67)
-        target_leaves["cultural/justice/fairness"] = round(min(0.78, fairness), 2)
+    cult = {
+        k: float(v)
+        for k, v in avg_coords.items()
+        if k.startswith("cultural/") and is_valid_leaf_id(k)
+    }
+    phil = {
+        k: float(v)
+        for k, v in avg_coords.items()
+        if k.startswith("philosophical/") and is_valid_leaf_id(k)
+    }
+    exp_complex = {
+        k: float(v)
+        for k, v in avg_coords.items()
+        if k.startswith("experiential/")
+        and is_valid_leaf_id(k)
+        and k not in (SALIENCE_LEAF, VALENCE_LEAF, AROUSAL_LEAF, RESONANCE_LEAF, RETENTION_LEAF, NOVELTY_LEAF)
+    }
+
+    # 1. Cultural anchor: select the leaf with the strongest extremity from neutral (0.50)
+    low_cult = sorted(
+        ((k, v) for k, v in cult.items() if k in FOUNDATIONAL_LEAVES and v <= 0.35),
+        key=lambda kv: (kv[1], kv[0]),
+    )
+    high_cult = sorted(
+        ((k, v) for k, v in cult.items() if v >= 0.50),
+        key=lambda kv: (-kv[1], kv[0]),
+    )
+    if low_cult and high_cult:
+        if (0.50 - low_cult[0][1]) >= (high_cult[0][1] - 0.50):
+            k_low, v_low = low_cult[0]
+            target_leaves[k_low] = round(min(0.20, max(0.14, v_low + 0.04)), 2)
+        else:
+            k_high, v_high = high_cult[0]
+            target_leaves[k_high] = round(min(0.78, v_high), 2)
+    elif low_cult:
+        k_low, v_low = low_cult[0]
+        target_leaves[k_low] = round(min(0.20, max(0.14, v_low + 0.04)), 2)
+    elif high_cult:
+        k_high, v_high = high_cult[0]
+        target_leaves[k_high] = round(min(0.78, v_high), 2)
+
+    # 2. Experiential complex feeling anchor (if an active complex feeling drawer >= 0.50 exists)
+    top_exp = sorted(
+        ((k, v) for k, v in exp_complex.items() if v >= 0.50),
+        key=lambda kv: (-kv[1], kv[0]),
+    )
+    has_exp_anchor = False
+    if top_exp:
+        k_exp, v_exp = top_exp[0]
+        target_leaves[k_exp] = round(min(0.60, v_exp), 2)
+        has_exp_anchor = True
+
+    # 3. Philosophical structural anchor(s)
+    chaos = float(phil.get("philosophical/structure/chaos", 0.0))
+    if chaos >= 0.45:
         target_leaves["philosophical/structure/chaos"] = round(min(0.65, chaos), 2)
-        sanctuary = float(avg_coords.get("experiential/phase/austere_sanctuary", 0.0))
-        release = float(avg_coords.get("experiential/phase/bittersweet_release", 0.0))
-        if release >= 0.50:
-            target_leaves["experiential/phase/bittersweet_release"] = round(min(0.55, release), 2)
-        elif sanctuary >= 0.50:
-            target_leaves["experiential/phase/austere_sanctuary"] = round(min(0.60, sanctuary), 2)
     else:
+        structural_phil = sorted(
+            ((k, v) for k, v in phil.items() if k != "philosophical/being/existence" and v >= 0.55),
+            key=lambda kv: (-kv[1], kv[0]),
+        )
+        if not structural_phil:
+            structural_phil = sorted(
+                ((k, v) for k, v in phil.items() if v >= 0.55),
+                key=lambda kv: (-kv[1], kv[0]),
+            )
+        if structural_phil:
+            k1, v1 = structural_phil[0]
+            target_leaves[k1] = round(min(0.75, v1), 2)
+            if not has_exp_anchor and len(structural_phil) >= 2 and structural_phil[1][1] >= 0.65:
+                k2, v2 = structural_phil[1]
+                target_leaves[k2] = round(min(0.70, v2), 2)
+
+    if len(target_leaves) < 2:
         for k, v in sorted(avg_coords.items(), key=lambda kv: (-kv[1], kv[0])):
-            if is_valid_leaf_id(k) and v >= 0.65 and len(target_leaves) < 3:
+            if is_valid_leaf_id(k) and k not in target_leaves and v >= 0.45:
                 target_leaves[k] = round(min(0.75, v), 2)
+                if len(target_leaves) >= 2:
+                    break
+
     return target_leaves
+
+
+def _rule_collided_on_unresolved(
+    rule: FuzzyConceptRule,
+    unresolved_scenes: Sequence[UnresolvedSleepScene],
+) -> bool:
+    """Return True if `rule` was flagged as colliding or fired strongly on an unresolved scene."""
+    for s in unresolved_scenes:
+        if s.active_concept_collision == rule.concept_name:
+            return True
+        merged = {k: 0.50 for k in FOUNDATIONAL_LEAVES}
+        merged.update(s.external_coordinates)
+        merged.update(s.felt_chord_notes)
+        for req_leaf in rule.target_leaves:
+            merged.setdefault(req_leaf, 0.0)
+        if rule.evaluate(merged) >= 0.50:
+            return True
+    return False
 
 
 def refine_colliding_rules_during_sleep(
     rules: Sequence[FuzzyConceptRule],
     unresolved_scenes: Sequence[UnresolvedSleepScene],
 ) -> tuple[tuple[FuzzyConceptRule, ...], tuple[str, ...]]:
-    """Refine over-broad Tier-1 rules (`solitary_autarky`) that misfired on Epoch 1 collisions.
+    """Tighten any over-broad Tier-1 rule that collided or misfired on unresolved wake-cycle scenes.
 
-    In `continuous_tiered_ruleset.json`, `solitary_autarky` is defined as:
-    'A state of complete self-reliance where an individual exists independently without
-    external dependencies or social cooperation.'
-    Yet its original `target_leaves` omitted a low-chaos bound (`philosophical/structure/chaos <= 0.15`)
-    and omitted a low-communal-fairness bound (`cultural/justice/fairness <= 0.30` or higher
-    `needlessness >= 0.65`), causing it to fire during high-chaos structural fractures and
-    communal sharing. Sleep Mode refines `solitary_autarky`'s JSON targets to match its definition.
+    Instead of checking for a specific rule name, this function inspects every rule in `rules`:
+    if a Tier-1 rule collided on an unresolved scene (either via `active_concept_collision` or
+    by firing `>= 0.50` on an unsettled scene), its moderate positive leaf targets are tightened
+    and, if it specifies steady continuity/order without bounding structural chaos, a low-chaos
+    bound (`philosophical/structure/chaos = 0.10`) is added so it no longer misfires on fractures.
     """
-    solitary_collided = any(
-        s.active_concept_collision == "solitary_autarky"
-        or float(s.external_coordinates.get("philosophical/structure/chaos", 0.0)) >= 0.45
-        for s in unresolved_scenes
-    )
-    if not solitary_collided:
+    if not unresolved_scenes:
         return tuple(rules), ()
 
     updated: list[FuzzyConceptRule] = []
     refined_ids: list[str] = []
     for r in rules:
-        if r.concept_name == "solitary_autarky":
+        if r.tier == 1 and _rule_collided_on_unresolved(r, unresolved_scenes):
             new_targets = dict(r.target_leaves)
-            # Peaceful solitary self-reliance requires low structural chaos (<= 0.15)
-            # and genuine solitary independence rather than open communal sharing
-            new_targets["philosophical/structure/chaos"] = 0.10
-            new_targets["cultural/freedom/needlessness"] = max(
-                float(new_targets.get("cultural/freedom/needlessness", 0.45)),
-                0.75,
+            for k, val in list(new_targets.items()):
+                fval = float(val)
+                if 0.40 <= fval <= 0.65:
+                    new_targets[k] = 0.75
+
+            has_steady_axis = (
+                float(new_targets.get("philosophical/persistence/continuity", 0.0)) >= 0.60
+                or float(new_targets.get("philosophical/structure/order", 0.0)) >= 0.65
             )
-            new_targets["cultural/freedom/self-sufficiency"] = max(
-                float(new_targets.get("cultural/freedom/self-sufficiency", 0.65)),
-                0.75,
-            )
+            if has_steady_axis and "philosophical/structure/chaos" not in new_targets:
+                new_targets["philosophical/structure/chaos"] = 0.10
+
             refined_rule = FuzzyConceptRule(
                 rule_id=r.rule_id,
                 concept_name=r.concept_name,
@@ -392,8 +512,12 @@ def run_sleep_consolidation(
             concept_name = f"{concept_name}_{ckey.split('_')[0]}"
 
         rep_scene = group[0].scene_index
-        rule_low = 0.72 if ckey == "exclusionary_enclosure_cluster" else 0.55
-        rule_high = 0.85 if ckey == "exclusionary_enclosure_cluster" else 0.78
+        has_tier2_or_chaos = (
+            any(leaf_tier(k) >= 2 for k in target_leaves)
+            or float(target_leaves.get("philosophical/structure/chaos", 0.0)) >= 0.45
+        )
+        rule_low = 0.55 if has_tier2_or_chaos else 0.72
+        rule_high = 0.78 if has_tier2_or_chaos else 0.85
         new_rule = FuzzyConceptRule(
             rule_id=f"rule-sleep-s{rep_scene}-{concept_name[:28]}",
             concept_name=concept_name,
@@ -406,7 +530,7 @@ def run_sleep_consolidation(
         forged_rules.append(new_rule)
         existing_names.add(concept_name)
 
-        # File the Teacher-consolidated clauses into the 3 branch archives using Epoch 1 coordinates
+        # File the Teacher-consolidated clauses into the 3 branch archives using observed coordinates
         cult_sig = {k: v for k, v in avg_coords.items() if k.startswith("cultural/")}
         phil_sig = {k: v for k, v in avg_coords.items() if k.startswith("philosophical/")}
         exp_sig = {
@@ -418,9 +542,17 @@ def run_sleep_consolidation(
         exp_sig[VALENCE_LEAF] = round(sum(s.valence for s in group) / len(group), 4)
         exp_sig[AROUSAL_LEAF] = round(sum(s.arousal for s in group) / len(group), 4)
 
-        exec_tag = "exclusionary_barrier" if ckey == "exclusionary_enclosure_cluster" else "shared_open_access"
-        leg_tag = "hollow_stillness" if ckey == "exclusionary_enclosure_cluster" else "bittersweet_release"
-        jud_tag = "sealed_structural_enclosure" if ckey == "exclusionary_enclosure_cluster" else "wall_fracture_into_flow"
+        from .chord_memory import compile_felt_chord
+
+        avg_fc = compile_felt_chord(
+            avg_coords,
+            salience=exp_sig[SALIENCE_LEAF],
+            valence=exp_sig[VALENCE_LEAF],
+            arousal=exp_sig[AROUSAL_LEAF],
+            resonance=0.65,
+            learned_leaves=tuple(learned_leaves),
+        )
+        exec_tag, leg_tag, jud_tag = _derive_concept_tags(avg_coords, avg_fc)
 
         exec_clause = BranchClauseEntry(
             clause_id=f"exec-sleep-s{rep_scene}-{exec_tag}",
@@ -453,16 +585,6 @@ def run_sleep_consolidation(
             coordinates=avg_coords,
             action_summary=proposal["executive_clause_text"],
             harvested_clause=exec_clause,
-        )
-        from .chord_memory import compile_felt_chord
-
-        avg_fc = compile_felt_chord(
-            avg_coords,
-            salience=exp_sig[SALIENCE_LEAF],
-            valence=exp_sig[VALENCE_LEAF],
-            arousal=exp_sig[AROUSAL_LEAF],
-            resonance=0.65,
-            learned_leaves=tuple(learned_leaves),
         )
         next_leg = cur_archives.legislative.record_scene(
             scene_index=rep_scene,

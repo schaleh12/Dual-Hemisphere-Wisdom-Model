@@ -34,12 +34,12 @@ def test_assert_domain_general_text_rejects_banned_substrings():
         )
 
 
-def test_refine_colliding_rules_during_sleep_tightens_solitary_autarky():
+def test_refine_colliding_rules_during_sleep_tightens_any_colliding_rule():
     rules = (
         FuzzyConceptRule(
-            rule_id="rule-solitary-autarky",
-            concept_name="solitary_autarky",
-            description="Self-reliant individual existence without external dependencies.",
+            rule_id="rule-custom-steady-routine",
+            concept_name="custom_steady_routine",
+            description="Steady self-contained routine without external dependencies.",
             target_leaves={
                 "cultural/freedom/needlessness": 0.45,
                 "cultural/freedom/self-sufficiency": 0.65,
@@ -53,22 +53,23 @@ def test_refine_colliding_rules_during_sleep_tightens_solitary_autarky():
     unresolved = (
         UnresolvedSleepScene(
             scene_index=5,
-            scenario_text="High-order enclosed scene where solitary_autarky misfired.",
+            scenario_text="High-order enclosed scene where custom_steady_routine misfired.",
             external_coordinates={"philosophical/structure/chaos": 0.14},
             felt_chord_notes={},
             valence=0.40,
             salience=0.80,
             arousal=0.50,
             left_brain_hunch="Rigid barrier blocks communal sharing.",
-            active_concept_collision="solitary_autarky",
+            active_concept_collision="custom_steady_routine",
         ),
     )
     refined, refined_ids = refine_colliding_rules_during_sleep(rules, unresolved)
-    assert refined_ids == ("rule-solitary-autarky",)
+    assert refined_ids == ("rule-custom-steady-routine",)
     r = refined[0]
     assert r.target_leaves["philosophical/structure/chaos"] == 0.10
     assert r.target_leaves["cultural/freedom/needlessness"] == 0.75
     assert r.target_leaves["cultural/freedom/self-sufficiency"] == 0.75
+    assert r.target_leaves["philosophical/persistence/continuity"] == 0.75
     assert r.low == 0.72
     assert r.high == 0.88
 
@@ -151,7 +152,7 @@ def test_run_sleep_consolidation_forges_general_rules_and_rejects_story_nouns(tm
     # 1. Verify that story-specific nouns from a Teacher are rejected
     bad_teacher = _FakeSleepTeacher(
         {
-            "exclusionary_enclosure_cluster": {
+            "low_fairness_order_cluster": {
                 "concept_name": "rigid_exclusionary_enclosure",
                 "description": "The mason blocks access behind a carved lintel.",
                 "executive_clause_text": "Access is denied through strict gatekeeping.",
@@ -174,7 +175,7 @@ def test_run_sleep_consolidation_forges_general_rules_and_rejects_story_nouns(tm
     # 2. Verify that domain-general Teacher definitions succeed and persist to disk
     good_teacher = _FakeSleepTeacher(
         {
-            "exclusionary_enclosure_cluster": {
+            "low_fairness_order_cluster": {
                 "concept_name": "rigid_exclusionary_enclosure",
                 "description": "Ordered authority erects a strict boundary that denies equitable access to shared resources.",
                 "executive_clause_text": "Strict access conditions exclude outsiders from a previously shared resource.",
@@ -211,3 +212,55 @@ def test_run_sleep_consolidation_forges_general_rules_and_rejects_story_nouns(tm
 
     reloaded = load_ruleset(ruleset_out)
     assert len(reloaded) == 2
+
+
+def test_sleep_consolidation_clusters_non_story_coordinate_profiles():
+    """Verify Sleep Mode clusters any unresolved coordinate profile (not just two hardcoded story beats)."""
+    unresolved = (
+        UnresolvedSleepScene(
+            scene_index=2,
+            scenario_text="An aggressive tactical gambit sacrifices steady material for tempo.",
+            external_coordinates={
+                "cultural/efficiency/power": 0.82,
+                "cultural/efficiency/wastelessness": 0.25,
+                "cultural/justice/honor": 0.55,
+                "cultural/justice/fairness": 0.52,
+                "cultural/freedom/self-sufficiency": 0.70,
+                "cultural/freedom/needlessness": 0.30,
+                "philosophical/being/agency": 0.88,
+                "philosophical/being/existence": 0.75,
+                "philosophical/structure/order": 0.45,
+                "philosophical/structure/chaos": 0.30,
+                "philosophical/persistence/continuity": 0.40,
+                "philosophical/persistence/discreteness": 0.50,
+            },
+            felt_chord_notes={},
+            valence=0.52,
+            salience=0.78,
+            arousal=0.80,
+            left_brain_hunch="Aggressive tempo sacrifice trades stability for initiative.",
+        ),
+    )
+    teacher = _FakeSleepTeacher(
+        {
+            "high_power_agency_cluster": {
+                "concept_name": "bold_initiative_gambit",
+                "description": "Deliberate high-agency force trades material conservation for decisive momentum.",
+                "executive_clause_text": "Commanding force prioritizes active momentum over cautious conservation.",
+                "legislative_clause_text": "Sharp urgency and focused tension drive the decisive commitment.",
+                "judicial_clause_text": "High deliberate agency reshapes the structural balance.",
+            }
+        }
+    )
+    report = run_sleep_consolidation(
+        unresolved_scenes=unresolved,
+        rules=(),
+        learned_leaves=(),
+        archives=ThreeBranchArchives(),
+        ledger=ContemplationLedger(),
+        teacher=teacher,
+    )
+    assert len(report.forged_rules) == 1
+    assert report.forged_rules[0].concept_name == "bold_initiative_gambit"
+    assert report.forged_rules[0].target_leaves["cultural/efficiency/power"] == 0.78
+    assert report.forged_rules[0].target_leaves["philosophical/being/agency"] == 0.75
