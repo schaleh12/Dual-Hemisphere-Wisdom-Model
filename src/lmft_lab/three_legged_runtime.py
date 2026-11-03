@@ -189,7 +189,7 @@ class SubliminalGapLeftBrain:
         self.gap_token_id = (
             int(gap_token_id)
             if gap_token_id is not None
-            else ensure_subliminal_gap_token(tokenizer, model)
+            else ensure_subliminal_gap_token(tokenizer)
         )
         self.max_clause_1_tokens = int(max_clause_1_tokens)
         self.max_post_gap_tokens = int(max_post_gap_tokens)
@@ -223,11 +223,14 @@ class SubliminalGapLeftBrain:
         )
 
         tokenizer = AutoTokenizer.from_pretrained(hf_model_id)
+        gap_token_id = ensure_subliminal_gap_token(tokenizer)
         model = AutoModelForCausalLM.from_pretrained(
             hf_model_id,
-            torch_dtype=resolved_dtype,
-        ).to(resolved_device)
-        gap_token_id = ensure_subliminal_gap_token(tokenizer, model)
+            dtype=resolved_dtype,
+        )
+        if len(tokenizer) > model.get_input_embeddings().num_embeddings:
+            model.resize_token_embeddings(len(tokenizer))
+        model.to(resolved_device)
         projector, meta, lora_cfg = load_lora_and_callosum_checkpoint(
             checkpoint_dir,
             model=model,
