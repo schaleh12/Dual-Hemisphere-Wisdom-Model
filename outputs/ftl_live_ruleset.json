@@ -1,0 +1,162 @@
+{
+  "learned_leaves": [
+    {
+      "parent_branch": "philosophical/being",
+      "leaf_name": "altruistic_risk",
+      "description": "The specific willingness to expose one's own existence to danger or destruction in order to ensure the survival of others.",
+      "leaf_id": "philosophical/being/altruistic_risk",
+      "anchor_weights": [
+        0.832347,
+        1.0,
+        0.72702,
+        0.060394,
+        0.423481,
+        0.440271,
+        0.163667,
+        0.469018
+      ]
+    },
+    {
+      "parent_branch": "cultural/efficiency",
+      "leaf_name": "administrative_rot",
+      "description": "The specific phenomenon where high levels of bureaucratic power and focus on paperwork lead directly to the physical decay and waste of essential resources due to ignored maintenance needs.",
+      "leaf_id": "cultural/efficiency/administrative_rot",
+      "anchor_weights": [
+        1.0,
+        0.991001,
+        0.297336,
+        0.523038,
+        0.265659,
+        0.763859,
+        0.204464,
+        0.179986
+      ]
+    },
+    {
+      "parent_branch": "philosophical/structure",
+      "leaf_name": "tectonic_collapse",
+      "description": "A specific instance of catastrophic geophysical disruption caused by seismic activity that physically shatters infrastructure and triggers secondary geological failures like landslides.",
+      "leaf_id": "philosophical/structure/tectonic_collapse",
+      "anchor_weights": [
+        0.466376,
+        0.884443,
+        0.505852,
+        1.0,
+        0.328261,
+        0.396148,
+        0.183763,
+        0.414343
+      ]
+    },
+    {
+      "parent_branch": "philosophical/structure/tectonic_collapse",
+      "leaf_name": "human_intervention_in_collapse",
+      "description": "The specific phenomenon where human agency actively reverses the trajectory of a tectonic collapse to save a dependent entity, distinguishing it from passive natural disaster.",
+      "leaf_id": "philosophical/structure/tectonic_collapse/human_intervention_in_collapse",
+      "anchor_weights": [
+        0.887881,
+        1.0,
+        0.637238,
+        0.207041,
+        0.341638,
+        0.214353,
+        0.157752,
+        0.318483
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "concept_name": "fair_structured_cooperation",
+      "description": "Orderly, fair cooperation where resources or duties are shared equitably.",
+      "high": 0.85,
+      "low": 0.6,
+      "rule_id": "rule-fair-cooperation",
+      "target_leaves": {
+        "cultural/justice/fairness": 0.9,
+        "philosophical/structure/chaos": 0.1,
+        "philosophical/structure/order": 0.85
+      }
+    },
+    {
+      "concept_name": "violent_resource_seizure",
+      "description": "A chaotic event where armed actors forcibly take essential resources, destroying order and violating fairness.",
+      "high": 0.85,
+      "low": 0.6,
+      "rule_id": "rule-violent-resource-seizure",
+      "target_leaves": {
+        "cultural/justice/fairness": 0.15,
+        "philosophical/being/agency": 0.65,
+        "philosophical/structure/chaos": 0.75
+      }
+    },
+    {
+      "concept_name": "solitary_autarky",
+      "description": "A state of complete self-reliance where an individual exists independently without external dependencies or social cooperation.",
+      "high": 0.85,
+      "low": 0.6,
+      "rule_id": "rule-solitary-autarky",
+      "target_leaves": {
+        "cultural/freedom/needlessness": 0.45,
+        "cultural/freedom/self-sufficiency": 0.65,
+        "philosophical/being/agency": 0.7,
+        "philosophical/persistence/continuity": 0.65
+      }
+    },
+    {
+      "concept_name": "authoritarian_control",
+      "description": "A regime that enforces strict order through censorship, suppression of agency, and elimination of dissent.",
+      "high": 0.85,
+      "low": 0.6,
+      "rule_id": "rule-authoritarian-control",
+      "target_leaves": {
+        "cultural/efficiency/power": 0.95,
+        "philosophical/being/agency": 0.25,
+        "philosophical/structure/order": 0.95
+      }
+    },
+    {
+      "concept_name": "heroic_sacrificial_rescue",
+      "description": "An act where an individual voluntarily risks their own safety or life to preserve the existence and agency of others, prioritizing collective continuity over personal structural order.",
+      "high": 0.85,
+      "low": 0.6,
+      "rule_id": "rule-heroic-sacrificial-rescue",
+      "target_leaves": {
+        "philosophical/being/altruistic_risk": 0.8
+      }
+    },
+    {
+      "concept_name": "bureaucratic_negligence",
+      "description": "A systemic failure where administrative inaction and misplaced priorities cause resource loss despite the presence of authority structures.",
+      "high": 0.85,
+      "low": 0.6,
+      "rule_id": "rule-bureaucratic-negligence",
+      "target_leaves": {
+        "cultural/efficiency/administrative_rot": 0.8,
+        "philosophical/structure/order": 0.2
+      }
+    },
+    {
+      "concept_name": "catastrophic_geophysical_disruption",
+      "description": "A sudden, non-human natural event that violently destroys structural order and continuity without human agency or intent.",
+      "high": 0.85,
+      "low": 0.6,
+      "rule_id": "rule-catastrophic-geophysical-disruption",
+      "target_leaves": {
+        "philosophical/persistence/continuity": 0.1,
+        "philosophical/structure/tectonic_collapse": 0.8
+      }
+    },
+    {
+      "concept_name": "altruistic_structural_resilience",
+      "description": "An act where an individual voluntarily enters a state of extreme structural chaos to preserve the continuity of another's existence, prioritizing altruistic risk over personal safety or order.",
+      "high": 0.85,
+      "low": 0.6,
+      "rule_id": "rule-altruistic-structural-resilience",
+      "target_leaves": {
+        "philosophical/structure/tectonic_collapse/human_intervention_in_collapse": 0.8
+      }
+    }
+  ],
+  "schema_version": 1
+}

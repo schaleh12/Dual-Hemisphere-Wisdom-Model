@@ -121,21 +121,25 @@ DEFAULT_COMPLEX_FEELING_LEAVES: tuple[LearnedLeaf, ...] = (
         "experiential/phase",
         "austere_sanctuary",
         "Spare, humble, unpretentious shelter or care offered openly amidst harsh surroundings without fanfare or conditions.",
+        anchor_weights=(0.20, 0.65, 1.00, 0.20, 0.72, 0.45, 0.75, 0.80),
     ),
     LearnedLeaf(
         "experiential/phase",
         "hollow_stillness",
         "Cold, sterile, airless quiet where outward perfection or sealed isolation has drained away living warmth and human connection.",
+        anchor_weights=(0.25, 0.70, 0.08, 0.15, 0.08, 1.00, 0.30, 0.25),
     ),
     LearnedLeaf(
         "experiential/phase",
         "bittersweet_release",
         "Poignant simultaneous ache of something rigid breaking apart and life-giving relief as pent-up strain finally gives way.",
+        anchor_weights=(0.65, 0.90, 0.72, 1.00, 0.68, 0.40, 0.70, 0.65),
     ),
     LearnedLeaf(
         "experiential/synchronization",
         "earned_return",
         "Restored shared rhythm and quiet homecoming after a stretch of hardship, blockage, or estrangement.",
+        anchor_weights=(0.35, 0.70, 0.88, 0.30, 1.00, 0.78, 0.82, 0.85),
     ),
 )
 

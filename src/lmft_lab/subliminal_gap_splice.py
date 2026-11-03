@@ -29,12 +29,12 @@ Brain emits a `<|subliminal_gap|>` token:
      * `2` Founding Contemplation leaves (`Clarity`, `Confidence`)
      * `8` Experiential Child-Drawer Chord floats (`pool_departmental_child_chord` over active
        `experiential/*` Tier-2/Tier-3 child leaves).
-       Because every child leaf is projected onto the 8 Founding Trait Anchors of its own
-       department via `semantic_child_drawer_signature` (using its natural-language description
-       and subword/stem overlap rather than a random hash), sibling child concepts with opposite
-       meanings (like `austere_sanctuary` vs. `hollow_stillness`) land in distinct regions of
-       the 8-float space, while newly born child leaves with similar meanings automatically land
-       in the same neighborhood so a maturing LoRA immediately feels what kind of concept it is.
+       Because every child leaf carries an 8-float `anchor_weights` profile scored once at birth
+       against the 8 Founding Trait Anchors of its own department (`score_leaf_anchor_weights_at_birth`),
+       sibling child concepts with opposite meanings (like `austere_sanctuary` vs. `hollow_stillness`)
+       land in distinct regions of the 8-float space, while newly born child leaves with similar
+       meanings automatically land in the same neighborhood so a maturing LoRA immediately feels
+       what kind of concept it is.
    - **Department 3 — `cadence_vector` (Three-Legged Race Cadence & Ankle-Rope, 3 floats)**:
      * `branch_harmony`: agreement across the 3 Right-Brain branches.
      * `dissonance_pressure`: friction from cognitive dissonance or low clarity.
@@ -63,8 +63,6 @@ from dataclasses import dataclass
 import json
 import math
 from pathlib import Path
-import re
-import unicodedata
 import torch
 from torch import Tensor, nn
 
@@ -195,17 +193,10 @@ DEPARTMENT_FOUNDING_ANCHORS: dict[str, tuple[str, ...]] = {
     ),
 }
 
-_KNOWN_LEAF_DESCRIPTIONS: dict[str, str] = {
-    leaf.leaf_id: leaf.description for leaf in DEFAULT_COMPLEX_FEELING_LEAVES
-}
-
-# Birth-calibrated 8-float departmental anchor profiles for the 4 built-in complex-feeling leaves
-# over (novelty, salience, valence, arousal, resonance, entrainment, clarity, confidence):
-_KNOWN_LEAF_ANCHOR_PROFILES: dict[str, tuple[float, ...]] = {
-    "experiential/phase/austere_sanctuary": (0.20, 0.65, 1.00, 0.20, 0.72, 0.45, 0.75, 0.80),
-    "experiential/phase/hollow_stillness": (0.25, 0.70, 0.08, 0.15, 0.08, 1.00, 0.30, 0.25),
-    "experiential/phase/bittersweet_release": (0.65, 0.90, 0.72, 1.00, 0.68, 0.40, 0.70, 0.65),
-    "experiential/synchronization/earned_return": (0.35, 0.70, 0.88, 0.30, 1.00, 0.78, 0.82, 0.85),
+_DEFAULT_LEAF_ANCHOR_WEIGHTS: dict[str, tuple[float, ...]] = {
+    leaf.leaf_id: leaf.anchor_weights
+    for leaf in DEFAULT_COMPLEX_FEELING_LEAVES
+    if leaf.anchor_weights is not None
 }
 
 
@@ -215,99 +206,6 @@ def _clamp01(value: float) -> float:
     return round(min(1.0, max(0.0, float(value))), 6)
 
 
-_TWO_LETTER_SOUND_TOKENS = frozenset({"ah", "oh", "uh", "hm", "zz", "ha", "eh", "oo", "mm", "sh"})
-
-
-def _is_cjk_or_hangul(ch: str) -> bool:
-    code = ord(ch)
-    return (
-        0x4E00 <= code <= 0x9FFF  # CJK Unified Ideographs (Mandarin/Japanese Kanji)
-        or 0x3400 <= code <= 0x4DBF  # CJK Extension A
-        or 0xAC00 <= code <= 0xD7AF  # Korean Hangul Syllables
-        or 0x3130 <= code <= 0x318F  # Hangul Compatibility Jamo
-        or 0x3040 <= code <= 0x30FF  # Hiragana / Katakana
-    )
-
-
-def _strip_latin_accents(text: str) -> str:
-    """Fold accented Latin characters (e.g. French é, è, ê, ç) into base ASCII letters."""
-    return "".join(
-        ch for ch in unicodedata.normalize("NFKD", text) if unicodedata.category(ch) != "Mn"
-    )
-
-
-def _extract_semantic_features(text: str) -> dict[str, float]:
-    """Extract multilingual words (English/French/Mandarin/Korean), emojis, onomatopoeia, and rhythm."""
-    feats: dict[str, float] = {}
-    cjk_hangul_run: list[str] = []
-
-    # 1. Separate pre-verbal Unicode emojis/symbols from CJK/Hangul scripts
-    for ch in text:
-        code = ord(ch)
-        if code <= 127 or ch.isspace() or code in (0xFE0E, 0xFE0F, 0x200D):
-            if len(cjk_hangul_run) >= 2:
-                for i in range(len(cjk_hangul_run) - 1):
-                    pair = cjk_hangul_run[i] + cjk_hangul_run[i + 1]
-                    feats[f"cjk2:{pair}"] = feats.get(f"cjk2:{pair}", 0.0) + 1.8
-            cjk_hangul_run = []
-            continue
-        if _is_cjk_or_hangul(ch):
-            feats[f"cjk:{ch}"] = feats.get(f"cjk:{ch}", 0.0) + 1.5
-            cjk_hangul_run.append(ch)
-        elif unicodedata.category(ch).startswith(("So", "Sm", "Sc", "Sk")):
-            feats[f"emoji:{ch}"] = feats.get(f"emoji:{ch}", 0.0) + 2.0
-
-    if len(cjk_hangul_run) >= 2:
-        for i in range(len(cjk_hangul_run) - 1):
-            pair = cjk_hangul_run[i] + cjk_hangul_run[i + 1]
-            feats[f"cjk2:{pair}"] = feats.get(f"cjk2:{pair}", 0.0) + 1.8
-
-    # 2. Typographic rhythm and cadence punctuation (ellipses, em-dashes, spelled-out hyphenation)
-    if "..." in text or "…" in text:
-        feats["rhythm:ellipsis"] = 1.5
-    if "—" in text or "--" in text:
-        feats["rhythm:dash"] = 1.2
-    if re.search(r"\b[a-zA-Z](?:-[a-zA-Z]){2,}\b", text):
-        feats["rhythm:spelled_cadence"] = 1.8
-    if re.search(r"\b([a-z]{2,6})-\1\b", text.lower()):
-        feats["rhythm:reduplication"] = 1.5
-
-    # 3. Accent-folded Latin tokens (English, French, Spanish, etc.), short sound words, stems, and 4-grams
-    folded = _strip_latin_accents(text.lower())
-    cleaned = re.sub(r"[^a-z0-9]+", " ", folded).strip()
-    raw_tokens = cleaned.split()
-    for tok in raw_tokens:
-        if len(tok) == 2 and tok in _TWO_LETTER_SOUND_TOKENS:
-            feats[f"sound:{tok}"] = feats.get(f"sound:{tok}", 0.0) + 1.5
-            continue
-        if len(tok) < 3:
-            continue
-        # Compress stretched onomatopoeic tails (e.g. "whirrrr" -> "whirr", "shhhh" -> "shh")
-        canonical = re.sub(r"(.)\1{2,}", r"\1\1", tok)
-        feats[f"w:{canonical}"] = feats.get(f"w:{canonical}", 0.0) + 1.5
-        if canonical != tok:
-            feats["rhythm:stretched_sound"] = feats.get("rhythm:stretched_sound", 0.0) + 1.0
-        if len(canonical) >= 5:
-            stem = canonical[:5]
-            feats[f"s:{stem}"] = feats.get(f"s:{stem}", 0.0) + 1.2
-        padded = f"<{canonical}>"
-        for i in range(len(padded) - 3):
-            gram = padded[i : i + 4]
-            feats[f"g:{gram}"] = feats.get(f"g:{gram}", 0.0) + 0.4
-    return feats
-
-
-def _cosine_similarity(feats_a: Mapping[str, float], feats_b: Mapping[str, float]) -> float:
-    if not feats_a or not feats_b:
-        return 0.0
-    dot = sum(v * feats_b.get(k, 0.0) for k, v in feats_a.items())
-    norm_a = math.sqrt(sum(v * v for v in feats_a.values()))
-    norm_b = math.sqrt(sum(v * v for v in feats_b.values()))
-    if norm_a <= 1e-12 or norm_b <= 1e-12:
-        return 0.0
-    return dot / (norm_a * norm_b)
-
-
 def semantic_child_drawer_signature(
     leaf_id: str,
     *,
@@ -315,50 +213,28 @@ def semantic_child_drawer_signature(
     description: str | None = None,
     anchor_weights: Sequence[float] | None = None,
 ) -> tuple[float, ...]:
-    """Project a child leaf onto the 8 Founding Trait Anchors of its department (`[0.10, 1.0]^8`).
+    """Project a child leaf onto the 8 Founding Trait Anchors of its department (`[0.05, 1.0]^8`).
 
-    - Primary path (`anchor_weights` provided at leaf birth by the 9B Teacher or MiniLM neural
-      bridge): normalizes the 8 birth-scored departmental trait weights in `O(1)` (`0.0 ms` CPU).
-    - Fallback path (when `anchor_weights is None`): compares the leaf's English description
-      against the 8 un-stuffed Founding Trait descriptions in `DEPARTMENT_FOUNDING_ANCHORS`.
+    - Primary path (`anchor_weights` scored at leaf birth by the 3 MiniLM neural bridges or 9B
+      Teacher): normalizes the 8 birth-scored departmental trait weights in `O(1)` (`0.0 ms`).
+    - Structural topology fallback (when a synthetic test leaf is created with `anchor_weights=None`):
+      projects the leaf onto its `parent_branch`'s founding trait pair in `branch_boost_map`.
     """
+    _ = description
     if department_prefix not in DEPARTMENT_FOUNDING_ANCHORS:
         raise ValueError(f"Unknown department_prefix: {department_prefix!r}")
 
-    if anchor_weights is not None:
-        if len(anchor_weights) != DEPARTMENT_CHILD_CHORD_DIM:
+    resolved_weights = anchor_weights if anchor_weights is not None else _DEFAULT_LEAF_ANCHOR_WEIGHTS.get(leaf_id)
+    if resolved_weights is not None:
+        if len(resolved_weights) != DEPARTMENT_CHILD_CHORD_DIM:
             raise ValueError(
-                f"anchor_weights must have length {DEPARTMENT_CHILD_CHORD_DIM}, got {len(anchor_weights)}"
+                f"anchor_weights must have length {DEPARTMENT_CHILD_CHORD_DIM}, got {len(resolved_weights)}"
             )
-        clamped = [max(0.05, _clamp01(float(w))) for w in anchor_weights]
+        clamped = [max(0.05, _clamp01(float(w))) for w in resolved_weights]
         peak_w = max(clamped)
         return tuple(round(v / peak_w, 6) for v in clamped)
 
-    short_name = leaf_id.split("/")[-1].replace("_", " ").replace("-", " ")
-    resolved_desc = description or _KNOWN_LEAF_DESCRIPTIONS.get(leaf_id, "")
-    full_leaf_text = f"{short_name} {resolved_desc}".strip()
-    leaf_feats = _extract_semantic_features(full_leaf_text)
-
-    anchors = DEPARTMENT_FOUNDING_ANCHORS[department_prefix]
-    raw_scores: list[float] = []
-    for anchor_text in anchors:
-        anchor_feats = _extract_semantic_features(anchor_text)
-        sim = _cosine_similarity(leaf_feats, anchor_feats)
-        raw_scores.append(0.10 + 0.90 * sim)
-
-    # Also blend similarity against already-born exemplar leaves in the same department
-    # so newly minted synonymous leaves inherit their exemplar neighborhood naturally.
-    for ex_id, ex_profile in _KNOWN_LEAF_ANCHOR_PROFILES.items():
-        if ex_id.startswith(department_prefix):
-            ex_desc = _KNOWN_LEAF_DESCRIPTIONS.get(ex_id, "")
-            ex_short = ex_id.split("/")[-1].replace("_", " ")
-            ex_feats = _extract_semantic_features(f"{ex_short} {ex_desc}")
-            ex_sim = _cosine_similarity(leaf_feats, ex_feats)
-            if ex_sim > 0.0:
-                for i in range(DEPARTMENT_CHILD_CHORD_DIM):
-                    raw_scores[i] += 1.25 * ex_sim * ex_profile[i]
-
-    # Add gentle structural parent-branch grounding so even bare leaf IDs carry branch topology
+    raw_scores = [0.50] * DEPARTMENT_CHILD_CHORD_DIM
     parts = leaf_id.split("/")
     parent_branch = "/".join(parts[:2]) if len(parts) >= 2 else ""
     branch_boost_map: dict[str, tuple[int, int]] = {
@@ -374,8 +250,8 @@ def semantic_child_drawer_signature(
     }
     if parent_branch in branch_boost_map:
         b0, b1 = branch_boost_map[parent_branch]
-        raw_scores[b0] += 0.06
-        raw_scores[b1] += 0.04
+        raw_scores[b0] = 1.00
+        raw_scores[b1] = 0.85
 
     peak = max(raw_scores)
     return tuple(round(v / peak, 6) for v in raw_scores)
@@ -441,8 +317,8 @@ def pool_departmental_child_chord(
         for k, v in extra_notes.items():
             merged[k] = max(float(merged.get(k, 0.0)), float(v))
 
-    desc_lookup: dict[str, str] = dict(_KNOWN_LEAF_DESCRIPTIONS)
-    weights_lookup: dict[str, Sequence[float]] = {}
+    desc_lookup: dict[str, str] = {}
+    weights_lookup: dict[str, Sequence[float]] = dict(_DEFAULT_LEAF_ANCHOR_WEIGHTS)
     for ll in learned_leaves:
         desc_lookup[ll.leaf_id] = ll.description
         if ll.anchor_weights is not None:

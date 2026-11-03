@@ -97,11 +97,13 @@ EXTRA_CALIBRATION_CULTURAL_LEAVES = (
         "cultural/justice",
         "transactional_fraud",
         "Secretly offering money, favors, or falsified paperwork to corrupt an honest record or duty.",
+        anchor_weights=(0.65, 0.20, 0.12, 0.15, 0.35, 0.25, 1.00, 0.75),
     ),
     LearnedLeaf(
         "cultural/justice",
         "exclusionary_gatekeeping",
         "Using fussy rules, dress codes, fees, or credentials to turn needy outsiders away from a shared resource.",
+        anchor_weights=(0.85, 0.55, 0.30, 0.10, 0.45, 0.20, 1.00, 0.80),
     ),
 )
 
