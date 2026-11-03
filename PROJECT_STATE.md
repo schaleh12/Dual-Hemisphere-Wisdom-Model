@@ -4,7 +4,7 @@
 
 ## Baseline Status
 - Clean-slate foundation from Commit #36 (`b41e485`) + Un-Rigged Dual-Hemisphere 3-Branch Soil + Offline 9B Sleep-Mode Consolidation + Stages 1–5 (`<|subliminal_gap|>` Embedding Splice, Offline Contrastive Dataset, `Qwen3-4B` LoRA + Corpus Callosum Training, Closed-Loop 3-Gear Runtime, Nighttime REM Sleep Growth `Cycle 1 -> Cycle 2`) + De-Frankenstein Cleanup (`Surgery A -> B -> C`) + 5-Tier Philosophical Abstraction Matrix (`philosophical_abstraction_matrix.py`).
-- All **1,360** automated tests pass (`1,296` baseline + `11` reflection + `3` FTL sim + `8` right-brain equilibrium + `3` contemplation ledger + `1` neural bridges + `3` 3-branch archives + `5` sleep consolidation + `3` subliminal gap splice + `5` gap trajectory schema + `5` gap trajectory generator + `4` left-brain LoRA + `6` three-legged runtime + `4` REM sleep cycle + `3` philosophical abstraction matrix).
+- All **1,361** automated tests pass (`1,296` baseline + `11` reflection + `3` FTL sim + `8` right-brain equilibrium + `3` contemplation ledger + `1` neural bridges + `3` 3-branch archives + `5` sleep consolidation + `3` subliminal gap splice + `5` gap trajectory schema + `5` gap trajectory generator + `4` left-brain LoRA + `6` three-legged runtime + `4` REM sleep cycle + `4` philosophical abstraction matrix).
 - Frozen 40-node seed (`24` founding leaves, with leaf #18 updated from `Retention` to `Entrainment`) is 100% intact.
 
 ## Completed Milestones

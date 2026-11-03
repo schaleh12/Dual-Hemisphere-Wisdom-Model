@@ -35,6 +35,11 @@ from pathlib import Path
 import torch
 from torch import Tensor
 
+from .philosophical_abstraction_matrix import (
+    CHESS_PIECE_TO_LEAF_ID,
+    PHILOSOPHICAL_SHADOW_LEAVES,
+    detect_shadow_pathologies,
+)
 from .reflection_classifier import LearnedLeaf
 from .subliminal_gap_splice import (
     DEFAULT_RUPTURE_DEADBAND,
@@ -71,7 +76,7 @@ CHESS_PHILOSOPHICAL_CHILD_LEAVES: tuple[LearnedLeaf, ...] = (
         "Dynamic queen volition and non-linear knight leaps shattering rigid lines in a forcing tactical strike.",
         anchor_weights=(1.00, 0.55, 0.20, 0.95, 0.30, 0.20, 0.88, 0.75),
     ),
-)
+) + PHILOSOPHICAL_SHADOW_LEAVES
 
 
 def _clamp01(value: float, name: str = "value") -> float:
@@ -233,11 +238,31 @@ def compile_chess_posture_chords(
     structural_stability = (k_ex + b_or + p_co + r_di) / 4.0
     tactical_volatility = (q_ag + n_ch + (1.0 - k_ex)) / 3.0
 
+    board_coords = {
+        CHESS_PIECE_TO_LEAF_ID["Queen"]: q_ag,
+        CHESS_PIECE_TO_LEAF_ID["King"]: k_ex,
+        CHESS_PIECE_TO_LEAF_ID["Bishop"]: b_or,
+        CHESS_PIECE_TO_LEAF_ID["Knight"]: n_ch,
+        CHESS_PIECE_TO_LEAF_ID["Pawn"]: p_co,
+        CHESS_PIECE_TO_LEAF_ID["Rook"]: r_di,
+    }
+    board_shadows = {
+        w.shadow_leaf_id: w.severity
+        for w in detect_shadow_pathologies(board_coords)
+        if w.shadow_leaf_id
+    }
+
     # =========================================================================
     # Branch A: Stoic Positional Fortress (consolidate lines, shelter King, conserve material)
     # =========================================================================
     phil_child_a = pool_departmental_child_chord(
-        {"philosophical/structure/positional_fortress_harmony": _clamp01(0.45 + 0.50 * structural_stability)},
+        {
+            "philosophical/structure/positional_fortress_harmony": _clamp01(0.45 + 0.50 * structural_stability),
+            **{
+                k: v for k, v in board_shadows.items()
+                if k in ("philosophical/being/paranoia", "philosophical/structure/prejudice", "philosophical/persistence/narcissism")
+            },
+        },
         department_prefix="philosophical/",
         learned_leaves=CHESS_PHILOSOPHICAL_CHILD_LEAVES,
     )
@@ -297,7 +322,13 @@ def compile_chess_posture_chords(
     # Branch B: Sharp Tactical Strike (unleash Queen volition + Knight fork disruption)
     # =========================================================================
     phil_child_b = pool_departmental_child_chord(
-        {"philosophical/being/tactical_fork_sacrifice": _clamp01(0.50 + 0.50 * tactical_volatility)},
+        {
+            "philosophical/being/tactical_fork_sacrifice": _clamp01(0.50 + 0.50 * tactical_volatility),
+            **{
+                k: v for k, v in board_shadows.items()
+                if k in ("philosophical/being/psychosis", "philosophical/structure/corruption", "philosophical/persistence/mania_greed")
+            },
+        },
         department_prefix="philosophical/",
         learned_leaves=CHESS_PHILOSOPHICAL_CHILD_LEAVES,
     )

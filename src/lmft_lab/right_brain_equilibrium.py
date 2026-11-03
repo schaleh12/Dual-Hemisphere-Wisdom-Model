@@ -63,6 +63,14 @@ from .contemplation_ledger import (
 )
 from .local_models import strict_json
 from .model_assets import ModelError
+from .philosophical_abstraction_matrix import (
+    PHILOSOPHICAL_SHADOW_LEAVES,
+    ShadowPathologyWarning,
+    SiblingColorBalance,
+    compute_philosophical_color_harmony,
+    detect_shadow_pathologies,
+    inspect_vibe_abstraction_profile,
+)
 from .propagation import Association, PropagationConfig, PropagationResult, propagate_activation
 from .reflection_classifier import (
     AROUSAL_LEAF,
@@ -524,6 +532,8 @@ class RightBrainVibe:
     queried_child_leaves: tuple[str, ...] = ()
     skipped_child_leaves: tuple[str, ...] = ()
     felt_chord: FeltChord | None = None
+    sibling_color_balances: tuple[SiblingColorBalance, ...] = ()
+    shadow_pathology_warnings: tuple[ShadowPathologyWarning, ...] = ()
 
     def __post_init__(self):
         if self.posture not in RIGHT_BRAIN_POSTURES:
@@ -773,6 +783,33 @@ def compile_right_brain_vibe(
                     round(0.50 * r_val + 0.50 * l_val, 4),
                 )
 
+        if fact <= 0.30 and not theory_warmer:
+            ext_pre_shadows = {
+                w.shadow_leaf_id
+                for w in detect_shadow_pathologies(
+                    locked_external,
+                    fact=fact,
+                    arousal=arousal,
+                    resonance=resonance,
+                )
+            }
+            th_shadows = detect_shadow_pathologies(
+                internal_theory_coords,
+                fact=fact,
+                arousal=arousal,
+                resonance=resonance,
+            )
+            for th_w in th_shadows:
+                ext_val = float(locked_external.get(th_w.leaf_id, 0.0))
+                if (
+                    th_w.shadow_leaf_id not in ext_pre_shadows
+                    and ext_val <= 0.55
+                    and (th_w.leaf_activation - ext_val) >= 0.35
+                ):
+                    dissonance_notes.append(
+                        f"shadow_pathology_dissonance({th_w.shadow_pathology.lower()}:{th_w.trigger_reason})"
+                    )
+
     ratified_chord_names: set[str] = set()
     tension_resolving_chord_names: set[str] = set()
     active_theory_rules = list(rules)
@@ -973,13 +1010,44 @@ def compile_right_brain_vibe(
         learned_leaves=learned_leaves,
     )
 
+    sibling_color_balances = compute_philosophical_color_harmony(locked_external)
+    shadow_warnings = detect_shadow_pathologies(
+        locked_external,
+        fact=fact,
+        arousal=arousal,
+        resonance=resonance,
+        novelty=novelty,
+    )
+    vibe_coords = dict(locked_external)
+    for w in shadow_warnings:
+        if w.shadow_leaf_id:
+            vibe_coords[w.shadow_leaf_id] = max(
+                float(vibe_coords.get(w.shadow_leaf_id, 0.0)),
+                float(w.severity),
+            )
+
+    theory_coords_out = dict(internal_theory_coords) if internal_theory_coords is not None else {}
+    if internal_theory_coords is not None:
+        for th_w in detect_shadow_pathologies(
+            internal_theory_coords,
+            fact=fact,
+            arousal=arousal,
+            resonance=resonance,
+            novelty=novelty,
+        ):
+            if th_w.shadow_leaf_id:
+                theory_coords_out[th_w.shadow_leaf_id] = max(
+                    float(theory_coords_out.get(th_w.shadow_leaf_id, 0.0)),
+                    float(th_w.severity),
+                )
+
     vibe = RightBrainVibe(
         pass_index=pass_index,
         posture=posture,
         active_concept=active_concept,
         tug_reasons=tuple(tug_reasons),
-        coordinates=locked_external,
-        theory_coordinates=dict(internal_theory_coords) if internal_theory_coords is not None else {},
+        coordinates=vibe_coords,
+        theory_coordinates=theory_coords_out,
         rule_activations=raw_rule_activations,
         theory_rule_activations=theory_rule_activations,
         synthesis=synthesis,
@@ -1000,6 +1068,8 @@ def compile_right_brain_vibe(
         queried_child_leaves=queried_child_leaves,
         skipped_child_leaves=skipped_child_leaves,
         felt_chord=felt_chord,
+        sibling_color_balances=sibling_color_balances,
+        shadow_pathology_warnings=shadow_warnings,
     )
     return vibe, next_memory
 

@@ -36,6 +36,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 import math
 
+from .reflection_classifier import LearnedLeaf
+
 
 @dataclass(frozen=True)
 class PhilosophicalMatrixEntry:
@@ -61,6 +63,7 @@ class PhilosophicalMatrixEntry:
     # Tier 5: Kingdom & Environment
     kingdom: str
     environment: str
+    shadow_leaf_id: str = ""
 
     def to_dict(self) -> dict:
         return {
@@ -78,6 +81,7 @@ class PhilosophicalMatrixEntry:
             "chess_subtitle": self.chess_subtitle,
             "shadow_pathology": self.shadow_pathology,
             "shadow_subtitle": self.shadow_subtitle,
+            "shadow_leaf_id": self.shadow_leaf_id,
             "kingdom": self.kingdom,
             "environment": self.environment,
         }
@@ -101,6 +105,7 @@ PHILOSOPHICAL_ABSTRACTION_MATRIX: tuple[PhilosophicalMatrixEntry, ...] = (
         shadow_subtitle="Ungrounded volition",
         kingdom="Mammal",
         environment="Light",
+        shadow_leaf_id="philosophical/being/psychosis",
     ),
     PhilosophicalMatrixEntry(
         seed_coordinate="existence",
@@ -119,6 +124,7 @@ PHILOSOPHICAL_ABSTRACTION_MATRIX: tuple[PhilosophicalMatrixEntry, ...] = (
         shadow_subtitle="Existential siege",
         kingdom="Reptile",
         environment="Sun",
+        shadow_leaf_id="philosophical/being/paranoia",
     ),
     PhilosophicalMatrixEntry(
         seed_coordinate="order",
@@ -137,6 +143,7 @@ PHILOSOPHICAL_ABSTRACTION_MATRIX: tuple[PhilosophicalMatrixEntry, ...] = (
         shadow_subtitle="Rigid preconception",
         kingdom="Fish",
         environment="Ocean",
+        shadow_leaf_id="philosophical/structure/prejudice",
     ),
     PhilosophicalMatrixEntry(
         seed_coordinate="chaos",
@@ -155,6 +162,7 @@ PHILOSOPHICAL_ABSTRACTION_MATRIX: tuple[PhilosophicalMatrixEntry, ...] = (
         shadow_subtitle="Systemic entropy",
         kingdom="Bird",
         environment="Sky",
+        shadow_leaf_id="philosophical/structure/corruption",
     ),
     PhilosophicalMatrixEntry(
         seed_coordinate="continuity",
@@ -173,6 +181,7 @@ PHILOSOPHICAL_ABSTRACTION_MATRIX: tuple[PhilosophicalMatrixEntry, ...] = (
         shadow_subtitle="Runaway accumulation",
         kingdom="Insect",
         environment="Soil",
+        shadow_leaf_id="philosophical/persistence/mania_greed",
     ),
     PhilosophicalMatrixEntry(
         seed_coordinate="discreteness",
@@ -191,6 +200,53 @@ PHILOSOPHICAL_ABSTRACTION_MATRIX: tuple[PhilosophicalMatrixEntry, ...] = (
         shadow_subtitle="Isolated enclosure",
         kingdom="Amphibian",
         environment="Shadow",
+        shadow_leaf_id="philosophical/persistence/narcissism",
+    ),
+)
+
+CHESS_PIECE_TO_LEAF_ID: dict[str, str] = {
+    entry.chess_piece: entry.leaf_id for entry in PHILOSOPHICAL_ABSTRACTION_MATRIX
+}
+
+# Real Tier-2 LearnedLeaf child drawers for the 6 Shadow Pathologies under their parent branches.
+# Their 8-float anchor_weights project onto the 8 Thinker department anchors:
+# (agency, existence, order, chaos, continuity, discreteness, theory, fact).
+PHILOSOPHICAL_SHADOW_LEAVES: tuple[LearnedLeaf, ...] = (
+    LearnedLeaf(
+        "philosophical/being",
+        "psychosis",
+        "Ungrounded Queen volition and impulsive high-agency action charging ahead without existential safety or verified fact.",
+        anchor_weights=(0.96, 0.12, 0.25, 0.55, 0.46, 0.20, 0.90, 0.10),
+    ),
+    LearnedLeaf(
+        "philosophical/being",
+        "paranoia",
+        "Existential King siege and defensive panic where survival fear freezes active agency inside a threatened enclosure.",
+        anchor_weights=(0.12, 0.94, 0.72, 0.35, 0.33, 0.62, 0.85, 0.25),
+    ),
+    LearnedLeaf(
+        "philosophical/structure",
+        "prejudice",
+        "Rigid single-diagonal Bishop fixation and dogmatic order that locks onto preconceptions while rejecting openness.",
+        anchor_weights=(0.33, 0.75, 0.95, 0.05, 0.39, 0.73, 0.88, 0.20),
+    ),
+    LearnedLeaf(
+        "philosophical/structure",
+        "corruption",
+        "Brittle Knight disruption and chaotic systemic entropy that shatters structural order and continuity.",
+        anchor_weights=(0.45, 0.65, 0.10, 0.98, 0.15, 0.53, 0.60, 0.30),
+    ),
+    LearnedLeaf(
+        "philosophical/persistence",
+        "mania_greed",
+        "Runaway Pawn swarm accumulation and relentless momentum that dissolves discrete boundaries.",
+        anchor_weights=(0.78, 0.70, 0.45, 0.40, 0.96, 0.10, 0.82, 0.25),
+    ),
+    LearnedLeaf(
+        "philosophical/persistence",
+        "narcissism",
+        "Isolated Rook fortress enclosure and self-contained discreteness that seals out continuity and shared flow.",
+        anchor_weights=(0.20, 0.89, 0.75, 0.08, 0.12, 0.96, 0.80, 0.25),
     ),
 )
 
@@ -316,6 +372,7 @@ class ShadowPathologyWarning:
     severity: float
     trigger_reason: str
     dashboard_banner: str
+    shadow_leaf_id: str = ""
 
     def to_dict(self) -> dict:
         return {
@@ -330,6 +387,7 @@ class ShadowPathologyWarning:
             "chess_subtitle": self.chess_subtitle,
             "shadow_pathology": self.shadow_pathology,
             "shadow_subtitle": self.shadow_subtitle,
+            "shadow_leaf_id": self.shadow_leaf_id,
             "kingdom": self.kingdom,
             "environment": self.environment,
             "leaf_activation": self.leaf_activation,
@@ -372,6 +430,7 @@ def _make_warning(
         severity=_clamp01(severity),
         trigger_reason=reason,
         dashboard_banner=banner,
+        shadow_leaf_id=entry.shadow_leaf_id,
     )
 
 
@@ -429,7 +488,7 @@ def detect_shadow_pathologies(
     warnings: list[ShadowPathologyWarning] = []
 
     # 1. Red — Agency -> Queen -> Psychosis (Ungrounded volition)
-    if agency >= 0.75 and (existence <= 0.35 or resolved_fact <= 0.30):
+    if agency >= 0.75 and existence <= 0.35:
         sev = max(agency - existence, agency * (1.0 - min(existence, resolved_fact)))
         warnings.append(
             _make_warning(
@@ -457,7 +516,7 @@ def detect_shadow_pathologies(
         )
 
     # 3. Magenta — Order -> Bishop -> Prejudice (Rigid preconception)
-    if order >= 0.75 and chaos <= 0.35 and (fairness <= 0.35 or resolved_novelty <= 0.25):
+    if order >= 0.75 and chaos <= 0.35 and fairness <= 0.38:
         sev = max(order - fairness, order * (1.0 - min(fairness, resolved_novelty)))
         warnings.append(
             _make_warning(
@@ -485,7 +544,7 @@ def detect_shadow_pathologies(
         )
 
     # 5. Blue — Continuity -> Pawn -> Mania / Greed (Runaway accumulation)
-    if continuity >= 0.75 and (discreteness <= 0.30 or wastelessness <= 0.30):
+    if continuity >= 0.75 and discreteness <= 0.30 and fairness <= 0.45 and (wastelessness <= 0.35 or power >= 0.65):
         sev = max(continuity - discreteness, continuity * max(power, 1.0 - wastelessness))
         warnings.append(
             _make_warning(
@@ -499,7 +558,7 @@ def detect_shadow_pathologies(
         )
 
     # 6. Yellow — Discreteness -> Rook -> Narcissism (Isolated enclosure)
-    if discreteness >= 0.75 and (continuity <= 0.35 or fairness <= 0.35 or resolved_resonance <= 0.30):
+    if discreteness >= 0.75 and continuity <= 0.38 and fairness <= 0.38:
         sev = max(
             discreteness - continuity,
             discreteness * max(self_suff, 1.0 - min(fairness, resolved_resonance)),
@@ -518,22 +577,49 @@ def detect_shadow_pathologies(
     return tuple(warnings)
 
 
+def compute_shadow_leaf_coordinates(
+    coordinates: Mapping[str, float],
+    *,
+    fact: float | None = None,
+    arousal: float | None = None,
+    resonance: float | None = None,
+    novelty: float | None = None,
+) -> dict[str, float]:
+    """Compute the 6 Tier-2 Philosophical Shadow Pathology child-leaf activations in `[0.0, 1.0]`."""
+    warnings = detect_shadow_pathologies(
+        coordinates,
+        fact=fact,
+        arousal=arousal,
+        resonance=resonance,
+        novelty=novelty,
+    )
+    by_shadow_id = {w.shadow_leaf_id: w.severity for w in warnings if w.shadow_leaf_id}
+    out: dict[str, float] = {}
+    for leaf in PHILOSOPHICAL_SHADOW_LEAVES:
+        existing = float(coordinates.get(leaf.leaf_id, 0.0))
+        out[leaf.leaf_id] = _clamp01(max(existing, by_shadow_id.get(leaf.leaf_id, 0.0)))
+    return out
+
+
 def inspect_vibe_abstraction_profile(vibe) -> dict:
     """Compile a full 5-Tier Philosophical Abstraction & Shadow Pathology profile from a `RightBrainVibe`."""
     coords = vibe.coordinates
-    balances = compute_philosophical_color_harmony(coords)
-    warnings = detect_shadow_pathologies(
-        coords,
-        fact=vibe.fact,
-        arousal=vibe.arousal,
-        resonance=vibe.resonance,
-        novelty=vibe.novelty,
-    )
+    balances = getattr(vibe, "sibling_color_balances", None) or compute_philosophical_color_harmony(coords)
+    warnings = getattr(vibe, "shadow_pathology_warnings", None)
+    if warnings is None:
+        warnings = detect_shadow_pathologies(
+            coords,
+            fact=vibe.fact,
+            arousal=vibe.arousal,
+            resonance=vibe.resonance,
+            novelty=vibe.novelty,
+        )
     leaf_cards = []
     for entry in PHILOSOPHICAL_ABSTRACTION_MATRIX:
         val = _clamp01(float(coords.get(entry.leaf_id, 0.0)))
         card = entry.to_dict()
         card["activation"] = val
+        card["shadow_leaf_activation"] = _clamp01(float(coords.get(entry.shadow_leaf_id, 0.0)))
         leaf_cards.append(card)
     return {
         "leaves": leaf_cards,

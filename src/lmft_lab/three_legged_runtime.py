@@ -481,6 +481,20 @@ class ThreeLeggedTurnResult:
     def next_diary(self) -> SettledDiary:
         return self.equilibrium.next_diary
 
+    @property
+    def sibling_color_balances(self):
+        return self.final_vibe.sibling_color_balances
+
+    @property
+    def shadow_pathology_warnings(self):
+        return self.final_vibe.shadow_pathology_warnings
+
+    @property
+    def abstraction_profile(self) -> dict:
+        from .philosophical_abstraction_matrix import inspect_vibe_abstraction_profile
+
+        return inspect_vibe_abstraction_profile(self.final_vibe)
+
 
 def run_three_legged_turn(
     birth_state: BirthState,

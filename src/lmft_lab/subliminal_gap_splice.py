@@ -67,6 +67,7 @@ import torch
 from torch import Tensor, nn
 
 from .branch_archives import SocialDriftReport, ThreeClassifierDeliberation
+from .philosophical_abstraction_matrix import PHILOSOPHICAL_SHADOW_LEAVES
 from .runtime_store import atomic_json
 from .neural_bridge_classifiers import (
     DEFAULT_COMPLEX_FEELING_LEAVES,
@@ -195,7 +196,7 @@ DEPARTMENT_FOUNDING_ANCHORS: dict[str, tuple[str, ...]] = {
 
 _DEFAULT_LEAF_ANCHOR_WEIGHTS: dict[str, tuple[float, ...]] = {
     leaf.leaf_id: leaf.anchor_weights
-    for leaf in DEFAULT_COMPLEX_FEELING_LEAVES
+    for leaf in DEFAULT_COMPLEX_FEELING_LEAVES + PHILOSOPHICAL_SHADOW_LEAVES
     if leaf.anchor_weights is not None
 }
 
