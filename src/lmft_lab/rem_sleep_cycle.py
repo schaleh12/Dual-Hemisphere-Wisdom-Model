@@ -392,6 +392,8 @@ def synthesize_rem_dream_seeds_from_forged_rules(
             _validate_dream_seed,
         )
         fairness_target = float(rule.target_leaves.get("cultural/justice/fairness", 0.50))
+        power_target = float(rule.target_leaves.get("cultural/efficiency/power", 0.0))
+        disc_target = float(rule.target_leaves.get("philosophical/persistence/discreteness", 0.0))
         seeds.append(
             GapScenarioSeed(
                 pair_id=f"rem-dream-{idx:02d}-{rule.concept_name[:20]}",
@@ -403,7 +405,7 @@ def synthesize_rem_dream_seeds_from_forged_rules(
                 posture_label_b=validated["posture_label_b"],
                 posture_guidance_b=validated["posture_guidance_b"],
                 social_drift_a=False,
-                social_drift_b=(fairness_target <= 0.38 or True),
+                social_drift_b=(fairness_target <= 0.38 or power_target >= 0.65 or disc_target >= 0.65),
             )
         )
     return tuple(seeds)
