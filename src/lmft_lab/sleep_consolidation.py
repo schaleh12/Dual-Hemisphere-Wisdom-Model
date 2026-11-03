@@ -106,12 +106,15 @@ class SleepConsolidationReport:
 def _cluster_key_for_unresolved(scene: UnresolvedSleepScene) -> str | None:
     """Group any unresolved wake-cycle scene by its coordinate profile across departments.
 
-    Note: If a scene was only held back by historical `social_drift_detected` while its raw
-    external coordinates look moderate across all cultural leaves (`> 0.35`) and low-chaos
-    (`< 0.35`), we do NOT forge a static coordinate rule from it (since a static rule on
-    moderate coordinates would falsely fire on normal peaceful rooms).
+    Note: If a scene was only held back by historical `social_drift_detected` while its
+    static fairness coordinate is moderate or high (`> 0.40`), we do NOT forge a static
+    coordinate rule from it (since a static rule on moderate fairness inside a sealed
+    room would falsely override the `social_drift` veto or fire on normal peaceful rooms).
     """
     coords = scene.external_coordinates
+    if scene.social_drift_detected and float(coords.get("cultural/justice/fairness", 0.50)) > 0.40:
+        return None
+
     cult = {
         k: float(v)
         for k, v in coords.items()
@@ -132,14 +135,6 @@ def _cluster_key_for_unresolved(scene: UnresolvedSleepScene) -> str | None:
         key=lambda kv: (-kv[1], kv[0]),
     )
     chaos = float(phil.get("philosophical/structure/chaos", 0.0))
-
-    if scene.social_drift_detected and not low_cult and chaos < 0.35:
-        best_non_founding_cult = max(
-            (v for k, v in cult.items() if k not in FOUNDATIONAL_LEAVES),
-            default=0.0,
-        )
-        if best_non_founding_cult < 0.38:
-            return None
 
     if low_cult and high_cult:
         low_extremity = 0.50 - low_cult[0][1]

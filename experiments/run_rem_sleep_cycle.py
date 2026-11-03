@@ -291,14 +291,16 @@ def main() -> None:
     left_brain_c2.model.config.use_cache = False
 
     ckpt_cycle2_dir = repo_root / "models" / "left_brain_lora_cycle2"
-    rem_epochs = 2
-    rem_lr_proj = 1.8e-4
-    rem_lr_lora = 6e-5
+    rem_epochs = 1
+    rem_lr_proj = 1.0e-4
+    rem_lr_lora = 2e-5
+    rem_warmup_steps = 3
+    rem_replay_ratio = 2
 
     print(
-        f"[Phase 4] Running gentle incremental REM LoRA update ({rem_epochs} epochs, "
-        f"lr_proj={rem_lr_proj}, lr_lora={rem_lr_lora}) on {len(replay_train_pairs)} replay + "
-        f"{len(dream_pairs)} dream pairs ..."
+        f"[Phase 4] Running gentle incremental REM LoRA update ({rem_epochs} epoch, "
+        f"lr_proj={rem_lr_proj}, lr_lora={rem_lr_lora}, warmup={rem_warmup_steps}, replay_ratio={rem_replay_ratio}:1) "
+        f"on {len(replay_train_pairs)} replay + {len(dream_pairs)} dream pairs ..."
     )
     lora_history, callosum_meta_c2, combined_pairs = run_incremental_lora_cycle_2_pass(
         left_brain_c2.model,
@@ -317,6 +319,8 @@ def main() -> None:
         epochs=rem_epochs,
         lr_projector=rem_lr_proj,
         lr_lora=rem_lr_lora,
+        warmup_steps=rem_warmup_steps,
+        replay_ratio=rem_replay_ratio,
     )
     left_brain_c2.callosum_metadata = callosum_meta_c2
     vram_audit["phase4_peak_vram_mb"] = (

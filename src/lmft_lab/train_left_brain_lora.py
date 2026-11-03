@@ -930,6 +930,7 @@ def train_left_brain_lora_and_callosum(
     weight_decay: float = 0.01,
     contrastive_weight: float = 1.5,
     margin_target: float = 0.35,
+    warmup_steps: int = 0,
 ) -> list[dict[str, float]]:
     """Train `SubliminalGapProjector` and `LoRALinear` adapters on `train_pairs` with `batch_size=1`."""
     model.train()
@@ -940,14 +941,17 @@ def train_left_brain_lora_and_callosum(
     if not lora_params:
         raise ValueError("Model has no trainable LoRA parameters; call inject_lora_adapters(model) first")
 
+    base_lrs = (float(lr_projector), float(lr_lora))
     optimizer = torch.optim.AdamW(
         [
-            {"params": proj_params, "lr": float(lr_projector)},
-            {"params": lora_params, "lr": float(lr_lora)},
+            {"params": proj_params, "lr": base_lrs[0]},
+            {"params": lora_params, "lr": base_lrs[1]},
         ],
         weight_decay=float(weight_decay),
     )
 
+    global_step = 0
+    w_steps = max(0, int(warmup_steps))
     epoch_history: list[dict[str, float]] = []
     for epoch_idx in range(1, int(epochs) + 1):
         t0 = time.perf_counter()
@@ -958,6 +962,10 @@ def train_left_brain_lora_and_callosum(
         sum_mb = 0.0
 
         for pair in train_pairs:
+            if w_steps > 0:
+                scale = min(1.0, float(global_step + 1) / float(w_steps))
+                optimizer.param_groups[0]["lr"] = base_lrs[0] * scale
+                optimizer.param_groups[1]["lr"] = base_lrs[1] * scale
             optimizer.zero_grad()
             loss, metrics = compute_contrastive_pair_loss(
                 model,
@@ -972,6 +980,7 @@ def train_left_brain_lora_and_callosum(
             loss.backward()
             torch.nn.utils.clip_grad_norm_(proj_params + lora_params, max_norm=1.0)
             optimizer.step()
+            global_step += 1
 
             sum_total += metrics["total_loss"]
             sum_mle += metrics["mle_loss"]

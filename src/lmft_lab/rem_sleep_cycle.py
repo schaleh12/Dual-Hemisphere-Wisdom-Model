@@ -36,6 +36,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+import random
 import re
 import time
 
@@ -205,7 +206,18 @@ def run_wake_stream(
     cur_diary = SettledDiary()
     cur_chord_memory = ChordMemoryBank()
     cur_ledger = initial_ledger if initial_ledger is not None else ContemplationLedger()
-    cur_archives = initial_archives if initial_archives is not None else ThreeBranchArchives()
+    if initial_archives is not None:
+        cur_archives = ThreeBranchArchives(
+            executive=initial_archives.executive.__class__(
+                precedents=(),
+                action_clauses=initial_archives.executive.action_clauses,
+                max_entries=initial_archives.executive.max_entries,
+            ),
+            legislative=initial_archives.legislative,
+            judicial=initial_archives.judicial,
+        )
+    else:
+        cur_archives = ThreeBranchArchives()
     rules_tuple = tuple(rules)
     leaves_tuple = tuple(learned_leaves)
 
@@ -482,9 +494,11 @@ def run_incremental_lora_cycle_2_pass(
     checkpoint_out_dir: str | Path | None = None,
     daytime_scenarios: Sequence[str] = (),
     banned_substrings: Sequence[str] = (),
-    epochs: int = 2,
-    lr_projector: float = 1.8e-4,
-    lr_lora: float = 6e-5,
+    epochs: int = 1,
+    lr_projector: float = 1.0e-4,
+    lr_lora: float = 2e-5,
+    warmup_steps: int = 3,
+    replay_ratio: int | None = 2,
 ) -> tuple[list[dict[str, float]], CorpusCallosumMetadata, tuple[ContrastiveGapPair, ...]]:
     """Enforce Guardrail #2: Gentle incremental REM LoRA + Callosum update mixing replay + dream pairs."""
     combined_pairs = validate_dream_pairs_disjoint_from_wake_and_holdout(
@@ -494,11 +508,19 @@ def run_incremental_lora_cycle_2_pass(
         daytime_scenarios=daytime_scenarios,
         banned_substrings=banned_substrings,
     )
+    if replay_ratio is not None and replay_ratio > 0 and dream_pairs:
+        max_replay = min(len(replay_train_pairs), int(replay_ratio) * len(dream_pairs))
+        rng = random.Random(42 + int(sleep_cycle_before))
+        sampled_replay = tuple(rng.sample(list(replay_train_pairs), max_replay))
+        active_train_pairs = sampled_replay + tuple(dream_pairs)
+    else:
+        active_train_pairs = combined_pairs
+
     history = train_left_brain_lora_and_callosum(
         model,
         tokenizer,
         projector,
-        train_pairs=combined_pairs,
+        train_pairs=active_train_pairs,
         gap_token_id=gap_token_id,
         device=device,
         epochs=epochs,
@@ -507,6 +529,7 @@ def run_incremental_lora_cycle_2_pass(
         weight_decay=0.01,
         contrastive_weight=1.5,
         margin_target=0.35,
+        warmup_steps=warmup_steps,
     )
     sleep_cycle_after = int(sleep_cycle_before) + 1
     if checkpoint_out_dir is not None:
@@ -519,7 +542,8 @@ def run_incremental_lora_cycle_2_pass(
             trained_trajectories_count=len(combined_pairs),
             notes=(
                 f"Stage 5 Sleep Cycle {sleep_cycle_after}: gentle incremental REM update on "
-                f"{len(replay_train_pairs)} replay + {len(dream_pairs)} REM dream pairs."
+                f"{len(active_train_pairs) - len(dream_pairs)}/{len(replay_train_pairs)} replay + "
+                f"{len(dream_pairs)} REM dream pairs (warmup_steps={warmup_steps})."
             ),
         )
     else:

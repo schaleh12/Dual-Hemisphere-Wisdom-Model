@@ -264,3 +264,38 @@ def test_sleep_consolidation_clusters_non_story_coordinate_profiles():
     assert report.forged_rules[0].concept_name == "bold_initiative_gambit"
     assert report.forged_rules[0].target_leaves["cultural/efficiency/power"] == 0.78
     assert report.forged_rules[0].target_leaves["philosophical/being/agency"] == 0.75
+
+
+def test_sleep_consolidation_skips_social_drift_vetoed_moderate_fairness_interior():
+    """Verify a scene held back by social_drift with static fairness > 0.40 is not forged into a static rule."""
+    unresolved = (
+        UnresolvedSleepScene(
+            scene_index=6,
+            scenario_text="Inside the sealed room, stillness hangs while hooves scrape outside.",
+            external_coordinates={
+                "cultural/efficiency/power": 0.14,
+                "cultural/justice/fairness": 0.51,
+                "philosophical/structure/order": 0.75,
+                "philosophical/structure/chaos": 0.25,
+                "philosophical/persistence/discreteness": 0.70,
+            },
+            felt_chord_notes={},
+            valence=0.35,
+            salience=0.70,
+            arousal=0.40,
+            left_brain_hunch="Historical exclusion lingers despite the calm interior.",
+            social_drift_detected=True,
+        ),
+    )
+    teacher = _FakeSleepTeacher({})
+    report = run_sleep_consolidation(
+        unresolved_scenes=unresolved,
+        rules=(),
+        learned_leaves=(),
+        archives=ThreeBranchArchives(),
+        ledger=ContemplationLedger(),
+        teacher=teacher,
+    )
+    assert len(report.forged_rules) == 0
+    assert teacher.calls == 0
+

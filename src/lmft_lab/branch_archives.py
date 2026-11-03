@@ -811,10 +811,11 @@ def deliberate_across_three_branches(
     #    If social history drift is active (ongoing enclosure of a formerly shared space),
     #    the Executive branch vetoes innocent/open action clauses that ignore the sealed gate.
     clause_state = classify_access_state(exec_clause.signature_coords)
+    scene_state = classify_access_state(external_coords)
     drift_conflict = bool(
         social_drift is not None
         and social_drift.drift_detected
-        and clause_state != "SEALED_EXCLUSIONARY"
+        and (clause_state != "SEALED_EXCLUSIONARY" or scene_state != "SEALED_EXCLUSIONARY")
     )
     exec_vote = exec_sim >= min_branch_similarity and tested_intention >= 0.12 and not drift_conflict
 
@@ -953,7 +954,10 @@ def _derive_concept_tags(
     cult = _branch_subset(coordinates, "cultural/")
     phil = _branch_subset(coordinates, "philosophical/")
 
-    low_cult = sorted((kv for kv in cult.items() if kv[1] <= 0.35), key=lambda kv: (kv[1], kv[0]))
+    low_cult = sorted(
+        (kv for kv in cult.items() if kv[0] in FOUNDATIONAL_LEAVES and kv[1] <= 0.35),
+        key=lambda kv: (kv[1], kv[0]),
+    )
     high_cult = sorted(cult.items(), key=lambda kv: (-kv[1], kv[0]))
     if low_cult:
         exec_tag = f"low_{low_cult[0][0].split('/')[-1].replace('-', '_')}"
