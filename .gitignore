@@ -30,3 +30,6 @@ models/
 !.env.example
 .huggingface/
 *.token
+
+# Release bundles
+dist/

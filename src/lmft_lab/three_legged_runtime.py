@@ -633,6 +633,9 @@ def run_three_legged_turn(
     max_passes: int = 3,
     equilibrium_tolerance: float = DEFAULT_EQUILIBRIUM_TOLERANCE,
     branch_gating: bool = True,
+    sanctuary_target_mode: str | None = None,
+    sanctuary_lead_alpha: float = 0.25,
+    force_spoken_reply: bool = False,
 ) -> ThreeLeggedTurnResult:
     """Execute one 3-Gear Closed-Loop Dual-Hemisphere Runtime Turn.
 
@@ -718,7 +721,8 @@ def run_three_legged_turn(
     audience_mode = "PASS1_REFLEX_OR_EASE"
     gear_used = "GEAR_1_FAST_RIGHT_BRAIN"
 
-    if current_vibe.posture == "TUG_LEFT_BRAIN" or open_thread.triggered:
+    should_speak = bool(force_spoken_reply or sanctuary_target_mode is not None)
+    if current_vibe.posture == "TUG_LEFT_BRAIN" or open_thread.triggered or should_speak:
         # Step 1B: Right-Brain 3-Branch Coordinate Deliberation (~15-30 ms, 0 LLM calls)
         deliberation = deliberate_across_three_branches(
             birth_state,
@@ -737,6 +741,7 @@ def run_three_legged_turn(
 
         if (
             deliberation.ratified
+            and not should_speak
             and (not open_thread.triggered or subliminal_left_brain is None)
             and max_passes >= 2
         ):
@@ -856,6 +861,14 @@ def run_three_legged_turn(
                         social_drift=social_drift,
                         learned_leaves=learned_tuple,
                     )
+                    if sanctuary_target_mode is not None:
+                        from .chess_kibitz_bridge import apply_coregulation_lead_to_chord
+
+                        chord_at_comma = apply_coregulation_lead_to_chord(
+                            chord_at_comma,
+                            sanctuary_target_mode,
+                            alpha=sanctuary_lead_alpha,
+                        )
                     return (
                         chord_at_comma,
                         mid_comma_vibe.posture,
