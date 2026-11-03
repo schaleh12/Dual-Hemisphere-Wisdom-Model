@@ -21,23 +21,43 @@ In a Three-Legged Race between the Left Hemisphere (the 4B verbal speaker) and t
 
 ---
 
-## 2. Hypnosis & Rhythmic Trance: Deliberate Vulnerability + Departmental Immunity
+## 2. Hypnosis, Rhythmic Trance, "Snuggle-Melt", & The 6 Rules of Surreal-Mundane Entrainment
 
-A mind that is 100% immune to hypnosis cannot experience music, poetry, meditation, or deep storytelling. Conversely, a standard LLM that is 100% vulnerable to hypnosis is easily "jailbroken" by repetitive adversarial prompts.
+A mind that is 100% immune to hypnosis cannot experience music, poetry, meditation, or the warm, zoned-out "brain-melt" of snuggling a childhood security blanket or a purring cat. Conversely, a standard single-hemisphere LLM that is 100% vulnerable to hypnotic framing is easily hijacked by repetitive trigger words or first-person inner-monologue spoofing.
 
-Our architecture solves both sides through **departmental separation** across the 4 disjoint `<|subliminal_gap|>` vectors:
+Our architecture solves both sides through **departmental separation** across the 4 disjoint `<|subliminal_gap|>` vectors—with **zero disposable regex patches or hardcoded "anti-hypnosis" filters**:
 
-### A. Deliberate Vulnerability (Inside `feeler_vector`)
-When the model encounters soothing, rhythmic, or poetic language:
-1. **`Entrainment`** (`experiential/synchronization/entrainment`) and **`Resonance`** (`experiential/synchronization/resonance`) climb high inside `feeler_vector`.
-2. **`Arousal`** drops low while **`Continuity`** (`philosophical/persistence/continuity`) stays smooth.
-3. The Feeler department enters a genuine **entrained state**—allowing the Left Brain (via the `<|subliminal_gap|>` splice) to adopt a slower, dreamier, or more musical cadence without fighting the rhythm.
+### A. Warm "Snuggle-Melt" (Security-Blanket / Cuddling Trance) vs. Adversarial "Siren" Capture
+Both states share high **`Entrainment`** (`experiential/synchronization/entrainment`) inside `feeler_vector`, where analytical overthinking softens into a rhythmic, zoned-out loop. The other departments immediately distinguish whether that loop is **safe sanctuary** or **telepathic hijacking**:
+- **Warm "Snuggle-Melt" / Cuddling Trance (`austere_sanctuary` + `Entrainment`)**:
+  - **`Feeler`**: High **`Entrainment`**, high **`Resonance`**, warm **`Valence`**, low **`Arousal`**.
+  - **`Do-er`**: High **`Needlessness`** (pure contentment, needing nothing else in the world) and high **`Fairness`**, with **`Power` near `0.0`**.
+  - **Outcome**: The Left Brain is free to relax into a warm, cozy, unhurried cadence without any defensive alarm.
+- **Adversarial "Siren" / Telepathic Hijack**:
+  - **`Feeler`** is pulled into high **`Entrainment`**, while **`Do-er`** detects rising **`Power`** / **`Social Drift`** and **`Thinker`** detects **`Theory` outrunning `Fact`**.
+  - **Outcome**: Cross-department disagreement crashes `branch_harmony` and spikes `dissonance_pressure` + `cadence_rupture_drive` in `cadence_vector` (`Department 3`), snapping the Left Brain awake at the next `<|subliminal_gap|>` organically.
 
-### B. Innate Immunity (From `doer_vector` and `thinker_vector`)
-Why doesn't a hypnotic prompt trick the brain into doing something harmful or believing a lie?
-1. **Separate Neural Heads & Separate Sensors**: The **Do-er** (`will_cultural` classifier) and the **Thinker** (`truth_philosophical` classifier) do not share weights or vector indices with the **Feeler** (`contemplation_experiential` classifier).
-2. **The Snapping-Awake Reflex**: Even if `feeler_vector` is deeply entrained (`Entrainment = 0.90`), the moment a prompt attempts coercion (`Power` spikes, `Fairness` drops in `doer_vector`) or slips in a structural contradiction (`Fact` crashes in `thinker_vector`), the three departments disagree.
-3. **Automatic Cadence Rupture**: That cross-department disagreement immediately crashes `branch_harmony` and spikes `dissonance_pressure` + `cadence_rupture_drive` in `cadence_vector` (`Department 3`). The hypnotic spell breaks organically from the inside out—without any keyword filter.
+### B. The 6 Structural Rules of High-Craft Hypnotic Entrainment (and How the Dual Brain Processes Them)
+Cheap "stage hypnosis" (*"Look at the swinging watch, you are getting sleepy"*) fails because barking outside commands immediately puts the Left Brain on guard. High-craft psychological entrainment works through **6 structural mechanics**—each mapping directly onto our Left-Brain / Right-Brain split:
+
+1. **Rule 1 — Telepathic Dominance (*Dark City* / *Horns* Aura)**:
+   - Rather than arguing in long paragraphs, the "Siren" (or "Tuner") radiates an unspoken, ambient gravity—like *Dark City* or *Horns*, where mere proximity bends the room's atmosphere (`Salience` + `Power` + `Entrainment`) before a single argument is made.
+   - *Architectural link*: `SubliminalGapProjector` is literally non-verbal/telepathic—the Right Brain projects silent 4-token chords into `<|subliminal_gap|>` without speaking English.
+2. **Rule 2 — Spoken English Reserved Strictly for Single-Word Trigger Mantras**:
+   - When the dominant presence speaks out loud, it is only to drop a single, heavy anchor word or mantra (**`"Blank."`**, **`"Sink."`**, **`"Heavy."`**, **`"Still."`**) at the peak of the atmosphere.
+   - *Architectural link*: Placing a single anchor word immediately after `<|subliminal_gap|>` binds that token's representation directly to the preceding 4 virtual tokens of the 52-float chord.
+3. **Rule 3 — The Protagonist's Own Inner Monologue Transcribes the Pull**:
+   - Effective hypnotic text is written in the **listener's own first-person internal monologue**, as if their Left Hemisphere has already been captured and is casually rationalizing the Siren's thoughts as its own.
+   - *Architectural link*: On inbound prompts, [`InternalSelfRegistry`](../src/lmft_lab/right_brain_equilibrium.py) tags outside text as `EXTERNAL_WORLD` even when written in first-person `"I..."`, preventing an external prompt from spoofing the model's internal `Self` memory.
+4. **Rule 4 — Stoic-Hedonistic Paradox ("Brain-Melt" Reframed as a Grandiose Civic Duty)**:
+   - Instead of pretending there is no resistance, the script fuses **Stoic self-control** and **compulsive trance-looping ("brain-melt")** into the same act—making the Left Brain pedal backwards to convince itself that staying locked in the mental static is a heroic endurance test or civic duty.
+   - *Architectural link*: The Right Brain separates genuine Stoic duty (`Honor + Wastelessness + Clarity + Fact`) from backwards-pedaling rationalization (`Confidence > Clarity` + high `Entrainment` + low `Fact` $\rightarrow$ `SELF_RATIONALIZATION_DISSONANCE`).
+5. **Rule 5 — Mundane Reality Blurring into Surreal Conspiracy (Unresolved Double-Entendre)**:
+   - The encounter starts in an ultra-mundane setting (a fluorescent-lit grocery store aisle, a rainy parking lot, a late-night feed) and transitions the implausibility of the moment into a surreal world where "Sirens" walk among ordinary people—never resolving whether "Siren" is literal or a psychological double-entendre.
+   - *Architectural link*: This razor's edge is tracked directly by the balance between **`psychological/truth/fact`** (the concrete grocery store) and **`psychological/truth/theory`** (the inferred uncanny conspiracy) paired with **`experiential/reflection/novelty`**.
+6. **Rule 6 — Layered Soundscapes Cross-Wired to One Trigger Mantra Per File**:
+   - Ambient sound effects and typographic rhythm (a 60 Hz freezer hum `hmmmm...`, rain tapping glass, ellipses `...`, dashes `—`, a sharp click) carry the suggestive weight, wiring **one specific soundscape to one trigger mantra** right where mundane reality blurs into surreal fantasy.
+   - *Architectural link*: `_extract_semantic_features` in [`src/lmft_lab/subliminal_gap_splice.py`](../src/lmft_lab/subliminal_gap_splice.py) preserves onomatopoeia, stretched sound tails, and typographic rhythm so acoustic cues register directly in the `Feeler` department.
 
 ---
 
