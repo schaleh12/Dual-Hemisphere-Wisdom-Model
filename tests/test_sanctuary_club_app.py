@@ -535,3 +535,51 @@ def test_forensic_audit_chess_1_e4_gear1_settling_natural_prompt_and_illegal_mov
     assert "Nf6 contests the center" in cleaned_check
 
 
+def test_ui_ux_polish_color_bars_scroll_escape_coordinates_undo_and_ai_move(tmp_path: Path) -> None:
+    """Verify the 6 UI/UX Polish Ticket fixes (`renderColorBars`, scroll preservation, HTML escape, coordinates/reflex strip, `Undo`/`Play AI Move`, and Manifesto banner)."""
+    from lmft_lab.sanctuary_club_app import SINGLE_PAGE_HTML
+
+    # 1. Color Harmony Bars: shortened branch labels + Chess Piece mapping + nowrap spacing
+    assert "LEAF_TO_PIECE" in SINGLE_PAGE_HTML
+    assert "white-space: nowrap;" in SINGLE_PAGE_HTML
+    assert "shortBranch" in SINGLE_PAGE_HTML
+
+    # 2. Scroll & DOM preservation on 3-second poll
+    assert "lastRenderedChatSig" in SINGLE_PAGE_HTML
+    assert "lastRenderedBoardSig" in SINGLE_PAGE_HTML
+
+    # 3. HTML escaping & GEAR_3 formatting
+    assert "escapeHtml(m.text)" in SINGLE_PAGE_HTML
+    assert "GEAR 3 · QUEUED FOR SLEEP" in SINGLE_PAGE_HTML
+
+    # 4 & 5. Board coordinates (`coord-rank`, `coord-file`), last-move highlight, PGN + reflex strip, Undo, and Play AI Move
+    assert "coord-rank" in SINGLE_PAGE_HTML
+    assert "coord-file" in SINGLE_PAGE_HTML
+    assert "board-reflex-strip" in SINGLE_PAGE_HTML
+    assert "manifesto-banner" in SINGLE_PAGE_HTML
+
+    left_brain = _make_mini_left_brain()
+    runtime = SanctuaryClubRuntime(
+        state_dir=tmp_path / "ui_polish_state",
+        left_brain=left_brain,
+        lazy_load_gpu=False,
+    )
+    snap1 = runtime.handle_chess_move("e2e4")
+    assert snap1["board"]["last_move_uci"] == "e2e4"
+    assert snap1["board"]["pgn_snippet"] == "1. e4"
+    assert snap1["board"]["last_board_reflex"]["move_san"] == "e4"
+    assert snap1["board"]["last_board_reflex"]["gear_used"] == "GEAR_1_FAST_RIGHT_BRAIN"
+    assert "Wellspring of Being" in snap1["manifesto_text"]
+
+    # Play AI reply for Black (`handle_chess_ai_move`)
+    snap_ai = runtime.handle_chess_ai_move()
+    assert len(snap_ai["board"]["move_history_san"]) == 2
+    assert snap_ai["board"]["turn"] == "w"
+
+    # Undo Black's reply (`handle_chess_undo`)
+    snap_undo = runtime.handle_chess_undo()
+    assert snap_undo["board"]["move_history_san"] == ["e4"]
+    assert snap_undo["board"]["turn"] == "b"
+
+
+

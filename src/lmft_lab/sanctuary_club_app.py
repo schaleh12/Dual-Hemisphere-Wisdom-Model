@@ -58,8 +58,10 @@ from .chess_kibitz_bridge import (
     ChessBoardPosture,
     build_natural_chess_scenario_prompt,
     evaluate_chess_board_posture,
+    format_move_history_pgn_snippet,
     inspect_chess_moves_in_reply,
     merge_board_fact_with_chat_sensors,
+    rank_principled_legal_moves_san,
     verify_or_ground_chess_moves_in_reply,
 )
 from .chord_memory import ChordMemoryBank, compile_felt_chord
@@ -288,6 +290,7 @@ class SanctuaryClubRuntime:
         # Live session state
         self.board = chess.Board()
         self.move_history_san: list[str] = []
+        self.last_board_reflex: dict[str, Any] | None = None
         self.board_posture: ChessBoardPosture = evaluate_chess_board_posture(self.board)
         self.active_room: str = "chess"  # "chess" or "sanctuary"
         self.sanctuary_mode: str = "tilt_reset"
@@ -652,6 +655,12 @@ class SanctuaryClubRuntime:
     def get_state_snapshot(self) -> dict[str, Any]:
         self.board_posture = evaluate_chess_board_posture(self.board)
         legal_uci = [m.uci() for m in self.board.legal_moves]
+        last_move_uci = self.board.peek().uci() if self.board.move_stack else None
+        pgn_snippet = (
+            format_move_history_pgn_snippet(self.move_history_san, max_plies=12)
+            if self.move_history_san
+            else ""
+        )
         return {
             "active_room": self.active_room,
             "active_lineage": self.active_lineage,
@@ -661,6 +670,7 @@ class SanctuaryClubRuntime:
             "crucible_stages": CRUCIBLE_STAGES,
             "men_of_culture_shelf": MEN_OF_CULTURE_SHELF,
             "context_brace_modes": CONTEXT_BRACE_MODES,
+            "manifesto_text": CHESS_VS_HYPNOSIS_MANIFESTO,
             "sleep_cycle_index": self.sleep_cycle_index,
             "active_checkpoint_label": self.active_checkpoint_label,
             "left_brain_status": (
@@ -677,6 +687,9 @@ class SanctuaryClubRuntime:
                 "in_check": self.board.is_check(),
                 "is_game_over": self.board.is_game_over(),
                 "move_history_san": list(self.move_history_san),
+                "pgn_snippet": pgn_snippet,
+                "last_move_uci": last_move_uci,
+                "last_board_reflex": self.last_board_reflex,
                 "legal_moves_uci": legal_uci,
                 "posture": self.board_posture.to_dict(),
                 "presets": PRESET_CHESS_POSITIONS,
@@ -719,6 +732,19 @@ class SanctuaryClubRuntime:
             force_spoken_reply=has_board_warning,
         )
 
+        self.last_board_reflex = {
+            "move_san": san_str,
+            "move_uci": move.uci(),
+            "turn_to_move": "White" if self.board.turn == chess.WHITE else "Black",
+            "gear_used": turn.gear_used,
+            "settled": turn.settled,
+            "elapsed_ms": elapsed_ms,
+            "clarity": round(float(turn.final_vibe.clarity), 2),
+            "confidence": round(float(turn.final_vibe.confidence), 2),
+            "active_concept": turn.final_vibe.active_concept or "none",
+            "pgn_snippet": format_move_history_pgn_snippet(self.move_history_san, max_plies=12),
+        }
+
         # Only post to the chat room if Gear 2 spoke or a board shadow/check warning fired
         if turn.final_conscious_note or has_board_warning:
             raw_reply = turn.final_conscious_note or self._synthesize_gear_1_note(
@@ -742,6 +768,25 @@ class SanctuaryClubRuntime:
             )
         return self.get_state_snapshot()
 
+    def handle_chess_undo(self) -> dict[str, Any]:
+        """Undo the last half-move on the chessboard and refresh posture."""
+        if self.board.move_stack:
+            self.board.pop()
+            if self.move_history_san:
+                self.move_history_san.pop()
+        self.last_board_reflex = None
+        self.board_posture = evaluate_chess_board_posture(self.board)
+        return self.get_state_snapshot()
+
+    def handle_chess_ai_move(self) -> dict[str, Any]:
+        """Play a principled legal reply for the side to move on the chessboard."""
+        if self.board.is_game_over():
+            raise ValueError("The game is already over.")
+        candidates = rank_principled_legal_moves_san(self.board, limit=1)
+        if not candidates:
+            raise ValueError("No legal moves available.")
+        return self.handle_chess_move(candidates[0])
+
     def handle_set_fen(self, fen_or_preset: str) -> dict[str, Any]:
         key = fen_or_preset.strip()
         if key in PRESET_CHESS_POSITIONS:
@@ -750,6 +795,7 @@ class SanctuaryClubRuntime:
             fen = key
         self.board = chess.Board(fen)
         self.move_history_san.clear()
+        self.last_board_reflex = None
         self.board_posture = evaluate_chess_board_posture(self.board)
         return self.get_state_snapshot()
 
@@ -1451,6 +1497,9 @@ SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
   .sq.light { background: var(--board-light); }
   .sq.dark { background: var(--board-dark); }
   .sq.selected { background: var(--board-sel); }
+  .sq.last-move {
+    box-shadow: inset 0 0 0 2px rgba(234, 179, 8, 0.72);
+  }
   .sq.legal-dot::after {
     content: "";
     width: 10px;
@@ -1458,6 +1507,39 @@ SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
     border-radius: 50%;
     background: rgba(56, 189, 248, 0.55);
     position: absolute;
+  }
+  .coord-rank {
+    position: absolute;
+    top: 2px;
+    left: 3px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--text-dim);
+    pointer-events: none;
+    line-height: 1;
+  }
+  .coord-file {
+    position: absolute;
+    bottom: 2px;
+    right: 3px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--text-dim);
+    pointer-events: none;
+    line-height: 1;
+  }
+  .board-reflex-strip {
+    width: 100%;
+    background: var(--bg-root);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 6px 9px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
   }
   .piece-w { color: #f8fafc; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.85)); }
   .piece-b { color: #94a3b8; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.95)); }
@@ -1510,6 +1592,9 @@ SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
   .color-row-head {
     display: flex;
     justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
     font-family: var(--font-mono);
     font-size: 11px;
     color: var(--text-muted);
@@ -1605,6 +1690,8 @@ SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
     line-height: 1.5;
     color: var(--text-main);
     font-size: 13px;
+    white-space: pre-wrap;
+    word-break: break-word;
   }
   .msg-foot {
     display: flex;
@@ -1698,10 +1785,14 @@ SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
   <main>
     <section class="left-pane">
       <!-- CHESS VIEW -->
-      <div id="chess-view" style="display:flex; flex-direction:column; gap:12px;">
+      <div id="chess-view" style="display:flex; flex-direction:column; gap:10px;">
         <div class="section-label">LIVE BOARD (FACT ANCHOR)</div>
         <div class="board-wrap">
           <div class="chess-grid" id="chess-grid"></div>
+          <div class="board-reflex-strip" id="board-reflex-strip">
+            <span id="board-pgn-line">Starting position · White to move</span>
+            <span id="board-reflex-line" style="color:var(--text-dim);">Click a piece or enter a move to trigger Gear-1 Right-Brain reflex.</span>
+          </div>
           <div class="controls-row">
             <select id="preset-select" style="flex:1;" onchange="loadPreset(this.value)">
               <option value="start">Standard Starting Position</option>
@@ -1710,10 +1801,12 @@ SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
               <option value="knight_outpost_chaos">Sharp Tactical Tension (Knight / Ice)</option>
               <option value="rook_seventh_bastion">7th-Rank Rook Bastion Endgame</option>
             </select>
+            <button class="btn" onclick="undoChessMove()" title="Undo last half-move">Undo</button>
+            <button class="btn" onclick="playAiChessMove()" title="Have the side to move play a principled legal move">Play AI Move</button>
             <button class="btn" onclick="loadPreset('start')">Reset</button>
           </div>
           <div class="controls-row">
-            <input type="text" id="fen-input" placeholder="Paste FEN or move (e.g. e4, Nf3)..." style="flex:1;">
+            <input type="text" id="fen-input" placeholder="Paste FEN or move (e.g. e4, Nf3)..." style="flex:1;" onkeydown="if(event.key==='Enter') applyManualMoveOrFen()">
             <button class="btn" onclick="applyManualMoveOrFen()">Apply</button>
           </div>
         </div>
@@ -1733,7 +1826,14 @@ SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
             <div style="display:flex; gap:6px; flex-wrap:wrap;">
               <button class="btn" style="flex:1; font-size:11px; border-color:#38bdf8;" onclick="openCultureShelf('poetry')" title="Open Imgur Poetry Portfolio &amp; load Stage I Wave">Poetry [Imgur ↗]</button>
               <button class="btn" style="flex:1; font-size:11px; border-color:#38bdf8;" onclick="openCultureShelf('music')" title="Open Curated YouTube Music Playlist &amp; load Stage II Wave">Music [Playlist ↗]</button>
-              <button class="btn" style="flex:1; font-size:11px; border-color:#38bdf8;" onclick="openCultureShelf('philosophy')" title="Load Chess vs. Hypnosis Philosophy Manifesto into Stage III Wave">Philosophy [Manifesto]</button>
+              <button class="btn" style="flex:1; font-size:11px; border-color:#38bdf8;" onclick="openCultureShelf('philosophy')" title="View Chess vs. Hypnosis Manifesto &amp; load Stage III Wave">Philosophy [Manifesto]</button>
+            </div>
+            <div id="manifesto-banner" style="display:none; background:var(--bg-elevated); border:1px solid #38bdf8; border-radius:3px; padding:8px 10px; font-size:11.5px; line-height:1.45; color:var(--text-main);">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; font-family:var(--font-mono); font-size:10.5px; color:var(--accent);">
+                <span>CHESS VS. HYPNOSIS MANIFESTO (CALIBRATED ONTOLOGY)</span>
+                <button class="foot-link" onclick="document.getElementById('manifesto-banner').style.display='none'">[Close]</button>
+              </div>
+              <div id="manifesto-banner-body"></div>
             </div>
             <div style="display:flex; gap:6px; flex-wrap:wrap;">
               <button class="btn" id="brace-btn-story_telling" style="flex:1; font-size:11px; font-family:var(--font-mono);" onclick="triggerContextBrace('story_telling')" title="Signal Right-Brain Do-er (Cultural History) to brace for Narrative Action Fact">(Story-Telling)</button>
@@ -1838,12 +1938,40 @@ const COLOR_HEX = {
   'Blue': '#3b82f6',
   'Yellow': '#eab308'
 };
+const LEAF_TO_PIECE = {
+  'agency': 'Queen',
+  'existence': 'King',
+  'order': 'Bishop',
+  'chaos': 'Knight',
+  'continuity': 'Pawn',
+  'discreteness': 'Rook'
+};
 
 let appState = null;
 let selectedSquare = null;
 let openDrawers = {};
 let currentCrucibleStage = 'poetry_story';
 let crucibleInitialized = false;
+let lastRenderedChatSig = '';
+let lastRenderedChatCount = 0;
+let lastRenderedBoardSig = '';
+
+function escapeHtml(raw) {
+  return String(raw ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function formatGearLabel(gear) {
+  const g = String(gear || '');
+  if (g === 'GEAR_1_FAST_RIGHT_BRAIN') return 'GEAR 1 · REFLEX';
+  if (g === 'GEAR_2_SUBLIMINAL_GAP_SPLICE') return 'GEAR 2 · COMMA-SPLICED';
+  if (g === 'GEAR_3_UNRESOLVED_QUEUED_FOR_SLEEP') return 'GEAR 3 · QUEUED FOR SLEEP';
+  return g;
+}
 
 function switchSanctuarySubtab(sub) {
   document.getElementById('subtab-crucible').classList.toggle('active', sub === 'crucible');
@@ -1879,6 +2007,13 @@ function openCultureShelf(key) {
   document.getElementById('crucible-wave-input').value = item.sample_text || '';
   if (item.url && item.url.startsWith('http')) {
     window.open(item.url, '_blank', 'noopener');
+  } else if (key === 'philosophy') {
+    const banner = document.getElementById('manifesto-banner');
+    const bodyEl = document.getElementById('manifesto-banner-body');
+    if (banner && bodyEl) {
+      bodyEl.textContent = appState.manifesto_text || item.sample_text || '';
+      banner.style.display = banner.style.display === 'block' ? 'none' : 'block';
+    }
   }
 }
 
@@ -1918,14 +2053,14 @@ async function apiPost(path, body) {
     return null;
   }
   appState = data;
-  renderAll();
+  renderAll(true);
   return data;
 }
 
 async function fetchState() {
   const res = await fetch('/api/state');
   appState = await res.json();
-  renderAll();
+  renderAll(false);
 }
 
 function switchRoom(room) {
@@ -1962,19 +2097,46 @@ function fenToGrid(fen) {
   return out;
 }
 
-function renderBoard() {
+function renderBoard(forceRebuild) {
   if (!appState || !appState.board) return;
+  const b = appState.board;
+  const turnLabel = b.turn === 'w' ? 'White to move' : 'Black to move';
+  const checkSuffix = b.in_check ? ' (IN CHECK)' : '';
+  const pgnEl = document.getElementById('board-pgn-line');
+  const reflexEl = document.getElementById('board-reflex-line');
+  if (pgnEl) {
+    const pgnTxt = b.pgn_snippet ? b.pgn_snippet : 'Starting position';
+    pgnEl.textContent = `${pgnTxt} · ${turnLabel}${checkSuffix}`;
+  }
+  if (reflexEl) {
+    const ref = b.last_board_reflex;
+    if (ref) {
+      reflexEl.textContent = `${formatGearLabel(ref.gear_used)} (${ref.elapsed_ms}ms · Clarity ${Number(ref.clarity).toFixed(2)} · ${ref.active_concept})`;
+      reflexEl.style.color = ref.settled ? 'var(--accent)' : '#fbbf24';
+    } else {
+      reflexEl.textContent = `Dominant: ${b.posture.dominant_piece} (${b.posture.dominant_color} / ${b.posture.dominant_element})`;
+      reflexEl.style.color = 'var(--text-dim)';
+    }
+  }
+
+  const boardSig = JSON.stringify([b.fen, b.last_move_uci || '', selectedSquare || '']);
+  if (!forceRebuild && boardSig === lastRenderedBoardSig) return;
+  lastRenderedBoardSig = boardSig;
+
   const gridEl = document.getElementById('chess-grid');
   gridEl.innerHTML = '';
-  const matrix = fenToGrid(appState.board.fen);
+  const matrix = fenToGrid(b.fen);
   const legalFromSelected = new Set();
   if (selectedSquare) {
-    for (const uci of appState.board.legal_moves_uci) {
+    for (const uci of b.legal_moves_uci) {
       if (uci.startsWith(selectedSquare)) {
         legalFromSelected.add(uci.slice(2, 4));
       }
     }
   }
+  const lastFrom = b.last_move_uci ? b.last_move_uci.slice(0, 2) : null;
+  const lastTo = b.last_move_uci ? b.last_move_uci.slice(2, 4) : null;
+
   for (let r = 0; r < 8; r++) {
     for (let c = 0; c < 8; c++) {
       const fileChar = String.fromCharCode(97 + c);
@@ -1983,7 +2145,22 @@ function renderBoard() {
       const sqDiv = document.createElement('div');
       sqDiv.className = 'sq ' + ((r + c) % 2 === 0 ? 'light' : 'dark');
       if (selectedSquare === sqName) sqDiv.classList.add('selected');
+      if (sqName === lastFrom || sqName === lastTo) sqDiv.classList.add('last-move');
       if (legalFromSelected.has(sqName)) sqDiv.classList.add('legal-dot');
+
+      if (c === 0) {
+        const rk = document.createElement('span');
+        rk.className = 'coord-rank';
+        rk.textContent = rankChar;
+        sqDiv.appendChild(rk);
+      }
+      if (r === 7) {
+        const fl = document.createElement('span');
+        fl.className = 'coord-file';
+        fl.textContent = fileChar;
+        sqDiv.appendChild(fl);
+      }
+
       const piece = matrix[r][c];
       if (piece) {
         const span = document.createElement('span');
@@ -2001,13 +2178,13 @@ async function onSquareClick(sqName, piece) {
   if (!selectedSquare) {
     if (piece) {
       selectedSquare = sqName;
-      renderBoard();
+      renderBoard(true);
     }
     return;
   }
   if (selectedSquare === sqName) {
     selectedSquare = null;
-    renderBoard();
+    renderBoard(true);
     return;
   }
   const candUci = selectedSquare + sqName;
@@ -2018,16 +2195,26 @@ async function onSquareClick(sqName, piece) {
     await apiPost('/api/chess/move', {move: matched});
   } else if (piece) {
     selectedSquare = sqName;
-    renderBoard();
+    renderBoard(true);
   } else {
     selectedSquare = null;
-    renderBoard();
+    renderBoard(true);
   }
 }
 
 async function loadPreset(val) {
   selectedSquare = null;
   await apiPost('/api/chess/fen', {fen: val});
+}
+
+async function undoChessMove() {
+  selectedSquare = null;
+  await apiPost('/api/chess/undo', {});
+}
+
+async function playAiChessMove() {
+  selectedSquare = null;
+  await apiPost('/api/chess/ai_move', {});
 }
 
 async function applyManualMoveOrFen() {
@@ -2063,13 +2250,18 @@ function renderColorBars() {
     const actB = b.activation_b ?? 0.5;
     const aPct = Math.round((actA / Math.max(0.01, actA + actB)) * 100);
     const bPct = 100 - aPct;
+    const leafAShort = (b.leaf_a || '').split('/').pop();
+    const leafBShort = (b.leaf_b || '').split('/').pop();
+    const pieceA = LEAF_TO_PIECE[leafAShort] || leafAShort;
+    const pieceB = LEAF_TO_PIECE[leafBShort] || leafBShort;
+    const shortBranch = (b.parent_branch || '').split('/').pop().toUpperCase();
     const row = document.createElement('div');
     row.className = 'color-row';
     row.innerHTML = `
       <div class="color-row-head">
-        <span>${b.color_a} (${(b.leaf_a || '').split('/').pop()} ${actA.toFixed(2)})</span>
-        <span>${(b.parent_branch || '').toUpperCase()}</span>
-        <span>${b.color_b} (${(b.leaf_b || '').split('/').pop()} ${actB.toFixed(2)})</span>
+        <span>${escapeHtml(b.color_a)} · ${escapeHtml(pieceA)} ${actA.toFixed(2)}</span>
+        <span style="color:var(--text-dim); font-size:10px; letter-spacing:0.05em;">${escapeHtml(shortBranch)}</span>
+        <span>${escapeHtml(b.color_b)} · ${escapeHtml(pieceB)} ${actB.toFixed(2)}</span>
       </div>
       <div class="bar-track">
         <div style="width:${aPct}%; background:${COLOR_HEX[b.color_a] || '#38bdf8'};"></div>
@@ -2090,7 +2282,7 @@ function renderColorBars() {
 
 function toggleDrawer(id) {
   openDrawers[id] = !openDrawers[id];
-  renderChat();
+  renderChat(true);
 }
 
 async function coachTurn(sceneIdx) {
@@ -2102,11 +2294,21 @@ async function savorTurn(sceneIdx) {
   await apiPost('/api/turn/savor', {scene_index: sceneIdx});
 }
 
-function renderChat() {
+function renderChat(forceRebuild) {
   if (!appState) return;
   const box = document.getElementById('chat-stream');
-  box.innerHTML = '';
   const msgs = appState.chat_messages || [];
+  const chatSig = JSON.stringify(msgs.map(m => [m.id, m.text, !!m.coached, !!m.savored, !!openDrawers[m.id]]));
+  if (!forceRebuild && chatSig === lastRenderedChatSig) {
+    return;
+  }
+  const prevScrollTop = box.scrollTop;
+  const wasAtBottom = (box.scrollHeight - box.scrollTop - box.clientHeight) < 60;
+  const hasNewMessage = msgs.length > lastRenderedChatCount;
+  lastRenderedChatSig = chatSig;
+  lastRenderedChatCount = msgs.length;
+
+  box.innerHTML = '';
   if (msgs.length === 0) {
     const empty = document.createElement('div');
     empty.style.color = 'var(--text-dim)';
@@ -2138,30 +2340,34 @@ function renderChat() {
       }
       footHtml = `
         <div class="msg-foot">
-          <span>${t.gear_used.replace('GEAR_1_FAST_RIGHT_BRAIN', 'GEAR 1 · REFLEX').replace('GEAR_2_SUBLIMINAL_GAP_SPLICE', 'GEAR 2 · COMMA-SPLICED')} · ${t.elapsed_ms}ms</span>
-          <button class="foot-link" onclick="toggleDrawer(${m.id})">[${isOpen ? 'Hide' : 'Inspect'} Nerve Cord]</button>
-          <button class="foot-link ${m.coached ? 'active-flag' : ''}" onclick="coachTurn(${m.id})">[${m.coached ? 'Queued for Sleep' : 'Coach / Queue for Sleep'}]</button>
-          <button class="foot-link ${m.savored ? 'active-flag' : ''}" onclick="savorTurn(${m.id})">[${m.savored ? 'Vibe Savored' : 'Savor Vibe'}]</button>
+          <span>${escapeHtml(formatGearLabel(t.gear_used))} · ${escapeHtml(t.elapsed_ms)}ms</span>
+          <button class="foot-link" onclick="toggleDrawer(${JSON.stringify(m.id)})">[${isOpen ? 'Hide' : 'Inspect'} Nerve Cord]</button>
+          <button class="foot-link ${m.coached ? 'active-flag' : ''}" onclick="coachTurn(${JSON.stringify(m.id)})">[${m.coached ? 'Queued for Sleep' : 'Coach / Queue for Sleep'}]</button>
+          <button class="foot-link ${m.savored ? 'active-flag' : ''}" onclick="savorTurn(${JSON.stringify(m.id)})">[${m.savored ? 'Vibe Savored' : 'Savor Vibe'}]</button>
         </div>
       `;
-      drawerHtml = `<div class="nerve-drawer" style="display:${isOpen ? 'block' : 'none'};">${drawerLines.join('\n')}</div>`;
+      drawerHtml = `<div class="nerve-drawer" style="display:${isOpen ? 'block' : 'none'};">${escapeHtml(drawerLines.join('\n'))}</div>`;
     } else if (m.guest_analysis) {
       const gw = m.guest_analysis.shadow_pathology_warnings || [];
       const warnTxt = gw.length ? `Shadow Alert: ${gw.map(x => x.shadow_pathology).join(', ')}` : 'No Shadow Pathology triggered';
-      footHtml = `<div class="msg-foot"><span>RIGHT-BRAIN GUEST X-RAY · ${warnTxt}</span></div>`;
+      footHtml = `<div class="msg-foot"><span>RIGHT-BRAIN GUEST X-RAY · ${escapeHtml(warnTxt)}</span></div>`;
     }
     card.innerHTML = `
       <div class="msg-head">
-        <span>${m.role_label || m.sender}</span>
-        <span>#${m.id}</span>
+        <span>${escapeHtml(m.role_label || m.sender)}</span>
+        <span>#${escapeHtml(m.id)}</span>
       </div>
-      <div class="msg-text">${m.text}</div>
+      <div class="msg-text">${escapeHtml(m.text)}</div>
       ${footHtml}
       ${drawerHtml}
     `;
     box.appendChild(card);
   }
-  box.scrollTop = box.scrollHeight;
+  if (hasNewMessage || wasAtBottom) {
+    box.scrollTop = box.scrollHeight;
+  } else {
+    box.scrollTop = prevScrollTop;
+  }
 }
 
 async function sendChat() {
@@ -2195,7 +2401,7 @@ async function switchLineage(mode) {
   await apiPost('/api/lineage', { lineage: mode });
 }
 
-function renderAll() {
+function renderAll(forceRebuild) {
   if (!appState) return;
   document.getElementById('cycle-badge').textContent = `CYCLE ${appState.sleep_cycle_index}`;
   const linSel = document.getElementById('lineage-select');
@@ -2215,9 +2421,9 @@ function renderAll() {
       bBtn.style.color = (appState.active_context_brace === bKey) ? 'var(--accent)' : 'var(--text-main)';
     }
   }
-  renderBoard();
+  renderBoard(!!forceRebuild);
   renderColorBars();
-  renderChat();
+  renderChat(!!forceRebuild);
 }
 
 fetchState();
@@ -2269,6 +2475,14 @@ def create_club_http_server(
                 data = json.loads(raw_bytes.decode("utf-8"))
                 if self.path == "/api/chess/move":
                     snap = runtime.handle_chess_move(str(data.get("move", "")))
+                    self._send_json(snap)
+                    return
+                if self.path == "/api/chess/undo":
+                    snap = runtime.handle_chess_undo()
+                    self._send_json(snap)
+                    return
+                if self.path == "/api/chess/ai_move":
+                    snap = runtime.handle_chess_ai_move()
                     self._send_json(snap)
                     return
                 if self.path == "/api/chess/fen":
