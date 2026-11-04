@@ -45,15 +45,27 @@ import webbrowser
 import chess
 
 from .birth import BirthState, create_birth_state
-from .branch_archives import ThreeBranchArchives, harvest_into_branch_archives
+from .branch_archives import (
+    EXECUTIVE_BRANCH,
+    JUDICIAL_BRANCH,
+    LEGISLATIVE_BRANCH,
+    BranchClauseEntry,
+    ThreeBranchArchives,
+    harvest_into_branch_archives,
+)
 from .chess_kibitz_bridge import (
     SANCTUARY_MODES,
     ChessBoardPosture,
     evaluate_chess_board_posture,
     merge_board_fact_with_chat_sensors,
 )
-from .chord_memory import ChordMemoryBank
-from .contemplation_ledger import ContemplationLedger
+from .chord_memory import ChordMemoryBank, compile_felt_chord
+from .contemplation_ledger import (
+    ContemplationLedger,
+    load_contemplation_ledger,
+    save_contemplation_ledger,
+)
+from .runtime_store import atomic_json
 from .neural_bridge_classifiers import (
     DEFAULT_COMPLEX_FEELING_LEAVES,
     NeuralThreeBridgeSuite,
@@ -74,8 +86,10 @@ from .reflection_classifier import (
     ContinuousMemoryState,
     FuzzyConceptRule,
     LearnedLeaf,
+    leaf_tier,
     load_learned_leaves,
     load_ruleset,
+    save_ruleset,
 )
 from .right_brain_equilibrium import (
     EXPERIENTIAL_SENSOR_LEAVES,
@@ -86,7 +100,12 @@ from .right_brain_equilibrium import (
 )
 from .sleep_consolidation import (
     UnresolvedSleepScene,
+    _anchor_target_leaves_from_cluster,
+    _average_cluster_coordinates,
+    _cluster_key_for_unresolved,
+    _derive_concept_tags,
     refine_colliding_rules_during_sleep,
+    run_sleep_consolidation,
 )
 from .three_legged_runtime import (
     SubliminalGapLeftBrain,
@@ -204,11 +223,13 @@ class SanctuaryClubRuntime:
         self,
         repo_root: str | Path | None = None,
         *,
+        state_dir: str | Path | None = None,
         birth_state: BirthState | None = None,
         sensors: ThreeBridgeSensors | None = None,
         rules: tuple[FuzzyConceptRule, ...] | None = None,
         learned_leaves: tuple[LearnedLeaf, ...] | None = None,
         left_brain: SubliminalGapLeftBrain | None = None,
+        teacher: Any | None = None,
         lazy_load_gpu: bool = True,
     ) -> None:
         self.repo_root = (
@@ -216,6 +237,12 @@ class SanctuaryClubRuntime:
             if repo_root is not None
             else Path(__file__).resolve().parents[2]
         )
+        self.state_dir = (
+            Path(state_dir).resolve()
+            if state_dir is not None
+            else (self.repo_root / "outputs" / "club_user_state")
+        )
+        self.teacher = teacher
         self.gpu_lock = threading.Lock()
         self.rem_sleep_in_progress = False
         self.left_brain_loading = False
@@ -229,7 +256,7 @@ class SanctuaryClubRuntime:
             random_seed=42,
         )
 
-        # Load Right-Brain rules & learned leaves
+        # Load Right-Brain rules & learned leaves (preferring persisted state_dir when present)
         if rules is not None:
             self.rules = tuple(rules)
         else:
@@ -262,12 +289,12 @@ class SanctuaryClubRuntime:
 
         self.memory: ContinuousMemoryState | None = None
         self.diary = SettledDiary()
-        self.ledger = ContemplationLedger()
+        self.ledger = self._load_initial_ledger()
         self.chord_memory = ChordMemoryBank()
-        self.archives = ThreeBranchArchives()
+        self.archives = self._load_initial_archives()
 
         self.sleep_queue: list[UnresolvedSleepScene] = []
-        self.savored_turn_ids: list[int] = []
+        self.savored_turn_ids: list[int] = self._load_initial_savored_ids()
         self.chat_messages: list[dict[str, Any]] = []
         self._turn_records_by_id: dict[int, dict[str, Any]] = {}
 
@@ -277,12 +304,16 @@ class SanctuaryClubRuntime:
             t.start()
 
     def _load_default_rules(self) -> tuple[FuzzyConceptRule, ...]:
-        for rel in (
-            "outputs/rem_sleep_consolidated_ruleset.json",
-            "outputs/sleep_consolidated_ruleset.json",
-            "outputs/continuous_tiered_ruleset.json",
-        ):
-            p = self.repo_root / rel
+        user_ruleset = self.state_dir / "club_ruleset.json"
+        candidates = [user_ruleset] + [
+            self.repo_root / rel
+            for rel in (
+                "outputs/rem_sleep_consolidated_ruleset.json",
+                "outputs/sleep_consolidated_ruleset.json",
+                "outputs/continuous_tiered_ruleset.json",
+            )
+        ]
+        for p in candidates:
             if p.exists():
                 try:
                     loaded = load_ruleset(p)
@@ -294,12 +325,16 @@ class SanctuaryClubRuntime:
 
     def _load_default_learned_leaves(self) -> tuple[LearnedLeaf, ...]:
         base: list[LearnedLeaf] = []
-        for rel in (
-            "outputs/rem_sleep_consolidated_ruleset.json",
-            "outputs/sleep_consolidated_ruleset.json",
-            "outputs/continuous_tiered_ruleset.json",
-        ):
-            p = self.repo_root / rel
+        user_ruleset = self.state_dir / "club_ruleset.json"
+        candidates = [user_ruleset] + [
+            self.repo_root / rel
+            for rel in (
+                "outputs/rem_sleep_consolidated_ruleset.json",
+                "outputs/sleep_consolidated_ruleset.json",
+                "outputs/continuous_tiered_ruleset.json",
+            )
+        ]
+        for p in candidates:
             if p.exists():
                 try:
                     base.extend(load_learned_leaves(p))
@@ -312,6 +347,59 @@ class SanctuaryClubRuntime:
                 base.append(leaf)
                 existing_ids.add(leaf.leaf_id)
         return tuple(base)
+
+    def _load_initial_archives(self) -> ThreeBranchArchives:
+        user_arch_dir = self.state_dir / "branch_archives"
+        if (user_arch_dir / "philosophical_lexicon.json").exists():
+            try:
+                return ThreeBranchArchives.load_all(user_arch_dir)
+            except Exception:
+                pass
+        default_arch_dir = self.repo_root / "outputs" / "branch_archives"
+        if (default_arch_dir / "philosophical_lexicon.json").exists():
+            try:
+                return ThreeBranchArchives.load_all(default_arch_dir)
+            except Exception:
+                pass
+        return ThreeBranchArchives()
+
+    def _load_initial_ledger(self) -> ContemplationLedger:
+        user_ledger = self.state_dir / "contemplation_ledger.json"
+        if user_ledger.exists():
+            try:
+                return load_contemplation_ledger(user_ledger)
+            except Exception:
+                pass
+        return ContemplationLedger()
+
+    def _load_initial_savored_ids(self) -> list[int]:
+        meta_path = self.state_dir / "club_meta.json"
+        if meta_path.exists():
+            try:
+                raw = json.loads(meta_path.read_text(encoding="utf-8"))
+                self.scene_counter = max(self.scene_counter, int(raw.get("scene_counter", 0)))
+                return [int(x) for x in raw.get("savored_turn_ids", [])]
+            except Exception:
+                pass
+        return []
+
+    def _persist_user_state(self) -> None:
+        """Persist ruleset, 3-branch archives, contemplation ledger, and savored turn metadata to disk."""
+        self.state_dir.mkdir(parents=True, exist_ok=True)
+        save_ruleset(
+            self.state_dir / "club_ruleset.json",
+            tuple(self.rules),
+            tuple(self.learned_leaves),
+        )
+        self.archives.save_all(self.state_dir / "branch_archives")
+        save_contemplation_ledger(self.state_dir / "contemplation_ledger.json", self.ledger)
+        atomic_json(
+            self.state_dir / "club_meta.json",
+            {
+                "savored_turn_ids": list(self.savored_turn_ids),
+                "scene_counter": int(self.scene_counter),
+            },
+        )
 
     def _load_default_sensors(self) -> ThreeBridgeSensors:
         bridges_dir = self.repo_root / "models" / "right_brain_bridges"
@@ -754,7 +842,7 @@ class SanctuaryClubRuntime:
         return self.get_state_snapshot()
 
     def savor_turn_vibe(self, scene_index: int) -> dict[str, Any]:
-        """Auditor Guardrail #3 (`[Savor / Keep Vibe]`): Bookmark a turn and reinforce its chord in the 3-branch archives."""
+        """Auditor Guardrail #3 (`[Savor / Keep Vibe]`): Bookmark a turn, reinforce its chord in the 3-branch archives, and persist to disk."""
         rec = self._turn_records_by_id.get(int(scene_index))
         if rec is None:
             raise ValueError(f"Unknown turn scene_index: {scene_index}")
@@ -776,26 +864,184 @@ class SanctuaryClubRuntime:
         for msg in self.chat_messages:
             if msg.get("id") == int(scene_index):
                 msg["savored"] = True
+        self._persist_user_state()
         return self.get_state_snapshot()
 
+    def _consolidate_sleep_clusters_locally(
+        self,
+        queued_scenes: tuple[UnresolvedSleepScene, ...],
+    ) -> tuple[tuple[str, ...], tuple[FuzzyConceptRule, ...], tuple[str, ...]]:
+        """Refine colliding rules and forge new coordinate-anchored rules + 3-branch clauses when Teacher LLM is offline."""
+        refined_rules, refined_ids = refine_colliding_rules_during_sleep(
+            self.rules,
+            queued_scenes,
+        )
+        active_rules = list(refined_rules)
+        existing_names = {r.concept_name for r in active_rules}
+        forged_rules: list[FuzzyConceptRule] = []
+        harvested_clause_ids: list[str] = []
+
+        clusters: dict[str, list[UnresolvedSleepScene]] = {}
+        for s in queued_scenes:
+            ckey = _cluster_key_for_unresolved(s)
+            clusters.setdefault(ckey, []).append(s)
+
+        cur_archives = self.archives
+        cur_ledger = self.ledger
+
+        for ckey, group in clusters.items():
+            avg_coords = _average_cluster_coordinates(group)
+            target_leaves = _anchor_target_leaves_from_cluster(ckey, avg_coords)
+            rep = group[0]
+            rep_scene = rep.scene_index
+
+            base_name = f"coached_{ckey}"
+            concept_name = base_name
+            if concept_name in existing_names:
+                concept_name = f"{base_name}_s{rep_scene}"
+
+            has_tier2_or_chaos = (
+                any(leaf_tier(k) >= 2 for k in target_leaves)
+                or float(target_leaves.get("philosophical/structure/chaos", 0.0)) >= 0.45
+            )
+            rule_low = 0.55 if has_tier2_or_chaos else 0.72
+            rule_high = 0.78 if has_tier2_or_chaos else 0.85
+
+            description = (
+                f"Consolidated REM coaching rule for {ckey.replace('_', ' ')}: "
+                f"{rep.scenario_text[:120]}"
+            )
+            new_rule = FuzzyConceptRule(
+                rule_id=f"rule-sleep-s{rep_scene}-{concept_name[:28]}",
+                concept_name=concept_name,
+                description=description,
+                target_leaves=target_leaves,
+                low=rule_low,
+                high=rule_high,
+            )
+            active_rules.append(new_rule)
+            forged_rules.append(new_rule)
+            existing_names.add(concept_name)
+
+            cult_sig = {k: v for k, v in avg_coords.items() if k.startswith("cultural/")}
+            phil_sig = {k: v for k, v in avg_coords.items() if k.startswith("philosophical/")}
+            exp_sig = {k: v for k, v in avg_coords.items() if k.startswith("experiential/")}
+            exp_sig[SALIENCE_LEAF] = round(sum(s.salience for s in group) / len(group), 4)
+            exp_sig[VALENCE_LEAF] = round(sum(s.valence for s in group) / len(group), 4)
+            exp_sig[AROUSAL_LEAF] = round(sum(s.arousal for s in group) / len(group), 4)
+
+            avg_fc = compile_felt_chord(
+                avg_coords,
+                salience=exp_sig[SALIENCE_LEAF],
+                valence=exp_sig[VALENCE_LEAF],
+                arousal=exp_sig[AROUSAL_LEAF],
+                resonance=0.65,
+                learned_leaves=tuple(self.learned_leaves),
+            )
+            exec_tag, leg_tag, jud_tag = _derive_concept_tags(avg_coords, avg_fc)
+
+            exec_text = f"Coordinate action under {concept_name} ({exec_tag}): {rep.left_brain_hunch[:100]}"
+            leg_text = f"Sense and pace {leg_tag} posture during {concept_name}: {rep.scenario_text[:100]}"
+            jud_text = f"Verify {jud_tag} equilibrium and ratified chord for {concept_name}."
+
+            exec_clause = BranchClauseEntry(
+                clause_id=f"exec-sleep-s{rep_scene}-{exec_tag}",
+                branch=EXECUTIVE_BRANCH,
+                text=exec_text,
+                signature_coords=cult_sig,
+                source_scene=rep_scene,
+                concept_tag=exec_tag,
+            )
+            leg_clause = BranchClauseEntry(
+                clause_id=f"leg-sleep-s{rep_scene}-{leg_tag}",
+                branch=LEGISLATIVE_BRANCH,
+                text=leg_text,
+                signature_coords=exp_sig,
+                source_scene=rep_scene,
+                concept_tag=leg_tag,
+            )
+            jud_clause = BranchClauseEntry(
+                clause_id=f"jud-sleep-s{rep_scene}-{jud_tag}",
+                branch=JUDICIAL_BRANCH,
+                text=jud_text,
+                signature_coords=phil_sig,
+                source_scene=rep_scene,
+                concept_tag=jud_tag,
+            )
+            harvested_clause_ids.extend([exec_clause.clause_id, leg_clause.clause_id, jud_clause.clause_id])
+
+            next_exec = cur_archives.executive.record_scene(
+                scene_index=rep_scene,
+                coordinates=avg_coords,
+                action_summary=exec_text,
+                harvested_clause=exec_clause,
+            )
+            next_leg = cur_archives.legislative.record_scene(
+                scene_index=rep_scene,
+                sensory_snapshot=leg_text,
+                felt_chord=avg_fc,
+                coordinates=avg_coords,
+                harvested_clause=leg_clause,
+            )
+            next_jud = cur_archives.judicial.record_clause_and_chord(
+                harvested_clause=jud_clause,
+                ratified_chord=new_rule,
+            )
+            cur_archives = ThreeBranchArchives(
+                executive=next_exec,
+                legislative=next_leg,
+                judicial=next_jud,
+            )
+            for s in group:
+                cur_ledger = cur_ledger.record_settled(
+                    scene_index=s.scene_index,
+                    takeaway_source=description,
+                    felt_chord=avg_fc,
+                    clarity=0.85,
+                    confidence=0.90,
+                    resolved_uncertainty_scenes=(s.scene_index,),
+                )
+
+        self.rules = tuple(active_rules)
+        self.archives = cur_archives
+        self.ledger = cur_ledger
+        return refined_ids, tuple(forged_rules), tuple(harvested_clause_ids)
+
     def handle_run_rem_sleep(self) -> dict[str, Any]:
-        """Auditor Guardrail #4: Run REM Sleep consolidation inside `self.gpu_lock`."""
+        """Auditor Guardrail #4: Run REM Sleep consolidation inside `self.gpu_lock` and persist forged rules + archives to disk."""
         with self.gpu_lock:
             self.rem_sleep_in_progress = True
             try:
                 queued_count = len(self.sleep_queue)
+                forged_count = 0
                 if queued_count > 0:
-                    refined_rules, refined_ids = refine_colliding_rules_during_sleep(
-                        self.rules,
-                        tuple(self.sleep_queue),
-                    )
-                    self.rules = refined_rules
+                    if self.teacher is not None:
+                        report = run_sleep_consolidation(
+                            self.teacher,
+                            tuple(self.sleep_queue),
+                            self.rules,
+                            self.archives,
+                            self.ledger,
+                            learned_leaves=self.learned_leaves,
+                        )
+                        self.rules = report.updated_rules
+                        self.archives = report.updated_archives
+                        self.ledger = report.updated_ledger
+                        refined_ids = report.refined_rule_ids
+                        forged_count = len(report.forged_rules)
+                    else:
+                        refined_ids, forged_rules, _clause_ids = (
+                            self._consolidate_sleep_clusters_locally(tuple(self.sleep_queue))
+                        )
+                        forged_count = len(forged_rules)
                 else:
                     refined_ids = ()
                 self.sleep_queue.clear()
+                self._persist_user_state()
                 summary = (
                     f"REM Sleep Cycle complete: consolidated {queued_count} queued scene(s), "
-                    f"refined {len(refined_ids)} colliding rule(s), and preserved {len(self.savored_turn_ids)} savored vibe(s)."
+                    f"forged {forged_count} new rule(s), refined {len(refined_ids)} colliding rule(s), "
+                    f"and persisted {len(self.savored_turn_ids)} savored vibe(s) to disk."
                 )
                 self.chat_messages.append(
                     {

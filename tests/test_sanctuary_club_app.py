@@ -303,10 +303,17 @@ def test_guardrail_2_board_fen_anchors_fact_and_catches_psychosis_chat_mismatch(
     assert any("shadow_pathology_dissonance(psychosis" in n for n in trace.comma_dissonance_notes)
 
 
-def test_guardrail_3_coach_sleep_queue_savor_vibe_and_guest_kibitzer_chair() -> None:
-    """Verify `[Coach]`, `[Savor Vibe]`, and the `Guest Kibitzer` chair work end-to-end."""
+def test_guardrail_3_coach_sleep_queue_savor_vibe_and_guest_kibitzer_chair(tmp_path: Path) -> None:
+    """Verify `[Coach]`, `[Savor Vibe]`, `Guest Kibitzer`, rule forging in REM Sleep, and disk persistence across restarts."""
+    state_dir = tmp_path / "club_state"
     left_brain = _make_mini_left_brain()
-    runtime = SanctuaryClubRuntime(left_brain=left_brain, lazy_load_gpu=False)
+    runtime = SanctuaryClubRuntime(
+        state_dir=state_dir,
+        left_brain=left_brain,
+        lazy_load_gpu=False,
+    )
+    initial_rules_count = len(runtime.rules)
+    initial_ratified_count = len(runtime.archives.judicial.ratified_chords)
 
     # 1. Make a legal move on the chessboard
     snap1 = runtime.handle_chess_move("e2e4")
@@ -323,10 +330,11 @@ def test_guardrail_3_coach_sleep_queue_savor_vibe_and_guest_kibitzer_chair() -> 
     assert snap_coached["sleep_queue_count"] >= 1
     assert any("Watch out for tactical forks on f7." in s.scenario_text for s in runtime.sleep_queue)
 
-    # 4. Bookmark turn (`[Savor / Keep Vibe]`)
+    # 4. Bookmark turn (`[Savor / Keep Vibe]`) -> persists immediately to state_dir
     snap_savored = runtime.savor_turn_vibe(turn_id)
     assert snap_savored["savored_count"] == 1
     assert turn_id in runtime.savored_turn_ids
+    assert (state_dir / "club_meta.json").exists()
 
     # 5. Guest Kibitzer Chair (scores guest comment through 3 MiniLM bridges + 6-Color/Shadow lens)
     snap_guest = runtime.handle_guest_kibitzer(
@@ -337,17 +345,40 @@ def test_guardrail_3_coach_sleep_queue_savor_vibe_and_guest_kibitzer_chair() -> 
     assert len(guest_msgs) == 1
     assert "sibling_color_balances" in guest_msgs[0]["guest_analysis"]
 
-    # 6. Run REM Sleep to consolidate the queued coaching item
+    # 6. Run REM Sleep to consolidate the queued coaching item into forged rules + 3-branch clauses
     snap_after_sleep = runtime.handle_run_rem_sleep()
     assert snap_after_sleep["sleep_queue_count"] == 0
+    assert len(runtime.rules) >= initial_rules_count + 1
+    assert len(runtime.archives.judicial.ratified_chords) >= initial_ratified_count + 1
+    assert (state_dir / "club_ruleset.json").exists()
+    assert (state_dir / "branch_archives" / "philosophical_lexicon.json").exists()
+
+    # 7. Restart a brand-new SanctuaryClubRuntime pointed at state_dir -> zero amnesia!
+    restarted = SanctuaryClubRuntime(
+        state_dir=state_dir,
+        left_brain=left_brain,
+        lazy_load_gpu=False,
+    )
+    assert len(restarted.rules) == len(runtime.rules)
+    assert len(restarted.archives.judicial.ratified_chords) == len(runtime.archives.judicial.ratified_chords)
+    assert turn_id in restarted.savored_turn_ids
 
 
 def test_guardrail_4_gpu_lock_http_server_and_release_bundle(tmp_path: Path) -> None:
     """Verify HTTP server endpoints, single GPU lock, and GitHub Release zip builder."""
+    import sys
+
+    repo_root = str(Path(__file__).resolve().parents[1])
+    if repo_root not in sys.path:
+        sys.path.insert(0, repo_root)
     from scripts.build_release_bundle import build_release_zip
 
     left_brain = _make_mini_left_brain()
-    runtime = SanctuaryClubRuntime(left_brain=left_brain, lazy_load_gpu=False)
+    runtime = SanctuaryClubRuntime(
+        state_dir=tmp_path / "server_state",
+        left_brain=left_brain,
+        lazy_load_gpu=False,
+    )
     assert isinstance(runtime.gpu_lock, type(threading.Lock()))
     assert "start" in PRESET_CHESS_POSITIONS
 
