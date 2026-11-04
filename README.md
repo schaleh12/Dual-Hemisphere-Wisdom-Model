@@ -42,7 +42,32 @@ Double-click **[`Start-LMFT-Club.bat`](Start-LMFT-Club.bat)** (or run `.\.venv\S
 
 ---
 
-## 3. How the Brain Runs Without Becoming an Unwieldy Circus: The 3-Gear Cycle
+## 3. Why Chess & Hypnosis? (The Silent Board vs. The Subliminal Finger-Snap)
+
+Why does the desktop app pair a **Chess Table** with a **Co-Regulation / Hypnosis Sanctuary**? Because those two domains solve the two opposite halves of how a human mind experiences a thought:
+
+1. **Chess is how the silent mind maps a problem** (structural, geometric, non-verbal).
+2. **Hypnosis is how that silent map steers the speaking voice** (wordless, mid-sentence, subconscious).
+
+### Side A: CHESS (The Right Brain's Silent Board)
+A normal chatbot is just an actor reading English stage directions out loud (*"You are feeling uneasy; answer cautiously"*). Humans don't have a little director inside their head typing English instructions—we have a **structural gut check**.
+
+In [`philosophical_abstraction_matrix.py`](src/lmft_lab/philosophical_abstraction_matrix.py) and [`gap_trajectory_schema.py`](src/lmft_lab/gap_trajectory_schema.py), the Right Brain treats *every* situation—a social dilemma, an emotional conversation, or a live chess position—as a **board state** made of 6 fundamental postures:
+- **King (`Existence` — *Wellspring of Being*) & Rook (`Discreteness` — *Quantized Bastion / Ground*)**: Survival, shelter, and stone castle walls that carve the board into discrete, protected enclosures (turning into **Paranoia** or **Narcissism** when a fortress walls itself off in panic or isolation).
+- **Bishop (`Order` — *Wind*) & Pawn (`Continuity` — *Swarm Continuum / Insect in Soil*)**: Long-range diagonal alignment and the connected pawn chain that flows together across the board and continuously metamorphoses (promotes into a Queen at the 8th rank—or tips into **Mania / Greed** when an accumulation snowballs out of control).
+- **Queen (`Agency` — *Lightning*) & Knight (`Chaos` — *Ice*)**: Direct willpower and non-linear leaps that jump *over* obstacles when normal rules are deadlocked (tipping into **Psychosis** when Queen volition charges ahead without King safety or `Fact`).
+
+Before the AI speaks a word, the Right Brain calculates the exact shape of the "board" in 52 numbers. **But the Right Brain cannot speak English.** It only knows the geometry of the tension.
+
+### Side B: HYPNOSIS (The `<|subliminal_gap|>` Finger-Snap at the Comma)
+How does a mute chess player steer a talkative storyteller without passing it a written note? **Hypnosis.**
+- The Left Brain (`Qwen3-4B`) starts a sentence on routine autopilot and pauses at the first comma (`"bla bla bla,"`), with **zero English stage directions** in the prompt (`assert_zero_stage_directions_in_prompt`).
+- Right in that comma breath (`<|subliminal_gap|>`), [`SubliminalGapProjector`](src/lmft_lab/subliminal_gap_splice.py) slips the Right Brain's 52-number chord straight into the language model's hidden layers alongside its `Entrainment` / rhythm leaf.
+- Like a wordless hypnotic finger-snap mid-sentence, the Left Brain's token probabilities shift on the second half of the sentence—and at the period, the Right Brain **listens to what the Left Brain just blurted out** and places those spoken words back onto the chessboard (`Theory` vs. `Fact`) to check whether the sentence actually resolved the tension or needs to be queued for Nighttime REM Sleep.
+
+---
+
+## 4. How the Brain Runs Without Becoming an Unwieldy Circus: The 3-Gear Cycle
 
 Just like a real human brain, the Right Brain and Left Brain do **not** chatter over each other every millisecond just to stay busy. Instead, the architecture runs on **three clean gears** ([`src/lmft_lab/three_legged_runtime.py`](src/lmft_lab/three_legged_runtime.py)):
 
@@ -57,7 +82,7 @@ Just like a real human brain, the Right Brain and Left Brain do **not** chatter 
 
 ---
 
-## 4. Core Architectural Breakthroughs
+## 5. Core Architectural Breakthroughs
 
 ### Breakthrough 1: The Frozen 40-Node Founding Seed & Isolated Child-Drawer Growth
 At the core of the Right Brain is a frozen [40-node founding seed](docs/MINIMAL_LMFT_SPEC.md#4-hardcoded-v01-seed-geometry) ([`src/lmft_lab/birth.py`](src/lmft_lab/birth.py)) with **24 founding leaves** across four domains:
@@ -105,7 +130,7 @@ Perception is split across **three specialized neural bridge classifiers** (`Min
 
 ---
 
-## 5. Repository Organization & Separation of Accountability (`Lab` vs. `School` vs. `Local User State`)
+## 6. Repository Organization & Separation of Accountability (`Lab` vs. `School` vs. `Local User State`)
 
 To keep Core Architecture debugging, official curriculum training, and personal user tinkering cleanly separated, the repository is organized into distinct layers:
 
@@ -159,7 +184,7 @@ LMFT-Lab/
 
 ---
 
-## 6. Quickstart & Verification (Windows / RTX 4080)
+## 7. Quickstart & Verification (Windows / RTX 4080)
 
 ### 1. Launch the Desktop App (`Chess Club & Co-Regulation Sanctuary`)
 ```powershell
@@ -185,7 +210,7 @@ $env:PYTHONPATH='src;.'
 
 ---
 
-## 7. Workflow & Anti-Delusion Trust Measures ([`AGENTS.md`](AGENTS.md))
+## 8. Workflow & Anti-Delusion Trust Measures ([`AGENTS.md`](AGENTS.md))
 
 1. **Plain, Everyday English Only**: Zero dense academic jargon or fake bureaucratic roleplay.
 2. **Zero Fake AI / Zero Coordinate or Rubric Rigging**: Never hardcode test words into rubrics, never clamp raw sensor coordinates (`Fact`), never zero out competing rules, and never harvest unsettled (`settled=False`) scenes into the archives as ratified rules.
