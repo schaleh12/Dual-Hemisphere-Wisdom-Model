@@ -77,6 +77,12 @@ from .dilemma_crucible import (
     MEN_OF_CULTURE_SHELF,
     CruciblePairedBridgeSensors,
 )
+from .impish_bloodmoon_adapter import (
+    DEFAULT_IMPISH_BLOODMOON_HF_ID,
+    UNSTEERED_BOOTSTRAP_STATUS,
+    clone_virgin_baseline_for_impish_bloodmoon,
+    decrypt_patreon_checkpoint_bundle,
+)
 from .runtime_store import atomic_json
 from .neural_bridge_classifiers import (
     DEFAULT_COMPLEX_FEELING_LEAVES,
@@ -233,6 +239,7 @@ class SanctuaryClubRuntime:
         repo_root: str | Path | None = None,
         *,
         state_dir: str | Path | None = None,
+        impish_state_dir: str | Path | None = None,
         birth_state: BirthState | None = None,
         sensors: ThreeBridgeSensors | None = None,
         rules: tuple[FuzzyConceptRule, ...] | None = None,
@@ -250,6 +257,11 @@ class SanctuaryClubRuntime:
             Path(state_dir).resolve()
             if state_dir is not None
             else (self.repo_root / "outputs" / "club_user_state")
+        )
+        self.impish_state_dir = (
+            Path(impish_state_dir).resolve()
+            if impish_state_dir is not None
+            else (self.repo_root / "outputs" / "impish_bloodmoon_state")
         )
         self.teacher = teacher
         self.gpu_lock = threading.Lock()
@@ -401,27 +413,39 @@ class SanctuaryClubRuntime:
         if self.active_lineage == "virgin":
             # Never overwrite the user's schooled state directory while inspecting the Cycle 0 Virgin Baseline
             return
-        self.state_dir.mkdir(parents=True, exist_ok=True)
+        target_dir = (
+            self.impish_state_dir
+            if self.active_lineage == "impish_bloodmoon"
+            else self.state_dir
+        )
+        target_dir.mkdir(parents=True, exist_ok=True)
         save_ruleset(
-            self.state_dir / "club_ruleset.json",
+            target_dir / "club_ruleset.json",
             tuple(self.rules),
             tuple(self.learned_leaves),
         )
-        self.archives.save_all(self.state_dir / "branch_archives")
-        save_contemplation_ledger(self.state_dir / "contemplation_ledger.json", self.ledger)
+        self.archives.save_all(target_dir / "branch_archives")
+        save_contemplation_ledger(target_dir / "contemplation_ledger.json", self.ledger)
         atomic_json(
-            self.state_dir / "club_meta.json",
+            target_dir / "club_meta.json",
             {
                 "savored_turn_ids": list(self.savored_turn_ids),
                 "scene_counter": int(self.scene_counter),
             },
         )
 
-    def switch_brain_lineage(self, lineage: str) -> dict[str, Any]:
-        """Switch between the `schooled` brain (Cycle 2 + user coaching) and `virgin` (Cycle 0 Core Architecture snapshot)."""
+    def switch_brain_lineage(
+        self,
+        lineage: str,
+        *,
+        patreon_passphrase: str | None = None,
+    ) -> dict[str, Any]:
+        """Switch between `schooled` (Cycle 2 + user coaching), `virgin` (Cycle 0 snapshot), and `impish_bloodmoon` (isolated Virgin clone)."""
         mode = lineage.strip().lower()
-        if mode not in ("schooled", "virgin"):
-            raise ValueError(f"Unknown lineage mode {lineage!r}; expected 'schooled' or 'virgin'.")
+        if mode not in ("schooled", "virgin", "impish_bloodmoon"):
+            raise ValueError(
+                f"Unknown lineage mode {lineage!r}; expected 'schooled', 'virgin', or 'impish_bloodmoon'."
+            )
         if mode == "virgin":
             virgin = load_virgin_baseline_state(repo_root=self.repo_root)
             self.active_lineage = "virgin"
@@ -442,6 +466,53 @@ class SanctuaryClubRuntime:
                     "text": (
                         "Switched to VIRGIN BASELINE (Cycle 0 — Core Architecture): "
                         "2 foundational rules, 10 structural Tier-2 leaves, 0 story precedents."
+                    ),
+                }
+            )
+        elif mode == "impish_bloodmoon":
+            impish_ckpt_dir = self.repo_root / "models" / "left_brain_impish_bloodmoon"
+            enc_bundle = self.repo_root / "outputs" / "impish_bloodmoon_patreon.enc"
+            if patreon_passphrase and patreon_passphrase.strip() and enc_bundle.exists():
+                decrypt_patreon_checkpoint_bundle(enc_bundle, impish_ckpt_dir, patreon_passphrase.strip())
+
+            impish_clone = clone_virgin_baseline_for_impish_bloodmoon(
+                self.impish_state_dir,
+                repo_root=self.repo_root,
+            )
+            callosum_status = UNSTEERED_BOOTSTRAP_STATUS
+            cycle_idx = 0
+            base_model_id = DEFAULT_IMPISH_BLOODMOON_HF_ID
+            meta_file = impish_ckpt_dir / "corpus_callosum_meta.json"
+            if meta_file.exists():
+                try:
+                    raw_meta = json.loads(meta_file.read_text(encoding="utf-8"))
+                    cycle_idx = int(raw_meta.get("sleep_cycle_index", 0))
+                    callosum_status = str(raw_meta.get("callosum_status", UNSTEERED_BOOTSTRAP_STATUS))
+                    base_model_id = str(raw_meta.get("base_model_id", DEFAULT_IMPISH_BLOODMOON_HF_ID))
+                except Exception:
+                    pass
+
+            self.active_lineage = "impish_bloodmoon"
+            self.sleep_cycle_index = cycle_idx
+            self.active_checkpoint_label = (
+                f"Impish Bloodmoon ({callosum_status} — {base_model_id})"
+            )
+            self.rules = impish_clone.rules
+            self.learned_leaves = impish_clone.learned_leaves
+            self.archives = impish_clone.archives
+            self.ledger = impish_clone.ledger
+            self.memory = None
+            self.diary = SettledDiary()
+            self.chord_memory = ChordMemoryBank()
+            self.chat_messages.append(
+                {
+                    "id": f"lineage-{int(time.time())}",
+                    "sender": "system",
+                    "role_label": "Lineage Switch",
+                    "text": (
+                        f"Switched to IMPISH BLOODMOON ({base_model_id} | {callosum_status}): "
+                        f"isolated Virgin clone at {self.impish_state_dir.name} ({len(self.rules)} rules, "
+                        f"{len(self.archives.judicial.ratified_chords)} ratified chords)."
                     ),
                 }
             )
@@ -1853,9 +1924,10 @@ SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
     <div class="brand">
       <span>LMFT SANCTUARY &amp; CHESS CLUB</span>
       <span class="brand-tag" id="cycle-badge">CYCLE 2</span>
-      <select id="lineage-select" style="padding:3px 8px; font-size:11px; font-family:var(--font-mono);" onchange="switchLineage(this.value)" title="Switch between Schooled (Cycle 2 + User Coaching) and Virgin Baseline (Cycle 0 — Core Architecture)">
+      <select id="lineage-select" style="padding:3px 8px; font-size:11px; font-family:var(--font-mono);" onchange="switchLineage(this.value)" title="Switch between Schooled (Cycle 2 + User Coaching), Virgin Baseline (Cycle 0), and Impish Bloodmoon (Virgin Clone)">
         <option value="schooled">LINEAGE: SCHOOLED (CYCLE 2)</option>
         <option value="virgin">LINEAGE: VIRGIN BASELINE (CYCLE 0)</option>
+        <option value="impish_bloodmoon">LINEAGE: IMPISH BLOODMOON (VIRGIN CLONE)</option>
       </select>
     </div>
     <div class="mode-tabs">
@@ -2613,7 +2685,14 @@ def create_club_http_server(
                     self._send_json(snap)
                     return
                 if self.path == "/api/lineage":
-                    snap = runtime.switch_brain_lineage(str(data.get("lineage", "schooled")))
+                    snap = runtime.switch_brain_lineage(
+                        str(data.get("lineage", "schooled")),
+                        patreon_passphrase=(
+                            str(data["patreon_passphrase"])
+                            if data.get("patreon_passphrase") is not None
+                            else None
+                        ),
+                    )
                     self._send_json(snap)
                     return
                 if self.path == "/api/crucible/brace":

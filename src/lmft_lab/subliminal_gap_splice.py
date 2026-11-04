@@ -826,6 +826,8 @@ class CorpusCallosumMetadata:
     sleep_cycle_index: int
     trained_trajectories_count: int
     notes: str = ""
+    base_model_id: str = "Qwen/Qwen3-4B"
+    callosum_status: str = "TRAINED_STEERED_CALLOSUM"
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -842,6 +844,8 @@ class CorpusCallosumMetadata:
             "sleep_cycle_index": self.sleep_cycle_index,
             "trained_trajectories_count": self.trained_trajectories_count,
             "notes": self.notes,
+            "base_model_id": self.base_model_id,
+            "callosum_status": self.callosum_status,
         }
 
 
@@ -852,6 +856,8 @@ def save_corpus_callosum_checkpoint(
     sleep_cycle_index: int = 0,
     trained_trajectories_count: int = 0,
     notes: str = "",
+    base_model_id: str = "Qwen/Qwen3-4B",
+    callosum_status: str | None = None,
 ) -> CorpusCallosumMetadata:
     """Persist `SubliminalGapProjector` weights and Sleep-Cycle maturation metadata to disk."""
     if sleep_cycle_index < 0 or trained_trajectories_count < 0:
@@ -861,6 +867,15 @@ def save_corpus_callosum_checkpoint(
     out_dir.mkdir(parents=True, exist_ok=True)
     first_linear = projector.department_heads[0][0]
     inter_size = int(first_linear.out_features)
+    resolved_status = (
+        str(callosum_status)
+        if callosum_status is not None
+        else (
+            "TRAINED_STEERED_CALLOSUM"
+            if int(trained_trajectories_count) > 0
+            else "UNSTEERED_BOOTSTRAP_CYCLE_0"
+        )
+    )
 
     meta = CorpusCallosumMetadata(
         schema_version=1,
@@ -869,6 +884,8 @@ def save_corpus_callosum_checkpoint(
         sleep_cycle_index=int(sleep_cycle_index),
         trained_trajectories_count=int(trained_trajectories_count),
         notes=str(notes),
+        base_model_id=str(base_model_id),
+        callosum_status=resolved_status,
     )
     atomic_json(out_dir / "corpus_callosum_meta.json", meta.to_dict())
     torch.save(projector.state_dict(), out_dir / "projector_weights.pt")
@@ -891,13 +908,17 @@ def load_corpus_callosum_checkpoint(
     if raw_meta.get("schema_version") != 1:
         raise ValueError(f"Unsupported Corpus Callosum schema_version: {raw_meta.get('schema_version')}")
 
+    trained_cnt = int(raw_meta["trained_trajectories_count"])
+    default_status = "TRAINED_STEERED_CALLOSUM" if trained_cnt > 0 else "UNSTEERED_BOOTSTRAP_CYCLE_0"
     meta = CorpusCallosumMetadata(
         schema_version=1,
         hidden_size=int(raw_meta["hidden_size"]),
         intermediate_size=int(raw_meta["intermediate_size"]),
         sleep_cycle_index=int(raw_meta["sleep_cycle_index"]),
-        trained_trajectories_count=int(raw_meta["trained_trajectories_count"]),
+        trained_trajectories_count=trained_cnt,
         notes=str(raw_meta.get("notes", "")),
+        base_model_id=str(raw_meta.get("base_model_id", "Qwen/Qwen3-4B")),
+        callosum_status=str(raw_meta.get("callosum_status", default_status)),
     )
     projector = SubliminalGapProjector(
         hidden_size=meta.hidden_size,

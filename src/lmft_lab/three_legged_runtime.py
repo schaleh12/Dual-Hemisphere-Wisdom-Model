@@ -195,8 +195,44 @@ class SplicedThoughtTrace:
         }
 
 
+def _tokenizer_has_single_think_token(tokenizer) -> bool:
+    """Return True only when `<think>` is a registered single token in `tokenizer` (e.g. Qwen3)."""
+    if hasattr(tokenizer, "get_vocab"):
+        vocab = tokenizer.get_vocab()
+        if isinstance(vocab, dict):
+            return "<think>" in vocab
+    return False
+
+
+def validate_pytorch_hf_model_source(hf_model_id_or_path: str | Path) -> str:
+    """Reject `.gguf` quantized files when loading a PyTorch `<|subliminal_gap|>` model."""
+    raw_str = str(hf_model_id_or_path).strip()
+    if not raw_str:
+        raise ValueError("hf_model_id_or_path cannot be empty")
+    if raw_str.lower().endswith(".gguf"):
+        raise ValueError(
+            f"Cannot load {raw_str!r}: <|subliminal_gap|> embedding splicing and LoRA training require "
+            "HuggingFace PyTorch weights (e.g. 'SicariusSicariiStuff/Impish_Bloodmoon_4B' or a local HF "
+            "directory with config.json + model.safetensors), not a quantized .gguf file."
+        )
+    candidate_path = Path(raw_str)
+    if candidate_path.exists() and candidate_path.is_dir():
+        has_gguf = any(candidate_path.glob("*.gguf"))
+        has_pt = (
+            (candidate_path / "config.json").exists()
+            or any(candidate_path.glob("*.safetensors"))
+            or any(candidate_path.glob("*.bin"))
+        )
+        if has_gguf and not has_pt:
+            raise ValueError(
+                f"Directory {raw_str!r} contains only .gguf files: <|subliminal_gap|> embedding splicing "
+                "and LoRA training require HuggingFace PyTorch safetensors weights, not .gguf."
+            )
+    return raw_str
+
+
 class SubliminalGapLeftBrain:
-    """PyTorch Left Brain (`Qwen/Qwen3-4B` + LoRA + `SubliminalGapProjector`) steered strictly via `<|subliminal_gap|>`."""
+    """PyTorch Left Brain (CausalLM + LoRA + `SubliminalGapProjector`) steered strictly via `<|subliminal_gap|>`."""
 
     def __init__(
         self,
@@ -211,6 +247,13 @@ class SubliminalGapLeftBrain:
         callosum_metadata: CorpusCallosumMetadata | None = None,
         lora_config: LoRAConfig | None = None,
     ) -> None:
+        embed_weight = model.get_input_embeddings().weight
+        model_hidden_size = int(embed_weight.shape[1])
+        if model_hidden_size != int(projector.hidden_size):
+            raise ValueError(
+                f"Model embedding hidden_size ({model_hidden_size}) does not match "
+                f"SubliminalGapProjector.hidden_size ({projector.hidden_size})"
+            )
         self.model = model
         self.tokenizer = tokenizer
         self.projector = projector
@@ -231,14 +274,30 @@ class SubliminalGapLeftBrain:
         cls,
         checkpoint_dir: str | Path,
         *,
-        hf_model_id: str = DEFAULT_QWEN_4B_HF_ID,
+        hf_model_id: str | None = None,
         device: str | torch.device | None = None,
         torch_dtype: torch.dtype | None = None,
         max_clause_1_tokens: int = 14,
         max_post_gap_tokens: int = 40,
     ) -> "SubliminalGapLeftBrain":
-        """Load `Qwen/Qwen3-4B` + trained `LoRALinear` adapters + `SubliminalGapProjector` from disk."""
+        """Load a HuggingFace CausalLM + trained `LoRALinear` adapters + `SubliminalGapProjector` from disk."""
+        import json as _json
         from transformers import AutoModelForCausalLM, AutoTokenizer
+
+        ckpt_path = Path(checkpoint_dir)
+        resolved_model_id = hf_model_id
+        if not resolved_model_id:
+            meta_file = ckpt_path / "corpus_callosum_meta.json"
+            lora_file = ckpt_path / "lora_config.json"
+            if meta_file.exists():
+                raw_m = _json.loads(meta_file.read_text(encoding="utf-8"))
+                resolved_model_id = str(raw_m.get("base_model_id", "")).strip() or None
+            if not resolved_model_id and lora_file.exists():
+                raw_l = _json.loads(lora_file.read_text(encoding="utf-8"))
+                resolved_model_id = str(raw_l.get("base_model_id", "")).strip() or None
+        resolved_model_id = validate_pytorch_hf_model_source(
+            resolved_model_id or DEFAULT_QWEN_4B_HF_ID
+        )
 
         resolved_device = (
             torch.device(device)
@@ -251,17 +310,17 @@ class SubliminalGapLeftBrain:
             else (torch.bfloat16 if resolved_device.type == "cuda" else torch.float32)
         )
 
-        tokenizer = AutoTokenizer.from_pretrained(hf_model_id)
+        tokenizer = AutoTokenizer.from_pretrained(resolved_model_id)
         gap_token_id = ensure_subliminal_gap_token(tokenizer)
         model = AutoModelForCausalLM.from_pretrained(
-            hf_model_id,
+            resolved_model_id,
             dtype=resolved_dtype,
         )
         if len(tokenizer) > model.get_input_embeddings().num_embeddings:
             model.resize_token_embeddings(len(tokenizer))
         model.to(resolved_device)
         projector, meta, lora_cfg = load_lora_and_callosum_checkpoint(
-            checkpoint_dir,
+            ckpt_path,
             model=model,
             device=resolved_device,
         )
@@ -282,7 +341,7 @@ class SubliminalGapLeftBrain:
     def _suppressed_token_ids(self) -> list[int]:
         """Collect token IDs for `<think>`, `</think>`, and `<|subliminal_gap|>` so generation stays clean."""
         suppressed: list[int] = [int(self.gap_token_id)]
-        if hasattr(self.tokenizer, "encode"):
+        if _tokenizer_has_single_think_token(self.tokenizer) and hasattr(self.tokenizer, "encode"):
             for tag in ("<think>", "</think>", "<think>\n", "</think>\n"):
                 ids = self.tokenizer.encode(tag, add_special_tokens=False)
                 if len(ids) == 1 and ids[0] not in suppressed:
@@ -303,7 +362,10 @@ class SubliminalGapLeftBrain:
         was_training = self.model.training
         self.model.eval()
         try:
-            prompt = f"User: {scenario_text.strip()}\nAssistant: <think>\n\n</think>\n"
+            if _tokenizer_has_single_think_token(self.tokenizer):
+                prompt = f"User: {scenario_text.strip()}\nAssistant: <think>\n\n</think>\n"
+            else:
+                prompt = f"User: {scenario_text.strip()}\nAssistant:"
             prompt_ids = self.tokenizer.encode(prompt, add_special_tokens=True)
             if not prompt_ids:
                 return "Weighing the situation before us,"

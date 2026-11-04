@@ -111,6 +111,7 @@ class LoRAConfig:
     lora_dropout: float = 0.05
     target_modules: tuple[str, ...] = DEFAULT_LORA_TARGET_MODULES
     num_top_layers: int | None = 16
+    base_model_id: str = "Qwen/Qwen3-4B"
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -120,6 +121,7 @@ class LoRAConfig:
             "lora_dropout": self.lora_dropout,
             "target_modules": list(self.target_modules),
             "num_top_layers": self.num_top_layers,
+            "base_model_id": self.base_model_id,
         }
 
 
@@ -207,16 +209,21 @@ def save_lora_and_callosum_checkpoint(
     sleep_cycle_index: int = 1,
     trained_trajectories_count: int = 0,
     notes: str = "",
+    base_model_id: str | None = None,
+    callosum_status: str | None = None,
 ) -> CorpusCallosumMetadata:
     """Save both `SubliminalGapProjector` and `LoRALinear` adapter weights to `checkpoint_dir`."""
     out_dir = Path(checkpoint_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+    resolved_base_model = str(base_model_id or lora_config.base_model_id or "Qwen/Qwen3-4B")
     meta = save_corpus_callosum_checkpoint(
         out_dir,
         projector,
         sleep_cycle_index=sleep_cycle_index,
         trained_trajectories_count=trained_trajectories_count,
         notes=notes,
+        base_model_id=resolved_base_model,
+        callosum_status=callosum_status,
     )
     atomic_json(out_dir / "lora_config.json", lora_config.to_dict())
     torch.save(extract_lora_state_dict(model), out_dir / "lora_adapters.pt")
@@ -232,6 +239,12 @@ def load_lora_and_callosum_checkpoint(
     """Load `SubliminalGapProjector`, `LoRAConfig`, and `lora_adapters.pt` from `checkpoint_dir`."""
     in_dir = Path(checkpoint_dir)
     projector, meta = load_corpus_callosum_checkpoint(in_dir, device=device)
+    model_hidden_size = int(model.get_input_embeddings().weight.shape[1])
+    if model_hidden_size != projector.hidden_size:
+        raise ValueError(
+            f"Model embedding hidden_size ({model_hidden_size}) does not match "
+            f"Corpus Callosum projector.hidden_size ({projector.hidden_size}) in {in_dir}"
+        )
     raw_cfg = json.loads((in_dir / "lora_config.json").read_text(encoding="utf-8"))
     lora_cfg = LoRAConfig(
         rank=int(raw_cfg["rank"]),
@@ -241,6 +254,7 @@ def load_lora_and_callosum_checkpoint(
         num_top_layers=(
             int(raw_cfg["num_top_layers"]) if raw_cfg.get("num_top_layers") is not None else None
         ),
+        base_model_id=str(raw_cfg.get("base_model_id", meta.base_model_id)),
     )
     has_lora = any(isinstance(m, LoRALinear) for m in model.modules())
     if not has_lora:

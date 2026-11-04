@@ -1,11 +1,6 @@
 # LMFT-Lab — Design Decisions (Rolling 5-Decision Window)
 
-*(Keep only the 5 most recent decisions here, under 80 lines AND 5,000 characters in plain English. Earlier decisions `D001–D032` and `D033–D050` are archived in `docs/archive/`.)*
-
-## D051: Local Chess Kibitzing Club & Co-Regulation Sanctuary App (`chess_kibitz_bridge.py`, `sanctuary_club_app.py`, 2026-11-03)
-- **Context**: Needed a local desktop app (`Start-LMFT-Club.bat`) combining a `python-chess` Kibitzing Table and a Co-Regulation Sanctuary under a single GPU lock.
-- **Design Choice**: `apply_coregulation_lead_to_chord` keeps `vibe.coordinates` (`Fact`) un-rigged while stepping the 52-float comma chord by `alpha = 0.25`; `evaluate_chess_board_posture` anchors Pass-1 Philosophical `Fact` to `python-chess`; and `SanctuaryClubRuntime` persists coached rules, 3-branch archives, and savored vibes to `outputs/club_user_state/`.
-- **Result**: Verified by end-to-end tests in `tests/test_sanctuary_club_app.py` and packaged into `dist/lmft-sanctuary-club-v0.1.0-win64.zip`.
+*(Keep only the 5 most recent decisions here, under 80 lines AND 5,000 characters in plain English. Earlier decisions `D001–D051` are archived in `docs/archive/`.)*
 
 ## D052: `Wellspring of Being` Ontology Calibration & `Cycle 0` Virgin Baseline Snapshot (`virgin_baseline.py`, 2026-11-04)
 - **Context**: `philosophical/being/existence` (Cyan / Water / King) previously used `"Ground of Being"`, colliding with the `"Ground"` element on Rook (`discreteness`), and we needed a SHA-256 locked `Cycle 0` Virgin Baseline folder.
@@ -24,5 +19,10 @@
 
 ## D055: Startup Context Hygiene & Removal of Screenshot Regex / Keyword Hacks (`AGENTS.md`, `three_legged_runtime.py`, `chess_kibitz_bridge.py`, 2026-11-04)
 - **Context**: Auditor review caught startup file bloat (`32 KB` across `PROJECT_STATE.md` and `DECISIONS.md`) and three band-aids in `commit 78345d1` (`_THIRD_PERSON_COT_PREFIXES` regexes, `_CHESS_DISCUSSION_KEYWORDS` / `_BOARD_NOUN_FOLLOWERS` word lists, and force-attaching a `>= 0.20` Tier-2 leaf in `_consolidate_sleep_clusters_locally`).
-- **Design Choice**: Added strict line/character caps and Rules `4a–4c` to `AGENTS.md`; archived older state/decisions to `docs/archive/`; suppressed `Qwen3-4B` CoT leakage at the root using `"Assistant: <think>\n\n</think>\n"` in `SubliminalGapLeftBrain`; restricted `_is_descriptive_square_or_history_token` to pure `python-chess` board state (`board.move_stack` and `board.piece_at`); and removed the Tier-2 leaf force-attach in `_consolidate_sleep_clusters_locally`, reporting honest `Queued Scene Replay Check` statuses (`SETTLED` vs. `STILL_COLLIDING`).
-- **Result**: Enforced by `test_startup_files_line_and_character_caps` and updated tests in `tests/test_sanctuary_club_app.py` (**`1,374`** passing tests).
+- **Design Choice**: Added strict line/character caps and Rules `4a–4c` to `AGENTS.md`; archived older state/decisions to `docs/archive/`; suppressed `Qwen3-4B` CoT leakage at the root using `"Assistant: <think>\n\n</think>\n"` in `SubliminalGapLeftBrain`; restricted `_is_descriptive_square_or_history_token` to pure `python-chess` board state (`board.move_stack` and `board.piece_at`); and removed the Tier-2 leaf force-attach in `_consolidate_sleep_clusters_locally`.
+- **Result**: Enforced by `test_startup_files_line_and_character_caps` in `tests/test_sanctuary_club_app.py`.
+
+## D056: Impish Bloodmoon Left-Brain Adapter, Isolated Virgin Clone, & Patreon Bundle Encryption (`impish_bloodmoon_adapter.py`, 2026-11-04)
+- **Context**: Needed a dedicated adapter pairing an isolated `Cycle 0` Virgin Baseline clone with `SicariusSicariiStuff/Impish_Bloodmoon_4B` (`hidden_size = 3072`), plus a cryptographic Patreon bundle packager.
+- **Design Choice**: Made `SubliminalGapLeftBrain` tokenizer- and dimension-agnostic (only injecting `<think>\n\n</think>\n` when `<think>` is in `tokenizer.get_vocab()`, validating `hidden_size`, and rejecting `.gguf` files); built `clone_virgin_baseline_for_impish_bloodmoon` (`outputs/impish_bloodmoon_state/`), `bootstrap_impish_bloodmoon_virgin_checkpoint` (`UNSTEERED_BOOTSTRAP_CYCLE_0`), `train_impish_bloodmoon_callosum_and_lora` (`TRAINED_STEERED_CALLOSUM`), and PBKDF2-HMAC-SHA256 Patreon bundle encryption; and added `impish_bloodmoon` to `#lineage-select`.
+- **Result**: Verified by 4 unit tests in `tests/test_impish_bloodmoon_adapter.py` (**`1,378`** total passing tests).

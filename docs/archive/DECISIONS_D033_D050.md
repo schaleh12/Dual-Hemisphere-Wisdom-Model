@@ -55,3 +55,8 @@
 
 ## D050: Live Mid-Sentence Comma Scoring at `<|subliminal_gap|>` (`three_legged_runtime.py`, `subliminal_gap_splice.py`, 2026-11-03)
 - Added `chord_builder_at_comma` and `_compile_mid_sentence_comma_vibe` so Clause 1 is scored live at the comma by the 3 MiniLM bridges before splicing the 52-float chord into `<|subliminal_gap|>`.
+
+## D051: Local Chess Kibitzing Club & Co-Regulation Sanctuary App (`chess_kibitz_bridge.py`, `sanctuary_club_app.py`, 2026-11-03)
+- **Context**: Needed a local desktop app (`Start-LMFT-Club.bat`) combining a `python-chess` Kibitzing Table and a Co-Regulation Sanctuary under a single GPU lock.
+- **Design Choice**: `apply_coregulation_lead_to_chord` keeps `vibe.coordinates` (`Fact`) un-rigged while stepping the 52-float comma chord by `alpha = 0.25`; `evaluate_chess_board_posture` anchors Pass-1 Philosophical `Fact` to `python-chess`; and `SanctuaryClubRuntime` persists coached rules, 3-branch archives, and savored vibes to `outputs/club_user_state/`.
+- **Result**: Verified by end-to-end tests in `tests/test_sanctuary_club_app.py` and packaged into `dist/lmft-sanctuary-club-v0.1.0-win64.zip`.
