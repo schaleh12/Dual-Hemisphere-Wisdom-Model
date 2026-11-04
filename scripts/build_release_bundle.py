@@ -28,9 +28,10 @@ def build_release_zip(
     zip_path = out_dir / BUNDLE_NAME
 
     include_files: list[Path] = []
-    launcher = root / "Start-LMFT-Club.bat"
-    if launcher.exists():
-        include_files.append(launcher)
+    for root_file in ("Start-LMFT-Club.bat", "README.md"):
+        p = root / root_file
+        if p.exists():
+            include_files.append(p)
 
     for py_file in sorted((root / "src" / "lmft_lab").rglob("*.py")):
         include_files.append(py_file)

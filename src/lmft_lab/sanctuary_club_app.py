@@ -945,7 +945,8 @@ class SanctuaryClubRuntime:
         clusters: dict[str, list[UnresolvedSleepScene]] = {}
         for s in queued_scenes:
             ckey = _cluster_key_for_unresolved(s)
-            clusters.setdefault(ckey, []).append(s)
+            if ckey is not None:
+                clusters.setdefault(ckey, []).append(s)
 
         cur_archives = self.archives
         cur_ledger = self.ledger
