@@ -148,23 +148,49 @@ def test_guardrail_3_bootstrap_vs_trained_callosum_and_holdout_checks(tmp_path: 
 
 
 def test_guardrail_4_app_lineage_selector_and_patreon_encryption(tmp_path: Path) -> None:
-    """Verify `switch_brain_lineage('impish_bloodmoon')` in the app and Patreon bundle encryption/decryption."""
+    """Verify `switch_brain_lineage('impish_bloodmoon')` never secretly uses Qwen3-4B and tests Patreon encryption."""
     assert 'value="impish_bloodmoon"' in SINGLE_PAGE_HTML
+
+    # Initialize runtime with a Qwen Left Brain (`qwen_lb`) and no Impish checkpoint installed
+    qwen_tok = _WordLevelTestTokenizer()
+    qwen_gap_id = ensure_subliminal_gap_token(qwen_tok)
+    qwen_model = _MiniCausalLM(vocab_size=64, hidden_size=32, num_layers=2)
+    qwen_proj = SubliminalGapProjector(hidden_size=32)
+    qwen_lb = SubliminalGapLeftBrain(
+        qwen_model,
+        qwen_tok,
+        qwen_proj,
+        gap_token_id=qwen_gap_id,
+        max_clause_1_tokens=4,
+        max_post_gap_tokens=5,
+    )
 
     schooled_dir = tmp_path / "club_schooled_state"
     impish_dir = tmp_path / "impish_bloodmoon_state"
     runtime = SanctuaryClubRuntime(
         state_dir=schooled_dir,
         impish_state_dir=impish_dir,
+        left_brain=qwen_lb,
         lazy_load_gpu=False,
     )
+    assert runtime.left_brain is qwen_lb
     schooled_rules_count = len(runtime.rules)
 
-    # Switch to `impish_bloodmoon` -> isolated Virgin clone with 2 foundational rules
+    # Switch to `impish_bloodmoon` -> must unload/detach `qwen_lb` and report IMPISH_CHECKPOINT_NOT_INSTALLED!
     snap_impish = runtime.switch_brain_lineage("impish_bloodmoon")
     assert snap_impish["active_lineage"] == "impish_bloodmoon"
     assert snap_impish["rules_count"] == 2
     assert "Impish Bloodmoon" in snap_impish["active_checkpoint_label"]
+    assert runtime.left_brain is None
+    assert snap_impish["left_brain_status"].startswith("IMPISH_CHECKPOINT_NOT_INSTALLED")
+
+    # Verify a chat turn in `impish_bloodmoon` mode NEVER calls `qwen_lb`!
+    qwen_lb.last_traces.clear()
+    snap_chat = runtime.handle_chat_message("Testing Impish lineage isolation.", room="sanctuary")
+    assert len(qwen_lb.last_traces) == 0
+    chat_turn_id = int(snap_chat["chat_messages"][-1]["id"])
+    assert runtime._turn_records_by_id[chat_turn_id]["turn"].left_brain_calls == 0
+    assert snap_chat["chat_messages"][-1]["telemetry"]["spliced_trace"] == {}
 
     # Forge a rule during REM Sleep while in `impish_bloodmoon` mode -> saves ONLY to `impish_dir`!
     from lmft_lab.dilemma_crucible import CRUCIBLE_STAGES
@@ -182,10 +208,12 @@ def test_guardrail_4_app_lineage_selector_and_patreon_encryption(tmp_path: Path)
     assert not (schooled_dir / "club_ruleset.json").exists()
     verify_virgin_baseline_snapshot()
 
-    # Switch back to `schooled` -> original schooled rule count is untouched
+    # Switch back to `schooled` -> restores `qwen_lb` and original schooled rule count
     snap_back = runtime.switch_brain_lineage("schooled")
     assert snap_back["active_lineage"] == "schooled"
     assert snap_back["rules_count"] == schooled_rules_count
+    assert runtime.left_brain is qwen_lb
+    assert snap_back["left_brain_status"].startswith("READY")
 
     # Verify Patreon encrypted checkpoint bundle round-trip and wrong-passphrase rejection
     raw_ckpt = tmp_path / "raw_impish_ckpt"

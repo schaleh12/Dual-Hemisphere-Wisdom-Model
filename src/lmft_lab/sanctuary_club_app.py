@@ -245,6 +245,7 @@ class SanctuaryClubRuntime:
         rules: tuple[FuzzyConceptRule, ...] | None = None,
         learned_leaves: tuple[LearnedLeaf, ...] | None = None,
         left_brain: SubliminalGapLeftBrain | None = None,
+        impish_left_brain: SubliminalGapLeftBrain | None = None,
         teacher: Any | None = None,
         lazy_load_gpu: bool = True,
     ) -> None:
@@ -264,11 +265,12 @@ class SanctuaryClubRuntime:
             else (self.repo_root / "outputs" / "impish_bloodmoon_state")
         )
         self.teacher = teacher
+        self._lazy_load_gpu = bool(lazy_load_gpu)
         self.gpu_lock = threading.Lock()
         self.rem_sleep_in_progress = False
         self.left_brain_loading = False
         self.left_brain_status = "LAZY_STANDBY"
-        self.active_lineage = "schooled"  # "schooled" (Cycle 2 + user state) or "virgin" (Cycle 0 snapshot)
+        self.active_lineage = "schooled"  # "schooled", "virgin", or "impish_bloodmoon"
         self.active_checkpoint_label = "Cycle 2 (models/left_brain_lora_cycle2)"
         self.sleep_cycle_index = 2
 
@@ -295,6 +297,8 @@ class SanctuaryClubRuntime:
         else:
             self.sensors = self._load_default_sensors()
 
+        self._qwen_left_brain: SubliminalGapLeftBrain | None = left_brain
+        self._impish_left_brain: SubliminalGapLeftBrain | None = impish_left_brain
         self.left_brain: SubliminalGapLeftBrain | None = left_brain
         if self.left_brain is not None:
             self.left_brain_status = "READY"
@@ -449,6 +453,12 @@ class SanctuaryClubRuntime:
         if mode == "virgin":
             virgin = load_virgin_baseline_state(repo_root=self.repo_root)
             self.active_lineage = "virgin"
+            self.left_brain = self._qwen_left_brain
+            if self.left_brain is not None:
+                self.left_brain_status = "READY (Cycle 0 Virgin)"
+            elif self._lazy_load_gpu:
+                t = threading.Thread(target=self._background_warm_left_brain, daemon=True)
+                t.start()
             self.sleep_cycle_index = 0
             self.active_checkpoint_label = "Virgin Baseline (Cycle 0 — Core Architecture)"
             self.rules = virgin.rules
@@ -497,6 +507,26 @@ class SanctuaryClubRuntime:
             self.active_checkpoint_label = (
                 f"Impish Bloodmoon ({callosum_status} — {base_model_id})"
             )
+
+            # Strictly isolate the Left Brain: never use Qwen3-4B when active_lineage == "impish_bloodmoon"
+            if self._impish_left_brain is not None:
+                self.left_brain = self._impish_left_brain
+                self.left_brain_status = f"READY (Impish Bloodmoon · {callosum_status})"
+            elif meta_file.exists() and self._lazy_load_gpu:
+                self.left_brain = None
+                self.left_brain_status = "LOADING_IMPISH_BLOODMOON..."
+                t = threading.Thread(
+                    target=self._background_warm_impish_left_brain,
+                    args=(impish_ckpt_dir, callosum_status),
+                    daemon=True,
+                )
+                t.start()
+            else:
+                self.left_brain = None
+                self.left_brain_status = (
+                    "IMPISH_CHECKPOINT_NOT_INSTALLED (Run experiments/run_train_impish_bloodmoon.py)"
+                )
+
             self.rules = impish_clone.rules
             self.learned_leaves = impish_clone.learned_leaves
             self.archives = impish_clone.archives
@@ -510,7 +540,8 @@ class SanctuaryClubRuntime:
                     "sender": "system",
                     "role_label": "Lineage Switch",
                     "text": (
-                        f"Switched to IMPISH BLOODMOON ({base_model_id} | {callosum_status}): "
+                        f"Switched to IMPISH BLOODMOON ({base_model_id} | {callosum_status} | "
+                        f"Left Brain: {self.left_brain_status}): "
                         f"isolated Virgin clone at {self.impish_state_dir.name} ({len(self.rules)} rules, "
                         f"{len(self.archives.judicial.ratified_chords)} ratified chords)."
                     ),
@@ -518,11 +549,19 @@ class SanctuaryClubRuntime:
             )
         else:
             self.active_lineage = "schooled"
+            self.left_brain = self._qwen_left_brain
             self.sleep_cycle_index = (
                 int(self.left_brain.callosum_metadata.sleep_cycle_index)
                 if (self.left_brain is not None and self.left_brain.callosum_metadata is not None)
                 else 2
             )
+            if self.left_brain is not None:
+                self.left_brain_status = f"READY (Cycle {self.sleep_cycle_index})"
+            elif self._lazy_load_gpu:
+                t = threading.Thread(target=self._background_warm_left_brain, daemon=True)
+                t.start()
+            else:
+                self.left_brain_status = "GEAR_1_ONLY (No LoRA checkpoint found)"
             self.active_checkpoint_label = f"Cycle {self.sleep_cycle_index} (models/left_brain_lora_cycle2)"
             self.rules = self._load_default_rules()
             self.learned_leaves = self._load_default_learned_leaves()
@@ -573,21 +612,70 @@ class SanctuaryClubRuntime:
             self.left_brain_status = "GEAR_1_ONLY (No LoRA checkpoint found)"
             return
         with self.gpu_lock:
-            if self.left_brain is not None or self.rem_sleep_in_progress:
+            if self._qwen_left_brain is not None or self.rem_sleep_in_progress:
+                if self.active_lineage != "impish_bloodmoon":
+                    self.left_brain = self._qwen_left_brain
                 return
             self.left_brain_loading = True
             self.left_brain_status = "LOADING_QWEN_4B..."
             try:
-                self.left_brain = SubliminalGapLeftBrain.from_checkpoint(
+                import torch as _torch
+
+                if self._impish_left_brain is not None:
+                    self._impish_left_brain = None
+                    if _torch.cuda.is_available():
+                        _torch.cuda.empty_cache()
+                loaded = SubliminalGapLeftBrain.from_checkpoint(
                     ckpt_dir,
                     max_clause_1_tokens=20,
                     max_post_gap_tokens=64,
                 )
-                if self.left_brain.callosum_metadata is not None:
-                    self.sleep_cycle_index = int(self.left_brain.callosum_metadata.sleep_cycle_index)
-                self.left_brain_status = f"READY (Cycle {self.sleep_cycle_index})"
+                self._qwen_left_brain = loaded
+                if self.active_lineage != "impish_bloodmoon":
+                    self.left_brain = loaded
+                    if loaded.callosum_metadata is not None:
+                        self.sleep_cycle_index = int(loaded.callosum_metadata.sleep_cycle_index)
+                    self.left_brain_status = f"READY (Cycle {self.sleep_cycle_index})"
             except Exception as exc:
-                self.left_brain_status = f"GEAR_1_FALLBACK ({type(exc).__name__})"
+                if self.active_lineage != "impish_bloodmoon":
+                    self.left_brain_status = f"GEAR_1_FALLBACK ({type(exc).__name__})"
+            finally:
+                self.left_brain_loading = False
+
+    def _background_warm_impish_left_brain(
+        self,
+        ckpt_dir: Path,
+        callosum_status: str,
+    ) -> None:
+        with self.gpu_lock:
+            if self._impish_left_brain is not None or self.rem_sleep_in_progress:
+                if self.active_lineage == "impish_bloodmoon":
+                    self.left_brain = self._impish_left_brain
+                return
+            self.left_brain_loading = True
+            self.left_brain_status = "LOADING_IMPISH_BLOODMOON..."
+            try:
+                import torch as _torch
+
+                if self._qwen_left_brain is not None:
+                    self._qwen_left_brain = None
+                    if _torch.cuda.is_available():
+                        _torch.cuda.empty_cache()
+                loaded = SubliminalGapLeftBrain.from_checkpoint(
+                    ckpt_dir,
+                    max_clause_1_tokens=20,
+                    max_post_gap_tokens=64,
+                )
+                self._impish_left_brain = loaded
+                if self.active_lineage == "impish_bloodmoon":
+                    self.left_brain = loaded
+                    self.left_brain_status = f"READY (Impish Bloodmoon · {callosum_status})"
+            except Exception as exc:
+                if self.active_lineage == "impish_bloodmoon":
+                    self.left_brain = None
+                    self.left_brain_status = (
+                        f"IMPISH_CHECKPOINT_NOT_INSTALLED ({type(exc).__name__}; Run experiments/run_train_impish_bloodmoon.py)"
+                    )
             finally:
                 self.left_brain_loading = False
 
@@ -641,7 +729,12 @@ class SanctuaryClubRuntime:
         # Acquire GPU lock if we aren't currently in REM sleep; otherwise fall back cleanly to Gear 1
         acquired = self.gpu_lock.acquire(blocking=not self.rem_sleep_in_progress, timeout=0.05 if self.rem_sleep_in_progress else 30.0)
         try:
-            active_lb = self.left_brain if (acquired and not self.rem_sleep_in_progress) else None
+            lineage_lb = (
+                self._impish_left_brain
+                if self.active_lineage == "impish_bloodmoon"
+                else self._qwen_left_brain
+            )
+            active_lb = lineage_lb if (acquired and not self.rem_sleep_in_progress) else None
             turn = run_three_legged_turn(
                 self.birth_state,
                 scenario_text,
