@@ -27,6 +27,7 @@ from lmft_lab.impish_bloodmoon_adapter import (  # noqa: E402
     DEFAULT_IMPISH_BLOODMOON_HF_ID,
     bootstrap_impish_bloodmoon_virgin_checkpoint,
     clone_virgin_baseline_for_impish_bloodmoon,
+    decrypt_patreon_checkpoint_bundle,
     encrypt_patreon_checkpoint_bundle,
     resolve_impish_bloodmoon_checkpoint_dir,
     resolve_impish_bloodmoon_state_dir,
@@ -36,7 +37,7 @@ from lmft_lab.impish_bloodmoon_adapter import (  # noqa: E402
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Bootstrap or train the Impish Bloodmoon Left-Brain LoRA + Corpus Callosum checkpoint."
+        description="Bootstrap, train, or encrypt/decrypt the Impish Bloodmoon 12B Left-Brain LoRA + Corpus Callosum checkpoint."
     )
     parser.add_argument(
         "--hf-model-id",
@@ -68,11 +69,46 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--lr-projector", type=float, default=8e-4, help="Projector learning rate (default: 8e-4)")
     parser.add_argument("--lr-lora", type=float, default=3e-4, help="LoRA learning rate (default: 3e-4)")
     parser.add_argument(
+        "--encrypt-bundle",
+        default="",
+        help="Encrypt --checkpoint-dir into the specified .enc file using --passphrase (without re-training).",
+    )
+    parser.add_argument(
+        "--decrypt-bundle",
+        default="",
+        help="Decrypt the specified .enc file into --checkpoint-dir using --passphrase.",
+    )
+    parser.add_argument(
+        "--passphrase",
+        default="",
+        help="Passphrase for --encrypt-bundle or --decrypt-bundle.",
+    )
+    parser.add_argument(
         "--pack-patreon-passphrase",
         default="",
-        help="Optional passphrase to also write an encrypted outputs/impish_bloodmoon_patreon.enc bundle.",
+        help="Optional passphrase to also write an encrypted dist/impish_bloodmoon_patreon.enc bundle after training.",
     )
     args = parser.parse_args(argv)
+
+    if args.decrypt_bundle.strip():
+        secret = args.passphrase.strip() or args.pack_patreon_passphrase.strip()
+        out_dir = decrypt_patreon_checkpoint_bundle(
+            args.decrypt_bundle.strip(),
+            args.checkpoint_dir,
+            secret,
+        )
+        print(f"Decrypted Patreon bundle into: {out_dir}")
+        return 0
+
+    if args.encrypt_bundle.strip():
+        secret = args.passphrase.strip() or args.pack_patreon_passphrase.strip()
+        enc_out = encrypt_patreon_checkpoint_bundle(
+            args.checkpoint_dir,
+            args.encrypt_bundle.strip(),
+            secret,
+        )
+        print(f"Encrypted Patreon bundle written to: {enc_out}")
+        return 0
 
     clone = clone_virgin_baseline_for_impish_bloodmoon(
         args.state_dir,
@@ -100,12 +136,13 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(json.dumps(report, indent=2))
 
-    if args.pack_patreon_passphrase.strip():
-        enc_out = REPO_ROOT / "outputs" / "impish_bloodmoon_patreon.enc"
+    pack_secret = args.pack_patreon_passphrase.strip() or args.passphrase.strip()
+    if pack_secret:
+        enc_out = REPO_ROOT / "dist" / "impish_bloodmoon_patreon.enc"
         encrypt_patreon_checkpoint_bundle(
             args.checkpoint_dir,
             enc_out,
-            args.pack_patreon_passphrase.strip(),
+            pack_secret,
         )
         print(f"Encrypted Patreon bundle written to: {enc_out}")
 

@@ -2,8 +2,8 @@
 
 Plain-English Purpose:
 Pairs an isolated clone of the `Cycle 0` Virgin Dual-Hemisphere Baseline (`baselines/virgin_dual_hemisphere_v1/`)
-with an alternate HuggingFace CausalLM Left Brain (defaulting to `SicariusSicariiStuff/Impish_Bloodmoon_4B`,
-`hidden_size = 3072`), implementing all 4 Auditor guardrails:
+with an alternate HuggingFace CausalLM Left Brain (defaulting to `SicariusSicariiStuff/Impish_Bloodmoon_12B`,
+`hidden_size = 5120`), implementing all 4 Auditor guardrails:
 1. **Tokenizer- & Dimension-Agnostic `<|subliminal_gap|>` Splicing**:
    - Rejects quantized `.gguf` files with a clear error explaining that `<|subliminal_gap|>` embedding
      splicing and LoRA training require HuggingFace PyTorch `safetensors` weights.
@@ -68,8 +68,8 @@ from .virgin_baseline import (
     verify_virgin_baseline_snapshot,
 )
 
-DEFAULT_IMPISH_BLOODMOON_HF_ID = "SicariusSicariiStuff/Impish_Bloodmoon_4B"
-DEFAULT_IMPISH_BLOODMOON_HIDDEN_SIZE = 3072
+DEFAULT_IMPISH_BLOODMOON_HF_ID = "SicariusSicariiStuff/Impish_Bloodmoon_12B"
+DEFAULT_IMPISH_BLOODMOON_HIDDEN_SIZE = 5120
 IMPISH_BLOODMOON_STATE_REL_DIR = Path("outputs") / "impish_bloodmoon_state"
 IMPISH_BLOODMOON_CHECKPOINT_REL_DIR = Path("models") / "left_brain_impish_bloodmoon"
 
@@ -321,6 +321,7 @@ def train_impish_bloodmoon_callosum_and_lora(
     lora_dropout: float = 0.05,
     num_top_layers: int | None = 16,
     intermediate_size: int = 256,
+    load_in_4bit: bool | None = None,
     device: str | torch.device | None = None,
     repo_root: str | Path | None = None,
 ) -> dict[str, Any]:
@@ -343,19 +344,63 @@ def train_impish_bloodmoon_callosum_and_lora(
         if device is not None
         else torch.device("cuda" if torch.cuda.is_available() else "cpu")
     )
+    dtype = torch.bfloat16 if resolved_device.type == "cuda" else torch.float32
+
+    use_4bit = (
+        bool(load_in_4bit)
+        if load_in_4bit is not None
+        else (
+            resolved_device.type == "cuda"
+            and any(tag in resolved_hf_id.lower() for tag in ("12b", "impish_bloodmoon"))
+        )
+    )
 
     if model is None or tokenizer is None:
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
-        dtype = torch.bfloat16 if resolved_device.type == "cuda" else torch.float32
-        tokenizer = AutoTokenizer.from_pretrained(resolved_hf_id)
-        model = AutoModelForCausalLM.from_pretrained(resolved_hf_id, dtype=dtype)
+        try:
+            tokenizer = AutoTokenizer.from_pretrained(resolved_hf_id, fix_mistral_regex=True)
+        except TypeError:
+            tokenizer = AutoTokenizer.from_pretrained(resolved_hf_id)
+
+        if use_4bit and resolved_device.type == "cuda":
+            from transformers import BitsAndBytesConfig
+
+            quant_cfg = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_compute_dtype=dtype,
+                bnb_4bit_use_double_quant=True,
+            )
+            model = AutoModelForCausalLM.from_pretrained(
+                resolved_hf_id,
+                quantization_config=quant_cfg,
+                device_map={"": str(resolved_device)},
+                dtype=dtype,
+                low_cpu_mem_usage=True,
+            )
+        else:
+            model = AutoModelForCausalLM.from_pretrained(resolved_hf_id, dtype=dtype)
 
     gap_token_id = ensure_subliminal_gap_token(tokenizer)
     vocab_len = len(tokenizer) if hasattr(tokenizer, "__len__") else len(tokenizer.get_vocab())
     if hasattr(model, "resize_token_embeddings") and vocab_len > model.get_input_embeddings().num_embeddings:
-        model.resize_token_embeddings(vocab_len)
-    model.to(resolved_device)
+        try:
+            model.resize_token_embeddings(vocab_len, mean_resizing=False)
+        except TypeError:
+            model.resize_token_embeddings(vocab_len)
+
+    if not getattr(model, "is_loaded_in_4bit", False):
+        model.to(resolved_device)
+    else:
+        model.get_input_embeddings().to(device=resolved_device, dtype=dtype)
+        out_emb = model.get_output_embeddings() if hasattr(model, "get_output_embeddings") else None
+        if out_emb is not None:
+            out_emb.to(device=resolved_device, dtype=dtype)
+        if hasattr(model, "gradient_checkpointing_enable"):
+            model.gradient_checkpointing_enable()
+        if hasattr(model, "config") and hasattr(model.config, "use_cache"):
+            model.config.use_cache = False
 
     resolved_hidden = detect_model_hidden_size(model)
     target_mods = detect_lora_target_modules(model)
@@ -410,6 +455,15 @@ def train_impish_bloodmoon_callosum_and_lora(
 
     holdout_report: dict[str, Any] | None = None
     if holdout_pairs:
+        resolved_sensors = sensors
+        bridges_dir = root / "models" / "right_brain_bridges"
+        if resolved_sensors is None and resolved_device.type == "cuda" and bridges_dir.exists():
+            try:
+                from .neural_bridge_classifiers import NeuralThreeBridgeSuite
+
+                resolved_sensors = NeuralThreeBridgeSuite.load_all(bridges_dir).as_three_bridge_sensors()
+            except Exception:
+                resolved_sensors = None
         eval_res = evaluate_holdout_pairs(
             model,
             tokenizer,
@@ -417,7 +471,7 @@ def train_impish_bloodmoon_callosum_and_lora(
             holdout_pairs=holdout_pairs,
             gap_token_id=gap_token_id,
             device=resolved_device,
-            sensors=sensors,
+            sensors=resolved_sensors,
         )
         holdout_report = eval_res.to_dict()
         atomic_json(out_dir / "impish_bloodmoon_holdout_report.json", holdout_report)
@@ -426,6 +480,7 @@ def train_impish_bloodmoon_callosum_and_lora(
         "checkpoint_dir": str(out_dir),
         "base_model_id": resolved_hf_id,
         "hidden_size": resolved_hidden,
+        "loaded_in_4bit": bool(getattr(model, "is_loaded_in_4bit", False)),
         "callosum_status": meta.callosum_status,
         "sleep_cycle_index": meta.sleep_cycle_index,
         "trained_trajectories_count": meta.trained_trajectories_count,

@@ -212,7 +212,7 @@ def validate_pytorch_hf_model_source(hf_model_id_or_path: str | Path) -> str:
     if raw_str.lower().endswith(".gguf"):
         raise ValueError(
             f"Cannot load {raw_str!r}: <|subliminal_gap|> embedding splicing and LoRA training require "
-            "HuggingFace PyTorch weights (e.g. 'SicariusSicariiStuff/Impish_Bloodmoon_4B' or a local HF "
+            "HuggingFace PyTorch weights (e.g. 'SicariusSicariiStuff/Impish_Bloodmoon_12B' or a local HF "
             "directory with config.json + model.safetensors), not a quantized .gguf file."
         )
     candidate_path = Path(raw_str)
@@ -277,6 +277,7 @@ class SubliminalGapLeftBrain:
         hf_model_id: str | None = None,
         device: str | torch.device | None = None,
         torch_dtype: torch.dtype | None = None,
+        load_in_4bit: bool | None = None,
         max_clause_1_tokens: int = 14,
         max_post_gap_tokens: int = 40,
     ) -> "SubliminalGapLeftBrain":
@@ -310,15 +311,57 @@ class SubliminalGapLeftBrain:
             else (torch.bfloat16 if resolved_device.type == "cuda" else torch.float32)
         )
 
-        tokenizer = AutoTokenizer.from_pretrained(resolved_model_id)
-        gap_token_id = ensure_subliminal_gap_token(tokenizer)
-        model = AutoModelForCausalLM.from_pretrained(
-            resolved_model_id,
-            dtype=resolved_dtype,
+        use_4bit = (
+            bool(load_in_4bit)
+            if load_in_4bit is not None
+            else (
+                resolved_device.type == "cuda"
+                and any(tag in resolved_model_id.lower() for tag in ("12b", "impish_bloodmoon"))
+            )
         )
-        if len(tokenizer) > model.get_input_embeddings().num_embeddings:
-            model.resize_token_embeddings(len(tokenizer))
-        model.to(resolved_device)
+
+        try:
+            tokenizer = AutoTokenizer.from_pretrained(resolved_model_id, fix_mistral_regex=True)
+        except TypeError:
+            tokenizer = AutoTokenizer.from_pretrained(resolved_model_id)
+        gap_token_id = ensure_subliminal_gap_token(tokenizer)
+
+        if use_4bit and resolved_device.type == "cuda":
+            from transformers import BitsAndBytesConfig
+
+            quant_cfg = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_compute_dtype=resolved_dtype,
+                bnb_4bit_use_double_quant=True,
+            )
+            model = AutoModelForCausalLM.from_pretrained(
+                resolved_model_id,
+                quantization_config=quant_cfg,
+                device_map={"": str(resolved_device)},
+                dtype=resolved_dtype,
+                low_cpu_mem_usage=True,
+            )
+        else:
+            model = AutoModelForCausalLM.from_pretrained(
+                resolved_model_id,
+                dtype=resolved_dtype,
+            )
+
+        vocab_len = len(tokenizer) if hasattr(tokenizer, "__len__") else len(tokenizer.get_vocab())
+        if vocab_len > model.get_input_embeddings().num_embeddings:
+            try:
+                model.resize_token_embeddings(vocab_len, mean_resizing=False)
+            except TypeError:
+                model.resize_token_embeddings(vocab_len)
+        if not getattr(model, "is_loaded_in_4bit", False):
+            model.to(resolved_device)
+        else:
+            model.get_input_embeddings().to(device=resolved_device, dtype=resolved_dtype)
+            out_emb = model.get_output_embeddings() if hasattr(model, "get_output_embeddings") else None
+            if out_emb is not None:
+                out_emb.to(device=resolved_device, dtype=resolved_dtype)
+
         projector, meta, lora_cfg = load_lora_and_callosum_checkpoint(
             ckpt_path,
             model=model,

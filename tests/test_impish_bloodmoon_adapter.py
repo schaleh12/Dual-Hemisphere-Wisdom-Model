@@ -15,6 +15,7 @@ import torch
 
 from lmft_lab.gap_trajectory_schema import compile_chess_posture_chords
 from lmft_lab.impish_bloodmoon_adapter import (
+    DEFAULT_IMPISH_BLOODMOON_HIDDEN_SIZE,
     DEFAULT_IMPISH_BLOODMOON_HF_ID,
     TRAINED_STEERED_STATUS,
     UNSTEERED_BOOTSTRAP_STATUS,
@@ -53,6 +54,8 @@ def test_guardrail_1_gguf_rejection_think_token_detection_and_hidden_size_check(
     with pytest.raises(ValueError, match="contains only .gguf files"):
         validate_pytorch_hf_model_source(gguf_dir)
 
+    assert DEFAULT_IMPISH_BLOODMOON_HF_ID == "SicariusSicariiStuff/Impish_Bloodmoon_12B"
+    assert DEFAULT_IMPISH_BLOODMOON_HIDDEN_SIZE == 5120
     assert validate_pytorch_hf_model_source(DEFAULT_IMPISH_BLOODMOON_HF_ID) == DEFAULT_IMPISH_BLOODMOON_HF_ID
 
     # Llama/Impish Bloodmoon tokenizer without `<think>` vs. Qwen3 tokenizer with `<think>`
@@ -150,6 +153,7 @@ def test_guardrail_3_bootstrap_vs_trained_callosum_and_holdout_checks(tmp_path: 
 def test_guardrail_4_app_lineage_selector_and_patreon_encryption(tmp_path: Path) -> None:
     """Verify `switch_brain_lineage('impish_bloodmoon')` never secretly uses Qwen3-4B and tests Patreon encryption."""
     assert 'value="impish_bloodmoon"' in SINGLE_PAGE_HTML
+    assert 'id="patreon-unlock-bar"' in SINGLE_PAGE_HTML
 
     # Initialize runtime with a Qwen Left Brain (`qwen_lb`) and no Impish checkpoint installed
     qwen_tok = _WordLevelTestTokenizer()
@@ -167,9 +171,11 @@ def test_guardrail_4_app_lineage_selector_and_patreon_encryption(tmp_path: Path)
 
     schooled_dir = tmp_path / "club_schooled_state"
     impish_dir = tmp_path / "impish_bloodmoon_state"
+    impish_ckpt_dir = tmp_path / "test_impish_ckpt"
     runtime = SanctuaryClubRuntime(
         state_dir=schooled_dir,
         impish_state_dir=impish_dir,
+        impish_checkpoint_dir=impish_ckpt_dir,
         left_brain=qwen_lb,
         lazy_load_gpu=False,
     )
@@ -230,3 +236,8 @@ def test_guardrail_4_app_lineage_selector_and_patreon_encryption(tmp_path: Path)
     _, unlocked_meta = load_corpus_callosum_checkpoint(unlocked_dir)
     assert unlocked_meta.hidden_size == 64
     assert unlocked_meta.callosum_status == UNSTEERED_BOOTSTRAP_STATUS
+
+    snap_unlocked = runtime.unlock_patreon_bundle("bloodmoon-secret-2026", enc_path=enc_file)
+    assert snap_unlocked["active_lineage"] == "impish_bloodmoon"
+    assert (impish_ckpt_dir / "corpus_callosum_meta.json").exists()
+    assert snap_unlocked["chat_messages"][-1]["role_label"] == "Patreon Bundle Unlocked"

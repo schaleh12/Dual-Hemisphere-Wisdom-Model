@@ -240,6 +240,7 @@ class SanctuaryClubRuntime:
         *,
         state_dir: str | Path | None = None,
         impish_state_dir: str | Path | None = None,
+        impish_checkpoint_dir: str | Path | None = None,
         birth_state: BirthState | None = None,
         sensors: ThreeBridgeSensors | None = None,
         rules: tuple[FuzzyConceptRule, ...] | None = None,
@@ -263,6 +264,11 @@ class SanctuaryClubRuntime:
             Path(impish_state_dir).resolve()
             if impish_state_dir is not None
             else (self.repo_root / "outputs" / "impish_bloodmoon_state")
+        )
+        self.impish_checkpoint_dir = (
+            Path(impish_checkpoint_dir).resolve()
+            if impish_checkpoint_dir is not None
+            else (self.repo_root / "models" / "left_brain_impish_bloodmoon")
         )
         self.teacher = teacher
         self._lazy_load_gpu = bool(lazy_load_gpu)
@@ -480,9 +486,9 @@ class SanctuaryClubRuntime:
                 }
             )
         elif mode == "impish_bloodmoon":
-            impish_ckpt_dir = self.repo_root / "models" / "left_brain_impish_bloodmoon"
-            enc_bundle = self.repo_root / "outputs" / "impish_bloodmoon_patreon.enc"
-            if patreon_passphrase and patreon_passphrase.strip() and enc_bundle.exists():
+            impish_ckpt_dir = self.impish_checkpoint_dir
+            enc_bundle = self._resolve_patreon_enc_path()
+            if patreon_passphrase and patreon_passphrase.strip() and enc_bundle is not None:
                 decrypt_patreon_checkpoint_bundle(enc_bundle, impish_ckpt_dir, patreon_passphrase.strip())
 
             impish_clone = clone_virgin_baseline_for_impish_bloodmoon(
@@ -580,6 +586,56 @@ class SanctuaryClubRuntime:
                     ),
                 }
             )
+        return self.get_state_snapshot()
+
+    def _resolve_patreon_enc_path(self, custom_enc_path: str | Path | None = None) -> Path | None:
+        """Locate an encrypted Patreon bundle (`.enc`) in `dist/`, `outputs/`, or the repo root."""
+        if custom_enc_path is not None and str(custom_enc_path).strip():
+            cand = Path(str(custom_enc_path).strip())
+            if not cand.is_absolute():
+                cand = (self.repo_root / cand).resolve()
+            if cand.exists():
+                return cand
+        for rel in (
+            Path("dist") / "impish_bloodmoon_patreon.enc",
+            Path("outputs") / "impish_bloodmoon_patreon.enc",
+            Path("impish_bloodmoon_patreon.enc"),
+        ):
+            p = (self.repo_root / rel).resolve()
+            if p.exists():
+                return p
+        return None
+
+    def unlock_patreon_bundle(
+        self,
+        passphrase: str,
+        *,
+        enc_path: str | Path | None = None,
+    ) -> dict[str, Any]:
+        """Decrypt a Patreon `.enc` bundle into `models/left_brain_impish_bloodmoon/` and activate the Impish lineage."""
+        clean_pass = passphrase.strip()
+        if not clean_pass:
+            raise ValueError("Please enter a Patreon unlock passphrase.")
+        resolved_enc = self._resolve_patreon_enc_path(enc_path)
+        if resolved_enc is None:
+            raise FileNotFoundError(
+                "Encrypted Patreon bundle not found at dist/impish_bloodmoon_patreon.enc "
+                "(or outputs/impish_bloodmoon_patreon.enc)."
+            )
+        impish_ckpt_dir = self.impish_checkpoint_dir
+        decrypt_patreon_checkpoint_bundle(resolved_enc, impish_ckpt_dir, clean_pass)
+        self.switch_brain_lineage("impish_bloodmoon")
+        self.chat_messages.append(
+            {
+                "id": f"patreon-unlock-{int(time.time())}",
+                "sender": "system",
+                "role_label": "Patreon Bundle Unlocked",
+                "text": (
+                    f"Unlocked {resolved_enc.name} into models/left_brain_impish_bloodmoon/ "
+                    f"({self.active_checkpoint_label})."
+                ),
+            }
+        )
         return self.get_state_snapshot()
 
     def _load_default_sensors(self) -> ThreeBridgeSensors:
@@ -2022,6 +2078,10 @@ SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
         <option value="virgin">LINEAGE: VIRGIN BASELINE (CYCLE 0)</option>
         <option value="impish_bloodmoon">LINEAGE: IMPISH BLOODMOON (VIRGIN CLONE)</option>
       </select>
+      <span id="patreon-unlock-bar" style="display:none; align-items:center; gap:5px;">
+        <input type="password" id="patreon-passphrase-input" placeholder="Patreon Unlock Key..." style="padding:3px 7px; font-size:11px; width:155px; background:var(--bg-input); color:var(--text-main); border:1px solid var(--border); border-radius:3px; font-family:var(--font-mono);" onkeydown="if(event.key==='Enter') unlockPatreonBundle()">
+        <button class="btn" style="padding:3px 8px; font-size:11px;" onclick="unlockPatreonBundle()" title="Decrypt dist/impish_bloodmoon_patreon.enc into models/left_brain_impish_bloodmoon/">[Unlock .enc]</button>
+      </span>
     </div>
     <div class="mode-tabs">
       <button class="tab-btn active" id="tab-chess" onclick="switchRoom('chess')">CHESS TABLE</button>
@@ -2656,11 +2716,23 @@ async function switchLineage(mode) {
   await apiPost('/api/lineage', { lineage: mode });
 }
 
+async function unlockPatreonBundle() {
+  const inp = document.getElementById('patreon-passphrase-input');
+  const pass = inp ? inp.value.trim() : '';
+  if (!pass) return;
+  inp.value = '';
+  await apiPost('/api/patreon/unlock', { passphrase: pass });
+}
+
 function renderAll(forceRebuild) {
   if (!appState) return;
   document.getElementById('cycle-badge').textContent = `CYCLE ${appState.sleep_cycle_index}`;
   const linSel = document.getElementById('lineage-select');
   if (linSel && appState.active_lineage) linSel.value = appState.active_lineage;
+  const patreonBar = document.getElementById('patreon-unlock-bar');
+  if (patreonBar) {
+    patreonBar.style.display = (appState.active_lineage === 'impish_bloodmoon') ? 'inline-flex' : 'none';
+  }
   document.getElementById('status-left-brain').textContent = `LEFT BRAIN: ${appState.left_brain_status}`;
   document.getElementById('status-rules').textContent = `RULES: ${appState.rules_count} | RATIFIED CHORDS: ${appState.ratified_chords_count}`;
   document.getElementById('status-savored').textContent = `SAVORED: ${appState.savored_count}`;
@@ -2783,6 +2855,17 @@ def create_club_http_server(
                         patreon_passphrase=(
                             str(data["patreon_passphrase"])
                             if data.get("patreon_passphrase") is not None
+                            else None
+                        ),
+                    )
+                    self._send_json(snap)
+                    return
+                if self.path == "/api/patreon/unlock":
+                    snap = runtime.unlock_patreon_bundle(
+                        str(data.get("passphrase", "")),
+                        enc_path=(
+                            str(data["enc_path"])
+                            if data.get("enc_path") is not None
                             else None
                         ),
                     )
