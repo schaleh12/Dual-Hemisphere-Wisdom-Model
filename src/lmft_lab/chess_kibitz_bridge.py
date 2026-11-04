@@ -198,7 +198,12 @@ def evaluate_chess_board_posture(
     hanging_count = sum(
         1
         for sq in our_non_king_sqs
-        if board.is_attacked_by(them, sq) and not board.is_attacked_by(us, sq)
+        if board.is_attacked_by(them, sq)
+        and not board.is_attacked_by(us, sq)
+        and not (
+            board.piece_type_at(sq) == chess.PAWN
+            and any(m.from_square == sq and board.is_capture(m) for m in our_moves)
+        )
     )
     coord_ratio = defended_count / max(1, len(our_non_king_sqs))
     order = _clamp01(
@@ -222,8 +227,8 @@ def evaluate_chess_board_posture(
         0.16
         + 0.09 * min(2, active_knights)
         + 0.035 * min(8, len(knight_moves))
-        + 0.07 * min(5, len(capture_moves))
-        + 0.12 * min(2, len(checking_moves))
+        + 0.05 * min(5, len(capture_moves))
+        + 0.06 * min(3, len(checking_moves))
         + 0.10 * min(3, hanging_count)
         + (0.18 if board.is_check() else 0.0)
     )
@@ -358,14 +363,20 @@ def rank_principled_legal_moves_san(board: chess.Board, *, limit: int = 6) -> li
     if not legal:
         return []
 
+    them = not board.turn
     scored: list[tuple[float, str]] = []
     for move in legal:
         san = board.san(move)
         score = 0.0
         piece_type = board.piece_type_at(move.from_square)
-        if board.gives_check(move):
-            score += 3.0
-        if board.is_capture(move):
+        is_cap = board.is_capture(move)
+        is_chk = board.gives_check(move)
+        dest_attacked = board.is_attacked_by(them, move.to_square)
+
+        if is_chk:
+            if is_cap or board.fullmove_number > 4 or not dest_attacked:
+                score += 0.6 if (board.fullmove_number <= 4 and not is_cap) else 3.0
+        if is_cap:
             score += 2.5
         if board.is_castling(move):
             score += 2.2
@@ -374,11 +385,13 @@ def rank_principled_legal_moves_san(board: chess.Board, *, limit: int = 6) -> li
         elif move.to_square in _EXTENDED_CENTER_SQUARES:
             score += 1.2
         if piece_type in (chess.KNIGHT, chess.BISHOP):
-            score += 0.85
+            score += 1.05
         elif piece_type == chess.PAWN and chess.square_file(move.to_square) in (2, 3, 4):
             score += 0.90
         elif piece_type == chess.KING and not board.is_castling(move) and not board.is_check():
             score -= 1.5
+        if not dest_attacked:
+            score += 0.45
         scored.append((score, san))
 
     scored.sort(key=lambda item: (-item[0], item[1]))
@@ -471,9 +484,10 @@ def verify_or_ground_chess_moves_in_reply(reply_text: str, board: chess.Board) -
     """Auditor Bug #3 Fix: Verify every SAN move token in `reply_text` against `python-chess` (`board.parse_san`).
 
     - Strips false `+`/`#` check suffixes when `board.gives_check(move)` is False.
-    - If `reply_text` names an illegal move (such as `Bf5+` on Move 1 when `d7`/`f7` are blocked),
-      replaces the illegal move with a real legal candidate from `board.legal_moves` and strips
-      ungrounded sacrifice/check hallucinations on quiet positions.
+    - If `reply_text` names an illegal move (such as `Bf5+` or `Re8#`) or makes an ungrounded
+      checkmate/opening-sacrifice claim, replaces the hallucinated sentence cleanly with a
+      board-accurate recommendation from `board.legal_moves` (never splicing a legal move token
+      into the middle of a hallucinated checkmate sentence).
     """
     if not reply_text or not reply_text.strip():
         return reply_text
@@ -481,13 +495,38 @@ def verify_or_ground_chess_moves_in_reply(reply_text: str, board: chess.Board) -
     report = inspect_chess_moves_in_reply(reply_text, board)
     illegal = report["illegal_moves_mentioned"]
     false_checks = report["false_check_tokens"]
-    if not illegal and not false_checks:
+
+    has_legal_mate = False
+    for m in board.legal_moves:
+        if board.gives_check(m):
+            board.push(m)
+            is_mate = board.is_checkmate()
+            board.pop()
+            if is_mate:
+                has_legal_mate = True
+                break
+
+    lower_reply = reply_text.lower()
+    claims_ungrounded_mate = (not has_legal_mate) and (
+        "checkmate" in lower_reply or "mate" in lower_reply
+    )
+    claims_ungrounded_opening_sacrifice = (
+        board.fullmove_number <= 4
+        and not board.is_check()
+        and "sacrific" in lower_reply
+    )
+
+    if (
+        not illegal
+        and not false_checks
+        and not claims_ungrounded_mate
+        and not claims_ungrounded_opening_sacrifice
+    ):
         return reply_text
 
     top_legal = rank_principled_legal_moves_san(board, limit=6)
     fallback_move = top_legal[0] if top_legal else "a legal development move"
     turn_label = "White" if board.turn == chess.WHITE else "Black"
-    has_legal_tactics = any(board.is_capture(m) or board.gives_check(m) for m in board.legal_moves)
 
     grounded = reply_text
     # First fix any legal moves that had a false `+` or `#` suffix attached
@@ -498,31 +537,18 @@ def verify_or_ground_chess_moves_in_reply(reply_text: str, board: chess.Board) -
             grounded,
         )
 
-    if illegal:
-        # If the model hallucinated an illegal move AND claimed a sacrifice/check on a quiet board
-        # with zero legal captures or checks, replace with a clean, grounded legal-move assessment.
-        lower_reply = grounded.lower()
-        claims_fake_tactics = any(
-            kw in lower_reply for kw in ("sacrific", "check", "mate", "shatter", "high-risk shelter")
-        )
-        if not has_legal_tactics and claims_fake_tactics and top_legal:
-            illegal_str = ", ".join(illegal)
+    if illegal or claims_ungrounded_mate or claims_ungrounded_opening_sacrifice:
+        if top_legal:
+            if illegal:
+                illegal_str = ", ".join(illegal)
+                return (
+                    f"For {turn_label}, {fallback_move} is a principled legal reply to contest the center "
+                    f"and develop cleanly (legal options include {', '.join(top_legal[:5])}; "
+                    f"filtered ungrounded move {illegal_str})."
+                )
             return (
                 f"For {turn_label}, {fallback_move} is a principled legal reply to contest the center "
-                f"and develop cleanly (legal options include {', '.join(top_legal[:5])}; "
-                f"filtered ungrounded move {illegal_str})."
-            )
-
-        for bad_tok in illegal:
-            grounded = re.sub(
-                r"(?<![A-Za-z0-9_])" + re.escape(bad_tok) + r"(?=$|[\s,.;:!?)\]])",
-                fallback_move,
-                grounded,
-            )
-        if top_legal:
-            grounded = (
-                f"{grounded.rstrip('.')} "
-                f"(Grounded to legal moves: {', '.join(top_legal[:5])}; filtered illegal {', '.join(illegal)})."
+                f"and develop cleanly (legal options include {', '.join(top_legal[:5])})."
             )
 
     return grounded

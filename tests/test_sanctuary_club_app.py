@@ -571,15 +571,34 @@ def test_ui_ux_polish_color_bars_scroll_escape_coordinates_undo_and_ai_move(tmp_
     assert snap1["board"]["last_board_reflex"]["gear_used"] == "GEAR_1_FAST_RIGHT_BRAIN"
     assert "Wellspring of Being" in snap1["manifesto_text"]
 
-    # Play AI reply for Black (`handle_chess_ai_move`)
+    # Play AI reply for Black (`handle_chess_ai_move`) -> plays `1... e5` (safe center pawn) and settles in Gear 1
     snap_ai = runtime.handle_chess_ai_move()
-    assert len(snap_ai["board"]["move_history_san"]) == 2
+    assert snap_ai["board"]["move_history_san"] == ["e4", "e5"]
     assert snap_ai["board"]["turn"] == "w"
+    assert snap_ai["board"]["last_board_reflex"]["gear_used"] == "GEAR_1_FAST_RIGHT_BRAIN"
+    assert snap_ai["sleep_queue_count"] == 0
 
     # Undo Black's reply (`handle_chess_undo`)
     snap_undo = runtime.handle_chess_undo()
     assert snap_undo["board"]["move_history_san"] == ["e4"]
     assert snap_undo["board"]["turn"] == "b"
+
+    # Even if `1... d5` is played manually (`1. e4 d5`), mutual pawn contact on White's turn settles in Gear 1
+    snap_d5 = runtime.handle_chess_move("d7d5")
+    assert snap_d5["board"]["last_board_reflex"]["gear_used"] == "GEAR_1_FAST_RIGHT_BRAIN"
+    assert snap_d5["sleep_queue_count"] == 0
+
+    # And `verify_or_ground_chess_moves_in_reply` never splices `exd5` into a hallucinated mate sentence
+    from lmft_lab.chess_kibitz_bridge import verify_or_ground_chess_moves_in_reply
+
+    franken_input = (
+        "The best reply is e5, This is the most direct and forceful play, "
+        "immediately threatening checkmate with Qh5 and Re8#."
+    )
+    cleaned_franken = verify_or_ground_chess_moves_in_reply(franken_input, runtime.board)
+    assert "threatening checkmate with Qh5 and exd5" not in cleaned_franken
+    assert "For White, exd5 is a principled legal reply" in cleaned_franken
+
 
 
 
