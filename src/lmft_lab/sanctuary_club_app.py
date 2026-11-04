@@ -65,6 +65,13 @@ from .contemplation_ledger import (
     load_contemplation_ledger,
     save_contemplation_ledger,
 )
+from .dilemma_crucible import (
+    CHESS_VS_HYPNOSIS_MANIFESTO,
+    CONTEXT_BRACE_MODES,
+    CRUCIBLE_STAGES,
+    MEN_OF_CULTURE_SHELF,
+    CruciblePairedBridgeSensors,
+)
 from .runtime_store import atomic_json
 from .neural_bridge_classifiers import (
     DEFAULT_COMPLEX_FEELING_LEAVES,
@@ -97,6 +104,7 @@ from .right_brain_equilibrium import (
     RIGHT_BRAIN_WILL_VERSION,
     SettledDiary,
     ThreeBridgeSensors,
+    compile_right_brain_vibe,
 )
 from .sleep_consolidation import (
     UnresolvedSleepScene,
@@ -287,6 +295,8 @@ class SanctuaryClubRuntime:
         self.board_posture: ChessBoardPosture = evaluate_chess_board_posture(self.board)
         self.active_room: str = "chess"  # "chess" or "sanctuary"
         self.sanctuary_mode: str = "tilt_reset"
+        self.active_crucible_stage: str = "poetry_story"
+        self.active_context_brace: str | None = None
         self.scene_counter: int = 0
 
         self.memory: ContinuousMemoryState | None = None
@@ -544,14 +554,15 @@ class SanctuaryClubRuntime:
         force_spoken_reply: bool,
         sanctuary_target_mode: str | None = None,
         clause_1_prefix: str | None = None,
+        custom_sensors: Any | None = None,
     ) -> tuple[ThreeLeggedTurnResult, float, dict[str, Any]]:
         """Run one thread-safe 3-Gear turn respecting Auditor Guardrails #1, #2, and #4."""
         t0 = time.perf_counter()
         self.scene_counter += 1
         scene_idx = self.scene_counter
 
-        active_sensors: Any = self.sensors
-        if room == "chess":
+        active_sensors: Any = custom_sensors if custom_sensors is not None else self.sensors
+        if custom_sensors is None and room == "chess":
             self.board_posture = evaluate_chess_board_posture(self.board)
             active_sensors = merge_board_fact_with_chat_sensors(self.board_posture, self.sensors)
 
@@ -649,6 +660,11 @@ class SanctuaryClubRuntime:
             "active_room": self.active_room,
             "active_lineage": self.active_lineage,
             "sanctuary_mode": self.sanctuary_mode,
+            "active_crucible_stage": self.active_crucible_stage,
+            "active_context_brace": self.active_context_brace,
+            "crucible_stages": CRUCIBLE_STAGES,
+            "men_of_culture_shelf": MEN_OF_CULTURE_SHELF,
+            "context_brace_modes": CONTEXT_BRACE_MODES,
             "sleep_cycle_index": self.sleep_cycle_index,
             "active_checkpoint_label": self.active_checkpoint_label,
             "left_brain_status": (
@@ -873,6 +889,164 @@ class SanctuaryClubRuntime:
                 return str(data["candidates"][0]["content"]["parts"][0]["text"]).strip()
         except urllib.error.URLError as exc:
             raise ValueError(f"Gemini API request failed: {exc}") from exc
+
+    def handle_context_brace(self, brace_key: str) -> dict[str, Any]:
+        """Signal the Dual-Hemisphere model to brace for `(Story-Telling)`, `(Art)`, or `(Coding)` context."""
+        key = brace_key.strip().lower()
+        if key not in CONTEXT_BRACE_MODES:
+            raise ValueError(f"Unknown context brace mode: {brace_key!r}")
+        info = CONTEXT_BRACE_MODES[key]
+        self.active_room = "sanctuary"
+        self.active_crucible_stage = str(info["stage_id"])
+        self.active_context_brace = key
+        self.chat_messages.append(
+            {
+                "id": f"brace-{int(time.time() * 1000)}",
+                "sender": "system",
+                "role_label": f"Context Brace {info['button_label']}",
+                "text": (
+                    f"{info['icebreaker_note']} "
+                    f"[Department: {info['department_braced']} | Braced Leaves: {', '.join(info['braced_leaves'])}]"
+                ),
+            }
+        )
+        return self.get_state_snapshot()
+
+    def handle_crucible_dilemma(
+        self,
+        stage_id: str,
+        wave_text: str,
+        structure_text: str,
+        *,
+        art_rgb: tuple[float, float, float] | list[float] | None = None,
+        harvest_for_sleep: bool = True,
+    ) -> dict[str, Any]:
+        """Run a 3-Stage Dilemma Crucible exposure (`Poetry/Story`, `Music/Art`, or `Philosophy/Coding`).
+
+        Auditor Guardrails #1 & #2:
+        - Scores `structure_text` (`(Story-Telling)`, `(Art)`, or `(Coding)`) as Pass-1 external `Fact`.
+        - Scores `wave_text` (`Poetry`, `Music`, or `Philosophy`) as `Theory / Wave` through the 3 MiniLM bridges.
+        - Automatically queues the paired dilemma into `self.sleep_queue` when `harvest_for_sleep=True`
+          or when the `Wave` vs. `Structure` gap triggers dissonance / branch disagreement.
+        """
+        st_key = stage_id.strip().lower()
+        if st_key not in CRUCIBLE_STAGES:
+            raise ValueError(f"Unknown crucible stage_id: {stage_id!r}")
+        w_clean = wave_text.strip()
+        s_clean = structure_text.strip()
+        if not w_clean or not s_clean:
+            raise ValueError("Both the Wave slot and the Structure slot must be non-empty.")
+
+        stage_info = CRUCIBLE_STAGES[st_key]
+        self.active_room = "sanctuary"
+        self.active_crucible_stage = st_key
+        self.active_context_brace = str(stage_info["brace_key"])
+
+        rgb_tuple: tuple[float, float, float] | None = None
+        if art_rgb is not None and len(art_rgb) == 3:
+            rgb_tuple = (float(art_rgb[0]), float(art_rgb[1]), float(art_rgb[2]))
+
+        paired_sensors = CruciblePairedBridgeSensors(
+            stage_id=st_key,
+            wave_text=w_clean,
+            structure_text=s_clean,
+            base_sensors=self.sensors,
+            art_rgb=rgb_tuple,
+        )
+
+        # Score the Wave (Poetry/Music/Philosophy) and Structure (Story/Art/Coding) directly through the 3 bridges
+        fact_coords, fact_exp, _, _ = paired_sensors.score_text(
+            s_clean,
+            learned_leaves=self.learned_leaves,
+        )
+        wave_coords, wave_exp, _, _ = paired_sensors.score_text(
+            w_clean,
+            learned_leaves=self.learned_leaves,
+        )
+        crucible_vibe, _ = compile_right_brain_vibe(
+            self.birth_state,
+            fact_coords,
+            fact_exp,
+            self.rules,
+            pass_index=1,
+            event_id=f"crucible_{st_key}_{self.scene_counter + 1}",
+            prior_memory=self.memory,
+            learned_leaves=self.learned_leaves,
+            internal_theory_coords=wave_coords,
+            internal_theory_experiential=wave_exp,
+        )
+
+        # Build a clean comma-terminated Clause-1 prefix from the Wave text so `<|subliminal_gap|>`
+        # intercepts the Wave right at the comma and compares it against the Structure Fact!
+        first_clause = w_clean.split(",")[0].split(".")[0].strip()
+        if len(first_clause) > 90:
+            first_clause = first_clause[:90].rsplit(" ", 1)[0]
+        wave_clause_1 = f"{first_clause},"
+
+        self.chat_messages.append(
+            {
+                "id": f"crucible-user-{self.scene_counter + 1}",
+                "sender": "user",
+                "role_label": f"Dilemma Crucible ({stage_info['title']})",
+                "text": f"[WAVE — {stage_info['wave_label']}]: {w_clean}\n[STRUCTURE — {stage_info['structure_label']}]: {s_clean}",
+            }
+        )
+
+        turn, _elapsed_ms, telemetry = self._execute_turn(
+            s_clean,
+            room="sanctuary",
+            force_spoken_reply=True,
+            sanctuary_target_mode=None,
+            clause_1_prefix=wave_clause_1,
+            custom_sensors=paired_sensors,
+        )
+
+        # Merge direct Wave vs. Structure dissonance notes into telemetry so the dilemma is 100% visible
+        merged_dissonance = list(telemetry.get("dissonance_notes", []))
+        for note in crucible_vibe.self_registry.dissonance_notes:
+            if note not in merged_dissonance:
+                merged_dissonance.append(note)
+        telemetry["dissonance_notes"] = merged_dissonance
+        telemetry["crucible_stage"] = st_key
+        telemetry["crucible_wave_vs_structure"] = {
+            "stage_title": stage_info["title"],
+            "wave_theory_coordinates": {k: round(float(v), 4) for k, v in wave_coords.items()},
+            "structure_fact_coordinates": {k: round(float(v), 4) for k, v in fact_coords.items()},
+            "crucible_clarity": round(float(crucible_vibe.clarity), 4),
+            "crucible_confidence": round(float(crucible_vibe.confidence), 4),
+            "crucible_dissonance_notes": list(crucible_vibe.self_registry.dissonance_notes),
+        }
+
+        scene_idx = int(telemetry["scene_index"])
+        dilemma_triggered = bool(
+            harvest_for_sleep
+            or merged_dissonance
+            or not turn.settled
+            or crucible_vibe.clarity < 0.62
+        )
+
+        reply_text = turn.final_conscious_note or (
+            f"Crucible [{stage_info['title']}]: Reconciling Wave (Theory={crucible_vibe.theory:.2f}) "
+            f"against Structure (Fact={crucible_vibe.fact:.2f}, Clarity={crucible_vibe.clarity:.2f})."
+        )
+        self.chat_messages.append(
+            {
+                "id": scene_idx,
+                "sender": "companion",
+                "role_label": f"LMFT Crucible Synthesis ({stage_info['roman']})",
+                "text": reply_text,
+                "telemetry": telemetry,
+                "coached": dilemma_triggered,
+                "savored": False,
+            }
+        )
+
+        if dilemma_triggered:
+            self.flag_turn_for_coaching(
+                scene_idx,
+                user_note=f"Crucible {stage_info['title']} — Wave: {w_clean[:80]} | Structure: {s_clean[:80]}",
+            )
+        return self.get_state_snapshot()
 
     def flag_turn_for_coaching(self, scene_index: int, user_note: str = "") -> dict[str, Any]:
         """Auditor Guardrail #3 (`[Coach / Queue for Sleep]`): Queue a turn as an `UnresolvedSleepScene` for Nighttime REM Sleep."""
@@ -1532,27 +1706,69 @@ SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
 
       <!-- SANCTUARY VIEW -->
       <div id="sanctuary-view" class="sanctuary-box">
-        <div class="section-label">CO-REGULATION PACING &amp; LEADING (COMMA SPLICE)</div>
-        <div class="pacer-track">
-          <div class="pacer-fill"></div>
-          <span style="z-index:1;">CLAUSE 1: PACE (FACT)</span>
-          <span style="z-index:1; color:var(--accent);">, &lt;|subliminal_gap|&gt;</span>
-          <span style="z-index:1;">CLAUSE 2: LEAD (ALPHA=0.25)</span>
+        <div class="mode-tabs" style="width:100%;">
+          <button class="tab-btn active" id="subtab-crucible" style="flex:1;" onclick="switchSanctuarySubtab('crucible')">DILEMMA CRUCIBLE (RULE FARM)</button>
+          <button class="tab-btn" id="subtab-pacing" style="flex:1;" onclick="switchSanctuarySubtab('pacing')">CO-REGULATION PACING</button>
         </div>
-        <div class="controls-row">
-          <span style="font-family:var(--font-mono); font-size:11px; color:var(--text-muted);">TARGET LEAD:</span>
-          <select id="sanctuary-mode-select" style="flex:1;" onchange="changeSanctuaryMode(this.value)">
-            <option value="tilt_reset">Tilt Reset (Red/Green -&gt; Cyan Water / Magenta Wind)</option>
-            <option value="deep_focus">Deep Focus (Magenta Bishop Order + Yellow Rook Bastion)</option>
-            <option value="night_wind_down">Night Wind-Down (Needlessness + Austere Sanctuary)</option>
-          </select>
+
+        <!-- SUB-VIEW 1: 3-STAGE DILEMMA CRUCIBLE & MEN OF CULTURE SHELF -->
+        <div id="sanctuary-crucible-pane" style="display:flex; flex-direction:column; gap:10px;">
+          <div class="telemetry-card" style="gap:8px;">
+            <div class="section-label">MEN OF CULTURE SHELF &amp; CONTEXT-BRACING SIGNALS</div>
+            <div style="display:flex; gap:6px; flex-wrap:wrap;">
+              <button class="btn" style="flex:1; font-size:11px; border-color:#38bdf8;" onclick="openCultureShelf('poetry')" title="Open Imgur Poetry Portfolio &amp; load Stage I Wave">Poetry [Imgur ↗]</button>
+              <button class="btn" style="flex:1; font-size:11px; border-color:#38bdf8;" onclick="openCultureShelf('music')" title="Open Curated YouTube Music Playlist &amp; load Stage II Wave">Music [Playlist ↗]</button>
+              <button class="btn" style="flex:1; font-size:11px; border-color:#38bdf8;" onclick="openCultureShelf('philosophy')" title="Load Chess vs. Hypnosis Philosophy Manifesto into Stage III Wave">Philosophy [Manifesto]</button>
+            </div>
+            <div style="display:flex; gap:6px; flex-wrap:wrap;">
+              <button class="btn" id="brace-btn-story_telling" style="flex:1; font-size:11px; font-family:var(--font-mono);" onclick="triggerContextBrace('story_telling')" title="Signal Right-Brain Do-er (Cultural History) to brace for Narrative Action Fact">(Story-Telling)</button>
+              <button class="btn" id="brace-btn-art" style="flex:1; font-size:11px; font-family:var(--font-mono);" onclick="triggerContextBrace('art')" title="Signal Right-Brain 6-Color Lens to brace for Spatial/Visual Fact">(Art)</button>
+              <button class="btn" id="brace-btn-coding" style="flex:1; font-size:11px; font-family:var(--font-mono);" onclick="triggerContextBrace('coding')" title="Signal Right-Brain Thinker &amp; AST Engine to brace for Executable Code Fact">(Coding)</button>
+            </div>
+          </div>
+
+          <div class="mode-tabs" style="width:100%;">
+            <button class="tab-btn active" id="stage-pill-poetry_story" style="flex:1;" onclick="selectCrucibleStage('poetry_story')">I. Poetry · (Story)</button>
+            <button class="tab-btn" id="stage-pill-music_art" style="flex:1;" onclick="selectCrucibleStage('music_art')">II. Music · (Art)</button>
+            <button class="tab-btn" id="stage-pill-philosophy_coding" style="flex:1;" onclick="selectCrucibleStage('philosophy_coding')">III. Philosophy · (Coding)</button>
+          </div>
+
+          <div class="telemetry-card" style="gap:6px;">
+            <div class="section-label" id="crucible-wave-label">POETRY (Wave / Cadence &amp; Metaphor -&gt; Theory)</div>
+            <textarea id="crucible-wave-input" rows="3" style="width:100%; background:var(--bg-input); border:1px solid var(--border); color:var(--text-main); border-radius:4px; padding:7px; font-size:12px; font-family:var(--font-sans); resize:vertical;"></textarea>
+            <div class="section-label" id="crucible-structure-label" style="margin-top:4px;">(STORY-TELLING) (Structure / Narrative Action -&gt; Fact)</div>
+            <textarea id="crucible-structure-input" rows="3" style="width:100%; background:var(--bg-input); border:1px solid var(--border); color:var(--text-main); border-radius:4px; padding:7px; font-size:12px; font-family:var(--font-mono); resize:vertical;"></textarea>
+            <div class="controls-row" style="margin-top:4px;">
+              <button class="btn" style="flex:1; border-color:var(--accent); color:var(--accent);" onclick="runCrucibleDilemma(true)">Inflict Dilemma &amp; Harvest for Sleep</button>
+              <button class="btn" onclick="loadCrucibleStageDefaults(currentCrucibleStage)">Reset Pair</button>
+            </div>
+          </div>
         </div>
-        <div class="telemetry-card">
-          <div class="section-label">HOW THIS ROOM WORKS</div>
-          <div style="color:var(--text-muted); line-height:1.45; font-size:12px;">
-            1. <b>Clause 1 (Before Comma)</b>: Matches your un-rigged external state (never forces fake calm).<br>
-            2. <b>At the Comma (&lt;|subliminal_gap|&gt;)</b>: Steps the 52-float nerve cord by <code>alpha=0.25</code> toward your chosen target.<br>
-            3. <b>Clause 2 (After Comma)</b>: Guides cadence one step toward equilibrium.
+
+        <!-- SUB-VIEW 2: CO-REGULATION PACING & LEADING -->
+        <div id="sanctuary-pacing-pane" style="display:none; flex-direction:column; gap:10px;">
+          <div class="section-label">CO-REGULATION PACING &amp; LEADING (COMMA SPLICE)</div>
+          <div class="pacer-track">
+            <div class="pacer-fill"></div>
+            <span style="z-index:1;">CLAUSE 1: PACE (FACT)</span>
+            <span style="z-index:1; color:var(--accent);">, &lt;|subliminal_gap|&gt;</span>
+            <span style="z-index:1;">CLAUSE 2: LEAD (ALPHA=0.25)</span>
+          </div>
+          <div class="controls-row">
+            <span style="font-family:var(--font-mono); font-size:11px; color:var(--text-muted);">TARGET LEAD:</span>
+            <select id="sanctuary-mode-select" style="flex:1;" onchange="changeSanctuaryMode(this.value)">
+              <option value="tilt_reset">Tilt Reset (Red/Green -&gt; Cyan Water / Magenta Wind)</option>
+              <option value="deep_focus">Deep Focus (Magenta Bishop Order + Yellow Rook Bastion)</option>
+              <option value="night_wind_down">Night Wind-Down (Needlessness + Austere Sanctuary)</option>
+            </select>
+          </div>
+          <div class="telemetry-card">
+            <div class="section-label">HOW CO-REGULATION PACING WORKS</div>
+            <div style="color:var(--text-muted); line-height:1.45; font-size:12px;">
+              1. <b>Clause 1 (Before Comma)</b>: Matches your un-rigged external state (never forces fake calm).<br>
+              2. <b>At the Comma (&lt;|subliminal_gap|&gt;)</b>: Steps the 52-float nerve cord by <code>alpha=0.25</code> toward your chosen target.<br>
+              3. <b>Clause 2 (After Comma)</b>: Guides cadence one step toward equilibrium.
+            </div>
           </div>
         </div>
       </div>
@@ -1611,6 +1827,69 @@ const COLOR_HEX = {
 let appState = null;
 let selectedSquare = null;
 let openDrawers = {};
+let currentCrucibleStage = 'poetry_story';
+let crucibleInitialized = false;
+
+function switchSanctuarySubtab(sub) {
+  document.getElementById('subtab-crucible').classList.toggle('active', sub === 'crucible');
+  document.getElementById('subtab-pacing').classList.toggle('active', sub === 'pacing');
+  document.getElementById('sanctuary-crucible-pane').style.display = sub === 'crucible' ? 'flex' : 'none';
+  document.getElementById('sanctuary-pacing-pane').style.display = sub === 'pacing' ? 'flex' : 'none';
+}
+
+function loadCrucibleStageDefaults(stageId) {
+  if (!appState || !appState.crucible_stages) return;
+  const st = appState.crucible_stages[stageId];
+  if (!st) return;
+  document.getElementById('crucible-wave-label').textContent = st.wave_label;
+  document.getElementById('crucible-structure-label').textContent = st.structure_label;
+  document.getElementById('crucible-wave-input').value = st.default_wave || '';
+  document.getElementById('crucible-structure-input').value = st.default_structure || '';
+}
+
+function selectCrucibleStage(stageId) {
+  currentCrucibleStage = stageId;
+  for (const k of ['poetry_story', 'music_art', 'philosophy_coding']) {
+    const el = document.getElementById('stage-pill-' + k);
+    if (el) el.classList.toggle('active', k === stageId);
+  }
+  loadCrucibleStageDefaults(stageId);
+}
+
+function openCultureShelf(key) {
+  if (!appState || !appState.men_of_culture_shelf) return;
+  const item = appState.men_of_culture_shelf[key];
+  if (!item) return;
+  selectCrucibleStage(item.stage_id);
+  document.getElementById('crucible-wave-input').value = item.sample_text || '';
+  if (item.url && item.url.startsWith('http')) {
+    window.open(item.url, '_blank', 'noopener');
+  }
+}
+
+async function triggerContextBrace(braceKey) {
+  const data = await apiPost('/api/crucible/brace', { brace_key: braceKey });
+  if (data && data.context_brace_modes && data.context_brace_modes[braceKey]) {
+    const info = data.context_brace_modes[braceKey];
+    selectCrucibleStage(info.stage_id);
+    document.getElementById('crucible-structure-input').value = info.default_structure_text || '';
+  }
+}
+
+async function runCrucibleDilemma(harvestForSleep) {
+  const waveText = document.getElementById('crucible-wave-input').value.trim();
+  const structureText = document.getElementById('crucible-structure-input').value.trim();
+  if (!waveText || !structureText) {
+    alert('Both the Wave slot and the Structure slot need text.');
+    return;
+  }
+  await apiPost('/api/crucible/run', {
+    stage_id: currentCrucibleStage,
+    wave_text: waveText,
+    structure_text: structureText,
+    harvest_for_sleep: !!harvestForSleep
+  });
+}
 
 async function apiPost(path, body) {
   const res = await fetch(path, {
@@ -1910,6 +2189,17 @@ function renderAll() {
   document.getElementById('status-rules').textContent = `RULES: ${appState.rules_count} | RATIFIED CHORDS: ${appState.ratified_chords_count}`;
   document.getElementById('status-savored').textContent = `SAVORED: ${appState.savored_count}`;
   document.getElementById('status-sleep-queue').textContent = `SLEEP QUEUE: ${appState.sleep_queue_count}`;
+  if (!crucibleInitialized && appState.crucible_stages) {
+    crucibleInitialized = true;
+    selectCrucibleStage(appState.active_crucible_stage || 'poetry_story');
+  }
+  for (const bKey of ['story_telling', 'art', 'coding']) {
+    const bBtn = document.getElementById('brace-btn-' + bKey);
+    if (bBtn) {
+      bBtn.style.borderColor = (appState.active_context_brace === bKey) ? 'var(--accent)' : 'var(--border)';
+      bBtn.style.color = (appState.active_context_brace === bKey) ? 'var(--accent)' : 'var(--text-main)';
+    }
+  }
   renderBoard();
   renderColorBars();
   renderChat();
@@ -2003,6 +2293,20 @@ def create_club_http_server(
                     return
                 if self.path == "/api/lineage":
                     snap = runtime.switch_brain_lineage(str(data.get("lineage", "schooled")))
+                    self._send_json(snap)
+                    return
+                if self.path == "/api/crucible/brace":
+                    snap = runtime.handle_context_brace(str(data.get("brace_key", "story_telling")))
+                    self._send_json(snap)
+                    return
+                if self.path == "/api/crucible/run":
+                    snap = runtime.handle_crucible_dilemma(
+                        str(data.get("stage_id", "poetry_story")),
+                        str(data.get("wave_text", "")),
+                        str(data.get("structure_text", "")),
+                        art_rgb=data.get("art_rgb"),
+                        harvest_for_sleep=bool(data.get("harvest_for_sleep", True)),
+                    )
                     self._send_json(snap)
                     return
                 self._send_json({"error": f"Unknown endpoint {self.path}"}, HTTPStatus.NOT_FOUND)

@@ -410,3 +410,64 @@ def test_guardrail_4_gpu_lock_http_server_and_release_bundle(tmp_path: Path) -> 
     zip_path = build_release_zip(output_dir=tmp_path, include_model_weights=False)
     assert zip_path.exists()
     assert zip_path.stat().st_size > 10_000
+
+
+def test_dilemma_crucible_three_stages_context_bracing_and_rem_rule_forging(tmp_path: Path) -> None:
+    """Verify the 3-Stage Dilemma Crucible (`Poetry/Story`, `Music/Art`, `Philosophy/Coding`) and Context-Bracing buttons."""
+    from lmft_lab.dilemma_crucible import (
+        CONTEXT_BRACE_MODES,
+        CRUCIBLE_STAGES,
+        MEN_OF_CULTURE_SHELF,
+        analyze_art_rgb_signature,
+        analyze_python_code_ast_structure,
+    )
+
+    assert "YU73erI" in MEN_OF_CULTURE_SHELF["poetry"]["url"]
+    assert "PLd-ihNNiEtFI" in MEN_OF_CULTURE_SHELF["music"]["url"]
+    assert "Wellspring of Being" in MEN_OF_CULTURE_SHELF["philosophy"]["sample_text"]
+
+    # Verify AST code analyzer extracts real structural invariants from Python syntax
+    ast_sig = analyze_python_code_ast_structure(CONTEXT_BRACE_MODES["coding"]["default_structure_text"])
+    assert "philosophical/structure/order" in ast_sig
+    assert "philosophical/persistence/discreteness" in ast_sig
+    assert analyze_python_code_ast_structure("Not valid python syntax $$$") == {}
+
+    # Verify RGB color-wheel projection maps pure Cyan (0, 1, 1) to `existence`
+    cyan_sig = analyze_art_rgb_signature((0.0, 1.0, 1.0))
+    assert cyan_sig["philosophical/being/existence"] == 1.0
+    assert cyan_sig["philosophical/being/agency"] == 0.0
+
+    left_brain = _make_mini_left_brain()
+    runtime = SanctuaryClubRuntime(
+        state_dir=tmp_path / "crucible_state",
+        left_brain=left_brain,
+        lazy_load_gpu=False,
+    )
+    initial_rules = len(runtime.rules)
+
+    # 1. Context-Brace buttons: `(Story-Telling)`, `(Art)`, `(Coding)`
+    for brace_key in ("story_telling", "art", "coding"):
+        snap_brace = runtime.handle_context_brace(brace_key)
+        assert snap_brace["active_room"] == "sanctuary"
+        assert snap_brace["active_context_brace"] == brace_key
+
+    # 2. Run all 3 Ordered Crucible Stages (`poetry_story`, `music_art`, `philosophy_coding`)
+    for stage_id, info in CRUCIBLE_STAGES.items():
+        snap_c = runtime.handle_crucible_dilemma(
+            stage_id,
+            info["default_wave"],
+            info["default_structure"],
+            art_rgb=(0.0, 0.9, 1.0) if stage_id == "music_art" else None,
+            harvest_for_sleep=True,
+        )
+        assert snap_c["active_crucible_stage"] == stage_id
+        assert snap_c["sleep_queue_count"] >= 1
+        last_msg = snap_c["chat_messages"][-1]
+        assert last_msg["sender"] == "companion"
+        assert "crucible_wave_vs_structure" in last_msg["telemetry"]
+
+    # 3. Run REM Sleep to forge new rules + 3-branch clauses from the Crucible dilemmas
+    snap_rem = runtime.handle_run_rem_sleep()
+    assert snap_rem["sleep_queue_count"] == 0
+    assert len(runtime.rules) > initial_rules
+
