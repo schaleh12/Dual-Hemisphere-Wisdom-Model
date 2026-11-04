@@ -471,3 +471,67 @@ def test_dilemma_crucible_three_stages_context_bracing_and_rem_rule_forging(tmp_
     assert snap_rem["sleep_queue_count"] == 0
     assert len(runtime.rules) > initial_rules
 
+
+def test_forensic_audit_chess_1_e4_gear1_settling_natural_prompt_and_illegal_move_filter(tmp_path: Path) -> None:
+    """Verify the 3 Forensic Audit fixes on `1. e4`:
+
+    1. `_load_default_rules()` always includes `VIRGIN_FOUNDATIONAL_RULES` (`rule_grounded_coordination`
+       and `rule_sanctuary_equilibrium`) so `1. e4` settles cleanly in Gear 1 with zero false Sleep-Queue dumps.
+    2. `build_natural_chess_scenario_prompt` gives natural chess context (move number, PGN history,
+       legal replies) with ZERO raw float telemetry leaked into the LLM prompt.
+    3. `verify_or_ground_chess_moves_in_reply` catches and filters illegal SAN moves (like `Bf5+` on
+       Move 1 when `d7`/`f7` are blocked) and strips false `+`/`#` check suffixes.
+    """
+    from lmft_lab.chess_kibitz_bridge import (
+        build_natural_chess_scenario_prompt,
+        inspect_chess_moves_in_reply,
+        verify_or_ground_chess_moves_in_reply,
+    )
+
+    left_brain = _make_mini_left_brain()
+    runtime = SanctuaryClubRuntime(
+        state_dir=tmp_path / "forensic_chess_state",
+        left_brain=left_brain,
+        lazy_load_gpu=False,
+    )
+
+    # Fix #1: Foundational rules are present alongside schooled rules, and `1. e4` settles in Gear 1!
+    rule_ids = {r.rule_id for r in runtime.rules}
+    assert "rule_grounded_coordination" in rule_ids
+    assert "rule_sanctuary_equilibrium" in rule_ids
+
+    snap_e4 = runtime.handle_chess_move("e2e4")
+    assert snap_e4["sleep_queue_count"] == 0
+    last_rec = runtime._turn_records_by_id[runtime.scene_counter]
+    assert last_rec["telemetry"]["settled"] is True
+    assert last_rec["telemetry"]["gear_used"] == "GEAR_1_FAST_RIGHT_BRAIN"
+    assert last_rec["telemetry"]["clarity"] >= 0.80
+    assert last_rec["telemetry"]["confidence"] == 1.0
+
+    # Fix #2: Natural chess prompt has move number, history, and legal replies, with ZERO float telemetry!
+    natural_prompt = build_natural_chess_scenario_prompt(runtime.board, runtime.move_history_san)
+    assert "Move 1 (1. e4): Black to move." in natural_prompt
+    assert "Legal replies include" in natural_prompt
+    for bad_telemetry_leak in ("0.91", "King Shelter=", "Dominant:", "Order="):
+        assert bad_telemetry_leak not in natural_prompt
+
+    # Fix #3: Illegal SAN move filter catches `Bf5+` on Move 1 and grounds against `board.legal_moves`!
+    hallucinated_reply = (
+        "Bf5+ is the best move, Bf5+ is the most principled choice, sacrificing a pawn "
+        "to lock the enemy king in a high-risk shelter while keeping the high-order structure intact."
+    )
+    move_report = inspect_chess_moves_in_reply(hallucinated_reply, runtime.board)
+    assert "Bf5+" in move_report["illegal_moves_mentioned"]
+
+    grounded_reply = verify_or_ground_chess_moves_in_reply(hallucinated_reply, runtime.board)
+    assert "Bf5+ is the best move" not in grounded_reply
+    assert "filtered ungrounded move Bf5+" in grounded_reply
+    assert any(legal_san in grounded_reply for legal_san in ("d5", "e5", "c5", "Nf6"))
+
+    # Also verify that a legal move with a false `+` suffix (`Nf6+` on Move 1) has the false `+` stripped
+    false_check_reply = "Developing with Nf6+ contests the center immediately."
+    cleaned_check = verify_or_ground_chess_moves_in_reply(false_check_reply, runtime.board)
+    assert "Nf6+" not in cleaned_check
+    assert "Nf6 contests the center" in cleaned_check
+
+

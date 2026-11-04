@@ -28,8 +28,10 @@ Plain-English Purpose:
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Mapping
+import re
+from typing import Any, Mapping
 import chess
 
 from .neural_bridge_classifiers import DEFAULT_COMPLEX_FEELING_LEAVES
@@ -320,6 +322,212 @@ def evaluate_chess_board_posture(
     )
 
 
+_CORE_CENTER_SQUARES = frozenset({chess.D4, chess.E4, chess.D5, chess.E5})
+_EXTENDED_CENTER_SQUARES = frozenset(
+    {
+        chess.C4,
+        chess.F4,
+        chess.C5,
+        chess.F5,
+        chess.C3,
+        chess.F3,
+        chess.C6,
+        chess.F6,
+        chess.D3,
+        chess.E3,
+        chess.D6,
+        chess.E6,
+    }
+)
+
+_SAN_TOKEN_REGEX = re.compile(
+    r"(?<![A-Za-z0-9_])"
+    r"("
+    r"(?:O-O-O|O-O|0-0-0|0-0)[+#]?"
+    r"|[KQRBN][a-h]?[1-8]?x?[a-h][1-8](?:=[QRBN])?[+#]?"
+    r"|[a-h]x[a-h][1-8](?:=[QRBN])?[+#]?"
+    r"|[a-h][1-8](?:=[QRBN])?[+#]?"
+    r")"
+    r"(?=$|[\s,.;:!?)\]])"
+)
+
+
+def rank_principled_legal_moves_san(board: chess.Board, *, limit: int = 6) -> list[str]:
+    """Return up to `limit` legal moves in SAN ordered by natural chess principles (checks, captures, center, development)."""
+    legal = list(board.legal_moves)
+    if not legal:
+        return []
+
+    scored: list[tuple[float, str]] = []
+    for move in legal:
+        san = board.san(move)
+        score = 0.0
+        piece_type = board.piece_type_at(move.from_square)
+        if board.gives_check(move):
+            score += 3.0
+        if board.is_capture(move):
+            score += 2.5
+        if board.is_castling(move):
+            score += 2.2
+        if move.to_square in _CORE_CENTER_SQUARES:
+            score += 1.8
+        elif move.to_square in _EXTENDED_CENTER_SQUARES:
+            score += 1.2
+        if piece_type in (chess.KNIGHT, chess.BISHOP):
+            score += 0.85
+        elif piece_type == chess.PAWN and chess.square_file(move.to_square) in (2, 3, 4):
+            score += 0.90
+        elif piece_type == chess.KING and not board.is_castling(move) and not board.is_check():
+            score -= 1.5
+        scored.append((score, san))
+
+    scored.sort(key=lambda item: (-item[0], item[1]))
+    return [san for _score, san in scored[: max(1, int(limit))]]
+
+
+def format_move_history_pgn_snippet(move_history_san: Sequence[str], *, max_plies: int = 8) -> str:
+    """Format recent SAN moves into standard numbered PGN notation (e.g., `'1. e4 e5 2. Nf3'`)."""
+    if not move_history_san:
+        return "starting position"
+    total = len(move_history_san)
+    start_idx = max(0, total - max(2, int(max_plies)))
+    if start_idx % 2 == 1:
+        start_idx = max(0, start_idx - 1)
+    parts: list[str] = []
+    for idx in range(start_idx, total, 2):
+        move_num = (idx // 2) + 1
+        white_san = move_history_san[idx]
+        if idx + 1 < total:
+            parts.append(f"{move_num}. {white_san} {move_history_san[idx + 1]}")
+        else:
+            parts.append(f"{move_num}. {white_san}")
+    return " ".join(parts)
+
+
+def build_natural_chess_scenario_prompt(
+    board: chess.Board,
+    move_history_san: Sequence[str] = (),
+    *,
+    user_note: str | None = None,
+) -> str:
+    """Build a natural-English chess scenario prompt with ZERO float telemetry and real legal move candidates."""
+    turn_label = "White" if board.turn == chess.WHITE else "Black"
+    check_clause = " (King is in check)" if board.is_check() else ""
+    history_str = format_move_history_pgn_snippet(move_history_san)
+    legal_candidates = rank_principled_legal_moves_san(board, limit=6)
+    legal_clause = (
+        f"Legal replies include {', '.join(legal_candidates)}."
+        if legal_candidates
+        else "The game is over (no legal moves)."
+    )
+
+    if move_history_san:
+        base = (
+            f"Chess table — Move {int(board.fullmove_number)} ({history_str}): "
+            f"{turn_label} to move{check_clause}. {legal_clause}"
+        )
+    else:
+        base = (
+            f"Chess table — Move {int(board.fullmove_number)} (FEN {board.fen()}): "
+            f"{turn_label} to move{check_clause}. {legal_clause}"
+        )
+
+    if user_note and user_note.strip():
+        return f"{user_note.strip()} [Board context: {base}]"
+    return base
+
+
+def inspect_chess_moves_in_reply(reply_text: str, board: chess.Board) -> dict[str, Any]:
+    """Inspect all SAN move tokens mentioned in `reply_text` against `board.parse_san()` and `board.gives_check()`."""
+    detected: list[str] = []
+    legal_moves_mentioned: list[str] = []
+    illegal_moves_mentioned: list[str] = []
+    false_check_tokens: list[tuple[str, str]] = []
+
+    for match in _SAN_TOKEN_REGEX.finditer(reply_text):
+        tok = match.group(1)
+        detected.append(tok)
+        core_san = tok.rstrip("+#").replace("0", "O")
+        try:
+            move = board.parse_san(core_san)
+            canonical = board.san(move)
+            if tok not in legal_moves_mentioned:
+                legal_moves_mentioned.append(canonical)
+            if tok.endswith(("+", "#")) and tok != canonical:
+                false_check_tokens.append((tok, canonical))
+        except ValueError:
+            if tok not in illegal_moves_mentioned:
+                illegal_moves_mentioned.append(tok)
+
+    return {
+        "detected_tokens": detected,
+        "legal_moves_mentioned": legal_moves_mentioned,
+        "illegal_moves_mentioned": illegal_moves_mentioned,
+        "false_check_tokens": false_check_tokens,
+    }
+
+
+def verify_or_ground_chess_moves_in_reply(reply_text: str, board: chess.Board) -> str:
+    """Auditor Bug #3 Fix: Verify every SAN move token in `reply_text` against `python-chess` (`board.parse_san`).
+
+    - Strips false `+`/`#` check suffixes when `board.gives_check(move)` is False.
+    - If `reply_text` names an illegal move (such as `Bf5+` on Move 1 when `d7`/`f7` are blocked),
+      replaces the illegal move with a real legal candidate from `board.legal_moves` and strips
+      ungrounded sacrifice/check hallucinations on quiet positions.
+    """
+    if not reply_text or not reply_text.strip():
+        return reply_text
+
+    report = inspect_chess_moves_in_reply(reply_text, board)
+    illegal = report["illegal_moves_mentioned"]
+    false_checks = report["false_check_tokens"]
+    if not illegal and not false_checks:
+        return reply_text
+
+    top_legal = rank_principled_legal_moves_san(board, limit=6)
+    fallback_move = top_legal[0] if top_legal else "a legal development move"
+    turn_label = "White" if board.turn == chess.WHITE else "Black"
+    has_legal_tactics = any(board.is_capture(m) or board.gives_check(m) for m in board.legal_moves)
+
+    grounded = reply_text
+    # First fix any legal moves that had a false `+` or `#` suffix attached
+    for raw_tok, canonical_san in false_checks:
+        grounded = re.sub(
+            r"(?<![A-Za-z0-9_])" + re.escape(raw_tok) + r"(?=$|[\s,.;:!?)\]])",
+            canonical_san,
+            grounded,
+        )
+
+    if illegal:
+        # If the model hallucinated an illegal move AND claimed a sacrifice/check on a quiet board
+        # with zero legal captures or checks, replace with a clean, grounded legal-move assessment.
+        lower_reply = grounded.lower()
+        claims_fake_tactics = any(
+            kw in lower_reply for kw in ("sacrific", "check", "mate", "shatter", "high-risk shelter")
+        )
+        if not has_legal_tactics and claims_fake_tactics and top_legal:
+            illegal_str = ", ".join(illegal)
+            return (
+                f"For {turn_label}, {fallback_move} is a principled legal reply to contest the center "
+                f"and develop cleanly (legal options include {', '.join(top_legal[:5])}; "
+                f"filtered ungrounded move {illegal_str})."
+            )
+
+        for bad_tok in illegal:
+            grounded = re.sub(
+                r"(?<![A-Za-z0-9_])" + re.escape(bad_tok) + r"(?=$|[\s,.;:!?)\]])",
+                fallback_move,
+                grounded,
+            )
+        if top_legal:
+            grounded = (
+                f"{grounded.rstrip('.')} "
+                f"(Grounded to legal moves: {', '.join(top_legal[:5])}; filtered illegal {', '.join(illegal)})."
+            )
+
+    return grounded
+
+
 class BoardAnchoredBridgeSensors:
     """Auditor Guardrail #2: Anchors Pass-1 Philosophical `Fact` to `python-chess` while scoring Chat/Theory via MiniLM."""
 
@@ -341,8 +549,10 @@ class BoardAnchoredBridgeSensors:
         branch_gate_threshold: float = 0.50,
     ) -> tuple[dict[str, float], dict[str, float], tuple[str, ...], tuple[str, ...]]:
         self.call_count += 1
+        # If board context was appended for the Left-Brain LLM, score the clean user/clause text via MiniLM
+        clean_for_minilm = text.split(" [Board context:")[0].strip() or text
         coords, exp_raw, queried, skipped = self.base_sensors.score_text(
-            text,
+            clean_for_minilm,
             learned_leaves=learned_leaves,
             branch_gating=branch_gating,
             branch_gate_threshold=branch_gate_threshold,

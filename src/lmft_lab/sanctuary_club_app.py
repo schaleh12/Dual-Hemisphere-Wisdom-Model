@@ -56,8 +56,11 @@ from .branch_archives import (
 from .chess_kibitz_bridge import (
     SANCTUARY_MODES,
     ChessBoardPosture,
+    build_natural_chess_scenario_prompt,
     evaluate_chess_board_posture,
+    inspect_chess_moves_in_reply,
     merge_board_fact_with_chat_sensors,
+    verify_or_ground_chess_moves_in_reply,
 )
 from .chord_memory import ChordMemoryBank, compile_felt_chord
 from .contemplation_ledger import (
@@ -120,7 +123,7 @@ from .three_legged_runtime import (
     ThreeLeggedTurnResult,
     run_three_legged_turn,
 )
-from .virgin_baseline import load_virgin_baseline_state
+from .virgin_baseline import VIRGIN_FOUNDATIONAL_RULES, load_virgin_baseline_state
 
 PRESET_CHESS_POSITIONS: dict[str, dict[str, str]] = {
     "start": {
@@ -203,26 +206,19 @@ def _default_fallback_sensors() -> ThreeBridgeSensors:
 
 
 def _default_fallback_rules() -> tuple[FuzzyConceptRule, ...]:
-    return (
-        FuzzyConceptRule(
-            rule_id="rule_grounded_coordination",
-            concept_name="grounded_coordination",
-            description="Balanced structure, sheltered King existence, and fair cooperation.",
-            target_leaves={
-                "philosophical/being/existence": 0.62,
-                "philosophical/structure/order": 0.60,
-            },
-        ),
-        FuzzyConceptRule(
-            rule_id="rule_sanctuary_equilibrium",
-            concept_name="sanctuary_equilibrium",
-            description="Calm co-regulation with steady order and low chaos.",
-            target_leaves={
-                "cultural/justice/fairness": 0.60,
-                "philosophical/structure/order": 0.58,
-            },
-        ),
-    )
+    return VIRGIN_FOUNDATIONAL_RULES
+
+
+def _ensure_foundational_rules(rules: tuple[FuzzyConceptRule, ...]) -> tuple[FuzzyConceptRule, ...]:
+    """Auditor Bug #1 Fix: Always ensure `VIRGIN_FOUNDATIONAL_RULES` (`grounded_coordination` & `sanctuary_equilibrium`) are present alongside schooled rules."""
+    foundational_by_id = {r.rule_id: r for r in VIRGIN_FOUNDATIONAL_RULES}
+    foundational_by_name = {r.concept_name: r for r in VIRGIN_FOUNDATIONAL_RULES}
+    merged: list[FuzzyConceptRule] = list(VIRGIN_FOUNDATIONAL_RULES)
+    for r in rules:
+        if r.rule_id in foundational_by_id or r.concept_name in foundational_by_name:
+            continue
+        merged.append(r)
+    return tuple(merged)
 
 
 class SanctuaryClubRuntime:
@@ -330,7 +326,7 @@ class SanctuaryClubRuntime:
                 try:
                     loaded = load_ruleset(p)
                     if loaded:
-                        return loaded
+                        return _ensure_foundational_rules(loaded)
                 except Exception:
                     pass
         return _default_fallback_rules()
@@ -706,13 +702,15 @@ class SanctuaryClubRuntime:
                 raise ValueError(f"Illegal or unrecognized chess move: {raw!r}") from exc
 
         san_str = self.board.san(move)
-        mover = "White" if self.board.turn == chess.WHITE else "Black"
         self.board.push(move)
         self.move_history_san.append(san_str)
         self.board_posture = evaluate_chess_board_posture(self.board)
 
-        move_desc = (
-            f"{mover} played {san_str}. {self.board_posture.board_summary}"
+        # Auditor Bug #2 Fix: Build natural chess context (move number, PGN history, legal replies)
+        # with ZERO float telemetry leaked into the Left-Brain prompt!
+        move_desc = build_natural_chess_scenario_prompt(
+            self.board,
+            self.move_history_san,
         )
         has_board_warning = bool(self.board_posture.board_shadow_warnings) or self.board.is_check()
         turn, elapsed_ms, telemetry = self._execute_turn(
@@ -723,11 +721,14 @@ class SanctuaryClubRuntime:
 
         # Only post to the chat room if Gear 2 spoke or a board shadow/check warning fired
         if turn.final_conscious_note or has_board_warning:
-            reply_text = turn.final_conscious_note or self._synthesize_gear_1_note(
+            raw_reply = turn.final_conscious_note or self._synthesize_gear_1_note(
                 turn,
                 room="chess",
                 board_posture=self.board_posture,
             )
+            # Auditor Bug #3 Fix: Verify every SAN move token against python-chess legal_moves
+            telemetry["chess_move_grounding"] = inspect_chess_moves_in_reply(raw_reply, self.board)
+            reply_text = verify_or_ground_chess_moves_in_reply(raw_reply, self.board)
             self.chat_messages.append(
                 {
                     "id": telemetry["scene_index"],
@@ -780,18 +781,32 @@ class SanctuaryClubRuntime:
         )
 
         target_mode = self.sanctuary_mode if self.active_room == "sanctuary" else None
+        scenario_input = (
+            build_natural_chess_scenario_prompt(
+                self.board,
+                self.move_history_san,
+                user_note=clean_text,
+            )
+            if self.active_room == "chess"
+            else clean_text
+        )
         turn, _elapsed_ms, telemetry = self._execute_turn(
-            clean_text,
+            scenario_input,
             room=self.active_room,
             force_spoken_reply=True,
             sanctuary_target_mode=target_mode,
             clause_1_prefix=clause_1_prefix,
         )
-        reply_text = turn.final_conscious_note or self._synthesize_gear_1_note(
+        raw_reply = turn.final_conscious_note or self._synthesize_gear_1_note(
             turn,
             room=self.active_room,
             board_posture=self.board_posture if self.active_room == "chess" else None,
         )
+        if self.active_room == "chess":
+            telemetry["chess_move_grounding"] = inspect_chess_moves_in_reply(raw_reply, self.board)
+            reply_text = verify_or_ground_chess_moves_in_reply(raw_reply, self.board)
+        else:
+            reply_text = raw_reply
         self.chat_messages.append(
             {
                 "id": telemetry["scene_index"],

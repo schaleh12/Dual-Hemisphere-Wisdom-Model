@@ -62,8 +62,8 @@ VIRGIN_FOUNDATIONAL_RULES: tuple[FuzzyConceptRule, ...] = (
         concept_name="grounded_coordination",
         description="Balanced structure, sheltered King existence (Wellspring of Being), and fair cooperation.",
         target_leaves={
-            "philosophical/being/existence": 0.62,
-            "philosophical/structure/order": 0.60,
+            "philosophical/being/existence": 0.68,
+            "philosophical/structure/order": 0.65,
         },
     ),
     FuzzyConceptRule(
@@ -71,8 +71,8 @@ VIRGIN_FOUNDATIONAL_RULES: tuple[FuzzyConceptRule, ...] = (
         concept_name="sanctuary_equilibrium",
         description="Calm co-regulation with steady order and low chaos.",
         target_leaves={
-            "cultural/justice/fairness": 0.60,
-            "philosophical/structure/order": 0.58,
+            "cultural/freedom/needlessness": 0.65,
+            "philosophical/being/existence": 0.68,
         },
     ),
 )
