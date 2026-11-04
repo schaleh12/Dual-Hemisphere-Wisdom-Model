@@ -142,7 +142,7 @@ def evaluate_chess_board_posture(
         + 0.015 * min(12, len(forward_attacks))
     )
 
-    # 2. King -> philosophical/being/existence (Cyan / Water: Ground of Being & King Shelter)
+    # 2. King -> philosophical/being/existence (Cyan / Water: Wellspring of Being & King Shelter)
     king_sq = board.king(us)
     if king_sq is None:
         existence = 0.10

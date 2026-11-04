@@ -112,6 +112,7 @@ from .three_legged_runtime import (
     ThreeLeggedTurnResult,
     run_three_legged_turn,
 )
+from .virgin_baseline import load_virgin_baseline_state
 
 PRESET_CHESS_POSITIONS: dict[str, dict[str, str]] = {
     "start": {
@@ -247,6 +248,7 @@ class SanctuaryClubRuntime:
         self.rem_sleep_in_progress = False
         self.left_brain_loading = False
         self.left_brain_status = "LAZY_STANDBY"
+        self.active_lineage = "schooled"  # "schooled" (Cycle 2 + user state) or "virgin" (Cycle 0 snapshot)
         self.active_checkpoint_label = "Cycle 2 (models/left_brain_lora_cycle2)"
         self.sleep_cycle_index = 2
 
@@ -385,6 +387,9 @@ class SanctuaryClubRuntime:
 
     def _persist_user_state(self) -> None:
         """Persist ruleset, 3-branch archives, contemplation ledger, and savored turn metadata to disk."""
+        if self.active_lineage == "virgin":
+            # Never overwrite the user's schooled state directory while inspecting the Cycle 0 Virgin Baseline
+            return
         self.state_dir.mkdir(parents=True, exist_ok=True)
         save_ruleset(
             self.state_dir / "club_ruleset.json",
@@ -400,6 +405,61 @@ class SanctuaryClubRuntime:
                 "scene_counter": int(self.scene_counter),
             },
         )
+
+    def switch_brain_lineage(self, lineage: str) -> dict[str, Any]:
+        """Switch between the `schooled` brain (Cycle 2 + user coaching) and `virgin` (Cycle 0 Core Architecture snapshot)."""
+        mode = lineage.strip().lower()
+        if mode not in ("schooled", "virgin"):
+            raise ValueError(f"Unknown lineage mode {lineage!r}; expected 'schooled' or 'virgin'.")
+        if mode == "virgin":
+            virgin = load_virgin_baseline_state(repo_root=self.repo_root)
+            self.active_lineage = "virgin"
+            self.sleep_cycle_index = 0
+            self.active_checkpoint_label = "Virgin Baseline (Cycle 0 — Core Architecture)"
+            self.rules = virgin.rules
+            self.learned_leaves = virgin.learned_leaves
+            self.archives = virgin.archives
+            self.ledger = virgin.ledger
+            self.memory = None
+            self.diary = SettledDiary()
+            self.chord_memory = ChordMemoryBank()
+            self.chat_messages.append(
+                {
+                    "id": f"lineage-{int(time.time())}",
+                    "sender": "system",
+                    "role_label": "Lineage Switch",
+                    "text": (
+                        "Switched to VIRGIN BASELINE (Cycle 0 — Core Architecture): "
+                        "2 foundational rules, 10 structural Tier-2 leaves, 0 story precedents."
+                    ),
+                }
+            )
+        else:
+            self.active_lineage = "schooled"
+            self.sleep_cycle_index = (
+                int(self.left_brain.callosum_metadata.sleep_cycle_index)
+                if (self.left_brain is not None and self.left_brain.callosum_metadata is not None)
+                else 2
+            )
+            self.active_checkpoint_label = f"Cycle {self.sleep_cycle_index} (models/left_brain_lora_cycle2)"
+            self.rules = self._load_default_rules()
+            self.learned_leaves = self._load_default_learned_leaves()
+            self.archives = self._load_initial_archives()
+            self.ledger = self._load_initial_ledger()
+            self.savored_turn_ids = self._load_initial_savored_ids()
+            self.memory = None
+            self.chat_messages.append(
+                {
+                    "id": f"lineage-{int(time.time())}",
+                    "sender": "system",
+                    "role_label": "Lineage Switch",
+                    "text": (
+                        f"Switched to SCHOOLED BRAIN (Cycle {self.sleep_cycle_index}): "
+                        f"{len(self.rules)} rules, {len(self.archives.judicial.ratified_chords)} ratified chords."
+                    ),
+                }
+            )
+        return self.get_state_snapshot()
 
     def _load_default_sensors(self) -> ThreeBridgeSensors:
         bridges_dir = self.repo_root / "models" / "right_brain_bridges"
@@ -587,6 +647,7 @@ class SanctuaryClubRuntime:
         legal_uci = [m.uci() for m in self.board.legal_moves]
         return {
             "active_room": self.active_room,
+            "active_lineage": self.active_lineage,
             "sanctuary_mode": self.sanctuary_mode,
             "sleep_cycle_index": self.sleep_cycle_index,
             "active_checkpoint_label": self.active_checkpoint_label,
@@ -1433,6 +1494,10 @@ SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
     <div class="brand">
       <span>LMFT SANCTUARY &amp; CHESS CLUB</span>
       <span class="brand-tag" id="cycle-badge">CYCLE 2</span>
+      <select id="lineage-select" style="padding:3px 8px; font-size:11px; font-family:var(--font-mono);" onchange="switchLineage(this.value)" title="Switch between Schooled (Cycle 2 + User Coaching) and Virgin Baseline (Cycle 0 — Core Architecture)">
+        <option value="schooled">LINEAGE: SCHOOLED (CYCLE 2)</option>
+        <option value="virgin">LINEAGE: VIRGIN BASELINE (CYCLE 0)</option>
+      </select>
     </div>
     <div class="mode-tabs">
       <button class="tab-btn active" id="tab-chess" onclick="switchRoom('chess')">CHESS TABLE</button>
@@ -1831,9 +1896,15 @@ async function runRemSleep() {
   await apiPost('/api/sleep/run', {});
 }
 
+async function switchLineage(mode) {
+  await apiPost('/api/lineage', { lineage: mode });
+}
+
 function renderAll() {
   if (!appState) return;
   document.getElementById('cycle-badge').textContent = `CYCLE ${appState.sleep_cycle_index}`;
+  const linSel = document.getElementById('lineage-select');
+  if (linSel && appState.active_lineage) linSel.value = appState.active_lineage;
   document.getElementById('status-left-brain').textContent = `LEFT BRAIN: ${appState.left_brain_status}`;
   document.getElementById('status-rules').textContent = `RULES: ${appState.rules_count} | RATIFIED CHORDS: ${appState.ratified_chords_count}`;
   document.getElementById('status-savored').textContent = `SAVORED: ${appState.savored_count}`;
@@ -1927,6 +1998,10 @@ def create_club_http_server(
                     return
                 if self.path == "/api/sleep/run":
                     snap = runtime.handle_run_rem_sleep()
+                    self._send_json(snap)
+                    return
+                if self.path == "/api/lineage":
+                    snap = runtime.switch_brain_lineage(str(data.get("lineage", "schooled")))
                     self._send_json(snap)
                     return
                 self._send_json({"error": f"Unknown endpoint {self.path}"}, HTTPStatus.NOT_FOUND)

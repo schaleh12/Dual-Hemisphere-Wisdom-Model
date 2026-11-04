@@ -10,7 +10,7 @@ Plain-English Purpose:
 2. `compile_chess_posture_chords`:
    Maps the 6 Chess Piece Archetypes onto the 6 Founding Philosophical Leaves:
    - `queen_volition`    -> `philosophical/being/agency`          (Queen: multi-directional volition)
-   - `king_safety`       -> `philosophical/being/existence`       (King: survival / ground of being)
+   - `king_safety`       -> `philosophical/being/existence`       (King: survival / wellspring of being)
    - `bishop_alignment`  -> `philosophical/structure/order`       (Bishop: diagonal geometry)
    - `knight_disruption` -> `philosophical/structure/chaos`       (Knight: non-linear leaps / forks)
    - `pawn_chain_flow`   -> `philosophical/persistence/continuity`(Pawn: linked chain advance)

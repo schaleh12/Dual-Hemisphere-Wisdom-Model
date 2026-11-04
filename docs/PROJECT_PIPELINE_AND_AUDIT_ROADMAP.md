@@ -31,7 +31,7 @@ In the Right Brain's **Thinker Department (`Philosophical` branch)**, the 6 foun
 | Philosophical Founding Leaf | Chess Piece Archetype | Positional & Structural Meaning on the Board |
 | :--- | :--- | :--- |
 | **`philosophical/being/agency`** | **Queen** (*Volition*) | Maximum multi-directional freedom of action and active intervention across the whole board. |
-| **`philosophical/being/existence`** | **King** (*Ground of Being*) | Survival and physical shelter—if the King's safety collapses, existence on the board ends. |
+| **`philosophical/being/existence`** | **King** (*Wellspring of Being*) | Survival and physical shelter—if the King's safety collapses, existence on the board ends. |
 | **`philosophical/structure/order`** | **Bishop** (*Prevailing Geometry*) | Long-range diagonal alignment, color-complex discipline, and structured lanes of control. |
 | **`philosophical/structure/chaos`** | **Knight** (*Non-Linear Disruption*) | Leaping over walls, breaking rigid formations, forks, and unpredictable tactical disruption. |
 | **`philosophical/persistence/continuity`** | **Pawn** (*Connected Flow*) | Linked pawn chains, steady territorial advance, and irreversible forward momentum toward promotion. |

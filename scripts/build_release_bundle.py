@@ -35,6 +35,12 @@ def build_release_zip(
     for py_file in sorted((root / "src" / "lmft_lab").rglob("*.py")):
         include_files.append(py_file)
 
+    virgin_dir = root / "baselines" / "virgin_dual_hemisphere_v1"
+    if virgin_dir.exists():
+        for vf in sorted(virgin_dir.rglob("*")):
+            if vf.is_file():
+                include_files.append(vf)
+
     for ruleset_rel in (
         "outputs/rem_sleep_consolidated_ruleset.json",
         "outputs/sleep_consolidated_ruleset.json",

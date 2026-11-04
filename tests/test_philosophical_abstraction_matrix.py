@@ -23,7 +23,7 @@ def test_five_tier_matrix_entries_match_calibrated_wind_ice_chart() -> None:
 
     expected = (
         ("agency", "Extra-dimensional", "philosophical/being/agency", "Red", "Red Summoning", "Lightning", "Queen", "Volition", "Psychosis", "Mammal", "Light"),
-        ("existence", "Extra-dimensional", "philosophical/being/existence", "Cyan", "Cyan Sun Magic", "Water", "King", "Ground of Being", "Paranoia", "Reptile", "Sun"),
+        ("existence", "Extra-dimensional", "philosophical/being/existence", "Cyan", "Cyan Sun Magic", "Water", "King", "Wellspring of Being", "Paranoia", "Reptile", "Sun"),
         ("order", "Inter-dimensional", "philosophical/structure/order", "Magenta", "Magenta Medium", "Wind", "Bishop", "Prevailing currents", "Prejudice", "Fish", "Ocean"),
         ("chaos", "Inter-dimensional", "philosophical/structure/chaos", "Green", "Green Instrument", "Ice", "Knight", "Brittle shatter / frost", "Corruption", "Bird", "Sky"),
         ("continuity", "Hyper-dimensional", "philosophical/persistence/continuity", "Blue", "Blue Soil Magic", "Fire", "Pawn", "Swarm continuum", "Mania / Greed", "Insect", "Soil"),
