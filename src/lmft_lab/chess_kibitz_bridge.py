@@ -356,71 +356,6 @@ _SAN_TOKEN_REGEX = re.compile(
     r"(?=$|[\s,.;:!?)\]])(?![-A-Za-z0-9_])"
 )
 
-_CHESS_DISCUSSION_KEYWORDS = frozenset(
-    {
-        "move",
-        "moves",
-        "play",
-        "played",
-        "board",
-        "position",
-        "pawn",
-        "pawns",
-        "knight",
-        "knights",
-        "bishop",
-        "bishops",
-        "rook",
-        "rooks",
-        "queen",
-        "king",
-        "check",
-        "checkmate",
-        "mate",
-        "castle",
-        "castling",
-        "opening",
-        "center",
-        "attack",
-        "defend",
-        "defense",
-        "plan",
-        "line",
-        "threat",
-        "capture",
-        "sacrifice",
-        "fork",
-        "pin",
-        "tactic",
-        "tactics",
-        "endgame",
-        "white",
-        "black",
-        "kibitz",
-        "square",
-        "diagonal",
-        "file",
-        "rank",
-        " gambit",
-        "italian",
-        "sicilian",
-        "french",
-        "caro",
-    }
-)
-
-
-def is_chess_focused_message(text: str, board: chess.Board | None = None) -> bool:
-    """Return True if the user's message discusses chess moves/plans rather than a casual greeting."""
-    _ = board
-    if not text or not text.strip():
-        return False
-    clean = text.strip()
-    if _SAN_TOKEN_REGEX.search(clean):
-        return True
-    words = set(re.findall(r"[a-z]+", clean.lower()))
-    return bool(words & _CHESS_DISCUSSION_KEYWORDS)
-
 
 def rank_principled_legal_moves_san(board: chess.Board, *, limit: int = 6) -> list[str]:
     """Return up to `limit` legal moves in SAN ordered by natural chess principles (checks, captures, center, development)."""
@@ -531,42 +466,9 @@ def _collect_past_moves_san(
     return past
 
 
-_BOARD_NOUN_FOLLOWERS = frozenset(
-    {
-        "pawn",
-        "pawns",
-        "square",
-        "squares",
-        "diagonal",
-        "diagonals",
-        "file",
-        "files",
-        "rank",
-        "ranks",
-        "center",
-        "outpost",
-        "bishop",
-        "bishops",
-        "knight",
-        "knights",
-        "rook",
-        "rooks",
-        "queen",
-        "king",
-        "piece",
-        "pieces",
-        "chain",
-        "structure",
-    }
-)
-
-
 def _is_descriptive_square_or_history_token(
     tok: str,
     core_san: str,
-    match_start: int,
-    match_end: int,
-    reply_text: str,
     board: chess.Board,
     past_moves_san: set[str],
 ) -> bool:
@@ -590,17 +492,6 @@ def _is_descriptive_square_or_history_token(
         piece = board.piece_at(sq)
         if piece is not None and piece.symbol().upper() == core_san[0]:
             return True
-
-    # Check immediate surrounding words for descriptive noun/preposition usage ("the d4 square", "on e4")
-    before_slice = reply_text[max(0, match_start - 18) : match_start].lower()
-    after_slice = reply_text[match_end : min(len(reply_text), match_end + 24)].lower()
-    if re.search(r"\b(?:the|on|at|from|into|around|near|plays|played|after|\d+\.)\s+$", before_slice):
-        return True
-    after_words = re.findall(r"[a-z]+", after_slice)
-    if after_words and after_words[0] in _BOARD_NOUN_FOLLOWERS:
-        return True
-    if len(after_words) >= 3 and after_words[0] in ("and", "or") and after_words[2] in _BOARD_NOUN_FOLLOWERS:
-        return True
 
     return False
 
@@ -632,9 +523,6 @@ def inspect_chess_moves_in_reply(
             if _is_descriptive_square_or_history_token(
                 tok,
                 core_san,
-                match.start(1),
-                match.end(1),
-                reply_text,
                 board,
                 past_moves_san,
             ):

@@ -60,7 +60,6 @@ from .chess_kibitz_bridge import (
     evaluate_chess_board_posture,
     format_move_history_pgn_snippet,
     inspect_chess_moves_in_reply,
-    is_chess_focused_message,
     merge_board_fact_with_chat_sensors,
     rank_principled_legal_moves_san,
     verify_or_ground_chess_moves_in_reply,
@@ -817,6 +816,7 @@ class SanctuaryClubRuntime:
         room: str | None = None,
         sanctuary_mode: str | None = None,
         clause_1_prefix: str | None = None,
+        anchor_to_board: bool | None = None,
     ) -> dict[str, Any]:
         """Handle a user message in either the Chess Club or the Co-Regulation Sanctuary."""
         clean_text = text.strip()
@@ -838,9 +838,10 @@ class SanctuaryClubRuntime:
         )
 
         target_mode = self.sanctuary_mode if self.active_room == "sanctuary" else None
-        chess_focused = (self.active_room == "chess") and is_chess_focused_message(
-            clean_text,
-            self.board,
+        use_board_context = (self.active_room == "chess") and (
+            bool(anchor_to_board)
+            if anchor_to_board is not None
+            else bool(self.board.move_stack)
         )
         scenario_input = (
             build_natural_chess_scenario_prompt(
@@ -848,7 +849,7 @@ class SanctuaryClubRuntime:
                 self.move_history_san,
                 user_note=clean_text,
             )
-            if chess_focused
+            if use_board_context
             else clean_text
         )
         turn, _elapsed_ms, telemetry = self._execute_turn(
@@ -857,14 +858,14 @@ class SanctuaryClubRuntime:
             force_spoken_reply=True,
             sanctuary_target_mode=target_mode,
             clause_1_prefix=clause_1_prefix,
-            custom_sensors=self.sensors if (self.active_room == "chess" and not chess_focused) else None,
+            custom_sensors=self.sensors if (self.active_room == "chess" and not use_board_context) else None,
         )
         raw_reply = turn.final_conscious_note or self._synthesize_gear_1_note(
             turn,
             room=self.active_room,
-            board_posture=self.board_posture if chess_focused else None,
+            board_posture=self.board_posture if use_board_context else None,
         )
-        if chess_focused:
+        if use_board_context:
             telemetry["chess_move_grounding"] = inspect_chess_moves_in_reply(
                 raw_reply,
                 self.board,
@@ -1215,17 +1216,6 @@ class SanctuaryClubRuntime:
         for ckey, group in clusters.items():
             avg_coords = _average_cluster_coordinates(group)
             target_leaves = _anchor_target_leaves_from_cluster(ckey, avg_coords)
-            # If `target_leaves` only has Tier-1 leaves and a Tier-2 leaf is present (`>= 0.20`),
-            # include the strongest Tier-2 leaf so the newly forged rule has Tier-2 specificity
-            # and inhibits generic Tier-1 baseline rules (`Tier 2 > Tier 1`).
-            if not any(leaf_tier(k) >= 2 for k in target_leaves):
-                tier2_cands = sorted(
-                    ((k, float(v)) for k, v in avg_coords.items() if leaf_tier(k) >= 2 and float(v) >= 0.20),
-                    key=lambda kv: (-kv[1], kv[0]),
-                )
-                if tier2_cands:
-                    t2_key, t2_val = tier2_cands[0]
-                    target_leaves[t2_key] = round(min(0.65, t2_val), 2)
             rep = group[0]
             rep_scene = rep.scene_index
 
@@ -1420,10 +1410,10 @@ class SanctuaryClubRuntime:
                         )
                         lines.append(f"  • {r.concept_name} ({r.rule_id}): [{leaves_str}]")
                 if before_evals and after_evals:
-                    lines.append("\nBefore vs. After REM Sleep Verification:")
+                    lines.append("\nQueued Scene Replay Check:")
                     for bef, aft in zip(before_evals, after_evals):
-                        bef_status = "SETTLED (GEAR 1)" if bef["settled"] else "CONFUSED (GEAR 3)"
-                        aft_status = "SETTLED (GEAR 1)" if aft["settled"] else "CONFUSED (GEAR 3)"
+                        bef_status = "SETTLED (GEAR 1)" if bef["settled"] else "STILL_COLLIDING (GEAR 3)"
+                        aft_status = "SETTLED (GEAR 1)" if aft["settled"] else "STILL_COLLIDING (GEAR 3)"
                         lines.append(
                             f"  • Scene #{bef['scene_index']}: "
                             f"BEFORE = {bef_status} (Clarity {bef['clarity']:.2f}, matched={bef['matched_concept']}) "
@@ -1995,6 +1985,10 @@ SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
       <div class="composer">
         <div class="composer-main">
           <input type="text" id="chat-input" placeholder="Talk to companion, discuss a chess plan, or check in for Sanctuary pacing..." onkeydown="if(event.key==='Enter') sendChat()">
+          <label id="anchor-board-label" style="display:flex; align-items:center; gap:5px; font-family:var(--font-mono); font-size:11px; color:var(--text-muted); white-space:nowrap; cursor:pointer;" title="Include live chessboard move history &amp; legal replies in chat prompt">
+            <input type="checkbox" id="anchor-board-toggle" style="padding:0; cursor:pointer;">
+            <span>Board Context</span>
+          </label>
           <button class="btn" onclick="sendChat()">Send</button>
           <button class="btn" onclick="toggleGuestBar()">Guest Chair</button>
         </div>
@@ -2470,10 +2464,12 @@ async function sendChat() {
   if (!text) return;
   inp.value = '';
   const modeSel = document.getElementById('sanctuary-mode-select').value;
+  const anchorEl = document.getElementById('anchor-board-toggle');
   await apiPost('/api/chat', {
     text: text,
     room: appState ? appState.active_room : 'chess',
-    sanctuary_mode: modeSel
+    sanctuary_mode: modeSel,
+    anchor_to_board: anchorEl ? !!anchorEl.checked : null
   });
 }
 
@@ -2584,10 +2580,12 @@ def create_club_http_server(
                     self._send_json(snap)
                     return
                 if self.path == "/api/chat":
+                    anchor_val = data.get("anchor_to_board")
                     snap = runtime.handle_chat_message(
                         str(data.get("text", "")),
                         room=str(data.get("room", "chess")),
                         sanctuary_mode=str(data.get("sanctuary_mode", "tilt_reset")),
+                        anchor_to_board=bool(anchor_val) if anchor_val is not None else None,
                     )
                     self._send_json(snap)
                     return

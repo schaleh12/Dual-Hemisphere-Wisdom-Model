@@ -10,9 +10,9 @@ Because `AGENTS.md`, `PROJECT_STATE.md`, and `DECISIONS.md` are read into the AI
    - Write all documentation, code comments, and user responses in normal, clear English.
    - Never use dense academic jargon, fake bureaucratic roleplay (e.g., *"independent custodian review"*, *"parent authorization"*, *"complete public effect overapproximation"*), or compressed text with missing spaces.
    - Remember that the project owner is not a computer scientist. Explain what code does in simple, honest terms without dumping technical decisions or math formulas on the owner.
-2. **Strict Length Limits on Startup Files**:
-   - Keep `PROJECT_STATE.md` under **60 lines**. When old status entries become outdated, move them to `docs/archive/` instead of letting `PROJECT_STATE.md` grow into a wall of text.
-   - Keep `DECISIONS.md` entries brief (3–6 plain sentences per decision). Never read `docs/archive/` files at startup unless specifically asked.
+2. **Strict Line AND Character Limits on Startup Files**:
+   - Keep `PROJECT_STATE.md` under **40 lines AND 3,000 characters** (never write 600-character run-on lines to game the line count). Move completed stage history to `docs/archive/` instead of letting `PROJECT_STATE.md` grow into a wall of text.
+   - Keep only the **5 most recent decisions** in `DECISIONS.md` (under **80 lines AND 5,000 characters** total, 3–5 plain sentences per decision). Whenever a new decision is added, move the oldest one to `docs/archive/`. Never read `docs/archive/` files at startup unless specifically asked.
 3. **Zero Legacy Pollution**:
    - Never read, import, or reuse anything from the old `LMFT based general AI` folders (`LMFT-School`, `LMFT-Trainee`, `LMFT-Firmware`, or post-Commit-36 `LMFT-Lab`).
 4. **Zero Fake AI / Zero Rubric or Coordinate Rigging**:
@@ -20,6 +20,9 @@ Because `AGENTS.md`, `PROJECT_STATE.md`, and `DECISIONS.md` are read into the AI
    - Never use `if/else` text templates, pre-written essays, or keyword lookup tables to pretend a system is "thinking" or "speaking."
    - Never call a float array or NumPy matrix a "Small Language Model (SLM)."
    - Never put a thumb on the math scale to force a scene to settle: never clamp or overwrite raw sensor coordinates, never zero out competing rules when a favorite rule fires, never mint a candidate rule at runtime from the current test scene's own coordinates, and never harvest an unsettled (`settled=False`) scene into the archives as a ratified rule.
+   - **(a) Zero Screenshot Regex Cosmetology**: Never write regexes or string-replacement tables targeting specific English phrases from a bug screenshot (such as `_THIRD_PERSON_COT_PREFIXES` or `r"where White plays 1\. e"`). Fix the root cause (e.g., proper tokenizer/prompt formatting) or leave the LLM's raw words untouched.
+   - **(b) Zero English Keyword Lookup Tables**: Never use hardcoded `frozenset` word lists (such as `_CHESS_DISCUSSION_KEYWORDS` or `_BOARD_NOUN_FOLLOWERS`) to classify text or grammar. Use the 3 MiniLM neural bridges, pure `python-chess` state (`board.move_stack`, `board.piece_at`), or an explicit UI control.
+   - **(c) Zero Tautological Rule Verification**: Never force-attach a weak Tier-2 leaf (`>= 0.20`) just to exploit `Tier 2 > Tier 1` inhibition, and never label re-testing the exact training scene a rule was copied from as "Verification"—report honestly whether a rule settles or still collides.
 5. **Let Experiments Fail Openly (Overrides `/goal` Scoreboard Pressure)**:
    - If a model output is inadmissible, a rule fails to generalize, or a benchmark settles `4/8`, `5/8`, `7/8`, or `0/4`, report that exact score plainly and stop. Never move the goalposts or add runtime workarounds to turn a scoreboard green.
    - **Important for `/goal` commands**: When the user runs `/goal`, "achieving the goal" means building the requested code cleanly and reporting the true, un-rigged benchmark numbers—it **never** means forcing a `100%` (`8/8` or `4/4`) pass rate. An honest partial score is a complete success; a rigged perfect score is a failure. Always assume an independent Auditor AI window will inspect your git diff.
