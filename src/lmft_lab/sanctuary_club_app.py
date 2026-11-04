@@ -60,6 +60,7 @@ from .chess_kibitz_bridge import (
     evaluate_chess_board_posture,
     format_move_history_pgn_snippet,
     inspect_chess_moves_in_reply,
+    is_chess_focused_message,
     merge_board_fact_with_chat_sensors,
     rank_principled_legal_moves_san,
     verify_or_ground_chess_moves_in_reply,
@@ -98,6 +99,8 @@ from .reflection_classifier import (
     ContinuousMemoryState,
     FuzzyConceptRule,
     LearnedLeaf,
+    _evaluate_rules_with_inhibition,
+    compute_contemplation,
     leaf_tier,
     load_learned_leaves,
     load_ruleset,
@@ -507,8 +510,8 @@ class SanctuaryClubRuntime:
             try:
                 self.left_brain = SubliminalGapLeftBrain.from_checkpoint(
                     ckpt_dir,
-                    max_clause_1_tokens=14,
-                    max_post_gap_tokens=36,
+                    max_clause_1_tokens=20,
+                    max_post_gap_tokens=64,
                 )
                 if self.left_brain.callosum_metadata is not None:
                     self.sleep_cycle_index = int(self.left_brain.callosum_metadata.sleep_cycle_index)
@@ -753,8 +756,16 @@ class SanctuaryClubRuntime:
                 board_posture=self.board_posture,
             )
             # Auditor Bug #3 Fix: Verify every SAN move token against python-chess legal_moves
-            telemetry["chess_move_grounding"] = inspect_chess_moves_in_reply(raw_reply, self.board)
-            reply_text = verify_or_ground_chess_moves_in_reply(raw_reply, self.board)
+            telemetry["chess_move_grounding"] = inspect_chess_moves_in_reply(
+                raw_reply,
+                self.board,
+                move_history_san=self.move_history_san,
+            )
+            reply_text = verify_or_ground_chess_moves_in_reply(
+                raw_reply,
+                self.board,
+                move_history_san=self.move_history_san,
+            )
             self.chat_messages.append(
                 {
                     "id": telemetry["scene_index"],
@@ -827,13 +838,17 @@ class SanctuaryClubRuntime:
         )
 
         target_mode = self.sanctuary_mode if self.active_room == "sanctuary" else None
+        chess_focused = (self.active_room == "chess") and is_chess_focused_message(
+            clean_text,
+            self.board,
+        )
         scenario_input = (
             build_natural_chess_scenario_prompt(
                 self.board,
                 self.move_history_san,
                 user_note=clean_text,
             )
-            if self.active_room == "chess"
+            if chess_focused
             else clean_text
         )
         turn, _elapsed_ms, telemetry = self._execute_turn(
@@ -842,15 +857,24 @@ class SanctuaryClubRuntime:
             force_spoken_reply=True,
             sanctuary_target_mode=target_mode,
             clause_1_prefix=clause_1_prefix,
+            custom_sensors=self.sensors if (self.active_room == "chess" and not chess_focused) else None,
         )
         raw_reply = turn.final_conscious_note or self._synthesize_gear_1_note(
             turn,
             room=self.active_room,
-            board_posture=self.board_posture if self.active_room == "chess" else None,
+            board_posture=self.board_posture if chess_focused else None,
         )
-        if self.active_room == "chess":
-            telemetry["chess_move_grounding"] = inspect_chess_moves_in_reply(raw_reply, self.board)
-            reply_text = verify_or_ground_chess_moves_in_reply(raw_reply, self.board)
+        if chess_focused:
+            telemetry["chess_move_grounding"] = inspect_chess_moves_in_reply(
+                raw_reply,
+                self.board,
+                move_history_san=self.move_history_san,
+            )
+            reply_text = verify_or_ground_chess_moves_in_reply(
+                raw_reply,
+                self.board,
+                move_history_san=self.move_history_san,
+            )
         else:
             reply_text = raw_reply
         self.chat_messages.append(
@@ -1168,11 +1192,13 @@ class SanctuaryClubRuntime:
         queued_scenes: tuple[UnresolvedSleepScene, ...],
     ) -> tuple[tuple[str, ...], tuple[FuzzyConceptRule, ...], tuple[str, ...]]:
         """Refine colliding rules and forge new coordinate-anchored rules + 3-branch clauses when Teacher LLM is offline."""
-        refined_rules, refined_ids = refine_colliding_rules_during_sleep(
-            self.rules,
+        virgin_ids = {r.rule_id for r in VIRGIN_FOUNDATIONAL_RULES}
+        non_virgin_rules = tuple(r for r in self.rules if r.rule_id not in virgin_ids)
+        refined_non_virgin, refined_ids = refine_colliding_rules_during_sleep(
+            non_virgin_rules,
             queued_scenes,
         )
-        active_rules = list(refined_rules)
+        active_rules = list(_ensure_foundational_rules(refined_non_virgin))
         existing_names = {r.concept_name for r in active_rules}
         forged_rules: list[FuzzyConceptRule] = []
         harvested_clause_ids: list[str] = []
@@ -1189,6 +1215,17 @@ class SanctuaryClubRuntime:
         for ckey, group in clusters.items():
             avg_coords = _average_cluster_coordinates(group)
             target_leaves = _anchor_target_leaves_from_cluster(ckey, avg_coords)
+            # If `target_leaves` only has Tier-1 leaves and a Tier-2 leaf is present (`>= 0.20`),
+            # include the strongest Tier-2 leaf so the newly forged rule has Tier-2 specificity
+            # and inhibits generic Tier-1 baseline rules (`Tier 2 > Tier 1`).
+            if not any(leaf_tier(k) >= 2 for k in target_leaves):
+                tier2_cands = sorted(
+                    ((k, float(v)) for k, v in avg_coords.items() if leaf_tier(k) >= 2 and float(v) >= 0.20),
+                    key=lambda kv: (-kv[1], kv[0]),
+                )
+                if tier2_cands:
+                    t2_key, t2_val = tier2_cands[0]
+                    target_leaves[t2_key] = round(min(0.65, t2_val), 2)
             rep = group[0]
             rep_scene = rep.scene_index
 
@@ -1304,18 +1341,47 @@ class SanctuaryClubRuntime:
         self.ledger = cur_ledger
         return refined_ids, tuple(forged_rules), tuple(harvested_clause_ids)
 
+    def _evaluate_sleep_scene_snapshot(
+        self,
+        scene: UnresolvedSleepScene,
+        rules: tuple[FuzzyConceptRule, ...],
+    ) -> dict[str, Any]:
+        """Evaluate one `UnresolvedSleepScene` against `rules` to compare Before vs. After REM Sleep."""
+        coords: dict[str, float] = {k: 0.50 for k in FOUNDATIONAL_LEAVES}
+        coords.update(scene.external_coordinates)
+        coords.update(scene.felt_chord_notes)
+        for r in rules:
+            for req_leaf in r.target_leaves:
+                coords.setdefault(req_leaf, 0.0)
+        activations = _evaluate_rules_with_inhibition(rules, coords)
+        clarity, confidence, matched, is_confused, reason = compute_contemplation(activations)
+        return {
+            "scene_index": scene.scene_index,
+            "clarity": round(float(clarity), 2),
+            "confidence": round(float(confidence), 2),
+            "matched_concept": matched or "none",
+            "settled": not is_confused,
+            "gear": "GEAR_1_FAST_RIGHT_BRAIN" if not is_confused else "GEAR_3_UNRESOLVED_QUEUED_FOR_SLEEP",
+            "reason": reason,
+        }
+
     def handle_run_rem_sleep(self) -> dict[str, Any]:
-        """Auditor Guardrail #4: Run REM Sleep consolidation inside `self.gpu_lock` and persist forged rules + archives to disk."""
+        """Auditor Guardrail #4 & Item 6: Run REM Sleep consolidation and post a Before-vs-After Progress Receipt."""
         with self.gpu_lock:
             self.rem_sleep_in_progress = True
             try:
-                queued_count = len(self.sleep_queue)
-                forged_count = 0
+                queued_Snapshot = tuple(self.sleep_queue)
+                queued_count = len(queued_Snapshot)
+                before_evals = [
+                    self._evaluate_sleep_scene_snapshot(s, tuple(self.rules))
+                    for s in queued_Snapshot
+                ]
+                forged_rules_list: tuple[FuzzyConceptRule, ...] = ()
                 if queued_count > 0:
                     if self.teacher is not None:
                         report = run_sleep_consolidation(
                             self.teacher,
-                            tuple(self.sleep_queue),
+                            queued_Snapshot,
                             self.rules,
                             self.archives,
                             self.ledger,
@@ -1325,26 +1391,51 @@ class SanctuaryClubRuntime:
                         self.archives = report.updated_archives
                         self.ledger = report.updated_ledger
                         refined_ids = report.refined_rule_ids
-                        forged_count = len(report.forged_rules)
+                        forged_rules_list = report.forged_rules
                     else:
-                        refined_ids, forged_rules, _clause_ids = (
-                            self._consolidate_sleep_clusters_locally(tuple(self.sleep_queue))
+                        refined_ids, forged_rules_list, _clause_ids = (
+                            self._consolidate_sleep_clusters_locally(queued_Snapshot)
                         )
-                        forged_count = len(forged_rules)
                 else:
                     refined_ids = ()
+
+                forged_count = len(forged_rules_list)
+                after_evals = [
+                    self._evaluate_sleep_scene_snapshot(s, tuple(self.rules))
+                    for s in queued_Snapshot
+                ]
                 self.sleep_queue.clear()
                 self._persist_user_state()
-                summary = (
+
+                lines = [
                     f"REM Sleep Cycle complete: consolidated {queued_count} queued scene(s), "
                     f"forged {forged_count} new rule(s), refined {len(refined_ids)} colliding rule(s), "
                     f"and persisted {len(self.savored_turn_ids)} savored vibe(s) to disk."
-                )
+                ]
+                if forged_rules_list:
+                    lines.append("\nNewly Forged Right-Brain Rules:")
+                    for r in forged_rules_list:
+                        leaves_str = ", ".join(
+                            f"{k.split('/')[-1]}>={v:.2f}" for k, v in r.target_leaves.items()
+                        )
+                        lines.append(f"  • {r.concept_name} ({r.rule_id}): [{leaves_str}]")
+                if before_evals and after_evals:
+                    lines.append("\nBefore vs. After REM Sleep Verification:")
+                    for bef, aft in zip(before_evals, after_evals):
+                        bef_status = "SETTLED (GEAR 1)" if bef["settled"] else "CONFUSED (GEAR 3)"
+                        aft_status = "SETTLED (GEAR 1)" if aft["settled"] else "CONFUSED (GEAR 3)"
+                        lines.append(
+                            f"  • Scene #{bef['scene_index']}: "
+                            f"BEFORE = {bef_status} (Clarity {bef['clarity']:.2f}, matched={bef['matched_concept']}) "
+                            f"-> AFTER = {aft_status} (Clarity {aft['clarity']:.2f}, Confidence {aft['confidence']:.2f}, matched={aft['matched_concept']})"
+                        )
+
+                summary = "\n".join(lines)
                 self.chat_messages.append(
                     {
                         "id": f"rem-{int(time.time())}",
                         "sender": "system",
-                        "role_label": "Nighttime REM Sleep",
+                        "role_label": "Nighttime REM Sleep — Learning Receipt",
                         "text": summary,
                     }
                 )
@@ -1454,6 +1545,7 @@ SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
     padding: 14px;
     gap: 12px;
     overflow-y: auto;
+    overflow-x: hidden;
   }
   .right-pane {
     background: var(--bg-root);
@@ -1794,16 +1886,18 @@ SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
             <span id="board-reflex-line" style="color:var(--text-dim);">Click a piece or enter a move to trigger Gear-1 Right-Brain reflex.</span>
           </div>
           <div class="controls-row">
-            <select id="preset-select" style="flex:1;" onchange="loadPreset(this.value)">
+            <select id="preset-select" style="flex:1; width:100%;" onchange="loadPreset(this.value)">
               <option value="start">Standard Starting Position</option>
               <option value="exposed_king_attack">Exposed King vs. Attack (Psychosis Test)</option>
               <option value="naked_king_siege">Stripped King Under Siege</option>
               <option value="knight_outpost_chaos">Sharp Tactical Tension (Knight / Ice)</option>
               <option value="rook_seventh_bastion">7th-Rank Rook Bastion Endgame</option>
             </select>
-            <button class="btn" onclick="undoChessMove()" title="Undo last half-move">Undo</button>
-            <button class="btn" onclick="playAiChessMove()" title="Have the side to move play a principled legal move">Play AI Move</button>
-            <button class="btn" onclick="loadPreset('start')">Reset</button>
+          </div>
+          <div class="controls-row">
+            <button class="btn" style="flex:1;" onclick="undoChessMove()" title="Undo last half-move">Undo</button>
+            <button class="btn" style="flex:1;" onclick="playAiChessMove()" title="Have the side to move play a principled legal move">Play AI Move</button>
+            <button class="btn" style="flex:1;" onclick="loadPreset('start')">Reset</button>
           </div>
           <div class="controls-row">
             <input type="text" id="fen-input" placeholder="Paste FEN or move (e.g. e4, Nf3)..." style="flex:1;" onkeydown="if(event.key==='Enter') applyManualMoveOrFen()">

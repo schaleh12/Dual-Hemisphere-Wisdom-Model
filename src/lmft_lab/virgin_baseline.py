@@ -71,9 +71,11 @@ VIRGIN_FOUNDATIONAL_RULES: tuple[FuzzyConceptRule, ...] = (
         concept_name="sanctuary_equilibrium",
         description="Calm co-regulation with steady order and low chaos.",
         target_leaves={
-            "cultural/freedom/needlessness": 0.65,
+            "cultural/freedom/needlessness": 0.78,
             "philosophical/being/existence": 0.68,
         },
+        low=0.70,
+        high=0.86,
     ),
 )
 

@@ -601,5 +601,95 @@ def test_ui_ux_polish_color_bars_scroll_escape_coordinates_undo_and_ai_move(tmp_
     assert "[Board Fact-Check: Re8# is not legal here; legal moves for White include exd5" in cleaned_franken
 
 
+def test_six_screenshot_fixes_italian_game_casual_chat_and_rem_receipt(tmp_path: Path) -> None:
+    """Verify all 6 screenshot fixes:
+
+    1. `[Board Fact-Check]` does NOT flag past moves (`1. e4 e5 2. Nf3 Bc5`) or square/piece descriptions (`"the e4 and e5 pawns"`, `"the e4-e5 diagonal"`, `"the Bc5 bishop"`).
+    2. Casual greetings (`"so uh.. how's it goin?"`) in the Chess room do not get `[Board context: Legal replies include...]` stapled to them.
+    3. `1. e4 e5 2. Nf3 Bc5` settles cleanly in Gear 1 (`Clarity >= 0.80`) with zero false Sleep-Queue dumps.
+    4. `normalize_clause_1_prefix` strips `"The user is analyzing..."` CoT narration and incomplete `"1. e"` move stubs, and `clean_post_gap_continuation` trims dangling mid-sentence tails.
+    5. `.left-pane` has `overflow-x: hidden;` and separate button row.
+    6. `handle_run_rem_sleep()` posts a visible `Before vs. After REM Sleep Verification` receipt.
+    """
+    from lmft_lab.chess_kibitz_bridge import (
+        inspect_chess_moves_in_reply,
+        is_chess_focused_message,
+        verify_or_ground_chess_moves_in_reply,
+    )
+    from lmft_lab.sanctuary_club_app import SINGLE_PAGE_HTML
+    from lmft_lab.three_legged_runtime import (
+        clean_post_gap_continuation,
+        normalize_clause_1_prefix,
+    )
+
+    assert "overflow-x: hidden;" in SINGLE_PAGE_HTML
+    assert is_chess_focused_message("so uh.. how's it goin?") is False
+    assert is_chess_focused_message("Should we play d4 or Bc4 here?") is True
+
+    # Fix #4: Third-person CoT & mid-move cutoff cleanup
+    raw_c1 = "The user is analyzing a chess opening where White plays 1. e"
+    norm_c1 = normalize_clause_1_prefix(raw_c1)
+    assert "the user is" not in norm_c1.lower()
+    assert "1. e," not in norm_c1
+    assert norm_c1 == "Looking at a chess opening,"
+
+    raw_c2 = "the board is set up with the e4 and e5 pawns locked in a diagonal, and the Bc5 bishop"
+    cleaned_c2 = clean_post_gap_continuation(raw_c2)
+    assert cleaned_c2.endswith(".")
+    assert not cleaned_c2.endswith("and the Bc5 bishop")
+
+    left_brain = _make_mini_left_brain()
+    runtime = SanctuaryClubRuntime(
+        state_dir=tmp_path / "screenshot_fixes_state",
+        left_brain=left_brain,
+        lazy_load_gpu=False,
+    )
+
+    # Fix #3: Play `1. e4 e5 2. Nf3 Bc5` — every move settles in Gear 1 (`Clarity >= 0.60`, `Confidence == 1.0`)!
+    for uci_mv in ("e2e4", "e7e5", "g1f3", "f8c5"):
+        snap_mv = runtime.handle_chess_move(uci_mv)
+        assert snap_mv["board"]["last_board_reflex"]["gear_used"] == "GEAR_1_FAST_RIGHT_BRAIN"
+        assert snap_mv["board"]["last_board_reflex"]["clarity"] >= 0.60
+        assert snap_mv["board"]["last_board_reflex"]["confidence"] == 1.0
+        assert snap_mv["sleep_queue_count"] == 0
+
+    # Fix #1: Fact-checker does not flag `Nf3`, `Bc5`, `e4`, or `e5` when describing the Italian Game board!
+    msg_4_text = (
+        "Looking at this chess opening where White plays 1. e4, 2. Nf3 Bc5, "
+        "the board is set up with the e4 and e5 pawns locked in a diagonal, and the Bc5 bishop."
+    )
+    rep_4 = inspect_chess_moves_in_reply(msg_4_text, runtime.board, runtime.move_history_san)
+    assert rep_4["illegal_moves_mentioned"] == []
+    assert verify_or_ground_chess_moves_in_reply(msg_4_text, runtime.board, runtime.move_history_san) == msg_4_text
+
+    msg_5_text = "We're on the e4-e5 diagonal, play d4 to open the file and Bc4 to pressure the king."
+    rep_5 = inspect_chess_moves_in_reply(msg_5_text, runtime.board, runtime.move_history_san)
+    assert rep_5["illegal_moves_mentioned"] == []
+    assert verify_or_ground_chess_moves_in_reply(msg_5_text, runtime.board, runtime.move_history_san) == msg_5_text
+
+    # Fix #2: Casual greeting in Chess room does not staple `[Board context: Legal replies include...]`
+    snap_chat = runtime.handle_chat_message("so uh.. how's it goin?", room="chess")
+    last_turn_id = int(snap_chat["chat_messages"][-1]["id"])
+    assert "Legal replies include" not in runtime._turn_records_by_id[last_turn_id]["scenario_text"]
+
+    # Fix #6: Run a Crucible dilemma + REM Sleep and verify the `Before vs. After REM Sleep Verification` receipt!
+    from lmft_lab.dilemma_crucible import CRUCIBLE_STAGES
+
+    stage_info = CRUCIBLE_STAGES["poetry_story"]
+    runtime.handle_crucible_dilemma(
+        "poetry_story",
+        stage_info["default_wave"],
+        stage_info["default_structure"],
+        harvest_for_sleep=True,
+    )
+    snap_rem = runtime.handle_run_rem_sleep()
+    rem_msg = snap_rem["chat_messages"][-1]
+    assert rem_msg["role_label"] == "Nighttime REM Sleep — Learning Receipt"
+    assert "Newly Forged Right-Brain Rules:" in rem_msg["text"]
+    assert "Before vs. After REM Sleep Verification:" in rem_msg["text"]
+    assert "AFTER = SETTLED (GEAR 1)" in rem_msg["text"]
+
+
+
 
 

@@ -224,13 +224,13 @@ def evaluate_chess_board_posture(
     }
     active_knights = sum(1 for sq in board.pieces(chess.KNIGHT, us) if sq in center_ring)
     chaos = _clamp01(
-        0.16
-        + 0.09 * min(2, active_knights)
-        + 0.035 * min(8, len(knight_moves))
-        + 0.05 * min(5, len(capture_moves))
+        0.12
+        + 0.06 * min(2, active_knights)
+        + 0.02 * min(8, len(knight_moves))
+        + 0.04 * min(5, len(capture_moves))
         + 0.06 * min(3, len(checking_moves))
-        + 0.10 * min(3, hanging_count)
-        + (0.18 if board.is_check() else 0.0)
+        + 0.12 * min(3, hanging_count)
+        + (0.22 if board.is_check() else 0.0)
     )
 
     # 5. Pawn -> philosophical/persistence/continuity (Blue / Fire: Connected Phalanx & Flow)
@@ -346,15 +346,80 @@ _EXTENDED_CENTER_SQUARES = frozenset(
 )
 
 _SAN_TOKEN_REGEX = re.compile(
-    r"(?<![A-Za-z0-9_])"
+    r"(?<![A-Za-z0-9_-])"
     r"("
     r"(?:O-O-O|O-O|0-0-0|0-0)[+#]?"
     r"|[KQRBN][a-h]?[1-8]?x?[a-h][1-8](?:=[QRBN])?[+#]?"
     r"|[a-h]x[a-h][1-8](?:=[QRBN])?[+#]?"
     r"|[a-h][1-8](?:=[QRBN])?[+#]?"
     r")"
-    r"(?=$|[\s,.;:!?)\]])"
+    r"(?=$|[\s,.;:!?)\]])(?![-A-Za-z0-9_])"
 )
+
+_CHESS_DISCUSSION_KEYWORDS = frozenset(
+    {
+        "move",
+        "moves",
+        "play",
+        "played",
+        "board",
+        "position",
+        "pawn",
+        "pawns",
+        "knight",
+        "knights",
+        "bishop",
+        "bishops",
+        "rook",
+        "rooks",
+        "queen",
+        "king",
+        "check",
+        "checkmate",
+        "mate",
+        "castle",
+        "castling",
+        "opening",
+        "center",
+        "attack",
+        "defend",
+        "defense",
+        "plan",
+        "line",
+        "threat",
+        "capture",
+        "sacrifice",
+        "fork",
+        "pin",
+        "tactic",
+        "tactics",
+        "endgame",
+        "white",
+        "black",
+        "kibitz",
+        "square",
+        "diagonal",
+        "file",
+        "rank",
+        " gambit",
+        "italian",
+        "sicilian",
+        "french",
+        "caro",
+    }
+)
+
+
+def is_chess_focused_message(text: str, board: chess.Board | None = None) -> bool:
+    """Return True if the user's message discusses chess moves/plans rather than a casual greeting."""
+    _ = board
+    if not text or not text.strip():
+        return False
+    clean = text.strip()
+    if _SAN_TOKEN_REGEX.search(clean):
+        return True
+    words = set(re.findall(r"[a-z]+", clean.lower()))
+    return bool(words & _CHESS_DISCUSSION_KEYWORDS)
 
 
 def rank_principled_legal_moves_san(board: chess.Board, *, limit: int = 6) -> list[str]:
@@ -450,12 +515,107 @@ def build_natural_chess_scenario_prompt(
     return base
 
 
-def inspect_chess_moves_in_reply(reply_text: str, board: chess.Board) -> dict[str, Any]:
+def _collect_past_moves_san(
+    board: chess.Board,
+    move_history_san: Sequence[str] = (),
+) -> set[str]:
+    past: set[str] = {s.rstrip("+#") for s in move_history_san if s}
+    if board.move_stack:
+        try:
+            replay = board.root()
+            for mv in board.move_stack:
+                past.add(replay.san(mv).rstrip("+#"))
+                replay.push(mv)
+        except Exception:
+            pass
+    return past
+
+
+_BOARD_NOUN_FOLLOWERS = frozenset(
+    {
+        "pawn",
+        "pawns",
+        "square",
+        "squares",
+        "diagonal",
+        "diagonals",
+        "file",
+        "files",
+        "rank",
+        "ranks",
+        "center",
+        "outpost",
+        "bishop",
+        "bishops",
+        "knight",
+        "knights",
+        "rook",
+        "rooks",
+        "queen",
+        "king",
+        "piece",
+        "pieces",
+        "chain",
+        "structure",
+    }
+)
+
+
+def _is_descriptive_square_or_history_token(
+    tok: str,
+    core_san: str,
+    match_start: int,
+    match_end: int,
+    reply_text: str,
+    board: chess.Board,
+    past_moves_san: set[str],
+) -> bool:
+    """Return True when `tok` describes an already-played move or an existing piece/square on `board`."""
+    # Explicit check/mate or capture claims (e.g. `Bf5+`, `Re8#`, `Nxe4`) are active tactical claims
+    if tok.endswith(("+", "#")) or "x" in core_san:
+        return False
+
+    if core_san in past_moves_san:
+        return True
+
+    # Check if `core_san` is a bare square coordinate (`e4`, `e5`) that is already occupied on `board`
+    if re.fullmatch(r"[a-h][1-8]", core_san):
+        sq = chess.parse_square(core_san)
+        if board.piece_at(sq) is not None:
+            return True
+
+    # Check if `core_san` is a piece+square (`Bc5`, `Nf3`) where that exact piece already sits on `sq`
+    if re.fullmatch(r"[KQRBN][a-h][1-8]", core_san):
+        sq = chess.parse_square(core_san[1:3])
+        piece = board.piece_at(sq)
+        if piece is not None and piece.symbol().upper() == core_san[0]:
+            return True
+
+    # Check immediate surrounding words for descriptive noun/preposition usage ("the d4 square", "on e4")
+    before_slice = reply_text[max(0, match_start - 18) : match_start].lower()
+    after_slice = reply_text[match_end : min(len(reply_text), match_end + 24)].lower()
+    if re.search(r"\b(?:the|on|at|from|into|around|near|plays|played|after|\d+\.)\s+$", before_slice):
+        return True
+    after_words = re.findall(r"[a-z]+", after_slice)
+    if after_words and after_words[0] in _BOARD_NOUN_FOLLOWERS:
+        return True
+    if len(after_words) >= 3 and after_words[0] in ("and", "or") and after_words[2] in _BOARD_NOUN_FOLLOWERS:
+        return True
+
+    return False
+
+
+def inspect_chess_moves_in_reply(
+    reply_text: str,
+    board: chess.Board,
+    move_history_san: Sequence[str] = (),
+) -> dict[str, Any]:
     """Inspect all SAN move tokens mentioned in `reply_text` against `board.parse_san()` and `board.gives_check()`."""
     detected: list[str] = []
     legal_moves_mentioned: list[str] = []
     illegal_moves_mentioned: list[str] = []
     false_check_tokens: list[tuple[str, str]] = []
+    past_moves_san = _collect_past_moves_san(board, move_history_san)
 
     for match in _SAN_TOKEN_REGEX.finditer(reply_text):
         tok = match.group(1)
@@ -469,6 +629,16 @@ def inspect_chess_moves_in_reply(reply_text: str, board: chess.Board) -> dict[st
             if tok.endswith(("+", "#")) and tok != canonical:
                 false_check_tokens.append((tok, canonical))
         except ValueError:
+            if _is_descriptive_square_or_history_token(
+                tok,
+                core_san,
+                match.start(1),
+                match.end(1),
+                reply_text,
+                board,
+                past_moves_san,
+            ):
+                continue
             if tok not in illegal_moves_mentioned:
                 illegal_moves_mentioned.append(tok)
 
@@ -480,7 +650,11 @@ def inspect_chess_moves_in_reply(reply_text: str, board: chess.Board) -> dict[st
     }
 
 
-def verify_or_ground_chess_moves_in_reply(reply_text: str, board: chess.Board) -> str:
+def verify_or_ground_chess_moves_in_reply(
+    reply_text: str,
+    board: chess.Board,
+    move_history_san: Sequence[str] = (),
+) -> str:
     """Auditor Bug #3 & Guardrail Fix: Verify every SAN move token in `reply_text` against `python-chess` (`board.parse_san`).
 
     - Never overwrites or discards `Qwen3-4B`'s actual generated words with a canned sentence
@@ -493,7 +667,7 @@ def verify_or_ground_chess_moves_in_reply(reply_text: str, board: chess.Board) -
     if not reply_text or not reply_text.strip():
         return reply_text
 
-    report = inspect_chess_moves_in_reply(reply_text, board)
+    report = inspect_chess_moves_in_reply(reply_text, board, move_history_san=move_history_san)
     illegal = report["illegal_moves_mentioned"]
     false_checks = report["false_check_tokens"]
 

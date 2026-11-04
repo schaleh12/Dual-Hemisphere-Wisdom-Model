@@ -116,6 +116,14 @@ def assert_zero_stage_directions_in_prompt(prompt_text: str) -> None:
             )
 
 
+_THIRD_PERSON_COT_PREFIXES: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"^(?:okay,?\s*|hmm,?\s*|well,?\s*)?the user is analyzing\s+", re.IGNORECASE), "Looking at "),
+    (re.compile(r"^(?:okay,?\s*|hmm,?\s*|well,?\s*)?the user is asking(?:\s+about)?\s+", re.IGNORECASE), "Considering "),
+    (re.compile(r"^(?:okay,?\s*|hmm,?\s*|well,?\s*)?the user is playing\s+", re.IGNORECASE), "In this line with "),
+    (re.compile(r"^(?:okay,?\s*|hmm,?\s*|well,?\s*)?the user(?:'s|\s+is|\s+wants|\s+has)\s+", re.IGNORECASE), "Here, "),
+)
+
+
 def normalize_clause_1_prefix(raw_prefix: str) -> str:
     """Clean an opening clause so it stops at a comma boundary before `<|subliminal_gap|>`."""
     cleaned = re.sub(r"<think>.*?</think>", "", raw_prefix, flags=re.DOTALL)
@@ -125,18 +133,75 @@ def normalize_clause_1_prefix(raw_prefix: str) -> str:
     if not cleaned:
         return "Weighing the situation before us,"
 
+    # Strip third-person chain-of-thought narration ("The user is analyzing...")
+    for pattern, repl in _THIRD_PERSON_COT_PREFIXES:
+        if pattern.search(cleaned):
+            cleaned = pattern.sub(repl, cleaned, count=1).strip()
+            break
+
+    # Remove any trailing incomplete move-number stub (e.g. "where White plays 1. e" -> "")
+    cleaned = re.sub(
+        r"(?:\s+where\s+(?:White|Black)\s+plays)?\s+\d+\.(?:\.\.)?\s*[a-hKQRBN]?$",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    ).strip()
+
     # If a comma already appears after at least 2 words, truncate right at the first comma
     if "," in cleaned:
         first_comma_idx = cleaned.index(",")
         before_comma = cleaned[:first_comma_idx].strip()
+        before_comma = re.sub(r"\s+\d+\.(?:\.\.)?\s*[a-hKQRBN]?$", "", before_comma).strip()
         if len(before_comma.split()) >= 2:
+            if before_comma[0].islower():
+                before_comma = before_comma[0].upper() + before_comma[1:]
             return f"{before_comma},"
 
     # Replace any premature sentence-ending period/exclamation/question mark with a comma
     cleaned = cleaned.rstrip(".!?;:—- ").strip()
-    if not cleaned:
+    # Strip trailing dangling prepositions/articles/conjunctions if token budget truncated mid-phrase
+    cleaned = re.sub(
+        r"\s+(?:and|or|with|to|for|in|on|at|by|of|from|where|that|which|the|a|an)$",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    ).strip()
+    if not cleaned or len(cleaned.split()) < 2:
         return "Weighing the situation before us,"
+    if cleaned[0].islower():
+        cleaned = cleaned[0].upper() + cleaned[1:]
     return f"{cleaned},"
+
+
+def clean_post_gap_continuation(raw_text: str) -> str:
+    """Clean Clause-2 continuation and ensure it ends on a complete sentence boundary."""
+    text = re.sub(r"<think>.*?</think>", "", raw_text, flags=re.DOTALL)
+    text = text.replace("<think>", "").replace("</think>", "")
+    text = " ".join(text.replace("\n", " ").split()).strip()
+    if not text:
+        return "we hold steady and observe the unfolding tension."
+
+    if text.endswith((".", "!", "?")) and not re.search(r"\b\d+\.$", text):
+        return text
+
+    # If there is already a complete sentence boundary inside `text` (not a move number `1.`), trim there
+    sentence_ends = [m.end() for m in re.finditer(r"(?<!\b\d)[.!?](?=\s|$)", text)]
+    if sentence_ends and sentence_ends[-1] >= 16:
+        return text[: sentence_ends[-1]].strip()
+
+    # Otherwise strip any dangling trailing clause fragment (e.g. `, and the Bc5 bishop`) and add a period
+    trimmed = re.sub(
+        r",?\s+(?:and|or|but|with|while|as|to|for|in|on|at|by|of|from|the|a|an)(?:\s+[A-Za-z0-9_+-]+){0,3}$",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    ).strip()
+    trimmed = re.sub(r"\s+\d+\.(?:\.\.)?\s*[a-hKQRBN]?$", "", trimmed).rstrip(",;:- ").strip()
+    if not trimmed:
+        return "we hold steady and observe the unfolding tension."
+    if not trimmed.endswith((".", "!", "?")):
+        trimmed = f"{trimmed}."
+    return trimmed
 
 
 @dataclass(frozen=True)
@@ -423,7 +488,11 @@ class SubliminalGapLeftBrain:
                 generated_ids.append(next_id)
 
                 decoded_cont = self.tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
-                if step_idx >= 5 and decoded_cont.endswith((".", "!", "?")):
+                if (
+                    step_idx >= 5
+                    and decoded_cont.endswith((".", "!", "?"))
+                    and not re.search(r"\b\d+\.$", decoded_cont)
+                ):
                     break
 
                 next_tok_tensor = torch.tensor([[next_id]], dtype=torch.long, device=self.device)
@@ -434,12 +503,8 @@ class SubliminalGapLeftBrain:
                     dim=1,
                 )
 
-            post_gap_text = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
-            post_gap_text = re.sub(r"<think>.*?</think>", "", post_gap_text, flags=re.DOTALL)
-            post_gap_text = post_gap_text.replace("<think>", "").replace("</think>", "")
-            post_gap_text = " ".join(post_gap_text.replace("\n", " ").split()).strip()
-            if not post_gap_text:
-                post_gap_text = "we hold steady and observe the unfolding tension."
+            raw_post_gap = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
+            post_gap_text = clean_post_gap_continuation(raw_post_gap)
 
             full_thought = f"{prefix} {post_gap_text}".strip()
             trace = SplicedThoughtTrace(
