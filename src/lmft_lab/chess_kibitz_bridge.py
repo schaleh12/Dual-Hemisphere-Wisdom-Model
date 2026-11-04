@@ -481,13 +481,14 @@ def inspect_chess_moves_in_reply(reply_text: str, board: chess.Board) -> dict[st
 
 
 def verify_or_ground_chess_moves_in_reply(reply_text: str, board: chess.Board) -> str:
-    """Auditor Bug #3 Fix: Verify every SAN move token in `reply_text` against `python-chess` (`board.parse_san`).
+    """Auditor Bug #3 & Guardrail Fix: Verify every SAN move token in `reply_text` against `python-chess` (`board.parse_san`).
 
-    - Strips false `+`/`#` check suffixes when `board.gives_check(move)` is False.
-    - If `reply_text` names an illegal move (such as `Bf5+` or `Re8#`) or makes an ungrounded
-      checkmate/opening-sacrifice claim, replaces the hallucinated sentence cleanly with a
-      board-accurate recommendation from `board.legal_moves` (never splicing a legal move token
-      into the middle of a hallucinated checkmate sentence).
+    - Never overwrites or discards `Qwen3-4B`'s actual generated words with a canned sentence
+      (`AGENTS.md` Rule #4 & #5), and never splices replacement move tokens into the middle of
+      a sentence.
+    - Strips false `+`/`#` check suffixes on legal moves when `board.gives_check(move)` is False.
+    - Appends an honest `[Board Fact-Check: ...]` note at the end when `python-chess` detects
+      an illegal move or ungrounded mate/opening-sacrifice claim.
     """
     if not reply_text or not reply_text.strip():
         return reply_text
@@ -525,10 +526,9 @@ def verify_or_ground_chess_moves_in_reply(reply_text: str, board: chess.Board) -
         return reply_text
 
     top_legal = rank_principled_legal_moves_san(board, limit=6)
-    fallback_move = top_legal[0] if top_legal else "a legal development move"
     turn_label = "White" if board.turn == chess.WHITE else "Black"
 
-    grounded = reply_text
+    grounded = reply_text.strip()
     # First fix any legal moves that had a false `+` or `#` suffix attached
     for raw_tok, canonical_san in false_checks:
         grounded = re.sub(
@@ -537,18 +537,23 @@ def verify_or_ground_chess_moves_in_reply(reply_text: str, board: chess.Board) -
             grounded,
         )
 
-    if illegal or claims_ungrounded_mate or claims_ungrounded_opening_sacrifice:
-        if top_legal:
-            if illegal:
-                illegal_str = ", ".join(illegal)
-                return (
-                    f"For {turn_label}, {fallback_move} is a principled legal reply to contest the center "
-                    f"and develop cleanly (legal options include {', '.join(top_legal[:5])}; "
-                    f"filtered ungrounded move {illegal_str})."
-                )
+    if top_legal:
+        legal_list_str = ", ".join(top_legal[:5])
+        if illegal:
+            illegal_str = ", ".join(illegal)
             return (
-                f"For {turn_label}, {fallback_move} is a principled legal reply to contest the center "
-                f"and develop cleanly (legal options include {', '.join(top_legal[:5])})."
+                f"{grounded} [Board Fact-Check: {illegal_str} is not legal here; "
+                f"legal moves for {turn_label} include {legal_list_str}.]"
+            )
+        if claims_ungrounded_mate:
+            return (
+                f"{grounded} [Board Fact-Check: no legal checkmate exists on the board here; "
+                f"legal moves for {turn_label} include {legal_list_str}.]"
+            )
+        if claims_ungrounded_opening_sacrifice:
+            return (
+                f"{grounded} [Board Fact-Check: quiet opening position; "
+                f"legal moves for {turn_label} include {legal_list_str}.]"
             )
 
     return grounded

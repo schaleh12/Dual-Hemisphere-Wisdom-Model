@@ -524,8 +524,8 @@ def test_forensic_audit_chess_1_e4_gear1_settling_natural_prompt_and_illegal_mov
     assert "Bf5+" in move_report["illegal_moves_mentioned"]
 
     grounded_reply = verify_or_ground_chess_moves_in_reply(hallucinated_reply, runtime.board)
-    assert "Bf5+ is the best move" not in grounded_reply
-    assert "filtered ungrounded move Bf5+" in grounded_reply
+    assert hallucinated_reply in grounded_reply
+    assert "[Board Fact-Check: Bf5+ is not legal here;" in grounded_reply
     assert any(legal_san in grounded_reply for legal_san in ("d5", "e5", "c5", "Nf6"))
 
     # Also verify that a legal move with a false `+` suffix (`Nf6+` on Move 1) has the false `+` stripped
@@ -588,7 +588,7 @@ def test_ui_ux_polish_color_bars_scroll_escape_coordinates_undo_and_ai_move(tmp_
     assert snap_d5["board"]["last_board_reflex"]["gear_used"] == "GEAR_1_FAST_RIGHT_BRAIN"
     assert snap_d5["sleep_queue_count"] == 0
 
-    # And `verify_or_ground_chess_moves_in_reply` never splices `exd5` into a hallucinated mate sentence
+    # And `verify_or_ground_chess_moves_in_reply` preserves the LLM's words intact + appends `[Board Fact-Check: ...]`
     from lmft_lab.chess_kibitz_bridge import verify_or_ground_chess_moves_in_reply
 
     franken_input = (
@@ -596,8 +596,9 @@ def test_ui_ux_polish_color_bars_scroll_escape_coordinates_undo_and_ai_move(tmp_
         "immediately threatening checkmate with Qh5 and Re8#."
     )
     cleaned_franken = verify_or_ground_chess_moves_in_reply(franken_input, runtime.board)
+    assert franken_input in cleaned_franken
     assert "threatening checkmate with Qh5 and exd5" not in cleaned_franken
-    assert "For White, exd5 is a principled legal reply" in cleaned_franken
+    assert "[Board Fact-Check: Re8# is not legal here; legal moves for White include exd5" in cleaned_franken
 
 
 
