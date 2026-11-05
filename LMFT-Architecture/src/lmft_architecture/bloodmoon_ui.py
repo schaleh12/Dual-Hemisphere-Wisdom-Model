@@ -263,8 +263,8 @@ BLOODMOON_SINGLE_PAGE_HTML = """<!DOCTYPE html>
     <span class="pill" id="rules-count-pill">Rules: 2</span>
     <span class="pill" id="sleep-queue-pill">Sleep Queue: 0</span>
     <div id="patreon-unlock-bar" style="display:flex;gap:6px;align-items:center;">
-      <input type="password" id="patreon-passphrase-input" placeholder="Patreon .enc passphrase" style="width:155px;" />
-      <button class="btn" onclick="unlockPatreonBundle()">Unlock .enc</button>
+      <input type="password" id="patreon-passphrase-input" placeholder="Patreon Unlock Password (one-time)" style="width:205px;" onkeydown="if(event.key==='Enter')unlockPatreonBundle()" />
+      <button class="btn btn-primary" onclick="unlockPatreonBundle()">Unlock Studio</button>
     </div>
     <button class="btn" onclick="runRemSleepNow()">REM Sleep Now</button>
   </div>
@@ -387,8 +387,13 @@ function renderState(s) {
   document.getElementById("rules-count-pill").textContent = "Rules: " + (s.rules_count || 0);
   document.getElementById("sleep-queue-pill").textContent = "Sleep Queue: " + (s.sleep_queue_count || 0);
 
+  const unlocked = Boolean(s.patreon_unlocked);
   const unlockBar = document.getElementById("patreon-unlock-bar");
-  if (unlockBar) unlockBar.style.display = s.patreon_unlocked ? "none" : "flex";
+  if (unlockBar) unlockBar.style.display = unlocked ? "none" : "flex";
+  for (const btnId of ["step-clockwise-btn", "full-cycle-btn", "loop-clockwise-btn", "seed-custom-script-btn"]) {
+    const btnEl = document.getElementById(btnId);
+    if (btnEl) btnEl.disabled = !unlocked;
+  }
 
   const phase = Number(s.clockwise_phase || 1);
   for (let i = 1; i <= 3; i++) {
@@ -401,7 +406,9 @@ function renderState(s) {
     2: "Next: Phase 2 — Male Content-Lover (Audience & Immunizer)",
     3: "Next: Phase 3 — REM Sleep (Best Sleep of Its Life)"
   };
-  document.getElementById("active-phase-label").textContent = phaseNames[phase] || phaseNames[1];
+  document.getElementById("active-phase-label").textContent = unlocked
+    ? (phaseNames[phase] || phaseNames[1])
+    : "LOCKED — Enter Patreon Unlock Password once in the top bar";
 
   const canvasEl = document.getElementById("script-canvas-textarea");
   if (document.activeElement !== canvasEl && typeof s.script_canvas_text === "string") {
@@ -521,8 +528,14 @@ async function switchThread(tid) { await apiPost("/api/threads/switch", { thread
 async function runRemSleepNow() { await apiPost("/api/sleep/run", {}); }
 async function toggleAutoSleep(enabled) { await apiPost("/api/sleep/auto", { enabled: !!enabled }); }
 async function unlockPatreonBundle() {
-  const pw = document.getElementById("patreon-passphrase-input").value;
-  await apiPost("/api/patreon/unlock", { passphrase: pw });
+  const inp = document.getElementById("patreon-passphrase-input");
+  const pw = inp.value;
+  try {
+    await apiPost("/api/patreon/unlock", { passphrase: pw });
+    inp.value = "";
+  } catch (err) {
+    alert(err.message || "Invalid Patreon unlock password.");
+  }
 }
 
 async function pollState() {

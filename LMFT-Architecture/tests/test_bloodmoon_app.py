@@ -323,3 +323,79 @@ def test_user_seeded_baseline_script_initiates_clockwise_cycle(tmp_path: Path) -
     assert snap_p3["clockwise_cycle_count"] == 1
     assert snap_p3["baseline_exemplar_script"] == owner_script
 
+
+def test_persistent_one_time_patreon_password_lock_and_unlock(tmp_path: Path) -> None:
+    """Verify Bloodmoon enforces the PBKDF2-HMAC-SHA256 password gate when locked, and once unlocked once, persists the receipt so the user never has to enter it again."""
+    import hashlib
+    from lmft_architecture.bloodmoon_app import (
+        PATREON_LOCK_DIGEST_HEX,
+        PATREON_LOCK_SALT_HEX,
+        PATREON_PBKDF2_ITERATIONS,
+    )
+
+    assert len(PATREON_LOCK_SALT_HEX) == 32
+    assert len(PATREON_LOCK_DIGEST_HEX) == 64
+
+    test_salt_hex = "00112233445566778899aabbccddeeff"
+    test_secret = "Synthetic-Unit-Test-Key#9988!"
+    test_digest_hex = hashlib.pbkdf2_hmac(
+        "sha256",
+        test_secret.encode("utf-8"),
+        bytes.fromhex(test_salt_hex),
+        PATREON_PBKDF2_ITERATIONS,
+        dklen=32,
+    ).hex()
+
+    state_dir = tmp_path / "locked_bloodmoon_state"
+    runtime_1 = BloodmoonClockRuntime(
+        repo_root=tmp_path,
+        impish_state_dir=state_dir,
+        impish_left_brain=_make_mini_left_brain(),
+        lazy_load_gpu=False,
+        require_patreon_unlock=True,
+        lock_salt_hex=test_salt_hex,
+        lock_digest_hex=test_digest_hex,
+    )
+    assert runtime_1.is_patreon_unlocked() is False
+    snap_locked = runtime_1.get_state_snapshot()
+    assert snap_locked["patreon_unlocked"] is False
+    assert "LOCKED" in snap_locked["left_brain_status"]
+
+    # Attempting to step clockwise or chat while locked raises PermissionError
+    with pytest.raises(PermissionError, match="locked"):
+        runtime_1.step_clockwise_phase()
+    with pytest.raises(PermissionError, match="locked"):
+        runtime_1.handle_chat_message("Hello")
+
+    # Wrong password raises ValueError and remains locked
+    with pytest.raises(ValueError, match="Invalid Patreon unlock password"):
+        runtime_1.unlock_patreon_bundle("wrong-password-attempt")
+    assert runtime_1.is_patreon_unlocked() is False
+
+    # Entering the valid password once unlocks the studio and writes the persistent receipt
+    snap_unlocked = runtime_1.unlock_patreon_bundle(test_secret)
+    assert snap_unlocked["patreon_unlocked"] is True
+    assert runtime_1.is_patreon_unlocked() is True
+    assert runtime_1.unlock_receipt_path.exists()
+
+    # Clockwise stepping now works
+    snap_step = runtime_1.step_clockwise_phase(num_sentences=2)
+    assert snap_step["clockwise_phase"] == 2
+
+    # Closing the app and launching a brand-new runtime instance on the same state_dir
+    # starts permanently unlocked without ever asking for the password again
+    runtime_2 = BloodmoonClockRuntime(
+        repo_root=tmp_path,
+        impish_state_dir=state_dir,
+        impish_left_brain=_make_mini_left_brain(),
+        lazy_load_gpu=False,
+        require_patreon_unlock=True,
+        lock_salt_hex=test_salt_hex,
+        lock_digest_hex=test_digest_hex,
+    )
+    assert runtime_2.is_patreon_unlocked() is True
+    assert runtime_2.get_state_snapshot()["patreon_unlocked"] is True
+    snap_step_2 = runtime_2.step_clockwise_phase()
+    assert snap_step_2["clockwise_phase"] == 3
+
+

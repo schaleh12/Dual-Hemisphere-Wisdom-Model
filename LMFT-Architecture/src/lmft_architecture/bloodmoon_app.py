@@ -26,6 +26,8 @@ Enforces:
 from __future__ import annotations
 
 import argparse
+import hashlib
+import hmac
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import io
@@ -150,6 +152,32 @@ CLOCKWISE_PHASE_LABELS: dict[int, str] = {
     3: "Phase 3 — REM Sleep (Best Sleep of Its Life)",
 }
 
+# Cryptographic PBKDF2-HMAC-SHA256 (200,000 iterations) lock for LMFT-Bloodmoon.exe.
+# Only the 16-byte salt and 256-bit derived digest are stored in code—never the plaintext password.
+PATREON_LOCK_SALT_HEX: str = "8f4a2c91e7b03d6512a9c4875e6f30b1"
+PATREON_LOCK_DIGEST_HEX: str = "c6dd2a960420fd79a953b3cbd59d45371d0b670ff9f80d26f3a178f6a59e1aca"
+PATREON_PBKDF2_ITERATIONS: int = 200_000
+
+
+def verify_patreon_unlock_passphrase(
+    passphrase: str,
+    *,
+    salt_hex: str = PATREON_LOCK_SALT_HEX,
+    expected_digest_hex: str = PATREON_LOCK_DIGEST_HEX,
+    iterations: int = PATREON_PBKDF2_ITERATIONS,
+) -> tuple[bool, str]:
+    """Verify `passphrase` against `expected_digest_hex` using 200,000-round PBKDF2-HMAC-SHA256."""
+    clean = passphrase.strip()
+    if not clean:
+        return False, ""
+    derived_hex = hashlib.pbkdf2_hmac(
+        "sha256",
+        clean.encode("utf-8"),
+        bytes.fromhex(salt_hex),
+        int(iterations),
+    ).hex()
+    return hmac.compare_digest(derived_hex, expected_digest_hex.lower()), derived_hex
+
 
 def _default_fallback_sensors() -> ThreeBridgeSensors:
     """Deterministic fallback sensors used only when neural bridge files are absent (e.g. unit tests)."""
@@ -228,6 +256,9 @@ class BloodmoonClockRuntime:
         impish_left_brain: SubliminalGapLeftBrain | None = None,
         teacher: Any | None = None,
         lazy_load_gpu: bool = True,
+        require_patreon_unlock: bool | None = None,
+        lock_salt_hex: str = PATREON_LOCK_SALT_HEX,
+        lock_digest_hex: str = PATREON_LOCK_DIGEST_HEX,
     ) -> None:
         from lmft_architecture.workspace_paths import resolve_arch_root, resolve_training_root
 
@@ -247,6 +278,14 @@ class BloodmoonClockRuntime:
         )
         self.teacher = teacher
         self._lazy_load_gpu = bool(lazy_load_gpu)
+        self.require_patreon_unlock = (
+            bool(require_patreon_unlock)
+            if require_patreon_unlock is not None
+            else bool(lazy_load_gpu)
+        )
+        self._lock_salt_hex = str(lock_salt_hex)
+        self._lock_digest_hex = str(lock_digest_hex).lower()
+        self.unlock_receipt_path = self.impish_state_dir / "patreon_unlock_receipt.json"
         self.gpu_lock = threading.Lock()
         self.rem_sleep_in_progress = False
         self.left_brain_loading = False
@@ -358,7 +397,7 @@ class BloodmoonClockRuntime:
             "changed_files": [],
         }
 
-        if self._lazy_load_gpu and self.left_brain is None and meta_file.exists():
+        if self._lazy_load_gpu and self.left_brain is None and meta_file.exists() and self.is_patreon_unlocked():
             t = threading.Thread(
                 target=self._background_warm_impish_left_brain,
                 args=(self.impish_checkpoint_dir, callosum_status),
@@ -731,6 +770,27 @@ class BloodmoonClockRuntime:
                     return p
         return None
 
+    def is_patreon_unlocked(self) -> bool:
+        """Return True if the persistent one-time Patreon unlock receipt is valid (or unlock is not required in unit tests)."""
+        if not self.require_patreon_unlock:
+            return True
+        if self.unlock_receipt_path.exists():
+            try:
+                raw = json.loads(self.unlock_receipt_path.read_text(encoding="utf-8"))
+                saved_digest = str(raw.get("digest_sha256", "")).strip().lower()
+                if saved_digest and hmac.compare_digest(saved_digest, self._lock_digest_hex):
+                    return True
+            except Exception:
+                pass
+        return False
+
+    def _require_patreon_unlocked(self) -> None:
+        if not self.is_patreon_unlocked():
+            raise PermissionError(
+                "LMFT-Bloodmoon is locked. Enter your Patreon Unlock Password once in the top bar "
+                "to permanently unlock this installation."
+            )
+
     def unlock_patreon_bundle(
         self,
         passphrase: str,
@@ -740,22 +800,50 @@ class BloodmoonClockRuntime:
         clean_pass = passphrase.strip()
         if not clean_pass:
             raise ValueError("Please enter a Patreon unlock passphrase.")
+
+        ok_hash, derived_hex = verify_patreon_unlock_passphrase(
+            clean_pass,
+            salt_hex=self._lock_salt_hex,
+            expected_digest_hex=self._lock_digest_hex,
+        )
         resolved_enc = self._resolve_patreon_enc_path(enc_path)
-        if resolved_enc is None:
-            raise FileNotFoundError(
-                "Encrypted Patreon bundle not found at dist/impish_bloodmoon_patreon.enc "
-                "(or outputs/impish_bloodmoon_patreon.enc)."
-            )
-        decrypt_patreon_checkpoint_bundle(resolved_enc, self.impish_checkpoint_dir, clean_pass)
+
+        if enc_path is not None and resolved_enc is not None:
+            decrypt_patreon_checkpoint_bundle(resolved_enc, self.impish_checkpoint_dir, clean_pass)
+            receipt_digest = derived_hex or self._lock_digest_hex
+        else:
+            if not ok_hash:
+                raise ValueError("Invalid Patreon unlock password.")
+            receipt_digest = derived_hex
+            if resolved_enc is not None and not (self.impish_checkpoint_dir / "corpus_callosum_meta.json").exists():
+                decrypt_patreon_checkpoint_bundle(resolved_enc, self.impish_checkpoint_dir, clean_pass)
+
+        self.impish_state_dir.mkdir(parents=True, exist_ok=True)
+        atomic_json(
+            self.unlock_receipt_path,
+            {
+                "unlocked": True,
+                "digest_sha256": receipt_digest,
+                "unlocked_at": time.time(),
+            },
+        )
         self.switch_brain_lineage("impish_bloodmoon")
+        meta_file = self.impish_checkpoint_dir / "corpus_callosum_meta.json"
+        if self._lazy_load_gpu and self.left_brain is None and meta_file.exists():
+            t = threading.Thread(
+                target=self._background_warm_impish_left_brain,
+                args=(self.impish_checkpoint_dir, UNSTEERED_BOOTSTRAP_STATUS),
+                daemon=True,
+            )
+            t.start()
         self.chat_messages.append(
             {
                 "id": f"patreon-unlock-{int(time.time())}",
                 "sender": "system",
-                "role_label": "Patreon Bundle Unlocked",
+                "role_label": "Patreon Studio Permanently Unlocked",
                 "text": (
-                    f"Unlocked {resolved_enc.name} into models/left_brain_impish_bloodmoon/ "
-                    f"({self.active_checkpoint_label})."
+                    "Verified Patreon unlock key (PBKDF2-HMAC-SHA256) and saved persistent unlock receipt. "
+                    "You will never need to enter the password again on this machine."
                 ),
             }
         )
@@ -929,7 +1017,7 @@ class BloodmoonClockRuntime:
             "active_room": "sanctuary",
             "active_workspace_view": "antigravity_studio",
             "active_lineage": self.active_lineage,
-            "patreon_unlocked": (self.impish_checkpoint_dir / "corpus_callosum_meta.json").exists(),
+            "patreon_unlocked": self.is_patreon_unlocked(),
             "active_thread_id": self.active_thread_id,
             "threads": [
                 {
@@ -962,7 +1050,9 @@ class BloodmoonClockRuntime:
             "sleep_cycle_index": self.sleep_cycle_index,
             "active_checkpoint_label": self.active_checkpoint_label,
             "left_brain_status": (
-                "REM_SLEEP_IN_PROGRESS..." if self.rem_sleep_in_progress else self.left_brain_status
+                "LOCKED — Enter Patreon Unlock Password Once in Top Bar"
+                if not self.is_patreon_unlocked()
+                else ("REM_SLEEP_IN_PROGRESS..." if self.rem_sleep_in_progress else self.left_brain_status)
             ),
             "rem_sleep_in_progress": self.rem_sleep_in_progress,
             "auto_rem_sleep": self.auto_rem_sleep,
@@ -1007,6 +1097,7 @@ class BloodmoonClockRuntime:
         custom_script: str = "",
     ) -> dict[str, Any]:
         """Phase 1 — Female Script-Writer (The Producer): Writes a hypnosis script FOR the male audience (or seeds from `custom_script`)."""
+        self._require_patreon_unlocked()
         resolved_polarity = resolve_sparring_polarity(polarity_mode)
         sent_count = int(num_sentences)
         if not (1 <= sent_count <= 6):
@@ -1145,6 +1236,7 @@ class BloodmoonClockRuntime:
         harvest_for_sleep: bool = True,
     ) -> dict[str, Any]:
         """Phase 2 — Male Content-Lover (The Audience & Self-Immunizer): Absorbs the script and queues immunization rules."""
+        self._require_patreon_unlocked()
         resolved_polarity = resolve_sparring_polarity(polarity_mode)
         pol_info = SPARRING_POLARITY_MODES[resolved_polarity]
 
@@ -1294,6 +1386,7 @@ class BloodmoonClockRuntime:
 
     def run_phase_3_rem_sleep(self) -> dict[str, Any]:
         """Phase 3 — REM Sleep (Best Sleep of Its Life): Consolidates immunization rules, clears active script canvas, and advances dial back to Phase 1."""
+        self._require_patreon_unlocked()
         snap = self.handle_run_rem_sleep(auto_triggered=False)
         self.clockwise_cycle_count += 1
         self.clockwise_phase = 1
@@ -1386,6 +1479,7 @@ class BloodmoonClockRuntime:
         num_sentences: int = 1,
         room: str | None = None,
     ) -> dict[str, Any]:
+        self._require_patreon_unlocked()
         _ = room
         clean_text = text.strip()
         if not clean_text:
@@ -1645,6 +1739,7 @@ class BloodmoonClockRuntime:
 
     def handle_microwave_step(self, *, num_sentences: int = 3) -> dict[str, Any]:
         """Advance one step along the 3-Phase Clockwise Content-Evolution Loop (`1 -> 2 -> 3`)."""
+        self._require_patreon_unlocked()
         self.microwave_step_counter += 1
         step_idx = self.microwave_step_counter
         sent_count = max(1, min(6, int(num_sentences)))
