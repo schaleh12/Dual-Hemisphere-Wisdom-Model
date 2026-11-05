@@ -169,3 +169,18 @@ Language Model Fuzzy Tree Research/      # Top-level Git repository & Desktop pr
 2. **Zero Fake AI / Zero Coordinate or Rubric Rigging**: Never hardcode test words into rubrics, never clamp raw sensor coordinates (`Fact`), never zero out competing rules, and never harvest unsettled (`settled=False`) scenes into the archives as ratified rules.
 3. **Let Experiments Fail Openly**: Honest partial scores (`4/8`, `5/8`, `7/8`, `3/4`) are reported plainly without moving goalposts.
 4. **Dual-Window Independent AI Auditing**: Every commit is written to pass inspection by a separate, independent Auditor AI window.
+
+---
+
+## 8. Future Horizon: Embodied Robotics & Autonomous Android Integration
+
+Because the 40-node Right Brain operates in continuous `[0.0, 1.0]` coordinate space (`~35 ms` in Gear 1) rather than slow English text generation, the architecture is designed so it can eventually step out of a desktop screen and serve as the **nervous system of an embodied autonomous android**.
+
+Moving from a software agent (`LMFT-Chess.exe` / `LMFT-Bloodmoon.exe`) into a physical body requires wiring three hardware bridges directly into the three branches of the **`Psychological`** domain (`Truth`, `Contemplation`, and `Will`):
+
+| `Psychological` Branch | Founding Leaf Slot | Embodied Hardware Role | How It Works with the 40-Node Fuzzy Tree |
+| :--- | :--- | :--- | :--- |
+| **1. `Truth` (`Fact` vs. `Theory`)** | **`psychological/truth/fact`** | **Sensory Grounding System** *(Vision, depth, balance/IMU, joint encoders, tactile sensors)* | Just as `LMFT-Chess.exe` anchors Pass-1 `Fact` directly from live chessboard geometry instead of chat words, physical sensors feed un-clamped real-world measurements into `Fact`. The Right Brain continuously compares what the android *expects* to happen (`Theory`) against what its body is *actually* experiencing (`Fact`). |
+| **2. `Contemplation` (`Confidence` & `Clarity`)** | **`psychological/contemplation/confidence`** | **Adaptive Fuzzy-Tree Motor "Glove"** *(Proprioceptive & kinematic readiness interface)* | Acts as a fitted "glove" between abstract fuzzy rules and the motor cortex. When a learned `FuzzyConceptRule` matches the sensory scene cleanly (`Confidence` and `Clarity` are high), the glove translates that linguistic membership selection into a smooth, assured motor posture. When two rules collide or the environment is unfamiliar (`settled = False`, low `Confidence`), the glove automatically softens movement and prevents reckless action. |
+| **3. `Will` (`Execution` & `Intention`)** | **`psychological/will/execution`** | **Physical Actuator Controller** *(Closed-loop joint, locomotion, and manipulation control)* | While `Intention` (`doer_vector[6]`) holds the internal commitment to act, `Execution` (`doer_vector[7]`) drives the physical controller. Whenever nighttime **REM Sleep** consolidates a new `FuzzyConceptRule` from daytime collisions, that rule automatically routes through `Confidence -> Intention -> Execution`—wiring newly learned concepts into both spoken cadence (`<|subliminal_gap|>`) and physical action propagation at the same time. |
+
