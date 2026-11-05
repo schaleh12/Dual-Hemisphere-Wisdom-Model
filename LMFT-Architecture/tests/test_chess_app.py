@@ -386,9 +386,11 @@ def test_hybrid_move_selection_and_blunder_veto_sleep_queue(tmp_path: Path) -> N
         def __init__(self, reply_text: str) -> None:
             self.reply_text = reply_text
             self.callosum_metadata = None
+            self.call_count = 0
 
         def generate_with_subliminal_splice(self, prompt: str, chord, **kwargs):
             _ = (prompt, kwargs)
+            self.call_count += 1
 
             class _Trace:
                 clause_1_prefix = "Securing the King,"
@@ -400,9 +402,10 @@ def test_hybrid_move_selection_and_blunder_veto_sleep_queue(tmp_path: Path) -> N
 
             return f"Securing the King, {self.reply_text}", _Trace()
 
+    stub_commit = _StubLeftBrain("we castle with O-O to connect the rooks.")
     runtime_commit = ChessKibitzerRuntime(
         state_dir=tmp_path / "hybrid_commit_state",
-        left_brain=_StubLeftBrain("we castle with O-O to connect the rooks."),  # type: ignore[arg-type]
+        left_brain=stub_commit,  # type: ignore[arg-type]
         lazy_load_gpu=False,
     )
     runtime_commit.set_auto_rem_sleep(False)
@@ -412,21 +415,38 @@ def test_hybrid_move_selection_and_blunder_veto_sleep_queue(tmp_path: Path) -> N
     assert arb_commit["selection_mode"] == "left_brain_kibitz_commit"
     assert arb_commit["chosen_move_san"] == "O-O"
     assert snap_commit["board"]["move_history_san"][-1] == "O-O"
+    # Verify pre-move deliberation was reused (only 1 LLM call per AI move, not 2)
+    assert stub_commit.call_count == 1
 
-    # Verify that when the Left Brain proposes a 1-ply blunder (`Bxf7+`), the Right Brain vetoes it and queues for REM sleep
+    # Verify that when the Left Brain proposes a 1-ply blunder (`Bxf7+`), the Right Brain vetoes it,
+    # queues the blunder's coordinates for REM sleep, and consolidates a cautionary `hazard_` rule
+    stub_veto = _StubLeftBrain("we sacrifice immediately with Bxf7+ for chaos.")
     runtime_veto = ChessKibitzerRuntime(
         state_dir=tmp_path / "hybrid_veto_state",
-        left_brain=_StubLeftBrain("we sacrifice immediately with Bxf7+ for chaos."),  # type: ignore[arg-type]
+        left_brain=stub_veto,  # type: ignore[arg-type]
         lazy_load_gpu=False,
     )
     runtime_veto.set_auto_rem_sleep(False)
     runtime_veto.handle_set_fen("r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 3 3")
+    before_bxf7_score = {
+        e.san: e.composite_score
+        for e in evaluate_candidate_moves_with_right_brain(board, runtime_veto.rules, limit=30)
+    }["Bxf7+"]
     snap_veto = runtime_veto.handle_chess_ai_move()
     arb_veto = snap_veto["last_hybrid_move_arbitration"]
     assert arb_veto["selection_mode"] == "right_brain_blunder_veto_queued_for_sleep"
     assert arb_veto["left_brain_proposed_san"] == "Bxf7+"
     assert arb_veto["chosen_move_san"] != "Bxf7+"
     assert snap_veto["sleep_queue_count"] >= 1
+    assert stub_veto.call_count == 1
+
+    runtime_veto.handle_run_rem_sleep()
+    assert any(r.concept_name.startswith("hazard_") for r in runtime_veto.rules)
+    after_bxf7_score = {
+        e.san: e.composite_score
+        for e in evaluate_candidate_moves_with_right_brain(board, runtime_veto.rules, limit=30)
+    }["Bxf7+"]
+    assert after_bxf7_score < before_bxf7_score
 
 
 def test_strict_airgap_sparring_engine_and_objective_elo_update(tmp_path: Path) -> None:

@@ -316,6 +316,7 @@ class ChessKibitzerRuntime:
         self.archives = self._load_initial_archives()
 
         self.sleep_queue: list[UnresolvedSleepScene] = []
+        self._hazard_scene_indices: set[int] = set()
         self.savored_turn_ids: list[int] = self._load_initial_savored_ids()
         self.chat_messages: list[dict[str, Any]] = []
         self._turn_records_by_id: dict[int, dict[str, Any]] = {}
@@ -825,6 +826,7 @@ class ChessKibitzerRuntime:
         num_sentences: int = 1,
         comma_chord_transform: Any | None = None,
         include_conversation_history: bool = False,
+        skip_left_brain: bool = False,
     ) -> tuple[ThreeLeggedTurnResult, float, dict[str, Any]]:
         t0 = time.perf_counter()
         self.scene_counter += 1
@@ -841,14 +843,22 @@ class ChessKibitzerRuntime:
             else ()
         )
 
-        acquired = self.gpu_lock.acquire(
-            blocking=not self.rem_sleep_in_progress,
-            timeout=0.05 if self.rem_sleep_in_progress else 180.0,
+        acquired = (
+            False
+            if skip_left_brain
+            else self.gpu_lock.acquire(
+                blocking=not self.rem_sleep_in_progress,
+                timeout=0.05 if self.rem_sleep_in_progress else 180.0,
+            )
         )
         try:
             if acquired and not self.rem_sleep_in_progress and self._lazy_load_gpu and self._qwen_left_brain is None:
                 self._load_qwen_locked()
-            active_lb = self._qwen_left_brain if (acquired and not self.rem_sleep_in_progress) else None
+            active_lb = (
+                self._qwen_left_brain
+                if (acquired and not self.rem_sleep_in_progress and not skip_left_brain)
+                else None
+            )
             turn = run_three_legged_turn(
                 self.birth_state,
                 scenario_text,
@@ -1017,7 +1027,12 @@ class ChessKibitzerRuntime:
             "gemini_api_configured": bool(os.environ.get("GEMINI_API_KEY", "").strip()),
         }
 
-    def handle_chess_move(self, move_uci_or_san: str) -> dict[str, Any]:
+    def handle_chess_move(
+        self,
+        move_uci_or_san: str,
+        *,
+        pre_deliberation: tuple[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Make a move on the chessboard and spontaneously append to the continuous Pretext -> Subtext -> Context stream."""
         raw = move_uci_or_san.strip()
         move: chess.Move | None = None
@@ -1033,22 +1048,29 @@ class ChessKibitzerRuntime:
             except ValueError as exc:
                 raise ValueError(f"Illegal or unrecognized chess move: {raw!r}") from exc
 
+        mover_color = self.board.turn
         san_str = self.board.san(move)
         self.board.push(move)
         self.move_history_san.append(san_str)
-        self.board_posture = evaluate_chess_board_posture(self.board)
+        mover_posture = evaluate_chess_board_posture(self.board, perspective=mover_color)
+        self.board_posture = mover_posture
 
         move_desc = build_natural_chess_scenario_prompt(
             self.board,
             self.move_history_san,
         )
-        has_board_warning = bool(self.board_posture.board_shadow_warnings) or self.board.is_check()
+        has_board_warning = (
+            bool(mover_posture.board_shadow_warnings)
+            or bool(evaluate_chess_board_posture(self.board).board_shadow_warnings)
+            or self.board.is_check()
+        )
         conv_history = self._extract_clean_conversation_history()
         turn, elapsed_ms, telemetry = self._execute_turn(
             move_desc,
             room="chess",
-            force_spoken_reply=has_board_warning,
+            force_spoken_reply=has_board_warning and pre_deliberation is None,
             include_conversation_history=True,
+            skip_left_brain=pre_deliberation is not None,
         )
 
         self.last_board_reflex = {
@@ -1069,7 +1091,22 @@ class ChessKibitzerRuntime:
             turn.final_vibe,
             learned_leaves=self.learned_leaves,
         )
-        if not raw_reply and self._qwen_left_brain is not None and not self.rem_sleep_in_progress:
+        if pre_deliberation is not None:
+            delib_text, delib_trace = pre_deliberation
+            raw_reply = delib_text
+            if delib_trace is not None and not telemetry.get("spliced_trace"):
+                telemetry["spliced_trace"] = {
+                    "sentence_count": 1,
+                    "clause_1_prefix": delib_trace.clause_1_prefix,
+                    "post_gap_continuation": delib_trace.post_gap_continuation,
+                    "comma_scored_live": delib_trace.comma_scored_live,
+                    "comma_vibe_posture": delib_trace.comma_vibe_posture,
+                    "comma_dissonance_notes": list(delib_trace.comma_dissonance_notes),
+                    "spliced_cadence_vector": [round(float(x), 4) for x in delib_trace.spliced_chord.cadence_vector],
+                    "spliced_thinker_vector": [round(float(x), 4) for x in delib_trace.spliced_chord.thinker_vector[:8]],
+                    "spliced_feeler_vector": [round(float(x), 4) for x in delib_trace.spliced_chord.feeler_vector[:8]],
+                }
+        elif not raw_reply and self._qwen_left_brain is not None and not self.rem_sleep_in_progress:
             try:
                 with self.gpu_lock:
                     spontaneous_text, spontaneous_trace = self._qwen_left_brain.generate_with_subliminal_splice(
@@ -1097,7 +1134,7 @@ class ChessKibitzerRuntime:
             raw_reply = self._synthesize_gear_1_note(
                 turn,
                 room="chess",
-                board_posture=self.board_posture,
+                board_posture=mover_posture,
             )
 
         telemetry["chess_move_grounding"] = inspect_chess_moves_in_reply(
@@ -1113,10 +1150,10 @@ class ChessKibitzerRuntime:
         telemetry["pretext_subtext_context"] = {
             "pretext_turns": len(conv_history),
             "pretext_prompt": move_desc,
-            "dominant_piece": self.board_posture.dominant_piece,
-            "dominant_color": self.board_posture.dominant_color,
-            "dominant_element": self.board_posture.dominant_element,
-            "board_summary": self.board_posture.board_summary,
+            "dominant_piece": mover_posture.dominant_piece,
+            "dominant_color": mover_posture.dominant_color,
+            "dominant_element": mover_posture.dominant_element,
+            "board_summary": mover_posture.board_summary,
             "spliced_thinker_vector": [round(float(x), 4) for x in spliced_chord.thinker_vector[:6]],
             "context_reply": reply_text,
         }
@@ -1141,8 +1178,9 @@ class ChessKibitzerRuntime:
         if has_board_warning and turn.shadow_pathology_warnings:
             self.flag_turn_for_coaching(
                 int(telemetry["scene_index"]),
-                user_note=f"Board vs. Theory surprise after {san_str} ({self.board_posture.board_summary})",
+                user_note=f"Board vs. Theory surprise after {san_str} ({mover_posture.board_summary})",
                 check_auto_sleep=False,
+                is_hazard=True,
             )
 
         self._maybe_trigger_auto_rem_sleep()
@@ -1192,6 +1230,9 @@ class ChessKibitzerRuntime:
         selection_mode = "right_brain_equilibrium_choice"
         left_brain_proposed_san: str | None = None
         veto_reason: str | None = None
+        vetoed_coords: dict[str, float] | None = None
+        pre_delib_pair: tuple[str, Any] | None = None
+        top_san_set = {c.san for c in top_candidates[:5]}
 
         # Pre-move `<|subliminal_gap|>` deliberation when the 4B Left Brain is active
         if self._qwen_left_brain is not None and not self.rem_sleep_in_progress:
@@ -1223,11 +1264,12 @@ class ChessKibitzerRuntime:
                 )
                 conv_history = self._extract_clean_conversation_history()
                 with self.gpu_lock:
-                    delib_text, _ = self._qwen_left_brain.generate_with_subliminal_splice(
+                    delib_text, delib_trace = self._qwen_left_brain.generate_with_subliminal_splice(
                         pre_prompt,
                         pre_chord,
                         conversation_history=conv_history,
                     )
+                pre_delib_pair = (delib_text, delib_trace)
                 mentioned = inspect_chess_moves_in_reply(
                     delib_text,
                     self.board,
@@ -1237,21 +1279,44 @@ class ChessKibitzerRuntime:
                     left_brain_proposed_san = str(mentioned[0])
                     cand_eval = eval_by_san.get(left_brain_proposed_san)
                     if cand_eval is not None:
-                        if cand_eval.is_blunder or cand_eval.is_repetition or cand_eval.shadow_warnings:
+                        is_suboptimal = (
+                            left_brain_proposed_san not in top_san_set
+                            or (right_brain_choice.composite_score - cand_eval.composite_score) > 0.65
+                        )
+                        if (
+                            cand_eval.is_blunder
+                            or cand_eval.is_repetition
+                            or cand_eval.shadow_warnings
+                            or is_suboptimal
+                        ):
                             selection_mode = "right_brain_blunder_veto_queued_for_sleep"
                             veto_reason = (
                                 f"Left-Brain proposed {left_brain_proposed_san} "
                                 f"(blunder={cand_eval.is_blunder}, repetition={cand_eval.is_repetition}, "
-                                f"shadows={list(cand_eval.shadow_warnings)}); "
-                                f"Right-Brain played {right_brain_choice.san}."
+                                f"shadows={list(cand_eval.shadow_warnings)}, score={cand_eval.composite_score:.2f}); "
+                                f"Right-Brain played {right_brain_choice.san} (score={right_brain_choice.composite_score:.2f})."
                             )
+                            try:
+                                b_copy = self.board.copy()
+                                us_color = b_copy.turn
+                                b_copy.push(b_copy.parse_san(left_brain_proposed_san))
+                                v_post = evaluate_chess_board_posture(b_copy, perspective=us_color)
+                                vetoed_coords = {k: 0.52 for k in FOUNDATIONAL_LEAVES}
+                                vetoed_coords.update(
+                                    {k: float(v) for k, v in v_post.philosophical_coordinates.items()}
+                                )
+                                vetoed_coords["cultural/efficiency/wastelessness"] = (
+                                    0.18 if cand_eval.is_blunder else 0.30
+                                )
+                            except Exception:
+                                vetoed_coords = None
                         else:
                             chosen_san = left_brain_proposed_san
                             selection_mode = "left_brain_kibitz_commit"
             except Exception:
                 pass
 
-        snap = self.handle_chess_move(chosen_san)
+        snap = self.handle_chess_move(chosen_san, pre_deliberation=pre_delib_pair)
         arbitration_record = {
             "selection_mode": selection_mode,
             "chosen_move_san": chosen_san,
@@ -1269,6 +1334,8 @@ class ChessKibitzerRuntime:
                 last_scene_id,
                 user_note=veto_reason,
                 check_auto_sleep=True,
+                is_hazard=True,
+                override_coordinates=vetoed_coords,
             )
             snap = self.get_state_snapshot()
         snap["last_hybrid_move_arbitration"] = arbitration_record
@@ -1604,6 +1671,8 @@ class ChessKibitzerRuntime:
         user_note: str = "",
         *,
         check_auto_sleep: bool = True,
+        is_hazard: bool = False,
+        override_coordinates: dict[str, float] | None = None,
     ) -> dict[str, Any]:
         rec = self._turn_records_by_id.get(int(scene_index))
         if rec is None:
@@ -1611,10 +1680,17 @@ class ChessKibitzerRuntime:
         turn: ThreeLeggedTurnResult = rec["turn"]
         vibe = turn.final_vibe
         note_suffix = f" [Coach note: {user_note.strip()}]" if user_note.strip() else ""
+        scene_coords = dict(override_coordinates) if override_coordinates is not None else dict(vibe.coordinates)
+        if is_hazard:
+            self._hazard_scene_indices.add(int(scene_index))
+            scene_coords["cultural/efficiency/wastelessness"] = min(
+                float(scene_coords.get("cultural/efficiency/wastelessness", 0.20)),
+                0.20,
+            )
         sleep_scene = UnresolvedSleepScene(
             scene_index=int(scene_index),
             scenario_text=f"{rec['scenario_text']}{note_suffix}",
-            external_coordinates=dict(vibe.coordinates),
+            external_coordinates=scene_coords,
             felt_chord_notes=dict(vibe.felt_chord.complex_notes) if vibe.felt_chord is not None else {},
             valence=vibe.valence,
             salience=vibe.salience,
@@ -1788,6 +1864,7 @@ class ChessKibitzerRuntime:
                         f"by {cp_drop / 100.0:.2f} pawns against {self.opponent_target_elo:.0f}-Elo opponent."
                     ),
                     check_auto_sleep=True,
+                    is_hazard=True,
                 )
                 snap = self.get_state_snapshot()
             mover_tag = "LMFT"
@@ -1873,7 +1950,9 @@ class ChessKibitzerRuntime:
             rep = group[0]
             rep_scene = rep.scene_index
 
-            base_name = f"coached_{ckey}"
+            is_group_hazard = any(s.scene_index in self._hazard_scene_indices for s in group)
+            prefix = "hazard" if is_group_hazard else "coached"
+            base_name = f"{prefix}_{ckey}"
             concept_name = base_name if base_name not in existing_names else f"{base_name}_s{rep_scene}"
 
             has_tier2_or_chaos = (

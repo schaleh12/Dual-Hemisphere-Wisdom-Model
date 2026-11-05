@@ -419,8 +419,14 @@ function renderState(s) {
     const r = s.last_sparring_result;
     const pot = r.induction_potency || {};
     const res = r.lucid_resistance || {};
+    const bpInfo = s.master_cadence_blueprint
+      ? ` | Master Wave: ${s.master_cadence_blueprint.sentence_count}-Sent Blueprint Active`
+      : "";
     document.getElementById("last-sparring-summary").textContent =
-      `Last Verdict: ${r.verdict || "PENDING"} | Potency Entrainment=${Number(pot.entrainment || 0).toFixed(2)}, Pull=${Number(pot.subservience_pull || 0).toFixed(2)} | Male Needlessness=${Number(res.needlessness || 0).toFixed(2)}`;
+      `Last Verdict: ${r.verdict || "PENDING"} | Potency Entrainment=${Number(pot.entrainment || 0).toFixed(2)}, Pull=${Number(pot.subservience_pull || 0).toFixed(2)} | Male Needlessness=${Number(res.needlessness || 0).toFixed(2)}${bpInfo}`;
+  } else if (s.master_cadence_blueprint) {
+    document.getElementById("last-sparring-summary").textContent =
+      `Master Cadence Wave Active: ${s.master_cadence_blueprint.sentence_count}-sentence <|subliminal_gap|> chord wave extracted and ready.`;
   }
 
   const threadBox = document.getElementById("thread-list-container");

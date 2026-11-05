@@ -445,6 +445,10 @@ class SubliminalChordVector:
             + self.cadence_vector
         )
 
+    def as_flat_tuple(self) -> tuple[float, ...]:
+        """Return the 52-float chord as a flat tuple."""
+        return self.values
+
     def to_dict(self) -> dict[str, float]:
         vals = self.values
         return {

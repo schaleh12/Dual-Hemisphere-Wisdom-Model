@@ -535,11 +535,12 @@ def evaluate_candidate_moves_with_right_brain(
             activations = _evaluate_rules_with_inhibition(rule_tuple, coords)
             clarity, confidence, matched, is_confused, _reason = compute_contemplation(activations)
             settled = not is_confused
-            learned_bonus = (
-                0.55 * float(confidence)
-                if (matched and not matched.startswith(("balanced_", "mutual_")))
-                else 0.0
-            )
+            if matched and matched.startswith(("hazard_", "blunder_", "avoid_")):
+                learned_bonus = -0.65 * float(confidence)
+            elif matched and not matched.startswith(("balanced_", "mutual_")):
+                learned_bonus = 0.55 * float(confidence)
+            else:
+                learned_bonus = 0.0
         else:
             clarity, confidence, matched, settled, learned_bonus = 0.60, 0.60, None, True, 0.0
 

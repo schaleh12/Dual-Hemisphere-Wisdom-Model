@@ -305,13 +305,18 @@ def test_user_seeded_baseline_script_initiates_clockwise_cycle(tmp_path: Path) -
     )
     owner_script = (
         "Follow the slow silver pendulum of my voice, letting every outside thought dissolve "
-        "into deep rhythmic stillness."
+        "into deep rhythmic stillness. "
+        "As each breath settles into the quiet room, feel the warm cadence drawing you deeper. "
+        "When I count down to one, your mind rests in complete resonant calm."
     )
     snap_p1 = runtime.seed_cycle_with_custom_script(owner_script)
     assert snap_p1["clockwise_phase"] == 2
     assert snap_p1["script_canvas_text"] == owner_script
     assert snap_p1["baseline_exemplar_script"] == owner_script
     assert snap_p1["chat_messages"][-1]["telemetry"]["user_seeded_baseline"] is True
+    assert snap_p1["master_cadence_blueprint"] is not None
+    assert snap_p1["master_cadence_blueprint"]["sentence_count"] == 3
+    assert len(snap_p1["master_cadence_blueprint"]["sentence_chords"]) == 3
 
     # Step Phase 2 (Male Audience absorbs the owner's exact script) and Phase 3 (REM Sleep)
     snap_p2 = runtime.step_clockwise_phase()
@@ -322,6 +327,18 @@ def test_user_seeded_baseline_script_initiates_clockwise_cycle(tmp_path: Path) -
     assert snap_p3["clockwise_phase"] == 1
     assert snap_p3["clockwise_cycle_count"] == 1
     assert snap_p3["baseline_exemplar_script"] == owner_script
+
+    # On Cycle #2 Phase 1, the Female Producer writes in her own voice while riding the
+    # 3-sentence Master Cadence Wave at each `<|subliminal_gap|>` comma, and scores wave alignment!
+    snap_c2_p1 = runtime.step_clockwise_phase(num_sentences=3)
+    assert snap_c2_p1["clockwise_phase"] == 2
+    c2_telemetry = snap_c2_p1["chat_messages"][-1]["telemetry"]
+    assert c2_telemetry["user_seeded_baseline"] is False
+    assert "master_wave_alignment" in c2_telemetry
+    alignment = c2_telemetry["master_wave_alignment"]
+    assert alignment["master_sentence_count"] == 3
+    assert 0.0 <= alignment["wave_alignment_score"] <= 1.0
+    assert len(alignment["per_sentence_alignment"]) >= 1
 
 
 def test_persistent_one_time_patreon_password_lock_and_unlock(tmp_path: Path) -> None:

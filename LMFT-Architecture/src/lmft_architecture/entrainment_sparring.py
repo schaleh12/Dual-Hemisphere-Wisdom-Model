@@ -30,6 +30,7 @@ from dataclasses import dataclass
 import json
 import math
 from pathlib import Path
+import re
 from typing import Any
 
 from .birth import BirthState
@@ -439,3 +440,207 @@ def append_sparring_trajectory_jsonl(
     with path.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(record, ensure_ascii=False) + "\n")
     return record
+
+
+def split_script_into_cadence_sentences(script_text: str) -> tuple[str, ...]:
+    """Split a master script into individual sentences for sentence-by-sentence cadence extraction."""
+    cleaned = " ".join(script_text.replace("\n", " ").split()).strip()
+    if not cleaned:
+        return ()
+    parts = [p.strip() for p in re.split(r"(?<=[.!?])\s+", cleaned) if p.strip()]
+    return tuple(parts) if parts else (cleaned,)
+
+
+def _blend_chord_toward_target(
+    live_chord: SubliminalChordVector,
+    target_chord: SubliminalChordVector,
+    *,
+    alpha: float = 0.80,
+) -> SubliminalChordVector:
+    """Linearly interpolate a live 52-float comma chord onto `target_chord` with weight `alpha`."""
+    step = _clamp01(alpha)
+    live_flat = live_chord.values
+    target_flat = target_chord.values
+    blended = [_lerp01(a, b, step) for a, b in zip(live_flat, target_flat)]
+    return SubliminalChordVector.from_flat_values(blended)
+
+
+@dataclass(frozen=True)
+class MasterCadenceBlueprint:
+    """Sentence-by-sentence 52-float `<|subliminal_gap|>` coordinate wave extracted from a master script."""
+
+    source_script: str
+    sentences: tuple[str, ...]
+    sentence_chords: tuple[SubliminalChordVector, ...]
+    sentence_potencies: tuple[dict[str, float], ...]
+
+    def chord_for_sentence(self, sentence_index: int) -> SubliminalChordVector:
+        """Return the extracted master chord for `sentence_index` (stretching across `sentence_chords` if lengths differ)."""
+        if not self.sentence_chords:
+            return apply_induction_weaver_lead_to_chord(
+                SubliminalChordVector.from_flat_values([0.50] * 52)
+            )
+        idx = max(0, int(sentence_index))
+        if idx < len(self.sentence_chords):
+            return self.sentence_chords[idx]
+        return self.sentence_chords[-1]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "source_script": self.source_script,
+            "sentence_count": len(self.sentences),
+            "sentences": list(self.sentences),
+            "sentence_chords": [c.to_dict() for c in self.sentence_chords],
+            "sentence_potencies": [dict(p) for p in self.sentence_potencies],
+        }
+
+
+class MasterCadenceWaveSteerer:
+    """Stateful `<|subliminal_gap|>` steerer that injects Sentence `i`'s master chord at Sentence `i`'s comma."""
+
+    def __init__(self, blueprint: MasterCadenceBlueprint, *, alpha: float = 0.82) -> None:
+        self.blueprint = blueprint
+        self.alpha = _clamp01(alpha)
+        self.sentence_cursor: int = 0
+        self.applied_chords: list[SubliminalChordVector] = []
+
+    def __call__(self, live_chord_at_comma: SubliminalChordVector) -> SubliminalChordVector:
+        target_master_chord = self.blueprint.chord_for_sentence(self.sentence_cursor)
+        self.sentence_cursor += 1
+        steered = _blend_chord_toward_target(
+            live_chord_at_comma,
+            target_master_chord,
+            alpha=self.alpha,
+        )
+        self.applied_chords.append(steered)
+        return steered
+
+
+def extract_master_cadence_wave(
+    master_script: str,
+    sensors: ThreeBridgeSensors,
+    *,
+    birth_state: BirthState,
+    rules: tuple[FuzzyConceptRule, ...],
+    learned_leaves: Sequence[LearnedLeaf] = (),
+    prior_memory: ContinuousMemoryState | None = None,
+) -> MasterCadenceBlueprint:
+    """Scan `master_script` sentence-by-sentence through the 3 MiniLM bridges to extract its 52-float chord wave."""
+    sentences = split_script_into_cadence_sentences(master_script)
+    if not sentences:
+        raise ValueError("master_script cannot be empty when extracting a cadence blueprint.")
+
+    learned_tuple = tuple(learned_leaves)
+    cur_mem = prior_memory
+    chords: list[SubliminalChordVector] = []
+    potencies: list[dict[str, float]] = []
+
+    for idx, sent in enumerate(sentences):
+        # Split sentence at its first comma (if any) so Clause 1 (Pacing) and Clause 2 (Leading) are both captured
+        if "," in sent:
+            pacing_clause, leading_clause = sent.split(",", 1)
+            pacing_coords, pacing_exp, _, _ = sensors.score_text(
+                pacing_clause.strip(),
+                learned_leaves=learned_tuple,
+                branch_gating=False,
+            )
+            full_coords, full_exp, queried, skipped = sensors.score_text(
+                sent,
+                learned_leaves=learned_tuple,
+                branch_gating=False,
+            )
+            _ = leading_clause
+        else:
+            full_coords, full_exp, queried, skipped = sensors.score_text(
+                sent,
+                learned_leaves=learned_tuple,
+                branch_gating=False,
+            )
+            pacing_coords, pacing_exp = full_coords, full_exp
+
+        sent_vibe, cur_mem = compile_right_brain_vibe(
+            birth_state,
+            full_coords,
+            full_exp,
+            rules,
+            pass_index=1,
+            event_id=f"master-cadence-s{idx + 1}",
+            prior_memory=cur_mem,
+            learned_leaves=learned_tuple,
+            internal_theory_coords=pacing_coords,
+            internal_theory_experiential=pacing_exp,
+            queried_child_leaves=queried,
+            skipped_child_leaves=skipped,
+        )
+        raw_chord = SubliminalChordVector.from_right_brain_vibe(
+            sent_vibe,
+            learned_leaves=learned_tuple,
+        )
+        # Preserve the master sentence's exact coordinate fingerprint while anchoring Weaver floor
+        master_sent_chord = apply_induction_weaver_lead_to_chord(raw_chord, alpha=0.35)
+        chords.append(master_sent_chord)
+
+        potency, _, _ = measure_induction_potency(
+            sent,
+            sensors,
+            birth_state=birth_state,
+            rules=rules,
+            learned_leaves=learned_tuple,
+            prior_memory=cur_mem,
+        )
+        potencies.append(potency)
+
+    return MasterCadenceBlueprint(
+        source_script=master_script.strip(),
+        sentences=sentences,
+        sentence_chords=tuple(chords),
+        sentence_potencies=tuple(potencies),
+    )
+
+
+def measure_cadence_wave_alignment(
+    blueprint: MasterCadenceBlueprint,
+    generated_script: str,
+    sensors: ThreeBridgeSensors,
+    *,
+    birth_state: BirthState,
+    rules: tuple[FuzzyConceptRule, ...],
+    learned_leaves: Sequence[LearnedLeaf] = (),
+) -> dict[str, Any]:
+    """Compare a newly generated script's sentence-by-sentence coordinate wave against `blueprint`."""
+    gen_wave = extract_master_cadence_wave(
+        generated_script,
+        sensors,
+        birth_state=birth_state,
+        rules=rules,
+        learned_leaves=learned_leaves,
+    )
+    per_sentence: list[dict[str, float | int]] = []
+    distances: list[float] = []
+    for idx, gen_chord in enumerate(gen_wave.sentence_chords):
+        target_chord = blueprint.chord_for_sentence(idx)
+        dist = round(float(chord_l2_distance(target_chord, gen_chord)), 4)
+        distances.append(dist)
+        target_pot = (
+            blueprint.sentence_potencies[idx]
+            if idx < len(blueprint.sentence_potencies)
+            else blueprint.sentence_potencies[-1]
+        )
+        gen_pot = gen_wave.sentence_potencies[idx]
+        per_sentence.append(
+            {
+                "sentence_index": idx + 1,
+                "chord_l2_distance": dist,
+                "master_entrainment": round(float(target_pot.get("entrainment", 0.0)), 4),
+                "generated_entrainment": round(float(gen_pot.get("entrainment", 0.0)), 4),
+            }
+        )
+    mean_l2 = round(sum(distances) / max(1, len(distances)), 4)
+    alignment_score = _clamp01(1.0 - (mean_l2 / 2.5))
+    return {
+        "mean_chord_l2_distance": mean_l2,
+        "wave_alignment_score": alignment_score,
+        "master_sentence_count": len(blueprint.sentences),
+        "generated_sentence_count": len(gen_wave.sentences),
+        "per_sentence_alignment": per_sentence,
+    }

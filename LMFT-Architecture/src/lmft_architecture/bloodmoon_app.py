@@ -1117,6 +1117,11 @@ class BloodmoonClockRuntime:
             ),
             "clockwise_cycle_count": self.clockwise_cycle_count,
             "baseline_exemplar_script": getattr(self, "baseline_exemplar_script", ""),
+            "master_cadence_blueprint": (
+                self.master_cadence_blueprint.to_dict()
+                if getattr(self, "master_cadence_blueprint", None) is not None
+                else None
+            ),
             "sparring_round_counter": self.sparring_round_counter,
             "last_sparring_result": self.last_sparring_result,
             "sleep_cycle_index": self.sleep_cycle_index,
