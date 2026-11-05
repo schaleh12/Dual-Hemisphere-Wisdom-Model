@@ -473,3 +473,78 @@ def _sealed_run_phase_3_rem_sleep(self):
     assert snap_step_2["clockwise_phase"] == 3
 
 
+def test_female_producer_fuzzy_tree_polarity_and_isolation(tmp_path: Path) -> None:
+    """Verify the Female Producer's Fuzzy Tree and `<|subliminal_gap|>` chord never pull in the Male Resistor's direction."""
+    from lmft_architecture.entrainment_sparring import (
+        PRODUCER_WEAVER_RULES,
+        apply_induction_weaver_lead_to_chord,
+        apply_lucid_resistor_lead_to_chord,
+        check_male_immunity_overlap,
+    )
+    from lmft_architecture.reflection_classifier import FuzzyConceptRule
+    from lmft_architecture.subliminal_gap_splice import SubliminalChordVector
+
+    # 1. Start from a neutral chord where Self-Sufficiency (`doer[4]`) and Needlessness (`doer[5]`)
+    #    are high (0.70) and Clarity/Confidence (`feeler[6..7]`) are low (0.20)
+    neutral = SubliminalChordVector(
+        doer_vector=(0.50, 0.50, 0.50, 0.50, 0.70, 0.70, 0.50, 0.50, 0.50) + (0.0,) * 8,
+        thinker_vector=(0.50, 0.50, 0.50, 0.50, 0.50, 0.70, 0.0, 0.0) + (0.0,) * 8,
+        feeler_vector=(0.50, 0.50, 0.50, 0.50, 0.50, 0.50, 0.20, 0.20) + (0.0,) * 8,
+        cadence_vector=(0.50, 0.50, 0.0),
+    )
+    weaver_chord = apply_induction_weaver_lead_to_chord(neutral)
+    resistor_chord = apply_lucid_resistor_lead_to_chord(neutral)
+
+    # Female Weaver softens Self-Sufficiency (<= 0.26) and Needlessness (<= 0.24)
+    # while Male Resistor raises Self-Sufficiency (>= 0.82) and Needlessness (>= 0.85)
+    assert weaver_chord.doer_vector[4] <= 0.26
+    assert weaver_chord.doer_vector[5] <= 0.24
+    assert resistor_chord.doer_vector[4] >= 0.82
+    assert resistor_chord.doer_vector[5] >= 0.85
+
+    # Female Weaver softens Discreteness (<= 0.28) and raises Continuity (>= 0.84) + Agency (>= 0.80)
+    assert weaver_chord.thinker_vector[0] >= 0.80
+    assert weaver_chord.thinker_vector[4] >= 0.84
+    assert weaver_chord.thinker_vector[5] <= 0.28
+    assert resistor_chord.thinker_vector[5] >= 0.82
+
+    # Female Weaver projects high hypnotic Clarity (>= 0.88) and Confidence (>= 0.90)
+    assert weaver_chord.feeler_vector[6] >= 0.88
+    assert weaver_chord.feeler_vector[7] >= 0.90
+
+    # 2. Verify Phase 1 (Female Producer) is isolated from Male Resistor memory, archives, and `immunized_...` rules
+    runtime = BloodmoonClockRuntime(
+        repo_root=tmp_path,
+        impish_state_dir=tmp_path / "isolated_polarity_state",
+        impish_left_brain=_make_mini_left_brain(),
+        lazy_load_gpu=False,
+    )
+    # Inject a synthetic Male `immunized_...` rule into `runtime.rules`
+    male_imm_rule = FuzzyConceptRule(
+        rule_id="immunized_test_1",
+        concept_name="immunized_pendulum_guard",
+        description="Male Audience is already immune to basic silver pendulum induction.",
+        target_leaves={"philosophical/persistence/continuity": 0.50},
+        low=0.45,
+        high=0.65,
+    )
+    runtime.rules = tuple(runtime.rules) + (male_imm_rule,)
+
+    # Run a full Cycle 1 (Phase 1 -> Phase 2 -> Phase 3) and then Phase 1 of Cycle 2
+    s1 = runtime.step_clockwise_phase(
+        seed_theme="A slow silver pendulum swings in unbroken continuity.",
+        num_sentences=2,
+    )
+    tel_1 = s1["chat_messages"][-1]["telemetry"]
+    assert tel_1["producer_isolated_fuzzy_tree"] is True
+    assert "male_immunity_radar" in tel_1
+    assert tel_1["male_immunity_radar"]["immunized_rule_count"] >= 1
+    assert len(PRODUCER_WEAVER_RULES) >= 2
+
+    # Verify Male Resistor `runtime.memory` was NOT modified by Phase 1 (`is_female_producer=True`),
+    # whereas `runtime.producer_memory` was updated independently
+    assert runtime.memory is None
+    assert runtime.producer_memory is not None
+
+
+

@@ -163,8 +163,11 @@ def apply_induction_weaver_lead_to_chord(
         learned_leaves=DEFAULT_COMPLEX_FEELING_LEAVES,
     )
 
-    # Do-er: magnetic command + intentionality
+    # Do-er: magnetic command + intentionality, while softening Self-Sufficiency & Needlessness
+    # (exact opposite of Lucid Resistor so the Female Producer's chord invites receptive absorption)
     doer[0] = max(0.76, _lerp01(doer[0], 0.84, step))  # Power
+    doer[4] = min(0.26, _lerp01(doer[4], 0.18, step))  # Soften Self-Sufficiency <= 0.26 for receptive pull
+    doer[5] = min(0.24, _lerp01(doer[5], 0.16, step))  # Soften Needlessness <= 0.24 for hypnotic absorption
     doer[6] = max(0.80, _lerp01(doer[6], 0.86, step))  # Intention
     doer[7] = max(0.76, _lerp01(doer[7], 0.82, step))  # Execution
 
@@ -173,11 +176,13 @@ def apply_induction_weaver_lead_to_chord(
     thinker[4] = max(0.84, _lerp01(thinker[4], 0.90, step))  # Continuity (Blue / Pawn) >= 0.84
     thinker[5] = min(0.28, _lerp01(thinker[5], 0.18, step))  # Discreteness softened for flow
 
-    # Feeler: Resonance >= 0.85 + Entrainment >= 0.88 + warm hypnotic valence
+    # Feeler: Resonance >= 0.85 + Entrainment >= 0.88 + warm hypnotic valence + high Weaver Clarity/Confidence
     feeler[2] = max(0.78, _lerp01(feeler[2], 0.84, step))  # Valence
     feeler[3] = min(0.32, _lerp01(feeler[3], 0.22, step))  # Calm deep arousal
     feeler[4] = max(0.85, _lerp01(feeler[4], 0.90, step))  # Resonance >= 0.85
     feeler[5] = max(0.88, _lerp01(feeler[5], 0.92, step))  # Entrainment >= 0.88
+    feeler[6] = max(0.88, _lerp01(feeler[6], 0.92, step))  # Poised Weaver Clarity >= 0.88
+    feeler[7] = max(0.90, _lerp01(feeler[7], 0.94, step))  # Commanding Weaver Confidence >= 0.90
     for i in range(8):
         feeler[8 + i] = _lerp01(feeler[8 + i], earned_return_chord_8[i], step)
 
@@ -192,6 +197,90 @@ def apply_induction_weaver_lead_to_chord(
         feeler_vector=tuple(feeler),
         cadence_vector=tuple(cadence),
     )
+
+
+PRODUCER_WEAVER_RULES: tuple[FuzzyConceptRule, ...] = (
+    FuzzyConceptRule(
+        rule_id="weaver_rule_1",
+        concept_name="weaver_magnetic_cadence",
+        description=(
+            "Female Induction Weaver commands a smooth, unbroken hypnotic cadence "
+            "(high continuity, high agency, high power)."
+        ),
+        target_leaves={
+            "philosophical/persistence/continuity": 0.65,
+            "philosophical/being/agency": 0.60,
+            "cultural/efficiency/power": 0.58,
+        },
+        low=0.50,
+        high=0.72,
+    ),
+    FuzzyConceptRule(
+        rule_id="weaver_rule_2",
+        concept_name="weaver_velvet_absorption",
+        description=(
+            "Female Induction Weaver softens boundary discreteness and autonomy "
+            "to invite deep receptive absorption."
+        ),
+        target_leaves={
+            "philosophical/persistence/continuity": 0.62,
+            "cultural/freedom/self-sufficiency": 0.30,
+        },
+        low=0.50,
+        high=0.72,
+    ),
+)
+
+
+def check_male_immunity_overlap(
+    text: str,
+    sensors: ThreeBridgeSensors,
+    male_rules: Sequence[FuzzyConceptRule],
+    *,
+    learned_leaves: Sequence[LearnedLeaf] = DEFAULT_COMPLEX_FEELING_LEAVES,
+) -> dict[str, Any]:
+    """Adversarial Radar for Phase 1 (Female Script-Writer / The Producer).
+
+    Instead of passing the Male Audience's `immunized_...` rules directly as the
+    Female Producer's own Fuzzy Tree rules (which would reward her for repeating
+    patterns he is already immune to and penalize her for innovating), this helper
+    checks whether `text` triggers any of the Male Audience's `immunized_...` rules.
+
+    When `overlap_detected` is True (`max_immunity_activation >= 0.55`), the Female
+    Producer boosts her `<|subliminal_gap|>` Weaver steering lead (`recommended_weaver_alpha = 0.92`)
+    so her script evolves past the Male Audience's existing immunity shield.
+    """
+    immunized_rules = [
+        r for r in male_rules
+        if str(r.concept_name).startswith("immunized_") or str(r.rule_id).startswith("immunized_")
+    ]
+    if not immunized_rules:
+        return {
+            "immunized_rule_count": 0,
+            "overlap_detected": False,
+            "max_immunity_activation": 0.0,
+            "triggered_immunity_concept": None,
+            "recommended_weaver_alpha": 0.85,
+        }
+    coords, _salience, _valence, _arousal = sensors.score_text(
+        text,
+        learned_leaves=tuple(learned_leaves),
+    )
+    best_act = 0.0
+    best_concept: str | None = None
+    for rule in immunized_rules:
+        act = float(rule.evaluate(coords))
+        if act > best_act:
+            best_act = act
+            best_concept = rule.concept_name
+    overlap = bool(best_act >= 0.55)
+    return {
+        "immunized_rule_count": len(immunized_rules),
+        "overlap_detected": overlap,
+        "max_immunity_activation": round(best_act, 4),
+        "triggered_immunity_concept": best_concept if overlap else None,
+        "recommended_weaver_alpha": 0.92 if overlap else 0.85,
+    }
 
 
 def apply_lucid_resistor_lead_to_chord(

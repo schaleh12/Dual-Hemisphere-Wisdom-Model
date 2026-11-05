@@ -79,6 +79,7 @@ from .dilemma_crucible import (
 )
 from .entrainment_sparring import (
     MICROWAVE_SPARRING_SEEDS,
+    PRODUCER_WEAVER_RULES,
     SPARRING_POLARITY_MODES,
     SparringResistorFactSensors,
     append_sparring_trajectory_jsonl,
@@ -86,6 +87,7 @@ from .entrainment_sparring import (
     apply_lucid_resistor_lead_to_chord,
     build_resistor_scenario_prompt,
     build_weaver_scenario_prompt,
+    check_male_immunity_overlap,
     evaluate_sparring_verdict,
     extract_master_cadence_wave,
     measure_induction_potency,
@@ -383,6 +385,13 @@ class BloodmoonClockRuntime:
         self.ledger = self._load_initial_ledger()
         self.chord_memory = ChordMemoryBank()
         self.archives = self._load_initial_archives()
+
+        # Dedicated Phase 1 (Female Producer) Fuzzy Tree state so Male Resistor
+        # memory, resistance clauses, and `immunized_...` rules never bleed backwards into her:
+        self.producer_memory: ContinuousMemoryState | None = None
+        self.producer_diary = SettledDiary()
+        self.producer_chord_memory = ChordMemoryBank()
+        self.producer_archives = ThreeBranchArchives()
 
         self.sleep_queue: list[UnresolvedSleepScene] = []
         self.savored_turn_ids: list[int] = self._load_initial_savored_ids()
@@ -740,6 +749,10 @@ class BloodmoonClockRuntime:
             self.memory = None
             self.diary = SettledDiary()
             self.chord_memory = ChordMemoryBank()
+            self.producer_memory = None
+            self.producer_diary = SettledDiary()
+            self.producer_chord_memory = ChordMemoryBank()
+            self.producer_archives = ThreeBranchArchives()
             self._load_threads()
             return self.get_state_snapshot()
 
@@ -782,6 +795,10 @@ class BloodmoonClockRuntime:
         self.memory = None
         self.diary = SettledDiary()
         self.chord_memory = ChordMemoryBank()
+        self.producer_memory = None
+        self.producer_diary = SettledDiary()
+        self.producer_chord_memory = ChordMemoryBank()
+        self.producer_archives = ThreeBranchArchives()
         self._load_threads()
         self._sync_active_thread_record(persist=True)
         return self.get_state_snapshot()
@@ -1010,6 +1027,7 @@ class BloodmoonClockRuntime:
         comma_chord_transform: Any | None = None,
         include_conversation_history: bool = False,
         enqueue_unresolved_for_sleep: bool = True,
+        is_female_producer: bool = False,
     ) -> tuple[ThreeLeggedTurnResult, float, dict[str, Any]]:
         t0 = time.perf_counter()
         self.scene_counter += 1
@@ -1021,6 +1039,19 @@ class BloodmoonClockRuntime:
             if include_conversation_history
             else ()
         )
+
+        # Isolate Phase 1 (Female Producer) from Phase 2 (Male Resistor) rules, memory, and archives
+        active_rules = (
+            PRODUCER_WEAVER_RULES + VIRGIN_FOUNDATIONAL_RULES
+            if is_female_producer
+            else self.rules
+        )
+        active_memory = self.producer_memory if is_female_producer else self.memory
+        active_diary = self.producer_diary if is_female_producer else self.diary
+        active_chord_memory = (
+            self.producer_chord_memory if is_female_producer else self.chord_memory
+        )
+        active_archives = self.producer_archives if is_female_producer else self.archives
 
         acquired = self.gpu_lock.acquire(
             blocking=not self.rem_sleep_in_progress,
@@ -1034,16 +1065,16 @@ class BloodmoonClockRuntime:
                 self.birth_state,
                 scenario_text,
                 active_sensors,
-                self.rules,
+                active_rules,
                 scene_index=scene_idx,
                 subliminal_left_brain=active_lb,
                 clause_1_prefix=clause_1_prefix,
                 learned_leaves=self.learned_leaves,
-                prior_memory=self.memory,
-                diary=self.diary,
-                chord_memory=self.chord_memory,
+                prior_memory=active_memory,
+                diary=active_diary,
+                chord_memory=active_chord_memory,
                 contemplation_ledger=self.ledger,
-                branch_archives=self.archives,
+                branch_archives=active_archives,
                 max_passes=2,
                 sanctuary_target_mode=sanctuary_target_mode,
                 sanctuary_lead_alpha=0.25,
@@ -1057,12 +1088,18 @@ class BloodmoonClockRuntime:
                 self.gpu_lock.release()
 
         elapsed_ms = round((time.perf_counter() - t0) * 1000.0, 1)
-        self.memory = turn.next_memory
-        self.diary = turn.next_diary
+        if is_female_producer:
+            self.producer_memory = turn.next_memory
+            self.producer_diary = turn.next_diary
+            self.producer_chord_memory = turn.next_chord_memory
+            self.producer_archives = turn.next_archives
+        else:
+            self.memory = turn.next_memory
+            self.diary = turn.next_diary
+            self.chord_memory = turn.next_chord_memory
+            self.archives = turn.next_archives
         self.ledger = turn.next_ledger
-        self.chord_memory = turn.next_chord_memory
-        self.archives = turn.next_archives
-        if enqueue_unresolved_for_sleep and turn.unresolved_sleep_scene is not None:
+        if enqueue_unresolved_for_sleep and not is_female_producer and turn.unresolved_sleep_scene is not None:
             self.sleep_queue.append(turn.unresolved_sleep_scene)
 
         vibe = turn.final_vibe

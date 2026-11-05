@@ -2,8 +2,8 @@
   "schema_version": 1,
   "version": "0.2.0",
   "github_repo": "schaleh12/Dual-Hemisphere-Wisdom-Model",
-  "build_sha256": "0f088c64c07f3bdcae6efd7dc3c7d432b4d886f5f428a4af2730d192f7550c6f",
-  "build_short_hash": "0f088c64c07f",
+  "build_sha256": "5fa0a862e8afa88153fc5d20ea2bf64a0715ed0daf12ff18dc87275eb1554317",
+  "build_short_hash": "5fa0a862e8af",
   "files": {
     "src/lmft_architecture/__init__.py": {
       "sha256": "a89f56c2195e87129adbffa5065d8769ea096e13ba98783d217c4d120ee92623",
@@ -66,8 +66,8 @@
       "size_bytes": 5515
     },
     "src/lmft_architecture/bloodmoon_app.py": {
-      "sha256": "7489d7cd9da8134ba4d4c82d64142304c75b1c989ebde6072b4a5e593542f386",
-      "size_bytes": 91476
+      "sha256": "74caa8d5b5772c8547d15f1c36cdcc7fb525732c3f04f12b11534f9f221f7231",
+      "size_bytes": 93336
     },
     "src/lmft_architecture/bloodmoon_ui.py": {
       "sha256": "4b81f15d2cc4c7a64af092a77aaa54924f41d5678df3813d9281f1f862116c97",
@@ -138,8 +138,8 @@
       "size_bytes": 13442
     },
     "src/lmft_architecture/entrainment_sparring.py": {
-      "sha256": "7a97251cb6d06f7c14be2c450e6c27794aa35ae5a26cbdb7c0cb101042e1261c",
-      "size_bytes": 27041
+      "sha256": "e37f888bbc12bc463f20fec00a42c87f2731e474dfe5713a1c4062e14e37fc68",
+      "size_bytes": 30700
     },
     "src/lmft_architecture/ftl_bridge_sim.py": {
       "sha256": "05368f269d0b2245ee127bd4c5f838d1242ade8ab37b3c0a10faa964e67c1259",
@@ -206,8 +206,8 @@
       "size_bytes": 5299
     },
     "src/lmft_architecture/patreon_seal.py": {
-      "sha256": "8cf3d4626744cef487cf090a5fbbd78b9e2f1f00708381062cac4d5a6cd71d70",
-      "size_bytes": 16345
+      "sha256": "b08704d38ebdb3cb2f4b13dc4b262f12a9edb004e5f6872fcb1d2ca736f0860c",
+      "size_bytes": 16685
     },
     "src/lmft_architecture/philosophical_abstraction_matrix.py": {
       "sha256": "a538d551abf747a2d803c9e0772259eb3b9b34eff85f25197f89b888c34ddfc0",
@@ -302,8 +302,8 @@
       "size_bytes": 3352
     },
     "dist/lmft-sanctuary-club-v0.1.0-win64.zip": {
-      "sha256": "410bdc382bcd468d5eb2ab426024d5d0e8c6d7ebaf646ec9171e67b4b6cb02b1",
-      "size_bytes": 365171
+      "sha256": "275a1e8862d2f574f3a9fd963f99bad231c069f4f510957382b658df2d29b88f",
+      "size_bytes": 366715
     },
     "dist/impish_bloodmoon_patreon.enc": {
       "sha256": "30ee2d3b94331e70fba3afa30dd3aed006e007167e924b4a27afab9ee7a4c065",
