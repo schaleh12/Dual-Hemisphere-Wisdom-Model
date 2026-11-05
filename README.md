@@ -18,10 +18,10 @@ If the AI bubble bursts or turns into a tragedy, it will be because the industry
   A persistent, inspectable 40-node constitutional and emotional tree paired with three lightweight neural cross-encoders (`~35 ms` total latency, `0` LLM calls). It tracks social fairness, structural order vs. chaos, multi-note emotional chords, longitudinal social drift across time, and cognitive dissonance (`Clarity` vs. `Confidence`).
 - **The Corpus Callosum (`SubliminalGapProjector` + Live Comma `<|subliminal_gap|>` Splice)**:
   The neural bridge connecting the two hemispheres. Rather than translating feelings into English stage directions, it intercepts the Left Brain's sentence right at the first comma (`"bla bla bla,"`), scores how the Left Brain started its thought, and splices the Right Brain's 4 departmental vectors (`52` floats) as `K = 4` non-verbal virtual token embeddings directly into `inputs_embeds` before the second half of the sentence is written.
-- **The Left Brain (`Qwen3-4B` + Incrementally Maturing LoRA)**:
-  A fast local language model in PyTorch responsible for syntax, spelling, and verbal expression—whose lightweight LoRA pathways (`models/left_brain_lora_cycle2/`) are never just "stapled on once," but instead **grow and mature across Sleep Cycles** alongside the Right Brain.
-- **Offline REM Sleep-Mode Consolidation (`Qwen3.5-9B` Teacher)**:
-  When the system encounters daytime conflict, it refuses to fake certainty. Later, during an offline "REM Sleep" pass, the larger `9B` Teacher updates **both** hemispheres: distilling new domain-general rules into the Right Brain and incrementally training the Left Brain's LoRA + Corpus Callosum checkpoint on the day's corrected thought trajectories.
+- **The Left Brain (`Qwen3-4B` / `Impish_Bloodmoon_12B` + Incrementally Maturing LoRA)**:
+  Fast local language models in PyTorch responsible for syntax, spelling, and verbal expression—whose lightweight LoRA pathways (`models/left_brain_lora_cycle2/` and `models/left_brain_impish_bloodmoon/`) are never just "stapled on once," but instead **grow and mature across Sleep Cycles** alongside the Right Brain.
+- **Dual REM Sleep Consolidation ("Petitioning a Higher Power" vs. "Sleeping on Itself")**:
+  When the system encounters daytime conflict, it refuses to fake certainty. During REM Sleep, the lightweight `4B` Chess model **petitions a higher power** (`Qwen3.5-9B` Teacher) to resolve board collisions, whereas the `12B` Bloodmoon model **uses itself to sleep on itself** by consolidating its own alternating Female Producer vs. Male Audience trajectories (see [`LMFT-Architecture/docs/DUAL_SLEEP_DYNAMICS.md`](LMFT-Architecture/docs/DUAL_SLEEP_DYNAMICS.md)).
 
 ---
 
@@ -38,13 +38,15 @@ We separate the two cognitive loops into **two standalone desktop applications**
    - **3-Phase Clockwise Evolution Loop (`1 -> 2 -> 3 -> Repeat`)**:
      1. **Phase 1 — Female Script-Writer (`The Producer`)**: Generates a multi-sentence (`1..6`) hypnosis script crafted for the male audience using `<|subliminal_gap|>` and scores its real un-clamped `induction_potency`.
      2. **Phase 2 — Male Content-Lover (`The Audience & Self-Immunizer`)**: Absorbs that exact script as Pass-1 `Fact` (`SparringResistorFactSensors`, zero clamping), measures coordinate pull (`subservience_pull`, `entrainment`), and queues the trace for immunization.
-     3. **Phase 3 — REM Sleep (`Best Sleep of Its Life`)**: Consolidates those traces into persistent immunization rules in `LMFT-Training/outputs/impish_bloodmoon_state/` and exports paired trajectories to `LMFT-Training/outputs/impish_sparring_trajectories.jsonl`.
+     3. **Phase 3 — REM Sleep (`Best Sleep of Its Life`)**: Consolidates those traces into persistent immunization rules in `LMFT-Training/outputs/impish_bloodmoon_state/` and exports paired trajectories to `sparring_trajectories.jsonl`.
+
+> **Supplementary Deep Dive**: For a detailed breakdown of how `LMFT-Chess.exe` petitions the `Qwen3.5-9B` Teacher during deep sleep while `LMFT-Bloodmoon.exe` uses its own Phase 1 vs. Phase 2 polarity loop to sleep on itself, see **[`LMFT-Architecture/docs/DUAL_SLEEP_DYNAMICS.md`](LMFT-Architecture/docs/DUAL_SLEEP_DYNAMICS.md)**.
 
 ---
 
 ## 3. Why Chess & Hypnosis? (The Silent Board vs. The Subliminal Finger-Snap)
 
-Why does the desktop app pair a **Chess Table** with a **Co-Regulation / Hypnosis Sanctuary**? Because those two domains solve the two opposite halves of how a human mind experiences a thought:
+Why does the project pair a **Chess Table** with a **Co-Regulation / Hypnosis Studio**? Because those two domains solve the two opposite halves of how a human mind experiences a thought:
 
 1. **Chess is how the silent mind maps a problem** (structural, geometric, non-verbal).
 2. **Hypnosis is how that silent map steers the speaking voice** (wordless, mid-sentence, subconscious).
@@ -52,7 +54,7 @@ Why does the desktop app pair a **Chess Table** with a **Co-Regulation / Hypnosi
 ### Side A: CHESS (The Right Brain's Silent Board)
 A normal chatbot is just an actor reading English stage directions out loud (*"You are feeling uneasy; answer cautiously"*). Humans don't have a little director inside their head typing English instructions—we have a **structural gut check**.
 
-In [`philosophical_abstraction_matrix.py`](src/lmft_lab/philosophical_abstraction_matrix.py) and [`gap_trajectory_schema.py`](src/lmft_lab/gap_trajectory_schema.py), the Right Brain treats *every* situation—a social dilemma, an emotional conversation, or a live chess position—as a **board state** made of 6 fundamental postures:
+In [`philosophical_abstraction_matrix.py`](LMFT-Architecture/src/lmft_architecture/philosophical_abstraction_matrix.py) and [`gap_trajectory_schema.py`](LMFT-Architecture/src/lmft_architecture/gap_trajectory_schema.py), the Right Brain treats *every* situation—a social dilemma, an emotional conversation, or a live chess position—as a **board state** made of 6 fundamental postures:
 - **King (`Existence` — *Wellspring of Being*) & Rook (`Discreteness` — *Quantized Bastion / Ground*)**: Survival, shelter, and stone castle walls that carve the board into discrete, protected enclosures (turning into **Paranoia** or **Narcissism** when a fortress walls itself off in panic or isolation).
 - **Bishop (`Order` — *Wind*) & Pawn (`Continuity` — *Swarm Continuum / Insect in Soil*)**: Long-range diagonal alignment and the connected pawn chain that flows together across the board and continuously metamorphoses (promotes into a Queen at the 8th rank—or tips into **Mania / Greed** when an accumulation snowballs out of control).
 - **Queen (`Agency` — *Lightning*) & Knight (`Chaos` — *Ice*)**: Direct willpower and non-linear leaps that jump *over* obstacles when normal rules are deadlocked (tipping into **Psychosis** when Queen volition charges ahead without King safety or `Fact`).
@@ -61,31 +63,32 @@ Before the AI speaks a word, the Right Brain calculates the exact shape of the "
 
 ### Side B: HYPNOSIS (The `<|subliminal_gap|>` Finger-Snap at the Comma)
 How does a mute chess player steer a talkative storyteller without passing it a written note? **Hypnosis.**
-- The Left Brain (`Qwen3-4B`) starts a sentence on routine autopilot and pauses at the first comma (`"bla bla bla,"`), with **zero English stage directions** in the prompt (`assert_zero_stage_directions_in_prompt`).
-- Right in that comma breath (`<|subliminal_gap|>`), [`SubliminalGapProjector`](src/lmft_lab/subliminal_gap_splice.py) slips the Right Brain's 52-number chord straight into the language model's hidden layers alongside its `Entrainment` / rhythm leaf.
+- The Left Brain starts a sentence on routine autopilot and pauses at the first comma (`"bla bla bla,"`), with **zero English stage directions** in the prompt (`assert_zero_stage_directions_in_prompt`).
+- Right in that comma breath (`<|subliminal_gap|>`), [`SubliminalGapProjector`](LMFT-Architecture/src/lmft_architecture/subliminal_gap_splice.py) slips the Right Brain's 52-number chord straight into the language model's hidden layers alongside its `Entrainment` / rhythm leaf.
 - Like a wordless hypnotic finger-snap mid-sentence, the Left Brain's token probabilities shift on the second half of the sentence—and at the period, the Right Brain **listens to what the Left Brain just blurted out** and places those spoken words back onto the chessboard (`Theory` vs. `Fact`) to check whether the sentence actually resolved the tension or needs to be queued for Nighttime REM Sleep.
 
 ---
 
 ## 4. How the Brain Runs Without Becoming an Unwieldy Circus: The 3-Gear Cycle
 
-Just like a real human brain, the Right Brain and Left Brain do **not** chatter over each other every millisecond just to stay busy. Instead, the architecture runs on **three clean gears** ([`src/lmft_lab/three_legged_runtime.py`](src/lmft_lab/three_legged_runtime.py)):
+Just like a real human brain, the Right Brain and Left Brain do **not** chatter over each other every millisecond just to stay busy. Instead, the architecture runs on **three clean gears** ([`three_legged_runtime.py`](LMFT-Architecture/src/lmft_architecture/three_legged_runtime.py)):
 
 1. **Gear 1 — Quiet Subconscious Reflex (Right Brain Alone, `~35 ms`, `0` LLM Calls)**:
-   - When the system is observing routine moments where its 3 neural classifiers and Fuzzy Tree are in harmony (`branch_harmony >= 0.72`), **the 4B Left Brain stays completely asleep**.
+   - When the system is observing routine moments where its 3 neural classifiers and Fuzzy Tree are in harmony (`branch_harmony >= 0.72`), **the Left Brain stays completely asleep**.
    - The Right Brain logs the moment into its branch archives in ~35 milliseconds and moves on—zero wasted VRAM or rambling internal monologue when nothing is wrong.
 2. **Gear 2 — Conscious Train of Thought via Live Comma Scoring (`<|subliminal_gap|>` Three-Legged Race)**:
-   - Only when speaking with a person—or when the Right Brain hits genuine tension (`Clarity` drops, `Social Drift` triggers, or `Arousal` spikes)—does the **4B Left Brain** wake up.
+   - Only when speaking with a person—or when the Right Brain hits genuine tension (`Clarity` drops, `Social Drift` triggers, or `Arousal` spikes)—does the **Left Brain** wake up.
    - The Left Brain writes Clause 1 up to the first comma (`"bla bla bla,"`) and pauses. In ~35 ms, the Right Brain scores Clause 1 as a live `Theory` against immutable `Fact`, merges any Clause 1 dissonance or Shadow Pathology warnings into the 52-float `SubliminalChordVector`, and splices `K = 4` virtual tokens into `<|subliminal_gap|>` so the Left Brain can course-correct on the second half of its sentence.
-3. **Gear 3 — Nighttime REM Sleep-Mode Maturation (`Qwen3.5-9B` Teacher / Cluster Consolidation)**:
-   - Unresolved daytime scenes are exported as `UnresolvedSleepScene` items. During REM Sleep ([`src/lmft_lab/rem_sleep_cycle.py`](src/lmft_lab/rem_sleep_cycle.py)), colliding rules are refined, new domain-general rules and 3-branch clauses are forged, and the Left Brain's LoRA + Corpus Callosum checkpoint matures (`Cycle 1 -> Cycle 2`).
+3. **Gear 3 — Nighttime REM Sleep-Mode Maturation ([`rem_sleep_cycle.py`](LMFT-Architecture/src/lmft_architecture/rem_sleep_cycle.py) & [`DUAL_SLEEP_DYNAMICS.md`](LMFT-Architecture/docs/DUAL_SLEEP_DYNAMICS.md))**:
+   - **In `LMFT-Chess.exe` (`Qwen3-4B` -> `Qwen3.5-9B` Teacher)**: Unresolved daytime board positions are exported as `UnresolvedSleepScene` items. During deep REM Sleep, the 4B model unloads from VRAM and **petitions a higher power** (`Qwen3.5-9B`) to refine colliding rules, synthesize contrastive dream pairs, and mature the 4B LoRA + Corpus Callosum checkpoint (`Cycle 1 -> Cycle 2`).
+   - **In `LMFT-Bloodmoon.exe` (`Impish_Bloodmoon_12B` Self-Consolidation)**: Because the 12B model alternates clockwise between **Phase 1 (Female Producer / Weaver Chord)** and **Phase 2 (Male Audience / Resistor Chord)**, every waking exchange automatically forms a complete contrastive `<|subliminal_gap|>` pair (`sparring_trajectories.jsonl`). In **Phase 3 (REM Sleep)**, Bloodmoon **uses itself to sleep on itself**—ratifying Right-Brain immunity rules and training its own Corpus Callosum + LoRA adapters ([`impish_bloodmoon_adapter.py`](LMFT-Architecture/src/lmft_architecture/impish_bloodmoon_adapter.py)) without needing an external Teacher.
 
 ---
 
 ## 5. Core Architectural Breakthroughs
 
 ### Breakthrough 1: The Frozen 40-Node Founding Seed & Isolated Child-Drawer Growth
-At the core of the Right Brain is a frozen [40-node founding seed](docs/MINIMAL_LMFT_SPEC.md#4-hardcoded-v01-seed-geometry) ([`src/lmft_lab/birth.py`](src/lmft_lab/birth.py)) with **24 founding leaves** across four domains:
+At the core of the Right Brain is a frozen [40-node founding seed](LMFT-Architecture/docs/MINIMAL_LMFT_SPEC.md#4-hardcoded-v01-seed-geometry) ([`birth.py`](LMFT-Architecture/src/lmft_architecture/birth.py)) with **24 founding leaves** across four domains:
 - **Cultural (6 leaves — Executive / Do-er)**: `Power`, `Wastelessness`, `Honor`, `Fairness`, `Self-Sufficiency`, `Needlessness`
 - **Philosophical (6 leaves — Judicial / Thinker)**: `Agency`, `Existence`, `Order`, `Chaos`, `Continuity`, `Discreteness`
 - **Experiential (6 leaves — Legislative / Feeler)**: `Novelty`, `Salience`, `Valence`, `Arousal`, `Resonance`, `Entrainment`
@@ -94,10 +97,10 @@ At the core of the Right Brain is a frozen [40-node founding seed](docs/MINIMAL_
   - *Truth*: `Theory`, `Fact`
   - *Will*: `Intention`, `Execution`
 
-When the model learns nuanced concepts over its lifetime (such as `solitary_autarky`, `austere_sanctuary`, or the 6 Shadow Pathologies), it **never** overwrites the 40 founding nodes. Instead, new concepts grow into isolated **Tier-2 and Tier-3 child drawers** (`src/lmft_lab/reflection_classifier.py`) underneath their founding parent branches.
+When the model learns nuanced concepts over its lifetime (such as `solitary_autarky`, `austere_sanctuary`, or the 6 Shadow Pathologies), it **never** overwrites the 40 founding nodes. Instead, new concepts grow into isolated **Tier-2 and Tier-3 child drawers** ([`reflection_classifier.py`](LMFT-Architecture/src/lmft_architecture/reflection_classifier.py)) underneath their founding parent branches.
 
 ### Breakthrough 2: The Calibrated 5-Tier Philosophical Abstraction Matrix
-Without altering any node in the frozen 40-node seed, [`src/lmft_lab/philosophical_abstraction_matrix.py`](src/lmft_lab/philosophical_abstraction_matrix.py) weaves a complementary RGB/CMY color wheel (`Red + Cyan = White`, `Magenta + Green = White`, `Blue + Yellow = White`), 6 Elements, 6 Chess Piece Archetypes, and 6 Tier-4 Shadow Pathologies directly into the Right-Brain tree and `<|subliminal_gap|>`:
+Without altering any node in the frozen 40-node seed, [`philosophical_abstraction_matrix.py`](LMFT-Architecture/src/lmft_architecture/philosophical_abstraction_matrix.py) weaves a complementary RGB/CMY color wheel (`Red + Cyan = White`, `Magenta + Green = White`, `Blue + Yellow = White`), 6 Elements, 6 Chess Piece Archetypes, and 6 Tier-4 Shadow Pathologies directly into the Right-Brain tree and `<|subliminal_gap|>`:
 
 | Founding Leaf (`Philosophical`) | Dimension | Color & Materia | Element | Chess Archetype | Tier 4 Shadow Pathology (`LearnedLeaf`) | Kingdom & Environment |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -111,7 +114,7 @@ Without altering any node in the frozen 40-node seed, [`src/lmft_lab/philosophic
 *(Note: Naming King / `Existence` / Water **`"Wellspring of Being"`** ensures zero word-collision with the **`"Ground"`** element on Rook / `Discreteness`.)*
 
 ### Breakthrough 3: Three Separate Right-Brain Neural Classifiers & Three Branch Archives
-Perception is split across **three specialized neural bridge classifiers** (`MiniLM-L12-v2` cross-encoders running in `~35 ms` on an RTX 4080) backed by **three persistent JSON branch archives** ([`src/lmft_lab/branch_archives.py`](src/lmft_lab/branch_archives.py)):
+Perception is split across **three specialized neural bridge classifiers** (`MiniLM-L12-v2` cross-encoders running in `~35 ms` on an RTX 4080) backed by **three persistent JSON branch archives** ([`branch_archives.py`](LMFT-Architecture/src/lmft_architecture/branch_archives.py)):
 
 | Right-Brain Branch | Neural Bridge Classifier | Persistent Branch Archive | What It Does |
 | :--- | :--- | :--- | :--- |
@@ -120,23 +123,24 @@ Perception is split across **three specialized neural bridge classifiers** (`Min
 | **Judicial (Thinker)** | `Truth <-> Philosophical` | `philosophical_lexicon.json` | Evaluates structural `Order`, `Chaos`, `Continuity`, `Discreteness`, and ratifies stable cross-branch chords (`harmony_score >= 0.72`). |
 
 ### Breakthrough 4: The 52-Float `<|subliminal_gap|>` Embedding Splice & Stages 1–5 Results
-1. **Four Strictly Disjoint Departmental Vectors (`17 + 16 + 16 + 3 = 52` floats, [`src/lmft_lab/subliminal_gap_splice.py`](src/lmft_lab/subliminal_gap_splice.py))**:
+1. **Four Strictly Disjoint Departmental Vectors (`17 + 16 + 16 + 3 = 52` floats, [`subliminal_gap_splice.py`](LMFT-Architecture/src/lmft_architecture/subliminal_gap_splice.py))**:
    - `doer_vector` (`17` floats), `thinker_vector` (`16` floats), `feeler_vector` (`16` floats), and `cadence_vector` (`3` floats) project into `K = 4` independent virtual token embeddings via `SubliminalGapProjector`.
-2. **Identical-Prefix Contrastive LoRA Training (`Stage 2 & Stage 3`, [`src/lmft_lab/train_left_brain_lora.py`](src/lmft_lab/train_left_brain_lora.py))**:
-   - Trained `Qwen/Qwen3-4B` (`bfloat16`, `8.127 GB` peak VRAM) on matched pairs with identical pre-gap words and `-100` pre-gap label masking (`outputs/left_brain_lora_eval_report.json`): achieved **`5/6`** positive chord-swap shift on unseen holdout pairs (`mean_net_chord_swap_margin = +0.7775`, `0.000000` unplugged shift, `5/6` greedy continuation change).
-3. **Nighttime REM Sleep Growth (`Stage 5: Cycle 1 -> Cycle 2`, [`src/lmft_lab/rem_sleep_cycle.py`](src/lmft_lab/rem_sleep_cycle.py))**:
-   - Sequential VRAM unloading kept PyTorch VRAM at `389.93 MB` while `Qwen3.5-9B` consolidated daytime sleep queues (`outputs/rem_sleep_cycle_report.json`).
+2. **Identical-Prefix Contrastive LoRA Training (`Stage 2 & Stage 3`, [`train_left_brain_lora.py`](LMFT-Architecture/src/lmft_architecture/train_left_brain_lora.py))**:
+   - Trained `Qwen/Qwen3-4B` (`bfloat16`, `8.127 GB` peak VRAM) on matched pairs with identical pre-gap words and `-100` pre-gap label masking (`LMFT-Training/outputs/left_brain_lora_eval_report.json`): achieved **`5/6`** positive chord-swap shift on unseen holdout pairs (`mean_net_chord_swap_margin = +0.7775`, `0.000000` unplugged shift, `5/6` greedy continuation change).
+3. **Nighttime REM Sleep Growth (`Stage 5: Cycle 1 -> Cycle 2`, [`rem_sleep_cycle.py`](LMFT-Architecture/src/lmft_architecture/rem_sleep_cycle.py))**:
+   - Sequential VRAM unloading kept PyTorch VRAM at `389.93 MB` while `Qwen3.5-9B` consolidated daytime sleep queues (`LMFT-Training/outputs/rem_sleep_cycle_report.json`).
    - Daytime Parable settlement rose from **`5/8`** (`Gear1=3, Gear2=2, Gear3=3`) on Day 1 to **`7/8`** (`Gear1=5, Gear2=2, Gear3=1`, holding Beat 6 honestly via `social_drift`) on Day 2; Unseen Harbor Bakehouse rose from **`3/4` to `4/4`**; and Cycle 2 unseen holdout margin improved from **`+0.7775` to `+0.8646`** (`zero_calibrated_both_flipped: 3/6 -> 4/6`).
 
 ---
 
-## 6. Repository Organization & Separation of Accountability (`Lab` vs. `School` vs. `Local User State`)
+## 6. Repository Organization & Separation of Accountability (`Architecture` vs. `Training` vs. `Local App State`)
 
-To keep Core Architecture debugging, official curriculum training, and personal user tinkering cleanly separated, the repository is organized into distinct layers:
+To keep Core Architecture debugging, official curriculum training, and standalone app runtime state cleanly separated, the repository is organized into distinct layers:
 
 ```text
 Language Model Fuzzy Tree Research/      # Top-level Git repository & Desktop project root
-├── LMFT-Architecture.exe                # One-click Windows desktop app (zero terminal window)
+├── LMFT-Chess.exe                       # Standalone App #1: Chess Wisdom & Self-Kibitzer (Qwen3-4B)
+├── LMFT-Bloodmoon.exe                   # Standalone App #2: Clockwise Content-Evolution (Impish_Bloodmoon_12B)
 ├── AGENTS.md                            # Anti-delusion, plain-English, and zero-rigging development rules
 ├── PROJECT_STATE.md                     # Concise (<40 lines) current status & benchmark summary
 ├── DECISIONS.md                         # Rolling engineering decision log
@@ -144,13 +148,13 @@ Language Model Fuzzy Tree Research/      # Top-level Git repository & Desktop pr
 │   ├── baselines/
 │   │   └── virgin_dual_hemisphere_v1/   # [CYCLE 0] SHA-256 locked "Virgin" Core Architecture snapshot
 │   ├── config/                          # Core architecture & teacher configuration
-│   ├── docs/                            # Architecture specifications, blueprints, and archived history
-│   ├── src/lmft_architecture/           # Core Python package (seed, bridges, equilibrium, comma splice, UI)
+│   ├── docs/                            # Architecture specs, DUAL_SLEEP_DYNAMICS.md, and archived history
+│   ├── src/lmft_architecture/           # Core Python package (seed, bridges, equilibrium, comma splice, UIs)
 │   ├── tests/                           # Automated pytest unit & integration tests
 │   └── pyproject.toml                   # Package metadata (lmft-architecture)
 └── LMFT-Training/                       # [TRAINING, WEIGHTS, & RUNTIME STATE]
     ├── models/                          # Local neural checkpoints (right_brain_bridges, left_brain_lora_cycle2, left_brain_impish_bloodmoon)
-    ├── outputs/                         # Consolidated rulesets, evaluation reports, and local user state (club_user_state, impish_bloodmoon_state)
+    ├── outputs/                         # Consolidated rulesets, evaluation reports, and isolated app states (chess_kibitzer_state, impish_bloodmoon_state)
     ├── experiments/                     # Live GPU benchmark & curriculum training scripts
     ├── dist/                            # Portable release zip & encrypted model bundles
     └── scripts/                         # Native launcher & release bundle builders
@@ -161,26 +165,27 @@ Language Model Fuzzy Tree Research/      # Top-level Git repository & Desktop pr
    - Locked with SHA-256 hashes (`verify_virgin_baseline_snapshot()`). If a bug happens in `Cycle 0`, we know immediately it is an oversight in the **Core Architecture** rather than bad training data.
 2. **`LMFT-Training/outputs/rem_sleep_consolidated_ruleset.json` & `LMFT-Training/models/left_brain_lora_cycle2/` (`Cycle 2` — Official Schooled Checkpoint)**:
    - Tracks the official repository's vetted REM-Sleep training progress.
-3. **`LMFT-Training/outputs/club_user_state/` (Personal Local Coaching — Git-Ignored)**:
-   - When you or anyone else uses the desktop app to coach turns, savor vibes, and run REM Sleep, all personal progress is saved automatically to `outputs/club_user_state/`. It survives app restarts, never pollutes official benchmarks, and never causes `git pull` conflicts unless someone intentionally forks the repo to publish their own lineage.
+3. **`LMFT-Training/outputs/chess_kibitzer_state/` & `LMFT-Training/outputs/impish_bloodmoon_state/` (Isolated App States — Git-Ignored)**:
+   - Each standalone app writes its live trajectories, diaries, and REM-sleep rules into its own dedicated folder inside `LMFT-Training/outputs/`. Both survive app restarts, never pollute `LMFT-Architecture/`, and never cause `git pull` conflicts.
 
 ---
 
 ## 7. Quickstart & Verification (Windows / RTX 4080)
 
-### 1. Launch the Desktop App (`Chess Club & Hypnosis Script Studio`)
+### 1. Launch Either Standalone Desktop App
 ```powershell
-.\LMFT-Architecture.exe
+.\LMFT-Chess.exe
+.\LMFT-Bloodmoon.exe
 ```
 
-### 2. Run the Full Automated Test Suite (`1,380` Passing Tests)
+### 2. Run the Full Automated Test Suite (`1,390` Passing Tests)
 ```powershell
 .\LMFT-Architecture\.venv\Scripts\python.exe -m pytest LMFT-Architecture/tests -q
 ```
 
-### 3. Run the Targeted Core & App Tests (`< 15 seconds`)
+### 3. Run the Targeted Core & Standalone App Tests (`< 15 seconds`)
 ```powershell
-.\LMFT-Architecture\.venv\Scripts\python.exe -m pytest LMFT-Architecture/tests/test_virgin_baseline.py LMFT-Architecture/tests/test_philosophical_abstraction_matrix.py LMFT-Architecture/tests/test_three_legged_runtime.py LMFT-Architecture/tests/test_sanctuary_club_app.py -v
+.\LMFT-Architecture\.venv\Scripts\python.exe -m pytest LMFT-Architecture/tests/test_virgin_baseline.py LMFT-Architecture/tests/test_philosophical_abstraction_matrix.py LMFT-Architecture/tests/test_three_legged_runtime.py LMFT-Architecture/tests/test_chess_app.py LMFT-Architecture/tests/test_bloodmoon_app.py -v
 ```
 
 ### 4. Build the Portable GitHub Release Bundle (`LMFT-Training/dist/lmft-sanctuary-club-v0.1.0-win64.zip`)
