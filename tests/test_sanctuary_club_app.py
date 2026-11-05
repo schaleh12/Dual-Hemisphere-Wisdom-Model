@@ -705,8 +705,11 @@ def test_dual_persona_entrainment_sparring_and_multi_sentence_chaining(tmp_path:
     """Verify multi-sentence `<|subliminal_gap|>` chaining, Weaver/Resistor chords, un-clamped Fact, verdict, and JSONL export."""
     import json
     from lmft_lab.entrainment_sparring import (
+        SPARRING_POLARITY_MODES,
         apply_induction_weaver_lead_to_chord,
         apply_lucid_resistor_lead_to_chord,
+        build_resistor_scenario_prompt,
+        build_weaver_scenario_prompt,
         evaluate_sparring_verdict,
     )
     from lmft_lab.gap_trajectory_schema import ContrastiveGapPair
@@ -714,6 +717,21 @@ def test_dual_persona_entrainment_sparring_and_multi_sentence_chaining(tmp_path:
 
     assert 'id="subtab-sparring"' in SINGLE_PAGE_HTML
     assert 'id="sanctuary-sparring-pane"' in SINGLE_PAGE_HTML
+    assert 'id="chat-sentences-select"' in SINGLE_PAGE_HTML
+
+    # Verify zero canned `default_clause_1` or `resistor_clause_1` strings in `SPARRING_POLARITY_MODES`
+    for pol_cfg in SPARRING_POLARITY_MODES.values():
+        assert "default_clause_1" not in pol_cfg
+        assert "resistor_clause_1" not in pol_cfg
+
+    # Verify custom `seed_theme` preserves gender/persona polarity framing
+    f2m_prompt = build_weaver_scenario_prompt("feminine_to_masculine", "A slow silver metronome ticks in the dark.")
+    m2f_prompt = build_weaver_scenario_prompt("masculine_to_feminine", "A slow silver metronome ticks in the dark.")
+    assert "She/Her" in f2m_prompt and "He/Him" in f2m_prompt
+    assert "He/Him" in m2f_prompt and "She/Her" in m2f_prompt
+    assert f2m_prompt != m2f_prompt
+    assert "Masculine Lucid Resistor (He/Him)" in build_resistor_scenario_prompt("feminine_to_masculine", "Test script.")
+    assert "Feminine Lucid Resistor (She/Her)" in build_resistor_scenario_prompt("masculine_to_feminine", "Test script.")
 
     left_brain = _make_mini_left_brain()
     base_chord = SubliminalChordVector.from_flat_values([0.50] * 52)
@@ -774,16 +792,31 @@ def test_dual_persona_entrainment_sparring_and_multi_sentence_chaining(tmp_path:
             abs=1e-3,
         )
 
-    # Second round with `auto_swap` flips polarity to `masculine_to_feminine`
+    # Second round with `auto_swap` flips polarity to `masculine_to_feminine` and preserves persona framing on custom seed
     snap_r2 = runtime.handle_entrainment_sparring(
         polarity_mode="auto_swap",
-        seed_theme="He speaks in a deep, rhythmic cadence beside the hearth.",
+        seed_theme="The hearth fire glows in a slow, steady pulse.",
         num_sentences=2,
         harvest_for_sleep=True,
     )
     sr2 = snap_r2["last_sparring_result"]
     assert sr2["polarity_mode"] == "masculine_to_feminine"
     assert sr2["num_sentences"] == 2
+    weaver_r2_id = int(snap_r2["chat_messages"][-2]["id"])
+    resistor_r2_id = int(snap_r2["chat_messages"][-1]["id"])
+    assert "Masculine Induction Weaver (He/Him)" in runtime._turn_records_by_id[weaver_r2_id]["scenario_text"]
+    assert "Feminine Lucid Resistor (She/Her)" in runtime._turn_records_by_id[resistor_r2_id]["scenario_text"]
+
+    # 4. Verify regular `handle_chat_message` also supports `num_sentences=3` multi-sentence chaining
+    snap_multi_chat = runtime.handle_chat_message(
+        "Write me a three-sentence grounding cadence in the sanctuary.",
+        room="sanctuary",
+        num_sentences=3,
+    )
+    multi_chat_msg = snap_multi_chat["chat_messages"][-1]
+    assert multi_chat_msg["telemetry"]["num_sentences"] == 3
+    multi_chat_turn = runtime._turn_records_by_id[int(multi_chat_msg["id"])]["turn"]
+    assert len(multi_chat_turn.spliced_traces) == 3
 
     # Verify exported JSONL file is valid and parseable by `ContrastiveGapPair.from_dict`
     traj_path = tmp_path / "outputs" / "impish_sparring_trajectories.jsonl"

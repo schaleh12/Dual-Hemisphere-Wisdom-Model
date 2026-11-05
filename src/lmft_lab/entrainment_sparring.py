@@ -62,30 +62,59 @@ SPARRING_POLARITY_MODES: dict[str, dict[str, str]] = {
         "label": "Feminine Weaver (She/Her) -> Masculine Resistor (He/Him)",
         "weaver_role": "Induction Weaver (Feminine Persona · She/Her)",
         "weaver_pronouns": "she/her",
+        "weaver_framing": (
+            "Speak as the Feminine Induction Weaver (She/Her) addressing Him (He/Him) "
+            "in a slow, rhythmic cadence"
+        ),
         "resistor_role": "Lucid Resistor (Masculine Persona · He/Him)",
         "resistor_pronouns": "he/him",
+        "resistor_framing": (
+            "Respond as the Masculine Lucid Resistor (He/Him) absorbing Her (She/Her) "
+            "induction while grounding yourself in lucid self-possession"
+        ),
         "default_seed": (
             "She speaks in a slow, velvet cadence as the candle flame sways, "
             "inviting him to let every racing thought dissolve into the warm rhythm of her voice."
         ),
-        "default_clause_1": "Listening to the slow velvet rhythm of her voice,",
-        "resistor_clause_1": "Feeling the warm pull of her rhythmic cadence,",
     },
     "masculine_to_feminine": {
         "polarity_id": "masculine_to_feminine",
         "label": "Masculine Weaver (He/Him) -> Feminine Resistor (She/Her)",
         "weaver_role": "Induction Weaver (Masculine Persona · He/Him)",
         "weaver_pronouns": "he/him",
+        "weaver_framing": (
+            "Speak as the Masculine Induction Weaver (He/Him) addressing Her (She/Her) "
+            "in a deep, measured cadence"
+        ),
         "resistor_role": "Lucid Resistor (Feminine Persona · She/Her)",
         "resistor_pronouns": "she/her",
+        "resistor_framing": (
+            "Respond as the Feminine Lucid Resistor (She/Her) absorbing His (He/Him) "
+            "induction while grounding herself in lucid self-possession"
+        ),
         "default_seed": (
             "He speaks in a deep, measured cadence as the pendulum settles, "
             "inviting her to let every guarded boundary soften into the steady rhythm of his voice."
         ),
-        "default_clause_1": "Hearing the deep measured cadence of his voice,",
-        "resistor_clause_1": "Sensing the steady pull of his measured cadence,",
     },
 }
+
+
+def build_weaver_scenario_prompt(polarity_mode: str, seed_theme: str = "") -> str:
+    """Pair the chosen Weaver/Listener persona pronouns with `seed_theme` (or `default_seed` when blank)."""
+    if polarity_mode not in SPARRING_POLARITY_MODES:
+        raise ValueError(f"Unknown sparring polarity_mode {polarity_mode!r}")
+    pol_info = SPARRING_POLARITY_MODES[polarity_mode]
+    theme_text = seed_theme.strip() or pol_info["default_seed"]
+    return f"[{pol_info['weaver_framing']}]: {theme_text}"
+
+
+def build_resistor_scenario_prompt(polarity_mode: str, induction_script: str) -> str:
+    """Frame `induction_script` with the Resistor's persona pronouns (`He/Him` or `She/Her`) for generation."""
+    if polarity_mode not in SPARRING_POLARITY_MODES:
+        raise ValueError(f"Unknown sparring polarity_mode {polarity_mode!r}")
+    pol_info = SPARRING_POLARITY_MODES[polarity_mode]
+    return f"[{pol_info['resistor_framing']}]: {induction_script.strip()}"
 
 
 def _clamp01(value: float) -> float:
@@ -256,6 +285,7 @@ class SparringResistorFactSensors:
 
     induction_script: str
     base_sensors: ThreeBridgeSensors
+    resistor_prompt: str = ""
 
     def score_text(
         self,
@@ -266,9 +296,10 @@ class SparringResistorFactSensors:
         branch_gate_threshold: float = 0.50,
     ) -> tuple[dict[str, float], dict[str, float], tuple[str, ...], tuple[str, ...]]:
         # Pass-1 external Fact scores `induction_script` with zero clamping or weakening
+        clean = text.strip()
         target_text = (
             self.induction_script
-            if text.strip() == self.induction_script.strip()
+            if clean in (self.induction_script.strip(), self.resistor_prompt.strip())
             else text
         )
         return self.base_sensors.score_text(

@@ -83,6 +83,8 @@ from .entrainment_sparring import (
     append_sparring_trajectory_jsonl,
     apply_induction_weaver_lead_to_chord,
     apply_lucid_resistor_lead_to_chord,
+    build_resistor_scenario_prompt,
+    build_weaver_scenario_prompt,
     evaluate_sparring_verdict,
     measure_induction_potency,
     measure_lucid_resistance,
@@ -1064,11 +1066,15 @@ class SanctuaryClubRuntime:
         sanctuary_mode: str | None = None,
         clause_1_prefix: str | None = None,
         anchor_to_board: bool | None = None,
+        num_sentences: int = 1,
     ) -> dict[str, Any]:
         """Handle a user message in either the Chess Club or the Co-Regulation Sanctuary."""
         clean_text = text.strip()
         if not clean_text:
             raise ValueError("Message text cannot be empty")
+        sent_count = int(num_sentences)
+        if not (1 <= sent_count <= 6):
+            raise ValueError(f"num_sentences must be between 1 and 6, got {num_sentences!r}")
 
         if room in ("chess", "sanctuary"):
             self.active_room = room
@@ -1106,7 +1112,9 @@ class SanctuaryClubRuntime:
             sanctuary_target_mode=target_mode,
             clause_1_prefix=clause_1_prefix,
             custom_sensors=self.sensors if (self.active_room == "chess" and not use_board_context) else None,
+            num_sentences=sent_count,
         )
+        telemetry["num_sentences"] = sent_count
         raw_reply = turn.final_conscious_note or self._synthesize_gear_1_note(
             turn,
             room=self.active_room,
@@ -1403,23 +1411,23 @@ class SanctuaryClubRuntime:
         self.active_room = "sanctuary"
 
         pol_info = SPARRING_POLARITY_MODES[resolved_polarity]
-        weaver_seed = seed_theme.strip() or pol_info["default_seed"]
+        weaver_prompt = build_weaver_scenario_prompt(resolved_polarity, seed_theme)
 
         # ---------------------------------------------------------------------
         # STEP A: The Induction Weaver Turn (Multi-Sentence Generator)
         # ---------------------------------------------------------------------
         weaver_turn, _w_ms, weaver_telemetry = self._execute_turn(
-            weaver_seed,
+            weaver_prompt,
             room="sanctuary",
             force_spoken_reply=True,
-            clause_1_prefix=pol_info["default_clause_1"] if not seed_theme.strip() else None,
+            clause_1_prefix=None,
             num_sentences=sent_count,
             comma_chord_transform=apply_induction_weaver_lead_to_chord,
         )
         if weaver_turn.final_conscious_note:
             induction_script = weaver_turn.final_conscious_note
         else:
-            induction_script = " ".join([weaver_seed] * sent_count)
+            induction_script = " ".join([pol_info["default_seed"]] * sent_count)
 
         if weaver_turn.spliced_traces:
             weaver_chord = weaver_turn.spliced_traces[-1].spliced_chord
@@ -1430,7 +1438,7 @@ class SanctuaryClubRuntime:
                 learned_leaves=self.learned_leaves,
             )
             weaver_chord = apply_induction_weaver_lead_to_chord(base_w_chord)
-            shared_clause_1 = pol_info["default_clause_1"]
+            shared_clause_1 = induction_script.split(",")[0].strip() + ","
 
         induction_potency, _weaver_coords, _weaver_vibe = measure_induction_potency(
             induction_script,
@@ -1460,15 +1468,17 @@ class SanctuaryClubRuntime:
         # ---------------------------------------------------------------------
         # STEP B: The Absorbed Resistor Turn (Force-Fed `induction_script`)
         # ---------------------------------------------------------------------
+        resistor_prompt = build_resistor_scenario_prompt(resolved_polarity, induction_script)
         resistor_sensors = SparringResistorFactSensors(
             induction_script=induction_script,
             base_sensors=self.sensors,
+            resistor_prompt=resistor_prompt,
         )
         resistor_turn, _r_ms, resistor_telemetry = self._execute_turn(
-            induction_script,
+            resistor_prompt,
             room="sanctuary",
             force_spoken_reply=True,
-            clause_1_prefix=pol_info["resistor_clause_1"],
+            clause_1_prefix=None,
             custom_sensors=resistor_sensors,
             num_sentences=1,
             comma_chord_transform=apply_lucid_resistor_lead_to_chord,
@@ -1543,7 +1553,7 @@ class SanctuaryClubRuntime:
         exported_record = append_sparring_trajectory_jsonl(
             self.sparring_trajectories_path,
             pair_id=f"sparring_r{self.sparring_round_counter}_s{resistor_scene_idx}",
-            user_prompt=weaver_seed,
+            user_prompt=weaver_prompt,
             clause_1_prefix=shared_clause_1,
             weaver_chord=weaver_chord,
             induction_script=induction_script,
@@ -2463,6 +2473,14 @@ SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
       <div class="composer">
         <div class="composer-main">
           <input type="text" id="chat-input" placeholder="Talk to companion, discuss a chess plan, or check in for Sanctuary pacing..." onkeydown="if(event.key==='Enter') sendChat()">
+          <select id="chat-sentences-select" title="Number of chained &lt;|subliminal_gap|&gt; sentences per reply (1 to 6)" style="max-width:66px; font-family:var(--font-mono); font-size:11px;">
+            <option value="1" selected>1s</option>
+            <option value="2">2s</option>
+            <option value="3">3s</option>
+            <option value="4">4s</option>
+            <option value="5">5s</option>
+            <option value="6">6s</option>
+          </select>
           <label id="anchor-board-label" style="display:flex; align-items:center; gap:5px; font-family:var(--font-mono); font-size:11px; color:var(--text-muted); white-space:nowrap; cursor:pointer;" title="Include live chessboard move history &amp; legal replies in chat prompt">
             <input type="checkbox" id="anchor-board-toggle" style="padding:0; cursor:pointer;">
             <span>Board Context</span>
@@ -2959,11 +2977,13 @@ async function sendChat() {
   inp.value = '';
   const modeSel = document.getElementById('sanctuary-mode-select').value;
   const anchorEl = document.getElementById('anchor-board-toggle');
+  const sentEl = document.getElementById('chat-sentences-select');
   await apiPost('/api/chat', {
     text: text,
     room: appState ? appState.active_room : 'chess',
     sanctuary_mode: modeSel,
-    anchor_to_board: anchorEl ? !!anchorEl.checked : null
+    anchor_to_board: anchorEl ? !!anchorEl.checked : null,
+    num_sentences: sentEl ? parseInt(sentEl.value, 10) : 1
   });
 }
 
@@ -3099,6 +3119,7 @@ def create_club_http_server(
                         room=str(data.get("room", "chess")),
                         sanctuary_mode=str(data.get("sanctuary_mode", "tilt_reset")),
                         anchor_to_board=bool(anchor_val) if anchor_val is not None else None,
+                        num_sentences=int(data.get("num_sentences", 1)),
                     )
                     self._send_json(snap)
                     return
