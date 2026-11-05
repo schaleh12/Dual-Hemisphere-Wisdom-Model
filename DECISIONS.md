@@ -1,11 +1,6 @@
 # LMFT-Lab — Design Decisions (Rolling 5-Decision Window)
 
-*(Keep only the 5 most recent decisions here, under 80 lines AND 5,000 characters in plain English. Earlier decisions `D001–D052` are archived in `docs/archive/`.)*
-
-## D053: 3-Stage Dilemma Crucible & 'Men of Culture' Context-Bracing (`dilemma_crucible.py`, 2026-11-04)
-- **Context**: Needed a rule-generating dilemma farm in the Sanctuary pitting `Wave / Theory` against `Structure / Fact` across `1. Poetry <-> (Story-Telling)`, `2. Music <-> (Art)`, and `3. Philosophy <-> (Coding)`.
-- **Design Choice**: Built `CruciblePairedBridgeSensors` to score both slots through the 3 MiniLM bridges (with 25% RGB color-wheel math on `Art` and 25% `ast.parse` invariants on `Coding`), wired the Men of Culture shelf and context-bracing buttons into the Sanctuary, and queued Crucible dilemmas for REM Sleep.
-- **Result**: Verified by `test_dilemma_crucible_three_stages_context_bracing_and_rem_rule_forging`.
+*(Keep only the 5 most recent decisions here, under 80 lines AND 5,000 characters in plain English. Earlier decisions `D001–D053` are archived in `docs/archive/`.)*
 
 ## D054: Chess Kibitzer Grounding, UI/UX Polish, & Zero Canned Templates (`chess_kibitz_bridge.py`, `sanctuary_club_app.py`, 2026-11-04)
 - **Context**: Playtesting caught opening moves failing to settle in Gear 1, float telemetry leaking into the chess prompt, illegal move hallucinations (`Bf5+`, `Re8#`), and UI layout/scroll glitches.
@@ -24,5 +19,10 @@
 
 ## D057: Dual-Persona Adversarial Entrainment Sparring & Multi-Sentence Chaining (`entrainment_sparring.py`, `three_legged_runtime.py`, `sanctuary_club_app.py`, 2026-11-04)
 - **Context**: Needed a self-play sparring mode in the Sanctuary where the model alternates between generating multi-sentence hypnotic induction scripts (`Induction Weaver`) and resisting hypnotic absorption (`Lucid Resistor`).
-- **Design Choice**: Added `SubliminalGapLeftBrain.generate_multi_sentence_script` (`1..6` sentences); built `entrainment_sparring.py` with `feminine_to_masculine` / `masculine_to_feminine` / `auto_swap` polarity, Weaver (`entrainment >= 0.88`, `resonance >= 0.85`, `continuity >= 0.84`, `agency >= 0.80`) and Resistor (`existence >= 0.88`, `discreteness >= 0.82`, `needlessness >= 0.85`, `self-sufficiency >= 0.82`) comma chords, un-clamped `SparringResistorFactSensors`, honest `RESISTED_LUCIDLY` vs. `SWEPT_BY_ENTRAINMENT` verdicts, and `outputs/impish_sparring_trajectories.jsonl` export; and wired `ENTRAINMENT SPARRING (DUAL MODE)` into `sanctuary_club_app.py`.
+- **Design Choice**: Added `SubliminalGapLeftBrain.generate_multi_sentence_script` (`1..6` sentences); built `entrainment_sparring.py` with `feminine_to_masculine` / `masculine_to_feminine` / `auto_swap` polarity, Weaver and Resistor comma chords, un-clamped `SparringResistorFactSensors`, honest `RESISTED_LUCIDLY` vs. `SWEPT_BY_ENTRAINMENT` verdicts, and `outputs/impish_sparring_trajectories.jsonl` export.
 - **Result**: Verified by `test_dual_persona_entrainment_sparring_and_multi_sentence_chaining`.
+
+## D058: Mode-Driven Dual GUI, Sliding Context Threads, AFK Microwave Trainer, & GitHub SHA-256 Sync (`sanctuary_club_ui.py`, `sanctuary_club_app.py`, `github_auto_sync.py`, 2026-11-05)
+- **Context**: Needed two dedicated workspace views (`Chess.com Arena` with SVG Staunton pieces vs. `Antigravity Hypnosis Script Studio`), multi-turn conversation memory without polluting Pass-1 `Fact`, persistent session threads, hands-free REM Sleep + AFK training, and SHA-256 release verification.
+- **Design Choice**: Added `format_sliding_conversation_history` (`12,000` char sliding window of clean dialogue while Pass-1 `Fact` scores only the current turn); added `threads.json` CRUD (`+ New Script Thread`, `Script Canvas`); built the Dual GUI in `sanctuary_club_ui.py`; added automatic REM Sleep at threshold (`Virgin` read-only) and the AFK Microwave loop (`handle_microwave_step`); and built `github_auto_sync.py` (`Guardrail #4` protecting `outputs/*`).
+- **Result**: Verified by `test_d058_dual_gui_sliding_context_threads_microwave_and_github_sync`.

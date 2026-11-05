@@ -9,7 +9,9 @@ Creates `dist/lmft-sanctuary-club-v0.1.0-win64.zip` containing:
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
+import sys
 import zipfile
 
 RELEASE_VERSION = "v0.1.0"
@@ -23,8 +25,16 @@ def build_release_zip(
     include_model_weights: bool = False,
 ) -> Path:
     root = Path(repo_root).resolve() if repo_root is not None else Path(__file__).resolve().parents[1]
+    src_dir = str(root / "src")
+    if src_dir not in sys.path:
+        sys.path.insert(0, src_dir)
+    from lmft_lab.github_auto_sync import build_release_manifest
+
     out_dir = Path(output_dir).resolve() if output_dir is not None else (root / "dist")
     out_dir.mkdir(parents=True, exist_ok=True)
+    manifest = build_release_manifest(root)
+    manifest_path = out_dir / "release_manifest.json"
+    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     zip_path = out_dir / BUNDLE_NAME
 
     include_files: list[Path] = []

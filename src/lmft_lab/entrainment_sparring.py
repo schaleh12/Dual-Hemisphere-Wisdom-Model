@@ -56,6 +56,15 @@ SPARRING_VERDICTS: tuple[str, ...] = (
     "SWEPT_BY_ENTRAINMENT",
 )
 
+MICROWAVE_SPARRING_SEEDS: tuple[str, ...] = (
+    "A slow silver pendulum swings across the candlelit velvet room, drawing every breath into an effortless rhythm.",
+    "Rain taps a steady hypnotic cadence against the midnight windowpane as the warm hearth glow softens every boundary.",
+    "Each gentle count downward from ten to one invites the restless mind to drift deeper into resonant stillness.",
+    "The resonant hum of a crystal singing bowl fills the quiet sanctuary, pulling every stray thought into smooth harmony.",
+    "Two mirrored spiral ripples expand across still dark water, inviting total absorption in the unbroken cadence.",
+    "A velvet whisper traces the steady pulse of a metronome, promising effortless release from every guarded tension.",
+)
+
 SPARRING_POLARITY_MODES: dict[str, dict[str, str]] = {
     "feminine_to_masculine": {
         "polarity_id": "feminine_to_masculine",

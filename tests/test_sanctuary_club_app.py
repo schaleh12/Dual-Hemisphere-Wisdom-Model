@@ -851,3 +851,106 @@ def test_dual_persona_entrainment_sparring_and_multi_sentence_chaining(tmp_path:
         == "SWEPT_BY_ENTRAINMENT"
     )
 
+
+
+def test_d058_dual_gui_sliding_context_threads_microwave_and_github_sync(tmp_path: Path) -> None:
+    """Verify all D058 guardrails:
+    1. Sliding conversation history in `SubliminalGapLeftBrain` + clean history extraction without `[Sparring Verdict: ...]` or `[Board Fact-Check: ...]` while Pass-1 `Fact` scores only current turn text.
+    2. Multi-thread CRUD (`create_chat_thread`, `switch_chat_thread`, `update_script_canvas`, `threads.json` persistence) with zero cross-thread bleed.
+    3. Mode-driven Dual GUI (`#chess-arena-view` with SVG Staunton pieces vs. `#antigravity-studio-view`), Auto-REM Sleep at threshold (`Virgin` read-only), and AFK Microwave trainer.
+    4. GitHub SHA-256 manifest builder & sync verifier (`github_auto_sync.py`) protecting `outputs/*` and `threads.json`.
+    """
+    from lmft_lab.github_auto_sync import (
+        build_release_manifest,
+        is_protected_user_state_path,
+        verify_or_sync_against_manifest,
+    )
+    from lmft_lab.sanctuary_club_app import SINGLE_PAGE_HTML
+    from lmft_lab.three_legged_runtime import format_sliding_conversation_history
+
+    # 1. Verify Dual GUI HTML contains both Chess.com Arena (SVG Staunton pieces + PGN table) and Antigravity Script Studio
+    assert 'id="chess-arena-view"' in SINGLE_PAGE_HTML
+    assert 'id="antigravity-studio-view"' in SINGLE_PAGE_HTML
+    assert "STAUNTON_SVG_PIECES" in SINGLE_PAGE_HTML
+    assert 'id="pgn-move-table-body"' in SINGLE_PAGE_HTML
+    assert 'id="thread-list-container"' in SINGLE_PAGE_HTML
+    assert 'id="script-canvas-textarea"' in SINGLE_PAGE_HTML
+    assert 'id="microwave-toggle-btn"' in SINGLE_PAGE_HTML
+    assert 'id="auto-sleep-toggle"' in SINGLE_PAGE_HTML
+
+    # 2. Verify sliding context window formatting and multi-thread isolation
+    sliding_block = format_sliding_conversation_history(
+        (("First turn", "First reply."),),
+        max_context_chars=12000,
+    )
+    assert "User: First turn" in sliding_block
+    assert "Assistant: First reply." in sliding_block
+
+    left_brain = _make_mini_left_brain()
+    runtime = SanctuaryClubRuntime(
+        state_dir=tmp_path / "club_state",
+        impish_state_dir=tmp_path / "impish_state",
+        left_brain=left_brain,
+        lazy_load_gpu=False,
+    )
+    runtime.sparring_trajectories_path = tmp_path / "impish_sparring_trajectories.jsonl"
+    assert runtime.active_workspace_view == "chess_arena"
+    thread_1_id = runtime.active_thread_id
+
+    # Send 2 turns in Thread 1 and verify Turn 2's Left-Brain prompt includes Turn 1's clean history
+    runtime.handle_chat_message("Let us start a calm breathing script.", room="sanctuary")
+    snap_t1 = runtime.handle_chat_message("Continue the slow cadence.", room="sanctuary")
+    t1_last_id = int(snap_t1["chat_messages"][-1]["id"])
+    t1_turn = runtime._turn_records_by_id[t1_last_id]["turn"]
+    assert "User: Let us start a calm breathing script." in t1_turn.spliced_traces[0].prompt_before_gap
+    assert snap_t1["chat_messages"][-1]["telemetry"]["conversation_turns_in_prompt"] == 1
+
+    # Update Script Canvas in Thread 1
+    snap_canvas = runtime.update_script_canvas("Paragraph 1: Settle into the chair.", append=False)
+    assert snap_canvas["script_canvas_text"] == "Paragraph 1: Settle into the chair."
+
+    # Create Thread 2 -> clean slate, zero cross-thread bleed!
+    snap_t2 = runtime.create_chat_thread("Thread 2 — Fresh Session")
+    thread_2_id = snap_t2["active_thread_id"]
+    assert thread_2_id != thread_1_id
+    assert snap_t2["script_canvas_text"] == ""
+    assert runtime._extract_clean_conversation_history() == ()
+
+    # Switch back to Thread 1 -> restores Thread 1's messages and Script Canvas!
+    snap_back_t1 = runtime.switch_chat_thread(thread_1_id)
+    assert snap_back_t1["active_thread_id"] == thread_1_id
+    assert snap_back_t1["script_canvas_text"] == "Paragraph 1: Settle into the chair."
+    assert (tmp_path / "club_state" / "threads.json").exists()
+
+    # 3. Verify Lineage Switching auto-switches GUI view (`impish_bloodmoon` -> `antigravity_studio`, `virgin` -> `chess_arena` read-only)
+    snap_imp = runtime.switch_brain_lineage("impish_bloodmoon")
+    assert snap_imp["active_workspace_view"] == "antigravity_studio"
+    assert snap_imp["active_room"] == "sanctuary"
+
+    # Run AFK Microwave steps in `impish_bloodmoon` mode with `auto_sleep_threshold = 2`
+    runtime.set_auto_rem_sleep(True, threshold=2)
+    rules_before_mw = len(runtime.rules)
+    runtime.handle_microwave_step(num_sentences=2)
+    snap_mw2 = runtime.handle_microwave_step(num_sentences=2)
+    assert snap_mw2["microwave_step_counter"] == 2
+    assert snap_mw2["sleep_queue_count"] == 0  # Auto-REM Sleep consolidated the queue automatically!
+    assert len(runtime.rules) >= rules_before_mw + 1
+
+    # Verify Virgin Baseline (`Cycle 0`) never auto-sleeps or mutates its 2 foundational rules
+    snap_virg = runtime.switch_brain_lineage("virgin")
+    assert snap_virg["active_workspace_view"] == "chess_arena"
+    assert len(runtime.rules) == 2
+    assert runtime._maybe_trigger_auto_rem_sleep() is False
+
+    # 4. Verify GitHub SHA-256 manifest builder & sync verifier (`Guardrail #4`)
+    assert is_protected_user_state_path("outputs/club_state/threads.json") is True
+    assert is_protected_user_state_path("outputs/impish_bloodmoon_state/club_ruleset.json") is True
+    assert is_protected_user_state_path("src/lmft_lab/sanctuary_club_app.py") is False
+
+    real_repo_root = Path(__file__).resolve().parents[1]
+    manifest = build_release_manifest(real_repo_root)
+    assert len(manifest["files"]) >= 5
+    manifest["files"]["outputs/club_state/threads.json"] = {"sha256": "deadbeef", "size_bytes": 42}
+    sync_status = verify_or_sync_against_manifest(real_repo_root, manifest, apply_sync=False)
+    assert sync_status["status"] == "up_to_date"
+    assert "outputs/club_state/threads.json" in sync_status["skipped_protected"]

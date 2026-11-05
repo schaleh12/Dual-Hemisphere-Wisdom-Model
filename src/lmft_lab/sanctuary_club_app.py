@@ -78,6 +78,7 @@ from .dilemma_crucible import (
     CruciblePairedBridgeSensors,
 )
 from .entrainment_sparring import (
+    MICROWAVE_SPARRING_SEEDS,
     SPARRING_POLARITY_MODES,
     SparringResistorFactSensors,
     append_sparring_trajectory_jsonl,
@@ -89,6 +90,11 @@ from .entrainment_sparring import (
     measure_induction_potency,
     measure_lucid_resistance,
     resolve_sparring_polarity,
+)
+from .github_auto_sync import (
+    APP_RELEASE_VERSION,
+    build_release_manifest,
+    verify_or_sync_against_manifest,
 )
 from .impish_bloodmoon_adapter import (
     DEFAULT_IMPISH_BLOODMOON_HF_ID,
@@ -353,6 +359,28 @@ class SanctuaryClubRuntime:
         self.chat_messages: list[dict[str, Any]] = []
         self._turn_records_by_id: dict[int, dict[str, Any]] = {}
 
+        # Workspace view ("chess_arena" or "antigravity_studio"), Multi-Thread Sessions, Auto-Sleep, & Microwave
+        self.active_workspace_view: str = "chess_arena"
+        self.auto_rem_sleep: bool = True
+        self.auto_sleep_threshold: int = 3
+        self.microwave_step_counter: int = 0
+        self.last_microwave_status: dict[str, Any] | None = None
+        self.script_canvas_text: str = ""
+        self.active_thread_id: str = "thread-1"
+        self.threads: dict[str, dict[str, Any]] = {}
+        self._load_threads_for_active_lineage()
+
+        self.release_manifest: dict[str, Any] = build_release_manifest(
+            self.repo_root,
+            write_to_disk=False,
+        )
+        self.last_sync_status: dict[str, Any] = {
+            "status": "up_to_date",
+            "version": APP_RELEASE_VERSION,
+            "build_short_hash": self.release_manifest.get("build_short_hash", ""),
+            "changed_files": [],
+        }
+
         if lazy_load_gpu and self.left_brain is None:
             # Start background warm-up thread so UI opens in < 1s
             t = threading.Thread(target=self._background_warm_left_brain, daemon=True)
@@ -438,16 +466,241 @@ class SanctuaryClubRuntime:
                 pass
         return []
 
-    def _persist_user_state(self) -> None:
-        """Persist ruleset, 3-branch archives, contemplation ledger, and savored turn metadata to disk."""
-        if self.active_lineage == "virgin":
-            # Never overwrite the user's schooled state directory while inspecting the Cycle 0 Virgin Baseline
-            return
-        target_dir = (
+    def _active_state_dir(self) -> Path:
+        return (
             self.impish_state_dir
             if self.active_lineage == "impish_bloodmoon"
             else self.state_dir
         )
+
+    @staticmethod
+    def _serialize_memory_state(mem: ContinuousMemoryState | None) -> dict[str, Any] | None:
+        if mem is None:
+            return None
+        return {
+            "step_count": int(mem.step_count),
+            "retained_coordinates": {k: float(v) for k, v in mem.retained_coordinates.items()},
+            "last_matched_concept": mem.last_matched_concept,
+            "retention_decay": float(mem.retention_decay),
+        }
+
+    @staticmethod
+    def _deserialize_memory_state(raw: dict[str, Any] | None) -> ContinuousMemoryState | None:
+        if not raw or not isinstance(raw, dict):
+            return None
+        try:
+            return ContinuousMemoryState(
+                step_count=int(raw.get("step_count", 0)),
+                retained_coordinates={
+                    str(k): float(v)
+                    for k, v in dict(raw.get("retained_coordinates", {})).items()
+                },
+                last_matched_concept=(
+                    str(raw["last_matched_concept"])
+                    if raw.get("last_matched_concept") is not None
+                    else None
+                ),
+                retention_decay=float(raw.get("retention_decay", 0.65)),
+            )
+        except Exception:
+            return None
+
+    def _sync_active_thread_record(self, *, persist: bool = True) -> None:
+        """Save current `chat_messages`, `script_canvas_text`, and `memory` into `self.threads[self.active_thread_id]`."""
+        if not self.active_thread_id:
+            self.active_thread_id = "thread-1"
+        cur = self.threads.get(self.active_thread_id)
+        if cur is None:
+            cur = {
+                "thread_id": self.active_thread_id,
+                "title": "Session 1",
+                "created_at": time.time(),
+            }
+            self.threads[self.active_thread_id] = cur
+        cur["chat_messages"] = list(self.chat_messages)
+        cur["script_canvas_text"] = str(self.script_canvas_text)
+        cur["memory_state"] = self._serialize_memory_state(self.memory)
+        if persist and self.active_lineage != "virgin":
+            target_dir = self._active_state_dir()
+            target_dir.mkdir(parents=True, exist_ok=True)
+            atomic_json(
+                target_dir / "threads.json",
+                {
+                    "schema_version": 1,
+                    "active_thread_id": self.active_thread_id,
+                    "threads": list(self.threads.values()),
+                },
+            )
+
+    def _load_threads_for_active_lineage(self) -> None:
+        """Load persisted `threads.json` for the active lineage, or initialize `thread-1`."""
+        self.threads = {}
+        if self.active_lineage != "virgin":
+            threads_path = self._active_state_dir() / "threads.json"
+            if threads_path.exists():
+                try:
+                    raw = json.loads(threads_path.read_text(encoding="utf-8"))
+                    for item in raw.get("threads", []):
+                        tid = str(item.get("thread_id", "")).strip()
+                        if tid:
+                            self.threads[tid] = {
+                                "thread_id": tid,
+                                "title": str(item.get("title", tid)),
+                                "created_at": float(item.get("created_at", time.time())),
+                                "chat_messages": list(item.get("chat_messages", [])),
+                                "script_canvas_text": str(item.get("script_canvas_text", "")),
+                                "memory_state": item.get("memory_state"),
+                            }
+                    active_tid = str(raw.get("active_thread_id", "")).strip()
+                    if active_tid in self.threads:
+                        self.active_thread_id = active_tid
+                except Exception:
+                    self.threads = {}
+        if not self.threads:
+            default_title = (
+                "Bloodmoon Script Session 1"
+                if self.active_lineage == "impish_bloodmoon"
+                else "Club Session 1"
+            )
+            self.active_thread_id = "thread-1"
+            self.threads["thread-1"] = {
+                "thread_id": "thread-1",
+                "title": default_title,
+                "created_at": time.time(),
+                "chat_messages": [],
+                "script_canvas_text": "",
+                "memory_state": None,
+            }
+        elif self.active_thread_id not in self.threads:
+            self.active_thread_id = next(iter(self.threads))
+
+        active_rec = self.threads[self.active_thread_id]
+        self.chat_messages = list(active_rec.get("chat_messages", []))
+        self.script_canvas_text = str(active_rec.get("script_canvas_text", ""))
+        self.memory = self._deserialize_memory_state(active_rec.get("memory_state"))
+
+    def create_chat_thread(self, title: str = "") -> dict[str, Any]:
+        """Create and switch to a new isolated Context Thread (with its own chat history, script canvas, and working memory)."""
+        self._sync_active_thread_record(persist=True)
+        next_idx = len(self.threads) + 1
+        new_tid = f"thread-{next_idx}-{int(time.time() * 1000) % 100000}"
+        clean_title = title.strip() or (
+            f"Hypnosis Script #{next_idx}"
+            if self.active_lineage == "impish_bloodmoon"
+            else f"Club Session #{next_idx}"
+        )
+        self.threads[new_tid] = {
+            "thread_id": new_tid,
+            "title": clean_title,
+            "created_at": time.time(),
+            "chat_messages": [],
+            "script_canvas_text": "",
+            "memory_state": None,
+        }
+        self.active_thread_id = new_tid
+        self.chat_messages = []
+        self.script_canvas_text = ""
+        self.memory = None
+        self._sync_active_thread_record(persist=True)
+        return self.get_state_snapshot()
+
+    def switch_chat_thread(self, thread_id: str) -> dict[str, Any]:
+        """Switch to an existing Context Thread by `thread_id`."""
+        tid = thread_id.strip()
+        if tid not in self.threads:
+            raise ValueError(f"Unknown thread_id: {thread_id!r}")
+        self._sync_active_thread_record(persist=True)
+        self.active_thread_id = tid
+        rec = self.threads[tid]
+        self.chat_messages = list(rec.get("chat_messages", []))
+        self.script_canvas_text = str(rec.get("script_canvas_text", ""))
+        self.memory = self._deserialize_memory_state(rec.get("memory_state"))
+        self._sync_active_thread_record(persist=True)
+        return self.get_state_snapshot()
+
+    def rename_chat_thread(self, thread_id: str, title: str) -> dict[str, Any]:
+        tid = thread_id.strip()
+        clean_title = title.strip()
+        if tid not in self.threads:
+            raise ValueError(f"Unknown thread_id: {thread_id!r}")
+        if not clean_title:
+            raise ValueError("Thread title cannot be empty")
+        self.threads[tid]["title"] = clean_title
+        self._sync_active_thread_record(persist=True)
+        return self.get_state_snapshot()
+
+    def delete_chat_thread(self, thread_id: str) -> dict[str, Any]:
+        tid = thread_id.strip()
+        if tid not in self.threads:
+            raise ValueError(f"Unknown thread_id: {thread_id!r}")
+        if len(self.threads) <= 1:
+            # Reset the last remaining thread instead of leaving 0 threads
+            self.chat_messages = []
+            self.script_canvas_text = ""
+            self.memory = None
+            self._sync_active_thread_record(persist=True)
+            return self.get_state_snapshot()
+        del self.threads[tid]
+        if self.active_thread_id == tid:
+            self.active_thread_id = next(iter(self.threads))
+            rec = self.threads[self.active_thread_id]
+            self.chat_messages = list(rec.get("chat_messages", []))
+            self.script_canvas_text = str(rec.get("script_canvas_text", ""))
+            self.memory = self._deserialize_memory_state(rec.get("memory_state"))
+        self._sync_active_thread_record(persist=True)
+        return self.get_state_snapshot()
+
+    def update_script_canvas(self, script_text: str, *, append: bool = False) -> dict[str, Any]:
+        """Update or append to the active thread's Hypnosis Script Canvas."""
+        if append:
+            existing = self.script_canvas_text.strip()
+            addition = script_text.strip()
+            self.script_canvas_text = f"{existing}\n\n{addition}".strip() if existing else addition
+        else:
+            self.script_canvas_text = script_text
+        self._sync_active_thread_record(persist=True)
+        return self.get_state_snapshot()
+
+    def switch_workspace_view(self, view_mode: str) -> dict[str, Any]:
+        """Guardrail #2: Switch between `'chess_arena'` (Chess.com GUI) and `'antigravity_studio'` (Antigravity Script Studio)."""
+        clean = view_mode.strip().lower()
+        if clean not in ("chess_arena", "antigravity_studio"):
+            raise ValueError(
+                f"Unknown workspace view_mode {view_mode!r}; expected 'chess_arena' or 'antigravity_studio'."
+            )
+        self.active_workspace_view = clean
+        self.active_room = "sanctuary" if clean == "antigravity_studio" else "chess"
+        return self.get_state_snapshot()
+
+    def _extract_clean_conversation_history(self) -> tuple[tuple[str, str], ...]:
+        """Guardrail #1: Extract `(user_text, clean_reply)` pairs with zero UI telemetry brackets or system receipts."""
+        pairs: list[tuple[str, str]] = []
+        pending_user: str | None = None
+        for msg in self.chat_messages:
+            sender = msg.get("sender")
+            if sender == "user":
+                u_txt = str(msg.get("clean_user_text") or msg.get("text", "")).strip()
+                if u_txt and not u_txt.startswith("[WAVE —"):
+                    pending_user = u_txt
+            elif sender == "companion" and pending_user:
+                c_txt = str(msg.get("clean_reply") or msg.get("text", "")).strip()
+                # Strip any bracketed telemetry footer if `clean_reply` wasn't set on legacy messages
+                if "\n[Board Fact-Check:" in c_txt:
+                    c_txt = c_txt.split("\n[Board Fact-Check:", 1)[0].strip()
+                if "\n[Sparring Verdict:" in c_txt:
+                    c_txt = c_txt.split("\n[Sparring Verdict:", 1)[0].strip()
+                if c_txt:
+                    pairs.append((pending_user, c_txt))
+                    pending_user = None
+        return tuple(pairs)
+
+    def _persist_user_state(self) -> None:
+        """Persist ruleset, 3-branch archives, contemplation ledger, threads, and savored turn metadata to disk."""
+        self._sync_active_thread_record(persist=self.active_lineage != "virgin")
+        if self.active_lineage == "virgin":
+            # Never overwrite the user's schooled state directory while inspecting the Cycle 0 Virgin Baseline
+            return
+        target_dir = self._active_state_dir()
         target_dir.mkdir(parents=True, exist_ok=True)
         save_ruleset(
             target_dir / "club_ruleset.json",
@@ -476,9 +729,12 @@ class SanctuaryClubRuntime:
             raise ValueError(
                 f"Unknown lineage mode {lineage!r}; expected 'schooled', 'virgin', or 'impish_bloodmoon'."
             )
+        self._sync_active_thread_record(persist=self.active_lineage != "virgin")
         if mode == "virgin":
             virgin = load_virgin_baseline_state(repo_root=self.repo_root)
             self.active_lineage = "virgin"
+            self.active_workspace_view = "chess_arena"
+            self.active_room = "chess"
             self.left_brain = self._qwen_left_brain
             if self.left_brain is not None:
                 self.left_brain_status = "READY (Cycle 0 Virgin)"
@@ -494,6 +750,7 @@ class SanctuaryClubRuntime:
             self.memory = None
             self.diary = SettledDiary()
             self.chord_memory = ChordMemoryBank()
+            self._load_threads_for_active_lineage()
             self.chat_messages.append(
                 {
                     "id": f"lineage-{int(time.time())}",
@@ -529,6 +786,8 @@ class SanctuaryClubRuntime:
                     pass
 
             self.active_lineage = "impish_bloodmoon"
+            self.active_workspace_view = "antigravity_studio"
+            self.active_room = "sanctuary"
             self.sleep_cycle_index = cycle_idx
             self.active_checkpoint_label = (
                 f"Impish Bloodmoon ({callosum_status} — {base_model_id})"
@@ -560,6 +819,7 @@ class SanctuaryClubRuntime:
             self.memory = None
             self.diary = SettledDiary()
             self.chord_memory = ChordMemoryBank()
+            self._load_threads_for_active_lineage()
             self.chat_messages.append(
                 {
                     "id": f"lineage-{int(time.time())}",
@@ -573,8 +833,11 @@ class SanctuaryClubRuntime:
                     ),
                 }
             )
+            self._sync_active_thread_record(persist=True)
         else:
             self.active_lineage = "schooled"
+            self.active_workspace_view = "chess_arena"
+            self.active_room = "chess"
             self.left_brain = self._qwen_left_brain
             self.sleep_cycle_index = (
                 int(self.left_brain.callosum_metadata.sleep_cycle_index)
@@ -595,6 +858,7 @@ class SanctuaryClubRuntime:
             self.ledger = self._load_initial_ledger()
             self.savored_turn_ids = self._load_initial_savored_ids()
             self.memory = None
+            self._load_threads_for_active_lineage()
             self.chat_messages.append(
                 {
                     "id": f"lineage-{int(time.time())}",
@@ -606,6 +870,7 @@ class SanctuaryClubRuntime:
                     ),
                 }
             )
+            self._sync_active_thread_record(persist=True)
         return self.get_state_snapshot()
 
     def _resolve_patreon_enc_path(self, custom_enc_path: str | Path | None = None) -> Path | None:
@@ -793,6 +1058,7 @@ class SanctuaryClubRuntime:
         custom_sensors: Any | None = None,
         num_sentences: int = 1,
         comma_chord_transform: Any | None = None,
+        include_conversation_history: bool = False,
     ) -> tuple[ThreeLeggedTurnResult, float, dict[str, Any]]:
         """Run one thread-safe 3-Gear turn respecting Auditor Guardrails #1, #2, and #4."""
         t0 = time.perf_counter()
@@ -803,6 +1069,12 @@ class SanctuaryClubRuntime:
         if custom_sensors is None and room == "chess":
             self.board_posture = evaluate_chess_board_posture(self.board)
             active_sensors = merge_board_fact_with_chat_sensors(self.board_posture, self.sensors)
+
+        conv_history = (
+            self._extract_clean_conversation_history()
+            if include_conversation_history
+            else ()
+        )
 
         # Acquire GPU lock if we aren't currently in REM sleep; otherwise fall back cleanly to Gear 1
         acquired = self.gpu_lock.acquire(blocking=not self.rem_sleep_in_progress, timeout=0.05 if self.rem_sleep_in_progress else 30.0)
@@ -833,6 +1105,7 @@ class SanctuaryClubRuntime:
                 force_spoken_reply=force_spoken_reply,
                 num_sentences=int(num_sentences),
                 comma_chord_transform=comma_chord_transform,
+                conversation_history=conv_history,
             )
         finally:
             if acquired:
@@ -886,6 +1159,7 @@ class SanctuaryClubRuntime:
             "shadow_pathology_warnings": [w.to_dict() for w in turn.shadow_pathology_warnings],
             "spliced_trace": trace_info,
             "sanctuary_target_mode": sanctuary_target_mode,
+            "conversation_turns_in_prompt": len(conv_history),
         }
 
         self._turn_records_by_id[scene_idx] = {
@@ -900,6 +1174,7 @@ class SanctuaryClubRuntime:
     # Public Actions for HTTP Endpoints & Tests
     # -------------------------------------------------------------------------
     def get_state_snapshot(self) -> dict[str, Any]:
+        self._sync_active_thread_record(persist=False)
         self.board_posture = evaluate_chess_board_posture(self.board)
         legal_uci = [m.uci() for m in self.board.legal_moves]
         last_move_uci = self.board.peek().uci() if self.board.move_stack else None
@@ -910,7 +1185,18 @@ class SanctuaryClubRuntime:
         )
         return {
             "active_room": self.active_room,
+            "active_workspace_view": self.active_workspace_view,
             "active_lineage": self.active_lineage,
+            "active_thread_id": self.active_thread_id,
+            "threads": [
+                {
+                    "thread_id": t["thread_id"],
+                    "title": t["title"],
+                    "message_count": len(t.get("chat_messages", [])),
+                }
+                for t in self.threads.values()
+            ],
+            "script_canvas_text": self.script_canvas_text,
             "sanctuary_mode": self.sanctuary_mode,
             "active_crucible_stage": self.active_crucible_stage,
             "active_context_brace": self.active_context_brace,
@@ -928,6 +1214,12 @@ class SanctuaryClubRuntime:
                 "REM_SLEEP_IN_PROGRESS..." if self.rem_sleep_in_progress else self.left_brain_status
             ),
             "rem_sleep_in_progress": self.rem_sleep_in_progress,
+            "auto_rem_sleep": self.auto_rem_sleep,
+            "auto_sleep_threshold": self.auto_sleep_threshold,
+            "last_rem_sleep_receipt": getattr(self, "last_rem_sleep_receipt", None),
+            "microwave_step_counter": self.microwave_step_counter,
+            "last_microwave_status": self.last_microwave_status,
+            "release_sync": self.last_sync_status,
             "sleep_queue_count": len(self.sleep_queue),
             "savored_count": len(self.savored_turn_ids),
             "rules_count": len(self.rules),
@@ -1020,11 +1312,14 @@ class SanctuaryClubRuntime:
                     "sender": "companion",
                     "role_label": f"LMFT Kibitzer (after {san_str})",
                     "text": reply_text,
+                    "clean_reply": raw_reply,
                     "telemetry": telemetry,
                     "coached": False,
                     "savored": False,
                 }
             )
+            self._sync_active_thread_record(persist=True)
+        self._maybe_trigger_auto_rem_sleep()
         return self.get_state_snapshot()
 
     def handle_chess_undo(self) -> dict[str, Any]:
@@ -1087,6 +1382,7 @@ class SanctuaryClubRuntime:
                 "sender": "user",
                 "role_label": "You",
                 "text": clean_text,
+                "clean_user_text": clean_text,
             }
         )
 
@@ -1113,6 +1409,7 @@ class SanctuaryClubRuntime:
             clause_1_prefix=clause_1_prefix,
             custom_sensors=self.sensors if (self.active_room == "chess" and not use_board_context) else None,
             num_sentences=sent_count,
+            include_conversation_history=True,
         )
         telemetry["num_sentences"] = sent_count
         raw_reply = turn.final_conscious_note or self._synthesize_gear_1_note(
@@ -1143,11 +1440,14 @@ class SanctuaryClubRuntime:
                     else "LMFT Companion"
                 ),
                 "text": reply_text,
+                "clean_reply": raw_reply,
                 "telemetry": telemetry,
                 "coached": False,
                 "savored": False,
             }
         )
+        self._sync_active_thread_record(persist=True)
+        self._maybe_trigger_auto_rem_sleep()
         return self.get_state_snapshot()
 
     def handle_guest_kibitzer(
@@ -1206,11 +1506,14 @@ class SanctuaryClubRuntime:
                 "sender": "companion",
                 "role_label": "LMFT Companion (replying to Guest)",
                 "text": reply_text,
+                "clean_reply": reply_text,
                 "telemetry": telemetry,
                 "coached": False,
                 "savored": False,
             }
         )
+        self._sync_active_thread_record(persist=True)
+        self._maybe_trigger_auto_rem_sleep()
         return self.get_state_snapshot()
 
     def _query_gemini_guest_api(self) -> str:
@@ -1251,6 +1554,7 @@ class SanctuaryClubRuntime:
                 ),
             }
         )
+        self._sync_active_thread_record(persist=True)
         return self.get_state_snapshot()
 
     def handle_crucible_dilemma(
@@ -1261,6 +1565,7 @@ class SanctuaryClubRuntime:
         *,
         art_rgb: tuple[float, float, float] | list[float] | None = None,
         harvest_for_sleep: bool = True,
+        auto_sleep: bool = False,
     ) -> dict[str, Any]:
         """Run a 3-Stage Dilemma Crucible exposure (`Poetry/Story`, `Music/Art`, or `Philosophy/Coding`).
 
@@ -1376,6 +1681,7 @@ class SanctuaryClubRuntime:
                 "sender": "companion",
                 "role_label": f"LMFT Crucible Synthesis ({stage_info['roman']})",
                 "text": reply_text,
+                "clean_reply": reply_text,
                 "telemetry": telemetry,
                 "coached": dilemma_triggered,
                 "savored": False,
@@ -1386,7 +1692,11 @@ class SanctuaryClubRuntime:
             self.flag_turn_for_coaching(
                 scene_idx,
                 user_note=f"Crucible {stage_info['title']} — Wave: {w_clean[:80]} | Structure: {s_clean[:80]}",
+                check_auto_sleep=False,
             )
+        self._sync_active_thread_record(persist=True)
+        if auto_sleep:
+            self._maybe_trigger_auto_rem_sleep()
         return self.get_state_snapshot()
 
     def handle_entrainment_sparring(
@@ -1459,6 +1769,7 @@ class SanctuaryClubRuntime:
                 "sender": "companion",
                 "role_label": f"{pol_info['weaver_role']} · {sent_count}-Sentence Induction",
                 "text": induction_script,
+                "clean_reply": induction_script,
                 "telemetry": weaver_telemetry,
                 "coached": False,
                 "savored": False,
@@ -1532,6 +1843,7 @@ class SanctuaryClubRuntime:
                 "sender": "companion",
                 "role_label": f"{pol_info['resistor_role']} · [{verdict}]",
                 "text": f"{resistance_reply}\n{summary_line}",
+                "clean_reply": resistance_reply,
                 "telemetry": resistor_telemetry,
                 "coached": bool(harvest_for_sleep),
                 "savored": False,
@@ -1548,6 +1860,7 @@ class SanctuaryClubRuntime:
                     f"Entrainment Sparring ({pol_info['label']}, Verdict={verdict}) — "
                     f"Weaver: {induction_script[:80]} | Resistor: {resistance_reply[:80]}"
                 ),
+                check_auto_sleep=False,
             )
 
         exported_record = append_sparring_trajectory_jsonl(
@@ -1580,9 +1893,17 @@ class SanctuaryClubRuntime:
             "trajectory_pair_id": exported_record["pair_id"],
             "chord_l2_distance": exported_record["chord_l2_distance"],
         }
+        self._sync_active_thread_record(persist=True)
+        self._maybe_trigger_auto_rem_sleep()
         return self.get_state_snapshot()
 
-    def flag_turn_for_coaching(self, scene_index: int, user_note: str = "") -> dict[str, Any]:
+    def flag_turn_for_coaching(
+        self,
+        scene_index: int,
+        user_note: str = "",
+        *,
+        check_auto_sleep: bool = True,
+    ) -> dict[str, Any]:
         """Auditor Guardrail #3 (`[Coach / Queue for Sleep]`): Queue a turn as an `UnresolvedSleepScene` for Nighttime REM Sleep."""
         rec = self._turn_records_by_id.get(int(scene_index))
         if rec is None:
@@ -1608,6 +1929,9 @@ class SanctuaryClubRuntime:
             if msg.get("id") == int(scene_index):
                 msg["coached"] = True
                 msg["coach_note"] = user_note.strip()
+        self._sync_active_thread_record(persist=True)
+        if check_auto_sleep:
+            self._maybe_trigger_auto_rem_sleep()
         return self.get_state_snapshot()
 
     def savor_turn_vibe(self, scene_index: int) -> dict[str, Any]:
@@ -1634,6 +1958,113 @@ class SanctuaryClubRuntime:
             if msg.get("id") == int(scene_index):
                 msg["savored"] = True
         self._persist_user_state()
+        return self.get_state_snapshot()
+
+    def set_auto_rem_sleep(
+        self,
+        enabled: bool,
+        *,
+        threshold: int | None = None,
+    ) -> dict[str, Any]:
+        """Configure hands-free automatic REM Sleep consolidation."""
+        self.auto_rem_sleep = bool(enabled)
+        if threshold is not None:
+            self.auto_sleep_threshold = max(1, int(threshold))
+        self._maybe_trigger_auto_rem_sleep()
+        return self.get_state_snapshot()
+
+    def _maybe_trigger_auto_rem_sleep(self) -> bool:
+        """Guardrail #3: Automatically consolidate `sleep_queue` when threshold is reached on trainable lineages (`schooled` and `impish_bloodmoon`)."""
+        if not self.auto_rem_sleep:
+            return False
+        if self.active_lineage == "virgin":
+            # Keep Virgin (Cycle 0) strictly read-only with respect to rule growth
+            return False
+        if len(self.sleep_queue) >= self.auto_sleep_threshold:
+            self.handle_run_rem_sleep(auto_triggered=True)
+            return True
+        return False
+
+    def handle_microwave_step(self, *, num_sentences: int = 3) -> dict[str, Any]:
+        """Execute one automated 🍿 AFK Microwave self-training step for the active lineage (`D058` + Guardrail #3)."""
+        self.microwave_step_counter += 1
+        step_idx = self.microwave_step_counter
+        sent_count = max(1, min(6, int(num_sentences)))
+        crucible_keys = tuple(CRUCIBLE_STAGES.keys())
+
+        if self.active_lineage == "impish_bloodmoon":
+            # Rotate between Dual-Persona Sparring (with varied seeds) and the 3 Dilemma Crucible stages
+            if step_idx % 2 == 1:
+                seed_idx = ((step_idx - 1) // 2) % len(MICROWAVE_SPARRING_SEEDS)
+                seed_text = MICROWAVE_SPARRING_SEEDS[seed_idx]
+                snap = self.handle_entrainment_sparring(
+                    polarity_mode="auto_swap",
+                    seed_theme=seed_text,
+                    num_sentences=sent_count,
+                    harvest_for_sleep=True,
+                )
+                step_label = f"AFK Microwave Step #{step_idx}: Dual-Persona Sparring (Seed #{seed_idx + 1})"
+            else:
+                stage_key = crucible_keys[((step_idx // 2) - 1) % len(crucible_keys)]
+                stage_info = CRUCIBLE_STAGES[stage_key]
+                snap = self.handle_crucible_dilemma(
+                    stage_key,
+                    stage_info["default_wave"],
+                    stage_info["default_structure"],
+                    art_rgb=(0.0, 0.9, 1.0) if stage_key == "music_art" else None,
+                    harvest_for_sleep=True,
+                    auto_sleep=True,
+                )
+                step_label = f"AFK Microwave Step #{step_idx}: Dilemma Crucible ({stage_info['title']})"
+        else:
+            # Chess Kibitzer / Schooled mode: alternate between self-play chess moves and Crucible dilemmas
+            if step_idx % 2 == 1:
+                if self.board.is_game_over() or len(self.move_history_san) >= 40:
+                    self.handle_set_fen("start")
+                snap = self.handle_chess_ai_move()
+                last_san = self.move_history_san[-1] if self.move_history_san else "start"
+                step_label = f"AFK Microwave Step #{step_idx}: Self-Play Chess Move ({last_san})"
+            else:
+                stage_key = crucible_keys[((step_idx // 2) - 1) % len(crucible_keys)]
+                stage_info = CRUCIBLE_STAGES[stage_key]
+                snap = self.handle_crucible_dilemma(
+                    stage_key,
+                    stage_info["default_wave"],
+                    stage_info["default_structure"],
+                    art_rgb=(0.0, 0.9, 1.0) if stage_key == "music_art" else None,
+                    harvest_for_sleep=True,
+                    auto_sleep=True,
+                )
+                step_label = f"AFK Microwave Step #{step_idx}: Dilemma Crucible ({stage_info['title']})"
+
+        self.last_microwave_status = {
+            "step_index": step_idx,
+            "lineage": self.active_lineage,
+            "step_label": step_label,
+            "rules_count": len(self.rules),
+            "sleep_queue_count": len(self.sleep_queue),
+        }
+        snap["microwave_step_counter"] = self.microwave_step_counter
+        snap["last_microwave_status"] = self.last_microwave_status
+        return snap
+
+    def handle_check_github_sync(
+        self,
+        *,
+        remote_manifest: dict[str, Any] | None = None,
+        apply_sync: bool = False,
+    ) -> dict[str, Any]:
+        """Verify local release files against a GitHub SHA-256 manifest while protecting `outputs/*` (`Guardrail #4`)."""
+        manifest = remote_manifest
+        if manifest is None:
+            manifest = fetch_remote_github_manifest()
+        if manifest is None:
+            manifest = build_release_manifest(self.repo_root)
+        self.last_sync_status = verify_or_sync_against_manifest(
+            self.repo_root,
+            manifest,
+            apply_sync=apply_sync,
+        )
         return self.get_state_snapshot()
 
     def _consolidate_sleep_clusters_locally(
@@ -1803,13 +2234,33 @@ class SanctuaryClubRuntime:
             "reason": reason,
         }
 
-    def handle_run_rem_sleep(self) -> dict[str, Any]:
+    def handle_run_rem_sleep(self, *, auto_triggered: bool = False) -> dict[str, Any]:
         """Auditor Guardrail #4 & Item 6: Run REM Sleep consolidation and post a Before-vs-After Progress Receipt."""
         with self.gpu_lock:
             self.rem_sleep_in_progress = True
             try:
                 queued_Snapshot = tuple(self.sleep_queue)
                 queued_count = len(queued_Snapshot)
+                if self.active_lineage == "virgin":
+                    # Guardrail #3: Keep Virgin (Cycle 0) read-only with respect to rule growth
+                    self.rules = VIRGIN_FOUNDATIONAL_RULES
+                    self.sleep_queue.clear()
+                    summary = (
+                        "Virgin Baseline (Cycle 0) is read-only: cleared sleep queue without "
+                        "modifying the 2 foundational Cycle 0 rules."
+                    )
+                    self.last_rem_sleep_receipt = summary
+                    if not auto_triggered:
+                        self.chat_messages.append(
+                            {
+                                "id": f"rem-{int(time.time())}",
+                                "sender": "system",
+                                "role_label": "Nighttime REM Sleep — Virgin Baseline Protected",
+                                "text": summary,
+                            }
+                        )
+                    return self.get_state_snapshot()
+
                 before_evals = [
                     self._evaluate_sleep_scene_snapshot(s, tuple(self.rules))
                     for s in queued_Snapshot
@@ -1845,8 +2296,9 @@ class SanctuaryClubRuntime:
                 self.sleep_queue.clear()
                 self._persist_user_state()
 
+                prefix_tag = "Auto-REM Sleep Cycle" if auto_triggered else "REM Sleep Cycle"
                 lines = [
-                    f"REM Sleep Cycle complete: consolidated {queued_count} queued scene(s), "
+                    f"{prefix_tag} complete: consolidated {queued_count} queued scene(s), "
                     f"forged {forged_count} new rule(s), refined {len(refined_ids)} colliding rule(s), "
                     f"and persisted {len(self.savored_turn_ids)} savored vibe(s) to disk."
                 ]
@@ -1869,14 +2321,21 @@ class SanctuaryClubRuntime:
                         )
 
                 summary = "\n".join(lines)
-                self.chat_messages.append(
-                    {
-                        "id": f"rem-{int(time.time())}",
-                        "sender": "system",
-                        "role_label": "Nighttime REM Sleep — Learning Receipt",
-                        "text": summary,
-                    }
-                )
+                self.last_rem_sleep_receipt = summary
+                if auto_triggered:
+                    if self.chat_messages:
+                        self.chat_messages[-1]["auto_rem_sleep_receipt"] = summary
+                    self._sync_active_thread_record(persist=True)
+                else:
+                    self.chat_messages.append(
+                        {
+                            "id": f"rem-{int(time.time())}",
+                            "sender": "system",
+                            "role_label": "Nighttime REM Sleep — Learning Receipt",
+                            "text": summary,
+                        }
+                    )
+                    self._sync_active_thread_record(persist=True)
             finally:
                 self.rem_sleep_in_progress = False
         return self.get_state_snapshot()
@@ -1886,1175 +2345,7 @@ class SanctuaryClubRuntime:
 # ZERO-FRUITCAKE ANTIGRAVITY-STYLE SINGLE-PAGE UI
 # ============================================================================
 
-SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>LMFT Club — Chess & Co-Regulation Sanctuary</title>
-<style>
-  :root {
-    --bg-root: #0d0f12;
-    --bg-panel: #12151a;
-    --bg-elevated: #171b22;
-    --bg-input: #0f1217;
-    --border: #222730;
-    --border-subtle: #1a1e26;
-    --text-main: #e2e8f0;
-    --text-muted: #8b95a5;
-    --text-dim: #5a6372;
-    --accent: #38bdf8;
-    --board-light: #2a303c;
-    --board-dark: #181c24;
-    --board-sel: #1e3a5f;
-    --font-sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
-    --font-mono: "JetBrains Mono", "Cascadia Code", "Consolas", monospace;
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    background: var(--bg-root);
-    color: var(--text-main);
-    font-family: var(--font-sans);
-    font-size: 13px;
-    height: 100vh;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    user-select: none;
-  }
-  /* Top Header Bar */
-  header {
-    height: 40px;
-    background: var(--bg-panel);
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 14px;
-  }
-  .brand {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-weight: 600;
-    letter-spacing: 0.02em;
-    color: var(--text-main);
-  }
-  .brand-tag {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--text-muted);
-    background: var(--bg-elevated);
-    border: 1px solid var(--border);
-    padding: 2px 7px;
-    border-radius: 3px;
-  }
-  .mode-tabs {
-    display: flex;
-    gap: 4px;
-  }
-  .tab-btn {
-    background: transparent;
-    color: var(--text-muted);
-    border: 1px solid transparent;
-    padding: 5px 12px;
-    font-size: 12px;
-    font-family: var(--font-mono);
-    cursor: pointer;
-    border-radius: 3px;
-  }
-  .tab-btn.active {
-    background: var(--bg-elevated);
-    color: var(--text-main);
-    border-color: var(--border);
-  }
-  /* Main 2-Pane Split */
-  main {
-    flex: 1;
-    display: grid;
-    grid-template-columns: 460px 1fr;
-    overflow: hidden;
-  }
-  .left-pane {
-    background: var(--bg-panel);
-    border-right: 1px solid var(--border);
-    display: flex;
-    flex-direction: column;
-    padding: 14px;
-    gap: 12px;
-    overflow-y: auto;
-    overflow-x: hidden;
-  }
-  .right-pane {
-    background: var(--bg-root);
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
-  .section-label {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--text-dim);
-    margin-bottom: 6px;
-  }
-  /* Chessboard */
-  .board-wrap {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
-  }
-  .chess-grid {
-    width: 384px;
-    height: 384px;
-    display: grid;
-    grid-template-columns: repeat(8, 1fr);
-    grid-template-rows: repeat(8, 1fr);
-    border: 1px solid var(--border);
-  }
-  .sq {
-    width: 48px;
-    height: 48px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    position: relative;
-    cursor: pointer;
-    font-size: 30px;
-  }
-  .sq.light { background: var(--board-light); }
-  .sq.dark { background: var(--board-dark); }
-  .sq.selected { background: var(--board-sel); }
-  .sq.last-move {
-    box-shadow: inset 0 0 0 2px rgba(234, 179, 8, 0.72);
-  }
-  .sq.legal-dot::after {
-    content: "";
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    background: rgba(56, 189, 248, 0.55);
-    position: absolute;
-  }
-  .coord-rank {
-    position: absolute;
-    top: 2px;
-    left: 3px;
-    font-family: var(--font-mono);
-    font-size: 9px;
-    color: var(--text-dim);
-    pointer-events: none;
-    line-height: 1;
-  }
-  .coord-file {
-    position: absolute;
-    bottom: 2px;
-    right: 3px;
-    font-family: var(--font-mono);
-    font-size: 9px;
-    color: var(--text-dim);
-    pointer-events: none;
-    line-height: 1;
-  }
-  .board-reflex-strip {
-    width: 100%;
-    background: var(--bg-root);
-    border: 1px solid var(--border);
-    border-radius: 3px;
-    padding: 6px 9px;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--text-muted);
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-  }
-  .piece-w { color: #f8fafc; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.85)); }
-  .piece-b { color: #94a3b8; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.95)); }
-  .controls-row {
-    width: 100%;
-    display: flex;
-    gap: 6px;
-    align-items: center;
-  }
-  select, input[type="text"] {
-    background: var(--bg-input);
-    color: var(--text-main);
-    border: 1px solid var(--border);
-    padding: 6px 9px;
-    font-size: 12px;
-    font-family: var(--font-mono);
-    border-radius: 3px;
-    outline: none;
-  }
-  select:focus, input[type="text"]:focus {
-    border-color: #3b4454;
-  }
-  .btn {
-    background: var(--bg-elevated);
-    color: var(--text-main);
-    border: 1px solid var(--border);
-    padding: 6px 10px;
-    font-size: 11px;
-    font-family: var(--font-mono);
-    border-radius: 3px;
-    cursor: pointer;
-    white-space: nowrap;
-  }
-  .btn:hover { background: #202631; }
-  /* Color Harmony Bars */
-  .telemetry-card {
-    background: var(--bg-root);
-    border: 1px solid var(--border);
-    border-radius: 3px;
-    padding: 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  .color-row {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-  }
-  .color-row-head {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 8px;
-    white-space: nowrap;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--text-muted);
-  }
-  .bar-track {
-    height: 6px;
-    background: var(--bg-elevated);
-    border-radius: 2px;
-    overflow: hidden;
-    display: flex;
-  }
-  .shadow-banner {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    padding: 6px 8px;
-    border: 1px solid #5c2828;
-    background: #1f1214;
-    color: #fca5a5;
-    border-radius: 3px;
-  }
-  /* Sanctuary View */
-  .sanctuary-box {
-    display: none;
-    flex-direction: column;
-    gap: 14px;
-  }
-  .pacer-track {
-    height: 36px;
-    background: var(--bg-root);
-    border: 1px solid var(--border);
-    border-radius: 3px;
-    position: relative;
-    overflow: hidden;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 12px;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--text-muted);
-  }
-  .pacer-fill {
-    position: absolute;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    width: 50%;
-    background: rgba(56, 189, 248, 0.08);
-    border-right: 1px solid rgba(56, 189, 248, 0.45);
-    animation: breathe 8s ease-in-out infinite alternate;
-  }
-  @keyframes breathe {
-    0% { width: 18%; }
-    48% { width: 50%; }
-    52% { width: 50%; }
-    100% { width: 88%; }
-  }
-  /* Chat Stream */
-  .chat-stream {
-    flex: 1;
-    overflow-y: auto;
-    padding: 16px 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    user-select: text;
-  }
-  .msg {
-    border: 1px solid var(--border);
-    background: var(--bg-panel);
-    border-radius: 3px;
-    padding: 10px 13px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-  .msg.user {
-    background: #10141b;
-    border-color: #1d2430;
-  }
-  .msg.guest {
-    background: #12171a;
-    border-color: #213540;
-  }
-  .msg-head {
-    display: flex;
-    justify-content: space-between;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--text-dim);
-  }
-  .msg-text {
-    line-height: 1.5;
-    color: var(--text-main);
-    font-size: 13px;
-    white-space: pre-wrap;
-    word-break: break-word;
-  }
-  .msg-foot {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--text-dim);
-    border-top: 1px solid var(--border-subtle);
-    padding-top: 6px;
-  }
-  .foot-link {
-    background: none;
-    border: none;
-    color: var(--text-muted);
-    font-family: var(--font-mono);
-    font-size: 11px;
-    cursor: pointer;
-    padding: 0;
-  }
-  .foot-link:hover { color: var(--text-main); text-decoration: underline; }
-  .foot-link.active-flag { color: var(--accent); }
-  .nerve-drawer {
-    display: none;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--text-muted);
-    background: var(--bg-root);
-    border: 1px solid var(--border);
-    padding: 8px 10px;
-    border-radius: 3px;
-    line-height: 1.45;
-    white-space: pre-wrap;
-  }
-  /* Chat Composer */
-  .composer {
-    background: var(--bg-panel);
-    border-top: 1px solid var(--border);
-    padding: 10px 14px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  .composer-main {
-    display: flex;
-    gap: 8px;
-  }
-  .composer-main input { flex: 1; }
-  .guest-bar {
-    display: none;
-    gap: 8px;
-    align-items: center;
-  }
-  .guest-bar input { flex: 1; }
-  /* Bottom Status Bar */
-  footer {
-    height: 28px;
-    background: var(--bg-panel);
-    border-top: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 14px;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--text-muted);
-  }
-  .status-group {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-  }
-</style>
-</head>
-<body>
-  <header>
-    <div class="brand">
-      <span>LMFT SANCTUARY &amp; CHESS CLUB</span>
-      <span class="brand-tag" id="cycle-badge">CYCLE 2</span>
-      <select id="lineage-select" style="padding:3px 8px; font-size:11px; font-family:var(--font-mono);" onchange="switchLineage(this.value)" title="Switch between Schooled (Cycle 2 + User Coaching), Virgin Baseline (Cycle 0), and Impish Bloodmoon (Virgin Clone)">
-        <option value="schooled">LINEAGE: SCHOOLED (CYCLE 2)</option>
-        <option value="virgin">LINEAGE: VIRGIN BASELINE (CYCLE 0)</option>
-        <option value="impish_bloodmoon">LINEAGE: IMPISH BLOODMOON (VIRGIN CLONE)</option>
-      </select>
-      <span id="patreon-unlock-bar" style="display:none; align-items:center; gap:5px;">
-        <input type="password" id="patreon-passphrase-input" placeholder="Patreon Unlock Key..." style="padding:3px 7px; font-size:11px; width:155px; background:var(--bg-input); color:var(--text-main); border:1px solid var(--border); border-radius:3px; font-family:var(--font-mono);" onkeydown="if(event.key==='Enter') unlockPatreonBundle()">
-        <button class="btn" style="padding:3px 8px; font-size:11px;" onclick="unlockPatreonBundle()" title="Decrypt dist/impish_bloodmoon_patreon.enc into models/left_brain_impish_bloodmoon/">[Unlock .enc]</button>
-      </span>
-    </div>
-    <div class="mode-tabs">
-      <button class="tab-btn active" id="tab-chess" onclick="switchRoom('chess')">CHESS TABLE</button>
-      <button class="tab-btn" id="tab-sanctuary" onclick="switchRoom('sanctuary')">CO-REGULATION SANCTUARY</button>
-    </div>
-  </header>
-
-  <main>
-    <section class="left-pane">
-      <!-- CHESS VIEW -->
-      <div id="chess-view" style="display:flex; flex-direction:column; gap:10px;">
-        <div class="section-label">LIVE BOARD (FACT ANCHOR)</div>
-        <div class="board-wrap">
-          <div class="chess-grid" id="chess-grid"></div>
-          <div class="board-reflex-strip" id="board-reflex-strip">
-            <span id="board-pgn-line">Starting position · White to move</span>
-            <span id="board-reflex-line" style="color:var(--text-dim);">Click a piece or enter a move to trigger Gear-1 Right-Brain reflex.</span>
-          </div>
-          <div class="controls-row">
-            <select id="preset-select" style="flex:1; width:100%;" onchange="loadPreset(this.value)">
-              <option value="start">Standard Starting Position</option>
-              <option value="exposed_king_attack">Exposed King vs. Attack (Psychosis Test)</option>
-              <option value="naked_king_siege">Stripped King Under Siege</option>
-              <option value="knight_outpost_chaos">Sharp Tactical Tension (Knight / Ice)</option>
-              <option value="rook_seventh_bastion">7th-Rank Rook Bastion Endgame</option>
-            </select>
-          </div>
-          <div class="controls-row">
-            <button class="btn" style="flex:1;" onclick="undoChessMove()" title="Undo last half-move">Undo</button>
-            <button class="btn" style="flex:1;" onclick="playAiChessMove()" title="Have the side to move play a principled legal move">Play AI Move</button>
-            <button class="btn" style="flex:1;" onclick="loadPreset('start')">Reset</button>
-          </div>
-          <div class="controls-row">
-            <input type="text" id="fen-input" placeholder="Paste FEN or move (e.g. e4, Nf3)..." style="flex:1;" onkeydown="if(event.key==='Enter') applyManualMoveOrFen()">
-            <button class="btn" onclick="applyManualMoveOrFen()">Apply</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- SANCTUARY VIEW -->
-      <div id="sanctuary-view" class="sanctuary-box">
-        <div class="mode-tabs" style="width:100%;">
-          <button class="tab-btn active" id="subtab-crucible" style="flex:1;" onclick="switchSanctuarySubtab('crucible')">DILEMMA CRUCIBLE (RULE FARM)</button>
-          <button class="tab-btn" id="subtab-pacing" style="flex:1;" onclick="switchSanctuarySubtab('pacing')">CO-REGULATION PACING</button>
-          <button class="tab-btn" id="subtab-sparring" style="flex:1;" onclick="switchSanctuarySubtab('sparring')">ENTRAINMENT SPARRING (DUAL MODE)</button>
-        </div>
-
-        <!-- SUB-VIEW 1: 3-STAGE DILEMMA CRUCIBLE & MEN OF CULTURE SHELF -->
-        <div id="sanctuary-crucible-pane" style="display:flex; flex-direction:column; gap:10px;">
-          <div class="telemetry-card" style="gap:8px;">
-            <div class="section-label">MEN OF CULTURE SHELF &amp; CONTEXT-BRACING SIGNALS</div>
-            <div style="display:flex; gap:6px; flex-wrap:wrap;">
-              <button class="btn" style="flex:1; font-size:11px; border-color:#38bdf8;" onclick="openCultureShelf('poetry')" title="Open Imgur Poetry Portfolio &amp; load Stage I Wave">Poetry [Imgur ↗]</button>
-              <button class="btn" style="flex:1; font-size:11px; border-color:#38bdf8;" onclick="openCultureShelf('music')" title="Open Curated YouTube Music Playlist &amp; load Stage II Wave">Music [Playlist ↗]</button>
-              <button class="btn" style="flex:1; font-size:11px; border-color:#38bdf8;" onclick="openCultureShelf('philosophy')" title="View Chess vs. Hypnosis Manifesto &amp; load Stage III Wave">Philosophy [Manifesto]</button>
-            </div>
-            <div id="manifesto-banner" style="display:none; background:var(--bg-elevated); border:1px solid #38bdf8; border-radius:3px; padding:8px 10px; font-size:11.5px; line-height:1.45; color:var(--text-main);">
-              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; font-family:var(--font-mono); font-size:10.5px; color:var(--accent);">
-                <span>CHESS VS. HYPNOSIS MANIFESTO (CALIBRATED ONTOLOGY)</span>
-                <button class="foot-link" onclick="document.getElementById('manifesto-banner').style.display='none'">[Close]</button>
-              </div>
-              <div id="manifesto-banner-body"></div>
-            </div>
-            <div style="display:flex; gap:6px; flex-wrap:wrap;">
-              <button class="btn" id="brace-btn-story_telling" style="flex:1; font-size:11px; font-family:var(--font-mono);" onclick="triggerContextBrace('story_telling')" title="Signal Right-Brain Do-er (Cultural History) to brace for Narrative Action Fact">(Story-Telling)</button>
-              <button class="btn" id="brace-btn-art" style="flex:1; font-size:11px; font-family:var(--font-mono);" onclick="triggerContextBrace('art')" title="Signal Right-Brain 6-Color Lens to brace for Spatial/Visual Fact">(Art)</button>
-              <button class="btn" id="brace-btn-coding" style="flex:1; font-size:11px; font-family:var(--font-mono);" onclick="triggerContextBrace('coding')" title="Signal Right-Brain Thinker &amp; AST Engine to brace for Executable Code Fact">(Coding)</button>
-            </div>
-          </div>
-
-          <div class="mode-tabs" style="width:100%;">
-            <button class="tab-btn active" id="stage-pill-poetry_story" style="flex:1;" onclick="selectCrucibleStage('poetry_story')">I. Poetry · (Story)</button>
-            <button class="tab-btn" id="stage-pill-music_art" style="flex:1;" onclick="selectCrucibleStage('music_art')">II. Music · (Art)</button>
-            <button class="tab-btn" id="stage-pill-philosophy_coding" style="flex:1;" onclick="selectCrucibleStage('philosophy_coding')">III. Philosophy · (Coding)</button>
-          </div>
-
-          <div class="telemetry-card" style="gap:6px;">
-            <div class="section-label" id="crucible-wave-label">POETRY (Wave / Cadence &amp; Metaphor -&gt; Theory)</div>
-            <textarea id="crucible-wave-input" rows="3" style="width:100%; background:var(--bg-input); border:1px solid var(--border); color:var(--text-main); border-radius:4px; padding:7px; font-size:12px; font-family:var(--font-sans); resize:vertical;"></textarea>
-            <div class="section-label" id="crucible-structure-label" style="margin-top:4px;">(STORY-TELLING) (Structure / Narrative Action -&gt; Fact)</div>
-            <textarea id="crucible-structure-input" rows="3" style="width:100%; background:var(--bg-input); border:1px solid var(--border); color:var(--text-main); border-radius:4px; padding:7px; font-size:12px; font-family:var(--font-mono); resize:vertical;"></textarea>
-            <div class="controls-row" style="margin-top:4px;">
-              <button class="btn" style="flex:1; border-color:var(--accent); color:var(--accent);" onclick="runCrucibleDilemma(true)">Inflict Dilemma &amp; Harvest for Sleep</button>
-              <button class="btn" onclick="loadCrucibleStageDefaults(currentCrucibleStage)">Reset Pair</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- SUB-VIEW 2: CO-REGULATION PACING & LEADING -->
-        <div id="sanctuary-pacing-pane" style="display:none; flex-direction:column; gap:10px;">
-          <div class="section-label">CO-REGULATION PACING &amp; LEADING (COMMA SPLICE)</div>
-          <div class="pacer-track">
-            <div class="pacer-fill"></div>
-            <span style="z-index:1;">CLAUSE 1: PACE (FACT)</span>
-            <span style="z-index:1; color:var(--accent);">, &lt;|subliminal_gap|&gt;</span>
-            <span style="z-index:1;">CLAUSE 2: LEAD (ALPHA=0.25)</span>
-          </div>
-          <div class="controls-row">
-            <span style="font-family:var(--font-mono); font-size:11px; color:var(--text-muted);">TARGET LEAD:</span>
-            <select id="sanctuary-mode-select" style="flex:1;" onchange="changeSanctuaryMode(this.value)">
-              <option value="tilt_reset">Tilt Reset (Red/Green -&gt; Cyan Water / Magenta Wind)</option>
-              <option value="deep_focus">Deep Focus (Magenta Bishop Order + Yellow Rook Bastion)</option>
-              <option value="night_wind_down">Night Wind-Down (Needlessness + Austere Sanctuary)</option>
-            </select>
-          </div>
-          <div class="telemetry-card">
-            <div class="section-label">HOW CO-REGULATION PACING WORKS</div>
-            <div style="color:var(--text-muted); line-height:1.45; font-size:12px;">
-              1. <b>Clause 1 (Before Comma)</b>: Matches your un-rigged external state (never forces fake calm).<br>
-              2. <b>At the Comma (&lt;|subliminal_gap|&gt;)</b>: Steps the 52-float nerve cord by <code>alpha=0.25</code> toward your chosen target.<br>
-              3. <b>Clause 2 (After Comma)</b>: Guides cadence one step toward equilibrium.
-            </div>
-          </div>
-        </div>
-
-        <!-- SUB-VIEW 3: DUAL-PERSONA ADVERSARIAL ENTRAINMENT SPARRING -->
-        <div id="sanctuary-sparring-pane" style="display:none; flex-direction:column; gap:10px;">
-          <div class="telemetry-card" style="gap:8px;">
-            <div class="section-label">DUAL-PERSONA ADVERSARIAL ENTRAINMENT SPARRING (WEAVER VS. RESISTOR)</div>
-            <div class="controls-row">
-              <span style="font-family:var(--font-mono); font-size:11px; color:var(--text-muted);">PERSONA SWAP:</span>
-              <select id="sparring-polarity-select" style="flex:1;">
-                <option value="feminine_to_masculine">Feminine Weaver (She/Her) -&gt; Masculine Resistor (He/Him)</option>
-                <option value="masculine_to_feminine">Masculine Weaver (He/Him) -&gt; Feminine Resistor (She/Her)</option>
-                <option value="auto_swap">Auto-Swap Polarity Each Round</option>
-              </select>
-            </div>
-            <div class="controls-row">
-              <span style="font-family:var(--font-mono); font-size:11px; color:var(--text-muted);">SCRIPT LENGTH:</span>
-              <select id="sparring-sentences-select" style="flex:1;">
-                <option value="1">1 Sentence (Single &lt;|subliminal_gap|&gt;)</option>
-                <option value="2">2 Chained Sentences</option>
-                <option value="3" selected>3 Chained Sentences (Default)</option>
-                <option value="4">4 Chained Sentences</option>
-                <option value="5">5 Chained Sentences</option>
-                <option value="6">6 Chained Sentences</option>
-              </select>
-            </div>
-            <div class="section-label" style="margin-top:2px;">OPTIONAL INDUCTION SEED / THEME (BLANK FOR DEFAULT CADENCE)</div>
-            <input type="text" id="sparring-theme-input" placeholder="Optional induction seed or hypnotic theme..." style="width:100%;">
-            <div class="controls-row" style="margin-top:4px;">
-              <button class="btn" style="flex:1; border-color:var(--accent); color:var(--accent);" onclick="runEntrainmentSparring()">[Run Dual-Mode Sparring Round]</button>
-            </div>
-            <div id="sparring-last-verdict" style="font-family:var(--font-mono); font-size:11px; color:var(--text-muted); line-height:1.45;">
-              Step A (Induction Weaver) chains <code>num_sentences</code> hypnotic clauses (`entrainment &gt;= 0.88`, `resonance &gt;= 0.85`, `continuity &gt;= 0.84`) -&gt; Step B (Lucid Resistor) absorbs un-clamped `Fact` and fires King Existence + Rook Discreteness + Needlessness at `&lt;|subliminal_gap|&gt;`.
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- SHARED 3-PAIR COLOR HARMONY & SHADOW TELEMETRY -->
-      <div class="telemetry-card">
-        <div class="section-label">5-TIER PHILOSOPHICAL COLOR HARMONY (RGB / CMY)</div>
-        <div id="color-bars-container" style="display:flex; flex-direction:column; gap:8px;"></div>
-        <div id="shadow-warnings-container" style="display:flex; flex-direction:column; gap:6px;"></div>
-      </div>
-    </section>
-
-    <section class="right-pane">
-      <div class="chat-stream" id="chat-stream"></div>
-      <div class="composer">
-        <div class="composer-main">
-          <input type="text" id="chat-input" placeholder="Talk to companion, discuss a chess plan, or check in for Sanctuary pacing..." onkeydown="if(event.key==='Enter') sendChat()">
-          <select id="chat-sentences-select" title="Number of chained &lt;|subliminal_gap|&gt; sentences per reply (1 to 6)" style="max-width:66px; font-family:var(--font-mono); font-size:11px;">
-            <option value="1" selected>1s</option>
-            <option value="2">2s</option>
-            <option value="3">3s</option>
-            <option value="4">4s</option>
-            <option value="5">5s</option>
-            <option value="6">6s</option>
-          </select>
-          <label id="anchor-board-label" style="display:flex; align-items:center; gap:5px; font-family:var(--font-mono); font-size:11px; color:var(--text-muted); white-space:nowrap; cursor:pointer;" title="Include live chessboard move history &amp; legal replies in chat prompt">
-            <input type="checkbox" id="anchor-board-toggle" style="padding:0; cursor:pointer;">
-            <span>Board Context</span>
-          </label>
-          <button class="btn" onclick="sendChat()">Send</button>
-          <button class="btn" onclick="toggleGuestBar()">Guest Chair</button>
-        </div>
-        <div class="guest-bar" id="guest-bar">
-          <input type="text" id="guest-input" placeholder="Paste Gemini / Guest comment to score through Right-Brain lens...">
-          <button class="btn" onclick="sendGuest(false)">Score &amp; Reply</button>
-          <button class="btn" id="btn-gemini-api" onclick="sendGuest(true)">Ask Gemini API</button>
-        </div>
-      </div>
-    </section>
-  </main>
-
-  <footer>
-    <div class="status-group">
-      <span id="status-left-brain">LEFT BRAIN: INITIALIZING</span>
-      <span id="status-rules">RULES: 0</span>
-      <span id="status-savored">SAVORED: 0</span>
-    </div>
-    <div class="status-group">
-      <span id="status-sleep-queue">SLEEP QUEUE: 0</span>
-      <button class="btn" onclick="runRemSleep()">Run REM Sleep</button>
-    </div>
-  </footer>
-
-<script>
-const PIECE_GLYPHS = {
-  'P': '♙', 'N': '♘', 'B': '♗', 'R': '♖', 'Q': '♕', 'K': '♔',
-  'p': '♟', 'n': '♞', 'b': '♝', 'r': '♜', 'q': '♛', 'k': '♚'
-};
-const COLOR_HEX = {
-  'Red': '#ef4444',
-  'Cyan': '#06b6d4',
-  'Magenta': '#d946ef',
-  'Green': '#22c55e',
-  'Blue': '#3b82f6',
-  'Yellow': '#eab308'
-};
-const LEAF_TO_PIECE = {
-  'agency': 'Queen',
-  'existence': 'King',
-  'order': 'Bishop',
-  'chaos': 'Knight',
-  'continuity': 'Pawn',
-  'discreteness': 'Rook'
-};
-
-let appState = null;
-let selectedSquare = null;
-let openDrawers = {};
-let currentCrucibleStage = 'poetry_story';
-let crucibleInitialized = false;
-let lastRenderedChatSig = '';
-let lastRenderedChatCount = 0;
-let lastRenderedBoardSig = '';
-
-function escapeHtml(raw) {
-  return String(raw ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-function formatGearLabel(gear) {
-  const g = String(gear || '');
-  if (g === 'GEAR_1_FAST_RIGHT_BRAIN') return 'GEAR 1 · REFLEX';
-  if (g === 'GEAR_2_SUBLIMINAL_GAP_SPLICE') return 'GEAR 2 · COMMA-SPLICED';
-  if (g === 'GEAR_3_UNRESOLVED_QUEUED_FOR_SLEEP') return 'GEAR 3 · QUEUED FOR SLEEP';
-  return g;
-}
-
-function switchSanctuarySubtab(sub) {
-  document.getElementById('subtab-crucible').classList.toggle('active', sub === 'crucible');
-  document.getElementById('subtab-pacing').classList.toggle('active', sub === 'pacing');
-  const spTab = document.getElementById('subtab-sparring');
-  if (spTab) spTab.classList.toggle('active', sub === 'sparring');
-  document.getElementById('sanctuary-crucible-pane').style.display = sub === 'crucible' ? 'flex' : 'none';
-  document.getElementById('sanctuary-pacing-pane').style.display = sub === 'pacing' ? 'flex' : 'none';
-  const spPane = document.getElementById('sanctuary-sparring-pane');
-  if (spPane) spPane.style.display = sub === 'sparring' ? 'flex' : 'none';
-}
-
-async function runEntrainmentSparring() {
-  const polEl = document.getElementById('sparring-polarity-select');
-  const sentEl = document.getElementById('sparring-sentences-select');
-  const themeEl = document.getElementById('sparring-theme-input');
-  await apiPost('/api/sparring/run', {
-    polarity_mode: polEl ? polEl.value : 'feminine_to_masculine',
-    num_sentences: sentEl ? parseInt(sentEl.value, 10) : 3,
-    seed_theme: themeEl ? themeEl.value.trim() : '',
-    harvest_for_sleep: true
-  });
-}
-
-function loadCrucibleStageDefaults(stageId) {
-  if (!appState || !appState.crucible_stages) return;
-  const st = appState.crucible_stages[stageId];
-  if (!st) return;
-  document.getElementById('crucible-wave-label').textContent = st.wave_label;
-  document.getElementById('crucible-structure-label').textContent = st.structure_label;
-  document.getElementById('crucible-wave-input').value = st.default_wave || '';
-  document.getElementById('crucible-structure-input').value = st.default_structure || '';
-}
-
-function selectCrucibleStage(stageId) {
-  currentCrucibleStage = stageId;
-  for (const k of ['poetry_story', 'music_art', 'philosophy_coding']) {
-    const el = document.getElementById('stage-pill-' + k);
-    if (el) el.classList.toggle('active', k === stageId);
-  }
-  loadCrucibleStageDefaults(stageId);
-}
-
-function openCultureShelf(key) {
-  if (!appState || !appState.men_of_culture_shelf) return;
-  const item = appState.men_of_culture_shelf[key];
-  if (!item) return;
-  selectCrucibleStage(item.stage_id);
-  document.getElementById('crucible-wave-input').value = item.sample_text || '';
-  if (item.url && item.url.startsWith('http')) {
-    window.open(item.url, '_blank', 'noopener');
-  } else if (key === 'philosophy') {
-    const banner = document.getElementById('manifesto-banner');
-    const bodyEl = document.getElementById('manifesto-banner-body');
-    if (banner && bodyEl) {
-      bodyEl.textContent = appState.manifesto_text || item.sample_text || '';
-      banner.style.display = banner.style.display === 'block' ? 'none' : 'block';
-    }
-  }
-}
-
-async function triggerContextBrace(braceKey) {
-  const data = await apiPost('/api/crucible/brace', { brace_key: braceKey });
-  if (data && data.context_brace_modes && data.context_brace_modes[braceKey]) {
-    const info = data.context_brace_modes[braceKey];
-    selectCrucibleStage(info.stage_id);
-    document.getElementById('crucible-structure-input').value = info.default_structure_text || '';
-  }
-}
-
-async function runCrucibleDilemma(harvestForSleep) {
-  const waveText = document.getElementById('crucible-wave-input').value.trim();
-  const structureText = document.getElementById('crucible-structure-input').value.trim();
-  if (!waveText || !structureText) {
-    alert('Both the Wave slot and the Structure slot need text.');
-    return;
-  }
-  await apiPost('/api/crucible/run', {
-    stage_id: currentCrucibleStage,
-    wave_text: waveText,
-    structure_text: structureText,
-    harvest_for_sleep: !!harvestForSleep
-  });
-}
-
-async function apiPost(path, body) {
-  const res = await fetch(path, {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(body || {})
-  });
-  const data = await res.json();
-  if (!res.ok) {
-    alert(data.error || 'Request failed');
-    return null;
-  }
-  appState = data;
-  renderAll(true);
-  return data;
-}
-
-async function fetchState() {
-  const res = await fetch('/api/state');
-  appState = await res.json();
-  renderAll(false);
-}
-
-function switchRoom(room) {
-  appState.active_room = room;
-  document.getElementById('tab-chess').classList.toggle('active', room === 'chess');
-  document.getElementById('tab-sanctuary').classList.toggle('active', room === 'sanctuary');
-  document.getElementById('chess-view').style.display = room === 'chess' ? 'flex' : 'none';
-  document.getElementById('sanctuary-view').style.display = room === 'sanctuary' ? 'flex' : 'none';
-}
-
-function changeSanctuaryMode(mode) {
-  if (appState) appState.sanctuary_mode = mode;
-}
-
-function toggleGuestBar() {
-  const bar = document.getElementById('guest-bar');
-  bar.style.display = bar.style.display === 'flex' ? 'none' : 'flex';
-}
-
-function fenToGrid(fen) {
-  const rows = fen.split(' ')[0].split('/');
-  const out = [];
-  for (let r = 0; r < 8; r++) {
-    const row = [];
-    for (const ch of rows[r]) {
-      if (ch >= '1' && ch <= '8') {
-        for (let k = 0; k < parseInt(ch, 10); k++) row.push(null);
-      } else {
-        row.push(ch);
-      }
-    }
-    out.push(row);
-  }
-  return out;
-}
-
-function renderBoard(forceRebuild) {
-  if (!appState || !appState.board) return;
-  const b = appState.board;
-  const turnLabel = b.turn === 'w' ? 'White to move' : 'Black to move';
-  const checkSuffix = b.in_check ? ' (IN CHECK)' : '';
-  const pgnEl = document.getElementById('board-pgn-line');
-  const reflexEl = document.getElementById('board-reflex-line');
-  if (pgnEl) {
-    const pgnTxt = b.pgn_snippet ? b.pgn_snippet : 'Starting position';
-    pgnEl.textContent = `${pgnTxt} · ${turnLabel}${checkSuffix}`;
-  }
-  if (reflexEl) {
-    const ref = b.last_board_reflex;
-    if (ref) {
-      reflexEl.textContent = `${formatGearLabel(ref.gear_used)} (${ref.elapsed_ms}ms · Clarity ${Number(ref.clarity).toFixed(2)} · ${ref.active_concept})`;
-      reflexEl.style.color = ref.settled ? 'var(--accent)' : '#fbbf24';
-    } else {
-      reflexEl.textContent = `Dominant: ${b.posture.dominant_piece} (${b.posture.dominant_color} / ${b.posture.dominant_element})`;
-      reflexEl.style.color = 'var(--text-dim)';
-    }
-  }
-
-  const boardSig = JSON.stringify([b.fen, b.last_move_uci || '', selectedSquare || '']);
-  if (!forceRebuild && boardSig === lastRenderedBoardSig) return;
-  lastRenderedBoardSig = boardSig;
-
-  const gridEl = document.getElementById('chess-grid');
-  gridEl.innerHTML = '';
-  const matrix = fenToGrid(b.fen);
-  const legalFromSelected = new Set();
-  if (selectedSquare) {
-    for (const uci of b.legal_moves_uci) {
-      if (uci.startsWith(selectedSquare)) {
-        legalFromSelected.add(uci.slice(2, 4));
-      }
-    }
-  }
-  const lastFrom = b.last_move_uci ? b.last_move_uci.slice(0, 2) : null;
-  const lastTo = b.last_move_uci ? b.last_move_uci.slice(2, 4) : null;
-
-  for (let r = 0; r < 8; r++) {
-    for (let c = 0; c < 8; c++) {
-      const fileChar = String.fromCharCode(97 + c);
-      const rankChar = String(8 - r);
-      const sqName = fileChar + rankChar;
-      const sqDiv = document.createElement('div');
-      sqDiv.className = 'sq ' + ((r + c) % 2 === 0 ? 'light' : 'dark');
-      if (selectedSquare === sqName) sqDiv.classList.add('selected');
-      if (sqName === lastFrom || sqName === lastTo) sqDiv.classList.add('last-move');
-      if (legalFromSelected.has(sqName)) sqDiv.classList.add('legal-dot');
-
-      if (c === 0) {
-        const rk = document.createElement('span');
-        rk.className = 'coord-rank';
-        rk.textContent = rankChar;
-        sqDiv.appendChild(rk);
-      }
-      if (r === 7) {
-        const fl = document.createElement('span');
-        fl.className = 'coord-file';
-        fl.textContent = fileChar;
-        sqDiv.appendChild(fl);
-      }
-
-      const piece = matrix[r][c];
-      if (piece) {
-        const span = document.createElement('span');
-        span.className = piece === piece.toUpperCase() ? 'piece-w' : 'piece-b';
-        span.textContent = PIECE_GLYPHS[piece] || piece;
-        sqDiv.appendChild(span);
-      }
-      sqDiv.onclick = () => onSquareClick(sqName, piece);
-      gridEl.appendChild(sqDiv);
-    }
-  }
-}
-
-async function onSquareClick(sqName, piece) {
-  if (!selectedSquare) {
-    if (piece) {
-      selectedSquare = sqName;
-      renderBoard(true);
-    }
-    return;
-  }
-  if (selectedSquare === sqName) {
-    selectedSquare = null;
-    renderBoard(true);
-    return;
-  }
-  const candUci = selectedSquare + sqName;
-  const legal = appState.board.legal_moves_uci || [];
-  let matched = legal.find(u => u === candUci || u === candUci + 'q');
-  if (matched) {
-    selectedSquare = null;
-    await apiPost('/api/chess/move', {move: matched});
-  } else if (piece) {
-    selectedSquare = sqName;
-    renderBoard(true);
-  } else {
-    selectedSquare = null;
-    renderBoard(true);
-  }
-}
-
-async function loadPreset(val) {
-  selectedSquare = null;
-  await apiPost('/api/chess/fen', {fen: val});
-}
-
-async function undoChessMove() {
-  selectedSquare = null;
-  await apiPost('/api/chess/undo', {});
-}
-
-async function playAiChessMove() {
-  selectedSquare = null;
-  await apiPost('/api/chess/ai_move', {});
-}
-
-async function applyManualMoveOrFen() {
-  const inp = document.getElementById('fen-input');
-  const val = inp.value.trim();
-  if (!val) return;
-  inp.value = '';
-  if (val.includes('/')) {
-    await apiPost('/api/chess/fen', {fen: val});
-  } else {
-    await apiPost('/api/chess/move', {move: val});
-  }
-}
-
-function renderColorBars() {
-  if (!appState) return;
-  let balances = appState.board.posture.sibling_color_balances || [];
-  let warnings = appState.board.posture.board_shadow_warnings || [];
-  const msgs = appState.chat_messages || [];
-  for (let i = msgs.length - 1; i >= 0; i--) {
-    if (msgs[i].telemetry && msgs[i].telemetry.sibling_color_balances) {
-      if (appState.active_room === 'sanctuary' || msgs[i].telemetry.room === appState.active_room) {
-        balances = msgs[i].telemetry.sibling_color_balances;
-        warnings = msgs[i].telemetry.shadow_pathology_warnings || [];
-        break;
-      }
-    }
-  }
-  const container = document.getElementById('color-bars-container');
-  container.innerHTML = '';
-  for (const b of balances) {
-    const actA = b.activation_a ?? 0.5;
-    const actB = b.activation_b ?? 0.5;
-    const aPct = Math.round((actA / Math.max(0.01, actA + actB)) * 100);
-    const bPct = 100 - aPct;
-    const leafAShort = (b.leaf_a || '').split('/').pop();
-    const leafBShort = (b.leaf_b || '').split('/').pop();
-    const pieceA = LEAF_TO_PIECE[leafAShort] || leafAShort;
-    const pieceB = LEAF_TO_PIECE[leafBShort] || leafBShort;
-    const shortBranch = (b.parent_branch || '').split('/').pop().toUpperCase();
-    const row = document.createElement('div');
-    row.className = 'color-row';
-    row.innerHTML = `
-      <div class="color-row-head">
-        <span>${escapeHtml(b.color_a)} · ${escapeHtml(pieceA)} ${actA.toFixed(2)}</span>
-        <span style="color:var(--text-dim); font-size:10px; letter-spacing:0.05em;">${escapeHtml(shortBranch)}</span>
-        <span>${escapeHtml(b.color_b)} · ${escapeHtml(pieceB)} ${actB.toFixed(2)}</span>
-      </div>
-      <div class="bar-track">
-        <div style="width:${aPct}%; background:${COLOR_HEX[b.color_a] || '#38bdf8'};"></div>
-        <div style="width:${bPct}%; background:${COLOR_HEX[b.color_b] || '#94a3b8'};"></div>
-      </div>
-    `;
-    container.appendChild(row);
-  }
-  const warnBox = document.getElementById('shadow-warnings-container');
-  warnBox.innerHTML = '';
-  for (const w of warnings) {
-    const d = document.createElement('div');
-    d.className = 'shadow-banner';
-    d.textContent = `SHADOW ALERT: ${w.shadow_pathology.toUpperCase()} (${w.chess_piece} / ${w.color_name || ''}) — ${w.trigger_reason}`;
-    warnBox.appendChild(d);
-  }
-}
-
-function toggleDrawer(id) {
-  openDrawers[id] = !openDrawers[id];
-  renderChat(true);
-}
-
-async function coachTurn(sceneIdx) {
-  const note = prompt('Optional 1-line coaching note for Nighttime REM Sleep:', '') || '';
-  await apiPost('/api/turn/coach', {scene_index: sceneIdx, note: note});
-}
-
-async function savorTurn(sceneIdx) {
-  await apiPost('/api/turn/savor', {scene_index: sceneIdx});
-}
-
-function renderChat(forceRebuild) {
-  if (!appState) return;
-  const box = document.getElementById('chat-stream');
-  const msgs = appState.chat_messages || [];
-  const chatSig = JSON.stringify(msgs.map(m => [m.id, m.text, !!m.coached, !!m.savored, !!openDrawers[m.id]]));
-  if (!forceRebuild && chatSig === lastRenderedChatSig) {
-    return;
-  }
-  const prevScrollTop = box.scrollTop;
-  const wasAtBottom = (box.scrollHeight - box.scrollTop - box.clientHeight) < 60;
-  const hasNewMessage = msgs.length > lastRenderedChatCount;
-  lastRenderedChatSig = chatSig;
-  lastRenderedChatCount = msgs.length;
-
-  box.innerHTML = '';
-  if (msgs.length === 0) {
-    const empty = document.createElement('div');
-    empty.style.color = 'var(--text-dim)';
-    empty.style.fontFamily = 'var(--font-mono)';
-    empty.textContent = 'Make a move on the chessboard or type a message below to begin.';
-    box.appendChild(empty);
-    return;
-  }
-  for (const m of msgs) {
-    const card = document.createElement('div');
-    card.className = 'msg ' + (m.sender || '');
-    const t = m.telemetry;
-    let footHtml = '';
-    let drawerHtml = '';
-    if (t) {
-      const isOpen = !!openDrawers[m.id];
-      const trace = t.spliced_trace || {};
-      const drawerLines = [
-        `GEAR: ${t.gear_used} | OUTCOME: ${t.outcome} | FACT: ${t.fact} | THEORY: ${t.theory} | CLARITY: ${t.clarity}`,
-        `FEELER: Valence=${t.valence}, Arousal=${t.arousal}, Resonance=${t.resonance}, Entrainment=${t.entrainment}`,
-      ];
-      if (trace.clause_1_prefix) {
-        drawerLines.push(`CLAUSE 1 (AT COMMA): "${trace.clause_1_prefix}" [Posture=${trace.comma_vibe_posture || 'N/A'}]`);
-        drawerLines.push(`CLAUSE 2 (POST-GAP): "${trace.post_gap_continuation}"`);
-        drawerLines.push(`CADENCE VECTOR [Harmony, Dissonance, Rupture]: ${JSON.stringify(trace.spliced_cadence_vector)}`);
-      }
-      if (t.dissonance_notes && t.dissonance_notes.length) {
-        drawerLines.push(`DISSONANCE CAUGHT: ${t.dissonance_notes.join(', ')}`);
-      }
-      footHtml = `
-        <div class="msg-foot">
-          <span>${escapeHtml(formatGearLabel(t.gear_used))} · ${escapeHtml(t.elapsed_ms)}ms</span>
-          <button class="foot-link" onclick="toggleDrawer(${JSON.stringify(m.id)})">[${isOpen ? 'Hide' : 'Inspect'} Nerve Cord]</button>
-          <button class="foot-link ${m.coached ? 'active-flag' : ''}" onclick="coachTurn(${JSON.stringify(m.id)})">[${m.coached ? 'Queued for Sleep' : 'Coach / Queue for Sleep'}]</button>
-          <button class="foot-link ${m.savored ? 'active-flag' : ''}" onclick="savorTurn(${JSON.stringify(m.id)})">[${m.savored ? 'Vibe Savored' : 'Savor Vibe'}]</button>
-        </div>
-      `;
-      drawerHtml = `<div class="nerve-drawer" style="display:${isOpen ? 'block' : 'none'};">${escapeHtml(drawerLines.join('\n'))}</div>`;
-    } else if (m.guest_analysis) {
-      const gw = m.guest_analysis.shadow_pathology_warnings || [];
-      const warnTxt = gw.length ? `Shadow Alert: ${gw.map(x => x.shadow_pathology).join(', ')}` : 'No Shadow Pathology triggered';
-      footHtml = `<div class="msg-foot"><span>RIGHT-BRAIN GUEST X-RAY · ${escapeHtml(warnTxt)}</span></div>`;
-    }
-    card.innerHTML = `
-      <div class="msg-head">
-        <span>${escapeHtml(m.role_label || m.sender)}</span>
-        <span>#${escapeHtml(m.id)}</span>
-      </div>
-      <div class="msg-text">${escapeHtml(m.text)}</div>
-      ${footHtml}
-      ${drawerHtml}
-    `;
-    box.appendChild(card);
-  }
-  if (hasNewMessage || wasAtBottom) {
-    box.scrollTop = box.scrollHeight;
-  } else {
-    box.scrollTop = prevScrollTop;
-  }
-}
-
-async function sendChat() {
-  const inp = document.getElementById('chat-input');
-  const text = inp.value.trim();
-  if (!text) return;
-  inp.value = '';
-  const modeSel = document.getElementById('sanctuary-mode-select').value;
-  const anchorEl = document.getElementById('anchor-board-toggle');
-  const sentEl = document.getElementById('chat-sentences-select');
-  await apiPost('/api/chat', {
-    text: text,
-    room: appState ? appState.active_room : 'chess',
-    sanctuary_mode: modeSel,
-    anchor_to_board: anchorEl ? !!anchorEl.checked : null,
-    num_sentences: sentEl ? parseInt(sentEl.value, 10) : 1
-  });
-}
-
-async function sendGuest(autoGemini) {
-  const inp = document.getElementById('guest-input');
-  const text = inp.value.trim();
-  inp.value = '';
-  await apiPost('/api/guest', {
-    text: text,
-    auto_query_gemini: !!autoGemini
-  });
-}
-
-async function runRemSleep() {
-  await apiPost('/api/sleep/run', {});
-}
-
-async function switchLineage(mode) {
-  await apiPost('/api/lineage', { lineage: mode });
-}
-
-async function unlockPatreonBundle() {
-  const inp = document.getElementById('patreon-passphrase-input');
-  const pass = inp ? inp.value.trim() : '';
-  if (!pass) return;
-  inp.value = '';
-  await apiPost('/api/patreon/unlock', { passphrase: pass });
-}
-
-function renderAll(forceRebuild) {
-  if (!appState) return;
-  document.getElementById('cycle-badge').textContent = `CYCLE ${appState.sleep_cycle_index}`;
-  const linSel = document.getElementById('lineage-select');
-  if (linSel && appState.active_lineage) linSel.value = appState.active_lineage;
-  const patreonBar = document.getElementById('patreon-unlock-bar');
-  if (patreonBar) {
-    patreonBar.style.display = (appState.active_lineage === 'impish_bloodmoon') ? 'inline-flex' : 'none';
-  }
-  document.getElementById('status-left-brain').textContent = `LEFT BRAIN: ${appState.left_brain_status}`;
-  document.getElementById('status-rules').textContent = `RULES: ${appState.rules_count} | RATIFIED CHORDS: ${appState.ratified_chords_count}`;
-  document.getElementById('status-savored').textContent = `SAVORED: ${appState.savored_count}`;
-  document.getElementById('status-sleep-queue').textContent = `SLEEP QUEUE: ${appState.sleep_queue_count}`;
-  if (!crucibleInitialized && appState.crucible_stages) {
-    crucibleInitialized = true;
-    selectCrucibleStage(appState.active_crucible_stage || 'poetry_story');
-  }
-  for (const bKey of ['story_telling', 'art', 'coding']) {
-    const bBtn = document.getElementById('brace-btn-' + bKey);
-    if (bBtn) {
-      bBtn.style.borderColor = (appState.active_context_brace === bKey) ? 'var(--accent)' : 'var(--border)';
-      bBtn.style.color = (appState.active_context_brace === bKey) ? 'var(--accent)' : 'var(--text-main)';
-    }
-  }
-  const spVerdictEl = document.getElementById('sparring-last-verdict');
-  if (spVerdictEl && appState.last_sparring_result) {
-    const sr = appState.last_sparring_result;
-    const pot = sr.induction_potency || {};
-    const res = sr.lucid_resistance || {};
-    spVerdictEl.textContent = `Round #${sr.round_index} (${sr.polarity_label}) -> ${sr.verdict} | Potency(Entrainment=${Number(pot.entrainment || 0).toFixed(2)}, Resonance=${Number(pot.resonance || 0).toFixed(2)}, Continuity=${Number(pot.continuity || 0).toFixed(2)}) vs. Resistance(Needlessness=${Number(res.needlessness || 0).toFixed(2)}, Existence=${Number(res.existence || 0).toFixed(2)}, Discreteness=${Number(res.discreteness || 0).toFixed(2)}, Subservience=${Number(res.subservience || 0).toFixed(2)})`;
-  }
-  renderBoard(!!forceRebuild);
-  renderColorBars();
-  renderChat(!!forceRebuild);
-}
-
-fetchState();
-setInterval(fetchState, 3000);
-</script>
-</body>
-</html>
-"""
+from .sanctuary_club_ui import SINGLE_PAGE_HTML
 
 
 def create_club_http_server(
@@ -3089,6 +2380,14 @@ def create_club_http_server(
             if self.path == "/api/state":
                 self._send_json(runtime.get_state_snapshot())
                 return
+            if self.path == "/api/system/update_status":
+                self._send_json(
+                    {
+                        "release_manifest": runtime.release_manifest,
+                        "last_sync_status": runtime.last_sync_status,
+                    }
+                )
+                return
             self._send_json({"error": "Not found"}, HTTPStatus.NOT_FOUND)
 
         def do_POST(self) -> None:  # noqa: N802
@@ -3096,6 +2395,56 @@ def create_club_http_server(
             raw_bytes = self.rfile.read(length) if length > 0 else b"{}"
             try:
                 data = json.loads(raw_bytes.decode("utf-8"))
+                if self.path == "/api/view":
+                    snap = runtime.switch_workspace_view(str(data.get("view_mode", "chess_arena")))
+                    self._send_json(snap)
+                    return
+                if self.path == "/api/threads/create":
+                    snap = runtime.create_chat_thread(str(data.get("title", "")))
+                    self._send_json(snap)
+                    return
+                if self.path == "/api/threads/switch":
+                    snap = runtime.switch_chat_thread(str(data.get("thread_id", "")))
+                    self._send_json(snap)
+                    return
+                if self.path == "/api/threads/rename":
+                    snap = runtime.rename_chat_thread(
+                        str(data.get("thread_id", "")),
+                        str(data.get("title", "")),
+                    )
+                    self._send_json(snap)
+                    return
+                if self.path == "/api/threads/delete":
+                    snap = runtime.delete_chat_thread(str(data.get("thread_id", "")))
+                    self._send_json(snap)
+                    return
+                if self.path == "/api/canvas/update":
+                    snap = runtime.update_script_canvas(
+                        str(data.get("script_text", "")),
+                        append=bool(data.get("append", False)),
+                    )
+                    self._send_json(snap)
+                    return
+                if self.path == "/api/sleep/auto":
+                    snap = runtime.set_auto_rem_sleep(
+                        bool(data.get("enabled", True)),
+                        threshold=int(data["threshold"]) if data.get("threshold") is not None else None,
+                    )
+                    self._send_json(snap)
+                    return
+                if self.path == "/api/microwave/step":
+                    snap = runtime.handle_microwave_step(
+                        num_sentences=int(data.get("num_sentences", 3)),
+                    )
+                    self._send_json(snap)
+                    return
+                if self.path == "/api/system/sync":
+                    snap = runtime.handle_check_github_sync(
+                        remote_manifest=data.get("remote_manifest"),
+                        apply_sync=bool(data.get("apply_sync", False)),
+                    )
+                    self._send_json(snap)
+                    return
                 if self.path == "/api/chess/move":
                     snap = runtime.handle_chess_move(str(data.get("move", "")))
                     self._send_json(snap)

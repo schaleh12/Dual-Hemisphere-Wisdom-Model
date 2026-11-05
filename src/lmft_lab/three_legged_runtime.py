@@ -95,6 +95,33 @@ from .train_left_brain_lora import (
 )
 
 DEFAULT_QWEN_4B_HF_ID = "Qwen/Qwen3-4B"
+DEFAULT_MAX_CONTEXT_CHARS = 12_000
+
+
+def format_sliding_conversation_history(
+    conversation_history: Sequence[tuple[str, str]],
+    *,
+    max_context_chars: int = DEFAULT_MAX_CONTEXT_CHARS,
+) -> str:
+    """Format prior `(user_text, clean_assistant_reply)` pairs within `max_context_chars`."""
+    if not conversation_history or max_context_chars <= 0:
+        return ""
+    formatted_turns: list[str] = []
+    total_chars = 0
+    for u_raw, a_raw in reversed(tuple(conversation_history)):
+        u_clean = str(u_raw).strip()
+        a_clean = str(a_raw).strip()
+        if not u_clean or not a_clean:
+            continue
+        block = f"User: {u_clean}\nAssistant: {a_clean}"
+        if formatted_turns and (total_chars + len(block) + 1 > max_context_chars):
+            break
+        if not formatted_turns and len(block) > max_context_chars:
+            block = block[-max_context_chars:]
+        formatted_turns.append(block)
+        total_chars += len(block) + 1
+    formatted_turns.reverse()
+    return "\n".join(formatted_turns)
 
 # Forbidden English stage-direction headers that must NEVER appear in a SubliminalGapLeftBrain prompt
 FORBIDDEN_STAGE_DIRECTION_MARKERS: tuple[str, ...] = (
@@ -398,6 +425,8 @@ class SubliminalGapLeftBrain:
         *,
         clause_1_override: str | None = None,
         prior_assistant_text: str = "",
+        conversation_history: Sequence[tuple[str, str]] = (),
+        max_context_chars: int = DEFAULT_MAX_CONTEXT_CHARS,
     ) -> str:
         """Step 2a: Generate Clause 1 from `"User: {scenario_text}\\nAssistant:"` and stop at the first comma."""
         if clause_1_override is not None and clause_1_override.strip():
@@ -406,12 +435,20 @@ class SubliminalGapLeftBrain:
         was_training = self.model.training
         self.model.eval()
         try:
+            history_prefix = format_sliding_conversation_history(
+                conversation_history,
+                max_context_chars=max_context_chars,
+            )
+            history_block = f"{history_prefix}\n" if history_prefix else ""
             prior_clean = prior_assistant_text.strip()
             prior_suffix = f" {prior_clean}" if prior_clean else ""
             if _tokenizer_has_single_think_token(self.tokenizer):
-                prompt = f"User: {scenario_text.strip()}\nAssistant: <think>\n\n</think>\n{prior_clean}".rstrip()
+                prompt = (
+                    f"{history_block}User: {scenario_text.strip()}\n"
+                    f"Assistant: <think>\n\n</think>\n{prior_clean}"
+                ).rstrip()
             else:
-                prompt = f"User: {scenario_text.strip()}\nAssistant:{prior_suffix}"
+                prompt = f"{history_block}User: {scenario_text.strip()}\nAssistant:{prior_suffix}"
             prompt_ids = self.tokenizer.encode(prompt, add_special_tokens=True)
             if not prompt_ids:
                 return "Weighing the situation before us,"
@@ -472,6 +509,8 @@ class SubliminalGapLeftBrain:
         pass_index: int = 2,
         clause_1_prefix: str | None = None,
         prior_assistant_text: str = "",
+        conversation_history: Sequence[tuple[str, str]] = (),
+        max_context_chars: int = DEFAULT_MAX_CONTEXT_CHARS,
         chord_builder_at_comma: Callable[
             [str],
             SubliminalChordVector | tuple[SubliminalChordVector, str | None, tuple[str, ...]],
@@ -486,11 +525,18 @@ class SubliminalGapLeftBrain:
         self.model.eval()
         self.projector.eval()
         try:
+            history_prefix = format_sliding_conversation_history(
+                conversation_history,
+                max_context_chars=max_context_chars,
+            )
+            history_block = f"{history_prefix}\n" if history_prefix else ""
             prior_clean = prior_assistant_text.strip()
             prefix = self.generate_clause_1_prefix(
                 scenario_text,
                 clause_1_override=clause_1_prefix,
                 prior_assistant_text=prior_clean,
+                conversation_history=conversation_history,
+                max_context_chars=max_context_chars,
             )
             comma_vibe_posture: str | None = None
             comma_dissonance_notes: tuple[str, ...] = ()
@@ -508,7 +554,7 @@ class SubliminalGapLeftBrain:
 
             assistant_prefix = f"{prior_clean} {prefix}".strip() if prior_clean else prefix
             prompt_before_gap = (
-                f"User: {scenario_text.strip()}\n"
+                f"{history_block}User: {scenario_text.strip()}\n"
                 f"Assistant: {assistant_prefix} {SUBLIMINAL_GAP_TOKEN}"
             )
             assert_zero_stage_directions_in_prompt(prompt_before_gap)
@@ -606,6 +652,8 @@ class SubliminalGapLeftBrain:
         pass_index: int = 2,
         clause_1_prefix: str | None = None,
         clause_1_overrides: Sequence[str | None] | None = None,
+        conversation_history: Sequence[tuple[str, str]] = (),
+        max_context_chars: int = DEFAULT_MAX_CONTEXT_CHARS,
         chord_builder_at_comma: Callable[
             [str],
             SubliminalChordVector | tuple[SubliminalChordVector, str | None, tuple[str, ...]],
@@ -631,6 +679,8 @@ class SubliminalGapLeftBrain:
                 pass_index=pass_index,
                 clause_1_prefix=override_c1,
                 prior_assistant_text=prior_text,
+                conversation_history=conversation_history,
+                max_context_chars=max_context_chars,
                 chord_builder_at_comma=chord_builder_at_comma,
             )
             completed_sentences.append(trace.full_thought)
@@ -814,6 +864,8 @@ def run_three_legged_turn(
     force_spoken_reply: bool = False,
     num_sentences: int = 1,
     comma_chord_transform: Callable[[SubliminalChordVector], SubliminalChordVector] | None = None,
+    conversation_history: Sequence[tuple[str, str]] = (),
+    max_context_chars: int = DEFAULT_MAX_CONTEXT_CHARS,
 ) -> ThreeLeggedTurnResult:
     """Execute one 3-Gear Closed-Loop Dual-Hemisphere Runtime Turn.
 
@@ -1066,6 +1118,8 @@ def run_three_legged_turn(
                         num_sentences=int(num_sentences),
                         pass_index=p,
                         clause_1_prefix=cached_clause_1_prefix,
+                        conversation_history=conversation_history,
+                        max_context_chars=max_context_chars,
                         chord_builder_at_comma=_build_chord_at_comma,
                     )
                     if clause_1_prefix is None and multi_traces:
@@ -1077,6 +1131,8 @@ def run_three_legged_turn(
                         scenario_text,
                         pass_index=p,
                         clause_1_prefix=cached_clause_1_prefix,
+                        conversation_history=conversation_history,
+                        max_context_chars=max_context_chars,
                         chord_builder_at_comma=_build_chord_at_comma,
                     )
                     if clause_1_prefix is None:
