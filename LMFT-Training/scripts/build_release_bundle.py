@@ -49,8 +49,9 @@ def build_release_zip(
                 include_pairs.append((root_file, p))
                 break
 
-    for py_file in sorted((arch_root / "src" / "lmft_architecture").rglob("*.py")):
-        include_pairs.append((str(py_file.relative_to(arch_root)), py_file))
+    for py_file in sorted((arch_root / "src" / "lmft_architecture").rglob("*")):
+        if py_file.is_file() and py_file.suffix in (".py", ".enc"):
+            include_pairs.append((str(py_file.relative_to(arch_root)), py_file))
 
     virgin_dir = arch_root / "baselines" / "virgin_dual_hemisphere_v1"
     if virgin_dir.exists():

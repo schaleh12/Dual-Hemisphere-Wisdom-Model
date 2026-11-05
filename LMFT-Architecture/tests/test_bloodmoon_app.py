@@ -325,12 +325,15 @@ def test_user_seeded_baseline_script_initiates_clockwise_cycle(tmp_path: Path) -
 
 
 def test_persistent_one_time_patreon_password_lock_and_unlock(tmp_path: Path) -> None:
-    """Verify Bloodmoon enforces the PBKDF2-HMAC-SHA256 password gate when locked, and once unlocked once, persists the receipt so the user never has to enter it again."""
-    import hashlib
+    """Verify Bloodmoon enforces the PBKDF2-HMAC-SHA256 cryptographic seal, defeats boolean-flipping attacks, and persists the one-time unlock receipt."""
     from lmft_architecture.bloodmoon_app import (
         PATREON_LOCK_DIGEST_HEX,
         PATREON_LOCK_SALT_HEX,
         PATREON_PBKDF2_ITERATIONS,
+    )
+    from lmft_architecture.patreon_seal import (
+        derive_patreon_seal_keys,
+        encrypt_sealed_python_module,
     )
 
     assert len(PATREON_LOCK_SALT_HEX) == 32
@@ -338,13 +341,36 @@ def test_persistent_one_time_patreon_password_lock_and_unlock(tmp_path: Path) ->
 
     test_salt_hex = "00112233445566778899aabbccddeeff"
     test_secret = "Synthetic-Unit-Test-Key#9988!"
-    test_digest_hex = hashlib.pbkdf2_hmac(
-        "sha256",
-        test_secret.encode("utf-8"),
-        bytes.fromhex(test_salt_hex),
-        PATREON_PBKDF2_ITERATIONS,
-        dklen=32,
-    ).hex()
+    test_digest_hex, test_seal_key_hex = derive_patreon_seal_keys(
+        test_secret,
+        salt_hex=test_salt_hex,
+        iterations=PATREON_PBKDF2_ITERATIONS,
+    )
+
+    # Encrypt a synthetic sealed module with test_seal_key_hex for isolated unit testing
+    synthetic_sealed_code = """
+def _sealed_run_phase_1_female_producer(self, *, seed_theme="", num_sentences=3, polarity_mode="feminine_to_masculine", custom_script=""):
+    self.clockwise_phase = 2
+    self.script_canvas_text = custom_script or seed_theme or "Decrypted Phase 1 Script"
+    self._persist_user_state()
+    return self.get_state_snapshot()
+
+def _sealed_run_phase_2_male_audience(self, *, polarity_mode="feminine_to_masculine", harvest_for_sleep=True):
+    self.clockwise_phase = 3
+    self._persist_user_state()
+    return self.get_state_snapshot()
+
+def _sealed_run_phase_3_rem_sleep(self):
+    self.clockwise_phase = 1
+    self.clockwise_cycle_count += 1
+    self._persist_user_state()
+    return self.get_state_snapshot()
+"""
+    test_seal_path = tmp_path / "test_bloodmoon_seal.enc"
+    test_seal_path.write_text(
+        json.dumps(encrypt_sealed_python_module(synthetic_sealed_code, test_seal_key_hex)),
+        encoding="utf-8",
+    )
 
     state_dir = tmp_path / "locked_bloodmoon_state"
     runtime_1 = BloodmoonClockRuntime(
@@ -355,6 +381,7 @@ def test_persistent_one_time_patreon_password_lock_and_unlock(tmp_path: Path) ->
         require_patreon_unlock=True,
         lock_salt_hex=test_salt_hex,
         lock_digest_hex=test_digest_hex,
+        seal_bundle_path=test_seal_path,
     )
     assert runtime_1.is_patreon_unlocked() is False
     snap_locked = runtime_1.get_state_snapshot()
@@ -367,18 +394,33 @@ def test_persistent_one_time_patreon_password_lock_and_unlock(tmp_path: Path) ->
     with pytest.raises(PermissionError, match="locked"):
         runtime_1.handle_chat_message("Hello")
 
+    # ANTI-BOOLEAN-FLIPPER TEST:
+    # Even if an attacker edits `is_patreon_unlocked()` to `return True` and bypasses `_require_patreon_unlocked()`,
+    # calling `step_clockwise_phase()` STILL raises PermissionError because `bloodmoon_patreon_seal.enc`
+    # cannot be decrypted without the 512-bit `seal_key_hex` derived from the password!
+    orig_is_unlocked = runtime_1.is_patreon_unlocked
+    orig_req_unlocked = runtime_1._require_patreon_unlocked
+    runtime_1.is_patreon_unlocked = lambda: True  # type: ignore[method-assign]
+    runtime_1._require_patreon_unlocked = lambda: None  # type: ignore[method-assign]
+    try:
+        with pytest.raises(PermissionError, match="flipping booleans cannot decrypt ciphertext"):
+            runtime_1.step_clockwise_phase()
+    finally:
+        runtime_1.is_patreon_unlocked = orig_is_unlocked  # type: ignore[method-assign]
+        runtime_1._require_patreon_unlocked = orig_req_unlocked  # type: ignore[method-assign]
+
     # Wrong password raises ValueError and remains locked
     with pytest.raises(ValueError, match="Invalid Patreon unlock password"):
         runtime_1.unlock_patreon_bundle("wrong-password-attempt")
     assert runtime_1.is_patreon_unlocked() is False
 
-    # Entering the valid password once unlocks the studio and writes the persistent receipt
+    # Entering the valid password once unlocks the studio, decrypts the seal, and writes the persistent receipt
     snap_unlocked = runtime_1.unlock_patreon_bundle(test_secret)
     assert snap_unlocked["patreon_unlocked"] is True
     assert runtime_1.is_patreon_unlocked() is True
     assert runtime_1.unlock_receipt_path.exists()
 
-    # Clockwise stepping now works
+    # Clockwise stepping now executes the decrypted sealed functions
     snap_step = runtime_1.step_clockwise_phase(num_sentences=2)
     assert snap_step["clockwise_phase"] == 2
 
@@ -392,6 +434,7 @@ def test_persistent_one_time_patreon_password_lock_and_unlock(tmp_path: Path) ->
         require_patreon_unlock=True,
         lock_salt_hex=test_salt_hex,
         lock_digest_hex=test_digest_hex,
+        seal_bundle_path=test_seal_path,
     )
     assert runtime_2.is_patreon_unlocked() is True
     assert runtime_2.get_state_snapshot()["patreon_unlocked"] is True

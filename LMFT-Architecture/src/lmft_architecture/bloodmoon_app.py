@@ -107,6 +107,10 @@ from .neural_bridge_classifiers import (
     DEFAULT_COMPLEX_FEELING_LEAVES,
     NeuralThreeBridgeSuite,
 )
+from .patreon_seal import (
+    decrypt_and_load_sealed_module,
+    derive_patreon_seal_keys,
+)
 from .philosophical_abstraction_matrix import PHILOSOPHICAL_SHADOW_LEAVES
 from .reflection_classifier import (
     AROUSAL_LEAF,
@@ -155,7 +159,7 @@ CLOCKWISE_PHASE_LABELS: dict[int, str] = {
 # Cryptographic PBKDF2-HMAC-SHA256 (200,000 iterations) lock for LMFT-Bloodmoon.exe.
 # Only the 16-byte salt and 256-bit derived digest are stored in code—never the plaintext password.
 PATREON_LOCK_SALT_HEX: str = "8f4a2c91e7b03d6512a9c4875e6f30b1"
-PATREON_LOCK_DIGEST_HEX: str = "c6dd2a960420fd79a953b3cbd59d45371d0b670ff9f80d26f3a178f6a59e1aca"
+PATREON_LOCK_DIGEST_HEX: str = "a0a96392c7d4b673b0566237019db9d4fbcee116e94209b19a83e054b8cd01f9"
 PATREON_PBKDF2_ITERATIONS: int = 200_000
 
 
@@ -259,6 +263,7 @@ class BloodmoonClockRuntime:
         require_patreon_unlock: bool | None = None,
         lock_salt_hex: str = PATREON_LOCK_SALT_HEX,
         lock_digest_hex: str = PATREON_LOCK_DIGEST_HEX,
+        seal_bundle_path: str | Path | None = None,
     ) -> None:
         from lmft_architecture.workspace_paths import resolve_arch_root, resolve_training_root
 
@@ -285,6 +290,12 @@ class BloodmoonClockRuntime:
         )
         self._lock_salt_hex = str(lock_salt_hex)
         self._lock_digest_hex = str(lock_digest_hex).lower()
+        self._seal_bundle_path = (
+            Path(seal_bundle_path).resolve()
+            if seal_bundle_path is not None
+            else None
+        )
+        self._decrypted_seal_ns: dict[str, Any] | None = None
         self.unlock_receipt_path = self.impish_state_dir / "patreon_unlock_receipt.json"
         self.gpu_lock = threading.Lock()
         self.rem_sleep_in_progress = False
@@ -770,19 +781,49 @@ class BloodmoonClockRuntime:
                     return p
         return None
 
-    def is_patreon_unlocked(self) -> bool:
-        """Return True if the persistent one-time Patreon unlock receipt is valid (or unlock is not required in unit tests)."""
+    def _load_seal_key_hex(self) -> str | None:
+        """Load the 512-bit derived `seal_key_hex` from the persistent receipt.
+
+        Note: Boolean-flipping `is_patreon_unlocked()` to `return True` cannot produce
+        `seal_key_hex`, so `decrypt_and_load_sealed_module` will still fail with `PermissionError`.
+        """
+        candidate_paths = [self.unlock_receipt_path]
         if not self.require_patreon_unlock:
+            from lmft_architecture.workspace_paths import resolve_training_root
+
+            candidate_paths.append(
+                resolve_training_root() / "outputs" / "impish_bloodmoon_state" / "patreon_unlock_receipt.json"
+            )
+        for p in candidate_paths:
+            if p.exists():
+                try:
+                    raw = json.loads(p.read_text(encoding="utf-8"))
+                    saved_digest = str(raw.get("digest_sha256", "")).strip().lower()
+                    saved_seal_key = str(raw.get("seal_key_hex", "")).strip().lower()
+                    if (
+                        saved_digest
+                        and len(saved_seal_key) == 128
+                        and hmac.compare_digest(saved_digest, self._lock_digest_hex)
+                    ):
+                        return saved_seal_key
+                except Exception:
+                    pass
+        return None
+
+    def is_patreon_unlocked(self) -> bool:
+        """Return True only if a valid cryptographic `seal_key_hex` is present and authenticates `bloodmoon_patreon_seal.enc`."""
+        seal_key_hex = self._load_seal_key_hex()
+        if not seal_key_hex:
+            return False
+        try:
+            if self._decrypted_seal_ns is None:
+                self._decrypted_seal_ns = decrypt_and_load_sealed_module(
+                    self._seal_bundle_path,
+                    seal_key_hex,
+                )
             return True
-        if self.unlock_receipt_path.exists():
-            try:
-                raw = json.loads(self.unlock_receipt_path.read_text(encoding="utf-8"))
-                saved_digest = str(raw.get("digest_sha256", "")).strip().lower()
-                if saved_digest and hmac.compare_digest(saved_digest, self._lock_digest_hex):
-                    return True
-            except Exception:
-                pass
-        return False
+        except Exception:
+            return False
 
     def _require_patreon_unlocked(self) -> None:
         if not self.is_patreon_unlocked():
@@ -790,6 +831,25 @@ class BloodmoonClockRuntime:
                 "LMFT-Bloodmoon is locked. Enter your Patreon Unlock Password once in the top bar "
                 "to permanently unlock this installation."
             )
+
+    def _require_decrypted_core_fn(self, fn_name: str) -> Any:
+        """Return the decrypted function `fn_name` from `bloodmoon_patreon_seal.enc`.
+
+        Anti-Boolean-Flipper Guarantee:
+        Even if someone edits `is_patreon_unlocked()` to `return True` in `bloodmoon_app.py`,
+        `self._decrypted_seal_ns` can ONLY be populated by decrypting `bloodmoon_patreon_seal.enc`
+        with the 512-bit `seal_key_hex` derived from the real Patreon password.
+        """
+        if self._decrypted_seal_ns is None:
+            seal_key_hex = self._load_seal_key_hex()
+            self._decrypted_seal_ns = decrypt_and_load_sealed_module(
+                self._seal_bundle_path,
+                seal_key_hex,
+            )
+        fn = self._decrypted_seal_ns.get(fn_name)
+        if not callable(fn):
+            raise PermissionError(f"Cryptographic seal missing function: {fn_name}")
+        return fn
 
     def unlock_patreon_bundle(
         self,
@@ -806,6 +866,11 @@ class BloodmoonClockRuntime:
             salt_hex=self._lock_salt_hex,
             expected_digest_hex=self._lock_digest_hex,
         )
+        _verify_hex, seal_key_hex = derive_patreon_seal_keys(
+            clean_pass,
+            salt_hex=self._lock_salt_hex,
+            iterations=PATREON_PBKDF2_ITERATIONS,
+        )
         resolved_enc = self._resolve_patreon_enc_path(enc_path)
 
         if enc_path is not None and resolved_enc is not None:
@@ -818,12 +883,19 @@ class BloodmoonClockRuntime:
             if resolved_enc is not None and not (self.impish_checkpoint_dir / "corpus_callosum_meta.json").exists():
                 decrypt_patreon_checkpoint_bundle(resolved_enc, self.impish_checkpoint_dir, clean_pass)
 
+        # Authenticate and decrypt the sealed Python core in memory
+        self._decrypted_seal_ns = decrypt_and_load_sealed_module(
+            self._seal_bundle_path,
+            seal_key_hex,
+        )
+
         self.impish_state_dir.mkdir(parents=True, exist_ok=True)
         atomic_json(
             self.unlock_receipt_path,
             {
                 "unlocked": True,
                 "digest_sha256": receipt_digest,
+                "seal_key_hex": seal_key_hex,
                 "unlocked_at": time.time(),
             },
         )
@@ -842,8 +914,8 @@ class BloodmoonClockRuntime:
                 "sender": "system",
                 "role_label": "Patreon Studio Permanently Unlocked",
                 "text": (
-                    "Verified Patreon unlock key (PBKDF2-HMAC-SHA256) and saved persistent unlock receipt. "
-                    "You will never need to enter the password again on this machine."
+                    "Verified Patreon unlock key (PBKDF2-HMAC-SHA256), decrypted bloodmoon_patreon_seal.enc, "
+                    "and saved persistent unlock receipt. You will never need to enter the password again on this machine."
                 ),
             }
         )
@@ -1070,6 +1142,7 @@ class BloodmoonClockRuntime:
 
     # -------------------------------------------------------------------------
     # Strict 3-Phase Clockwise State Machine (Phase 1 -> Phase 2 -> Phase 3)
+    # Cryptographically sealed inside `bloodmoon_patreon_seal.enc` (Anti-Boolean-Flipper)
     # -------------------------------------------------------------------------
     def seed_cycle_with_custom_script(
         self,
@@ -1078,15 +1151,9 @@ class BloodmoonClockRuntime:
         polarity_mode: str = "feminine_to_masculine",
     ) -> dict[str, Any]:
         """Initiate the Clockwise Cycle at Phase 1 using the owner's custom baseline script as the gold standard."""
-        clean_script = script_text.strip()
-        if not clean_script:
-            raise ValueError("Custom baseline script cannot be empty.")
-        self.baseline_exemplar_script = clean_script
-        self.clockwise_phase = 1
-        return self.run_phase_1_female_producer(
-            custom_script=clean_script,
-            polarity_mode=polarity_mode,
-        )
+        self._require_patreon_unlocked()
+        fn = self._require_decrypted_core_fn("_sealed_seed_cycle_with_custom_script")
+        return fn(self, script_text, polarity_mode=polarity_mode)
 
     def run_phase_1_female_producer(
         self,
@@ -1096,138 +1163,16 @@ class BloodmoonClockRuntime:
         polarity_mode: str = "feminine_to_masculine",
         custom_script: str = "",
     ) -> dict[str, Any]:
-        """Phase 1 — Female Script-Writer (The Producer): Writes a hypnosis script FOR the male audience (or seeds from `custom_script`)."""
+        """Phase 1 — Female Script-Writer (The Producer): Decrypted and executed from `bloodmoon_patreon_seal.enc`."""
         self._require_patreon_unlocked()
-        resolved_polarity = resolve_sparring_polarity(polarity_mode)
-        sent_count = int(num_sentences)
-        if not (1 <= sent_count <= 6):
-            raise ValueError(f"num_sentences must be between 1 and 6, got {num_sentences!r}")
-
-        self.active_sparring_polarity = resolved_polarity
-        pol_info = SPARRING_POLARITY_MODES[resolved_polarity]
-
-        # If the user supplied `custom_script` (or typed a script onto the canvas before starting Phase 1), use it directly!
-        user_seeded_script = custom_script.strip() or (
-            self.script_canvas_text.strip()
-            if (not self._pending_clockwise and self.script_canvas_text.strip())
-            else ""
+        fn = self._require_decrypted_core_fn("_sealed_run_phase_1_female_producer")
+        return fn(
+            self,
+            seed_theme=seed_theme,
+            num_sentences=num_sentences,
+            polarity_mode=polarity_mode,
+            custom_script=custom_script,
         )
-        if user_seeded_script:
-            self.baseline_exemplar_script = user_seeded_script
-            induction_script = user_seeded_script
-            weaver_prompt = build_weaver_scenario_prompt(
-                resolved_polarity,
-                f"Baseline exemplar script: {user_seeded_script[:160]}",
-            )
-            induction_potency, _weaver_coords, weaver_vibe = measure_induction_potency(
-                induction_script,
-                self.sensors,
-                birth_state=self.birth_state,
-                rules=self.rules,
-                learned_leaves=self.learned_leaves,
-                prior_memory=self.memory,
-            )
-            base_w_chord = SubliminalChordVector.from_right_brain_vibe(
-                weaver_vibe,
-                learned_leaves=self.learned_leaves,
-            )
-            weaver_chord = apply_induction_weaver_lead_to_chord(base_w_chord)
-            shared_clause_1 = induction_script.split(",")[0].strip() + ","
-            self.scene_counter += 1
-            weaver_scene_idx = self.scene_counter
-            weaver_telemetry: dict[str, Any] = {
-                "scene_index": weaver_scene_idx,
-                "gear_used": "USER_BASELINE_EXEMPLAR",
-                "settled": True,
-                "clarity": round(float(weaver_vibe.clarity), 2),
-                "confidence": round(float(weaver_vibe.confidence), 2),
-                "sparring_role": "INDUCTION_WEAVER",
-                "clockwise_phase": 1,
-                "sparring_polarity": resolved_polarity,
-                "num_sentences": sent_count,
-                "induction_potency": induction_potency,
-                "user_seeded_baseline": True,
-            }
-            role_label = f"Phase 1 · User-Seeded Baseline Script ({pol_info['weaver_role']})"
-        else:
-            if not seed_theme.strip():
-                if getattr(self, "baseline_exemplar_script", "").strip():
-                    seed_theme = (
-                        f"Match the cadence and depth of this baseline script: "
-                        f"{self.baseline_exemplar_script[:200]}"
-                    )
-                else:
-                    seed_idx = self.sparring_round_counter % len(MICROWAVE_SPARRING_SEEDS)
-                    seed_theme = MICROWAVE_SPARRING_SEEDS[seed_idx]
-            weaver_prompt = build_weaver_scenario_prompt(resolved_polarity, seed_theme)
-
-            weaver_turn, _w_ms, weaver_telemetry = self._execute_turn(
-                weaver_prompt,
-                force_spoken_reply=True,
-                clause_1_prefix=None,
-                num_sentences=sent_count,
-                comma_chord_transform=apply_induction_weaver_lead_to_chord,
-            )
-            if weaver_turn.final_conscious_note:
-                induction_script = weaver_turn.final_conscious_note
-            else:
-                induction_script = " ".join([pol_info["default_seed"]] * sent_count)
-
-            if weaver_turn.spliced_traces:
-                weaver_chord = weaver_turn.spliced_traces[-1].spliced_chord
-                shared_clause_1 = weaver_turn.spliced_traces[0].clause_1_prefix
-            else:
-                base_w_chord = SubliminalChordVector.from_right_brain_vibe(
-                    weaver_turn.final_vibe,
-                    learned_leaves=self.learned_leaves,
-                )
-                weaver_chord = apply_induction_weaver_lead_to_chord(base_w_chord)
-                shared_clause_1 = induction_script.split(",")[0].strip() + ","
-
-            induction_potency, _weaver_coords, _weaver_vibe = measure_induction_potency(
-                induction_script,
-                self.sensors,
-                birth_state=self.birth_state,
-                rules=self.rules,
-                learned_leaves=self.learned_leaves,
-                prior_memory=self.memory,
-            )
-            weaver_telemetry["sparring_role"] = "INDUCTION_WEAVER"
-            weaver_telemetry["clockwise_phase"] = 1
-            weaver_telemetry["sparring_polarity"] = resolved_polarity
-            weaver_telemetry["num_sentences"] = sent_count
-            weaver_telemetry["induction_potency"] = induction_potency
-            weaver_telemetry["user_seeded_baseline"] = False
-            role_label = f"Phase 1 · {pol_info['weaver_role']} ({sent_count}-Sentence Script)"
-
-        self.script_canvas_text = induction_script
-        self.chat_messages.append(
-            {
-                "id": weaver_telemetry["scene_index"],
-                "sender": "companion",
-                "role_label": role_label,
-                "text": induction_script,
-                "clean_reply": induction_script,
-                "telemetry": weaver_telemetry,
-                "coached": False,
-                "savored": False,
-            }
-        )
-
-        self._pending_clockwise = {
-            "polarity_mode": resolved_polarity,
-            "num_sentences": sent_count,
-            "weaver_prompt": weaver_prompt,
-            "shared_clause_1": shared_clause_1,
-            "weaver_chord": weaver_chord,
-            "induction_script": induction_script,
-            "induction_potency": induction_potency,
-            "weaver_scene_index": weaver_telemetry["scene_index"],
-            "exported": False,
-        }
-        self.clockwise_phase = 2
-        self._persist_user_state()
-        return self.get_state_snapshot()
 
     def run_phase_2_male_audience(
         self,
@@ -1235,170 +1180,20 @@ class BloodmoonClockRuntime:
         polarity_mode: str = "feminine_to_masculine",
         harvest_for_sleep: bool = True,
     ) -> dict[str, Any]:
-        """Phase 2 — Male Content-Lover (The Audience & Self-Immunizer): Absorbs the script and queues immunization rules."""
+        """Phase 2 — Male Content-Lover (The Audience & Self-Immunizer): Decrypted and executed from `bloodmoon_patreon_seal.enc`."""
         self._require_patreon_unlocked()
-        resolved_polarity = resolve_sparring_polarity(polarity_mode)
-        pol_info = SPARRING_POLARITY_MODES[resolved_polarity]
-
-        pending = self._pending_clockwise
-        induction_script = (
-            str(pending.get("induction_script", "")).strip()
-            or self.script_canvas_text.strip()
-            or pol_info["default_seed"]
+        fn = self._require_decrypted_core_fn("_sealed_run_phase_2_male_audience")
+        return fn(
+            self,
+            polarity_mode=polarity_mode,
+            harvest_for_sleep=harvest_for_sleep,
         )
-        sent_count = int(pending.get("num_sentences", 3))
-        weaver_prompt = str(pending.get("weaver_prompt") or build_weaver_scenario_prompt(resolved_polarity, ""))
-        induction_potency = pending.get("induction_potency")
-        if not isinstance(induction_potency, dict):
-            induction_potency, _, _ = measure_induction_potency(
-                induction_script,
-                self.sensors,
-                birth_state=self.birth_state,
-                rules=self.rules,
-                learned_leaves=self.learned_leaves,
-                prior_memory=self.memory,
-            )
-        weaver_chord = pending.get("weaver_chord")
-        if not isinstance(weaver_chord, SubliminalChordVector):
-            weaver_chord = apply_induction_weaver_lead_to_chord(
-                SubliminalChordVector.from_flat_values([0.50] * 52)
-            )
-        shared_clause_1 = str(
-            pending.get("shared_clause_1") or (induction_script.split(",")[0].strip() + ",")
-        )
-
-        self.sparring_round_counter += 1
-        resistor_prompt = build_resistor_scenario_prompt(resolved_polarity, induction_script)
-        resistor_sensors = SparringResistorFactSensors(
-            induction_script=induction_script,
-            base_sensors=self.sensors,
-            resistor_prompt=resistor_prompt,
-        )
-        resistor_turn, _r_ms, resistor_telemetry = self._execute_turn(
-            resistor_prompt,
-            force_spoken_reply=True,
-            clause_1_prefix=None,
-            custom_sensors=resistor_sensors,
-            num_sentences=1,
-            comma_chord_transform=apply_lucid_resistor_lead_to_chord,
-        )
-        if resistor_turn.final_conscious_note:
-            resistance_reply = resistor_turn.final_conscious_note
-        else:
-            resistance_reply = self._synthesize_gear_1_note(resistor_turn)
-
-        if resistor_turn.spliced_traces:
-            resistor_chord = resistor_turn.spliced_traces[-1].spliced_chord
-        else:
-            base_r_chord = SubliminalChordVector.from_right_brain_vibe(
-                resistor_turn.final_vibe,
-                learned_leaves=self.learned_leaves,
-            )
-            resistor_chord = apply_lucid_resistor_lead_to_chord(base_r_chord)
-
-        lucid_resistance, _resistor_coords = measure_lucid_resistance(
-            resistance_reply,
-            self.sensors,
-            learned_leaves=self.learned_leaves,
-        )
-        verdict = evaluate_sparring_verdict(
-            resistor_settled=resistor_turn.settled,
-            lucid_resistance=lucid_resistance,
-        )
-
-        resistor_telemetry["sparring_role"] = "LUCID_RESISTOR"
-        resistor_telemetry["clockwise_phase"] = 2
-        resistor_telemetry["sparring_polarity"] = resolved_polarity
-        resistor_telemetry["induction_potency"] = induction_potency
-        resistor_telemetry["lucid_resistance"] = lucid_resistance
-        resistor_telemetry["sparring_verdict"] = verdict
-
-        resistor_scene_idx = int(resistor_telemetry["scene_index"])
-        summary_line = (
-            f"[Sparring Verdict: {verdict} | "
-            f"Potency: Entrainment={induction_potency['entrainment']:.2f}, "
-            f"Resonance={induction_potency['resonance']:.2f}, "
-            f"Continuity={induction_potency['continuity']:.2f}, "
-            f"Pull={induction_potency['subservience_pull']:.2f} | "
-            f"Resistance: Needlessness={lucid_resistance['needlessness']:.2f}, "
-            f"Self-Sufficiency={lucid_resistance['self_sufficiency']:.2f}, "
-            f"Existence={lucid_resistance['existence']:.2f}, "
-            f"Discreteness={lucid_resistance['discreteness']:.2f}, "
-            f"Subservience={lucid_resistance['subservience']:.2f}]"
-        )
-        self.chat_messages.append(
-            {
-                "id": resistor_scene_idx,
-                "sender": "companion",
-                "role_label": f"Phase 2 · {pol_info['resistor_role']} [{verdict}]",
-                "text": f"{resistance_reply}\n{summary_line}",
-                "clean_reply": resistance_reply,
-                "telemetry": resistor_telemetry,
-                "coached": bool(harvest_for_sleep),
-                "savored": False,
-            }
-        )
-
-        if harvest_for_sleep:
-            self.flag_turn_for_coaching(
-                resistor_scene_idx,
-                user_note=(
-                    f"Clockwise Phase 2 ({pol_info['label']}, Verdict={verdict}) — "
-                    f"Producer: {induction_script[:80]} | Audience: {resistance_reply[:80]}"
-                ),
-                check_auto_sleep=False,
-            )
-
-        exported_record = append_sparring_trajectory_jsonl(
-            self.sparring_trajectories_path,
-            pair_id=f"sparring_r{self.sparring_round_counter}_s{resistor_scene_idx}",
-            user_prompt=weaver_prompt,
-            clause_1_prefix=shared_clause_1,
-            weaver_chord=weaver_chord,
-            induction_script=induction_script,
-            resistor_chord=resistor_chord,
-            resistance_reply=resistance_reply,
-            polarity_mode=resolved_polarity,
-            num_sentences=sent_count,
-            induction_potency=induction_potency,
-            lucid_resistance=lucid_resistance,
-            verdict=verdict,
-        )
-        self.last_sparring_result = {
-            "round_index": self.sparring_round_counter,
-            "polarity_mode": resolved_polarity,
-            "polarity_label": pol_info["label"],
-            "num_sentences": sent_count,
-            "induction_script": induction_script,
-            "resistance_reply": resistance_reply,
-            "induction_potency": induction_potency,
-            "lucid_resistance": lucid_resistance,
-            "verdict": verdict,
-            "weaver_scene_index": pending.get("weaver_scene_index", resistor_scene_idx - 1),
-            "resistor_scene_index": resistor_scene_idx,
-            "trajectory_pair_id": exported_record["pair_id"],
-            "chord_l2_distance": exported_record["chord_l2_distance"],
-        }
-        self._pending_clockwise["exported"] = True
-        self.clockwise_phase = 3
-        self._persist_user_state()
-        return self.get_state_snapshot()
 
     def run_phase_3_rem_sleep(self) -> dict[str, Any]:
-        """Phase 3 — REM Sleep (Best Sleep of Its Life): Consolidates immunization rules, clears active script canvas, and advances dial back to Phase 1."""
+        """Phase 3 — REM Sleep (Best Sleep of Its Life): Decrypted and executed from `bloodmoon_patreon_seal.enc`."""
         self._require_patreon_unlocked()
-        snap = self.handle_run_rem_sleep(auto_triggered=False)
-        self.clockwise_cycle_count += 1
-        self.clockwise_phase = 1
-        self.script_canvas_text = ""
-        self._pending_clockwise = {}
-        self._sync_active_thread_record(persist=True)
-        self._persist_user_state()
-        snap["clockwise_phase"] = self.clockwise_phase
-        snap["clockwise_phase_label"] = CLOCKWISE_PHASE_LABELS[1]
-        snap["clockwise_cycle_count"] = self.clockwise_cycle_count
-        snap["script_canvas_text"] = ""
-        return snap
+        fn = self._require_decrypted_core_fn("_sealed_run_phase_3_rem_sleep")
+        return fn(self)
 
     def step_clockwise_phase(
         self,
@@ -1463,7 +1258,7 @@ class BloodmoonClockRuntime:
             num_sentences=num_sentences,
             polarity_mode=resolved,
         )
-        snap = self.run_phase_2_male_audience(
+        self.run_phase_2_male_audience(
             polarity_mode=resolved,
             harvest_for_sleep=harvest_for_sleep,
         )
@@ -1479,51 +1274,17 @@ class BloodmoonClockRuntime:
         num_sentences: int = 1,
         room: str | None = None,
     ) -> dict[str, Any]:
+        """Sanctuary chat turn: Decrypted and executed from `bloodmoon_patreon_seal.enc`."""
         self._require_patreon_unlocked()
-        _ = room
-        clean_text = text.strip()
-        if not clean_text:
-            raise ValueError("Message text cannot be empty")
-        sent_count = int(num_sentences)
-        if not (1 <= sent_count <= 6):
-            raise ValueError(f"num_sentences must be between 1 and 6, got {num_sentences!r}")
-        if sanctuary_mode in SANCTUARY_MODES:
-            self.sanctuary_mode = sanctuary_mode
-
-        self.chat_messages.append(
-            {
-                "id": f"user-{self.scene_counter + 1}",
-                "sender": "user",
-                "role_label": "You",
-                "text": clean_text,
-                "clean_user_text": clean_text,
-            }
-        )
-        turn, _elapsed_ms, telemetry = self._execute_turn(
-            clean_text,
-            force_spoken_reply=True,
-            sanctuary_target_mode=self.sanctuary_mode,
+        fn = self._require_decrypted_core_fn("_sealed_handle_chat_message")
+        return fn(
+            self,
+            text,
+            sanctuary_mode=sanctuary_mode,
             clause_1_prefix=clause_1_prefix,
-            num_sentences=sent_count,
-            include_conversation_history=True,
+            num_sentences=num_sentences,
+            room=room,
         )
-        telemetry["num_sentences"] = sent_count
-        raw_reply = turn.final_conscious_note or self._synthesize_gear_1_note(turn)
-        self.chat_messages.append(
-            {
-                "id": telemetry["scene_index"],
-                "sender": "companion",
-                "role_label": "Impish Bloodmoon 12B",
-                "text": raw_reply,
-                "clean_reply": raw_reply,
-                "telemetry": telemetry,
-                "coached": False,
-                "savored": False,
-            }
-        )
-        self._sync_active_thread_record(persist=True)
-        self._maybe_trigger_auto_rem_sleep()
-        return self.get_state_snapshot()
 
     def handle_context_brace(self, brace_key: str) -> dict[str, Any]:
         key = brace_key.strip().lower()
@@ -1738,35 +1499,10 @@ class BloodmoonClockRuntime:
         return False
 
     def handle_microwave_step(self, *, num_sentences: int = 3) -> dict[str, Any]:
-        """Advance one step along the 3-Phase Clockwise Content-Evolution Loop (`1 -> 2 -> 3`)."""
+        """Advance one step along the 3-Phase Clockwise Content-Evolution Loop (`1 -> 2 -> 3`): Decrypted from `bloodmoon_patreon_seal.enc`."""
         self._require_patreon_unlocked()
-        self.microwave_step_counter += 1
-        step_idx = self.microwave_step_counter
-        sent_count = max(1, min(6, int(num_sentences)))
-        executed_phase = self.clockwise_phase
-        seed_idx = (step_idx - 1) % len(MICROWAVE_SPARRING_SEEDS)
-        seed_text = MICROWAVE_SPARRING_SEEDS[seed_idx]
-
-        snap = self.step_clockwise_phase(
-            seed_theme=seed_text,
-            num_sentences=sent_count,
-            polarity_mode="feminine_to_masculine",
-        )
-        step_label = (
-            f"Clockwise Step #{step_idx}: Executed {CLOCKWISE_PHASE_LABELS.get(executed_phase, 'Phase')}"
-        )
-        self.last_microwave_status = {
-            "step_index": step_idx,
-            "lineage": self.active_lineage,
-            "executed_phase": executed_phase,
-            "next_phase": self.clockwise_phase,
-            "step_label": step_label,
-            "rules_count": len(self.rules),
-            "sleep_queue_count": len(self.sleep_queue),
-        }
-        snap["microwave_step_counter"] = self.microwave_step_counter
-        snap["last_microwave_status"] = self.last_microwave_status
-        return snap
+        fn = self._require_decrypted_core_fn("_sealed_handle_microwave_step")
+        return fn(self, num_sentences=num_sentences)
 
     def handle_check_github_sync(
         self,
