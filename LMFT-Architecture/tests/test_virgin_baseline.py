@@ -92,3 +92,40 @@ def test_sanctuary_club_lineage_switch_virgin_vs_schooled(tmp_path: Path) -> Non
     assert snap_schooled["active_lineage"] == "schooled"
     assert snap_schooled["sleep_cycle_index"] == 2
     assert snap_schooled["rules_count"] == schooled_rules_count
+
+
+def test_architecture_folder_isolation_and_read_only_boundary(tmp_path: Path) -> None:
+    """Enforce strict isolation between `LMFT-Architecture/` (pure engine & Cycle 0 seed) and `LMFT-Training/` (weights, rulesets, & state)."""
+    from lmft_architecture.workspace_paths import resolve_arch_root, resolve_training_root
+
+    arch_root = resolve_arch_root()
+    train_root = resolve_training_root()
+
+    assert arch_root.name == "LMFT-Architecture"
+    assert train_root.name == "LMFT-Training"
+    assert arch_root != train_root
+
+    # 1. `LMFT-Architecture/src/` must only contain `lmft_architecture/` (no `lmft_lab/` folder)
+    src_subdirs = [p.name for p in (arch_root / "src").iterdir() if p.is_dir() and not p.name.startswith("__")]
+    assert src_subdirs == ["lmft_architecture"]
+
+    # 2. `LMFT-Architecture/` must never contain model weights, training trajectories, release bundles, or runtime state directories
+    forbidden_dirs = {"models", "outputs", "experiments", "dist", "club_user_state", "impish_bloodmoon_state"}
+    forbidden_exts = {".safetensors", ".gguf", ".pt", ".bin", ".enc", ".zip", ".jsonl"}
+    found_forbidden: list[str] = []
+    for p in arch_root.rglob("*"):
+        if ".venv" in p.parts or ".pytest_cache" in p.parts or "__pycache__" in p.parts:
+            continue
+        if p.is_dir() and p.name in forbidden_dirs:
+            found_forbidden.append(str(p.relative_to(arch_root)) + "/")
+        elif p.is_file() and p.suffix.lower() in forbidden_exts:
+            found_forbidden.append(str(p.relative_to(arch_root)))
+    assert found_forbidden == [], f"Training/weight artifacts leaked into LMFT-Architecture: {found_forbidden}"
+
+    # 3. Verify `Cycle 0` Virgin Baseline remains 100% read-only when active in SanctuaryClubRuntime
+    before_manifest = verify_virgin_baseline_snapshot()
+    runtime = SanctuaryClubRuntime(state_dir=tmp_path / "isolated_state", lazy_load_gpu=False)
+    runtime.switch_brain_lineage("virgin")
+    assert runtime._maybe_trigger_auto_rem_sleep() is False
+    after_manifest = verify_virgin_baseline_snapshot()
+    assert after_manifest == before_manifest
