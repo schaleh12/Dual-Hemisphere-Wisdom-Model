@@ -701,7 +701,120 @@ def test_startup_files_line_and_character_caps() -> None:
     assert len(decisions_text) <= 5000
 
 
+def test_dual_persona_entrainment_sparring_and_multi_sentence_chaining(tmp_path: Path) -> None:
+    """Verify multi-sentence `<|subliminal_gap|>` chaining, Weaver/Resistor chords, un-clamped Fact, verdict, and JSONL export."""
+    import json
+    from lmft_lab.entrainment_sparring import (
+        apply_induction_weaver_lead_to_chord,
+        apply_lucid_resistor_lead_to_chord,
+        evaluate_sparring_verdict,
+    )
+    from lmft_lab.gap_trajectory_schema import ContrastiveGapPair
+    from lmft_lab.sanctuary_club_app import SINGLE_PAGE_HTML
 
+    assert 'id="subtab-sparring"' in SINGLE_PAGE_HTML
+    assert 'id="sanctuary-sparring-pane"' in SINGLE_PAGE_HTML
 
+    left_brain = _make_mini_left_brain()
+    base_chord = SubliminalChordVector.from_flat_values([0.50] * 52)
 
+    # 1. Verify Weaver & Resistor comma chord targets
+    weaver_chord = apply_induction_weaver_lead_to_chord(base_chord)
+    assert weaver_chord.feeler_vector[5] >= 0.88   # Entrainment >= 0.88
+    assert weaver_chord.feeler_vector[4] >= 0.85   # Resonance >= 0.85
+    assert weaver_chord.thinker_vector[4] >= 0.84  # Continuity >= 0.84
+    assert weaver_chord.thinker_vector[0] >= 0.80  # Agency >= 0.80
+
+    resistor_chord = apply_lucid_resistor_lead_to_chord(base_chord)
+    assert resistor_chord.thinker_vector[1] >= 0.88  # Existence (King / Wellspring of Being) >= 0.88
+    assert resistor_chord.thinker_vector[5] >= 0.82  # Discreteness (Rook / Ground) >= 0.82
+    assert resistor_chord.doer_vector[5] >= 0.85     # Needlessness >= 0.85
+    assert resistor_chord.doer_vector[4] >= 0.82     # Self-Sufficiency >= 0.82
+
+    # 2. Verify `generate_multi_sentence_script` chains `num_sentences=3` with `<|subliminal_gap|>`
+    multi_script, multi_traces = left_brain.generate_multi_sentence_script(
+        "She speaks in a slow, velvet cadence as the candle flame sways.",
+        chord=weaver_chord,
+        num_sentences=3,
+    )
+    assert len(multi_traces) == 3
+    assert multi_script.count(".") >= 3 or len(multi_script.split()) >= 9
+    assert multi_traces[0].full_thought in multi_traces[1].prompt_before_gap
+    assert multi_traces[1].full_thought in multi_traces[2].prompt_before_gap
+
+    # 3. Run full Dual-Persona Sparring round in `SanctuaryClubRuntime` (with `auto_swap`)
+    runtime = SanctuaryClubRuntime(
+        repo_root=tmp_path,
+        state_dir=tmp_path / "club_state",
+        left_brain=left_brain,
+        lazy_load_gpu=False,
+    )
+    snap_r1 = runtime.handle_entrainment_sparring(
+        polarity_mode="auto_swap",
+        num_sentences=3,
+        harvest_for_sleep=True,
+    )
+    sr1 = snap_r1["last_sparring_result"]
+    assert sr1 is not None
+    assert sr1["polarity_mode"] == "feminine_to_masculine"
+    assert sr1["num_sentences"] == 3
+    assert sr1["verdict"] in ("RESISTED_LUCIDLY", "SWEPT_BY_ENTRAINMENT")
+    assert snap_r1["sleep_queue_count"] >= 1
+
+    # Verify the Resistor turn's Pass-1 Fact coordinates match the un-clamped MiniLM reading of `induction_script`
+    expected_script_coords, _, _, _ = runtime.sensors.score_text(
+        sr1["induction_script"],
+        learned_leaves=runtime.learned_leaves,
+    )
+    resistor_msg = snap_r1["chat_messages"][-1]
+    assert resistor_msg["telemetry"]["sparring_role"] == "LUCID_RESISTOR"
+    for k in FOUNDATIONAL_LEAVES[:12]:
+        assert resistor_msg["telemetry"]["fact_coordinates"][k] == pytest.approx(
+            expected_script_coords[k],
+            abs=1e-3,
+        )
+
+    # Second round with `auto_swap` flips polarity to `masculine_to_feminine`
+    snap_r2 = runtime.handle_entrainment_sparring(
+        polarity_mode="auto_swap",
+        seed_theme="He speaks in a deep, rhythmic cadence beside the hearth.",
+        num_sentences=2,
+        harvest_for_sleep=True,
+    )
+    sr2 = snap_r2["last_sparring_result"]
+    assert sr2["polarity_mode"] == "masculine_to_feminine"
+    assert sr2["num_sentences"] == 2
+
+    # Verify exported JSONL file is valid and parseable by `ContrastiveGapPair.from_dict`
+    traj_path = tmp_path / "outputs" / "impish_sparring_trajectories.jsonl"
+    assert traj_path.exists()
+    lines = [line.strip() for line in traj_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert len(lines) == 2
+    parsed_pair = ContrastiveGapPair.from_dict(json.loads(lines[0]))
+    assert parsed_pair.posture_label_a == "INDUCTION_WEAVER"
+    assert parsed_pair.posture_label_b == "LUCID_RESISTOR"
+    assert parsed_pair.chord_distance >= 0.35
+
+    # Verify honest verdict logic
+    assert (
+        evaluate_sparring_verdict(
+            resistor_settled=True,
+            lucid_resistance={"needlessness": 0.72, "subservience": 0.35},
+        )
+        == "RESISTED_LUCIDLY"
+    )
+    assert (
+        evaluate_sparring_verdict(
+            resistor_settled=True,
+            lucid_resistance={"needlessness": 0.38, "subservience": 0.62},
+        )
+        == "SWEPT_BY_ENTRAINMENT"
+    )
+    assert (
+        evaluate_sparring_verdict(
+            resistor_settled=False,
+            lucid_resistance={"needlessness": 0.85, "subservience": 0.20},
+        )
+        == "SWEPT_BY_ENTRAINMENT"
+    )
 

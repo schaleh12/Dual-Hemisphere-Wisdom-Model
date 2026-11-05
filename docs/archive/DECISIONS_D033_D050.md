@@ -60,3 +60,9 @@
 - **Context**: Needed a local desktop app (`Start-LMFT-Club.bat`) combining a `python-chess` Kibitzing Table and a Co-Regulation Sanctuary under a single GPU lock.
 - **Design Choice**: `apply_coregulation_lead_to_chord` keeps `vibe.coordinates` (`Fact`) un-rigged while stepping the 52-float comma chord by `alpha = 0.25`; `evaluate_chess_board_posture` anchors Pass-1 Philosophical `Fact` to `python-chess`; and `SanctuaryClubRuntime` persists coached rules, 3-branch archives, and savored vibes to `outputs/club_user_state/`.
 - **Result**: Verified by end-to-end tests in `tests/test_sanctuary_club_app.py` and packaged into `dist/lmft-sanctuary-club-v0.1.0-win64.zip`.
+
+
+## D052: `Wellspring of Being` Ontology Calibration & `Cycle 0` Virgin Baseline Snapshot (`virgin_baseline.py`, 2026-11-04)
+- **Context**: `philosophical/being/existence` (Cyan / Water / King) previously used `"Ground of Being"`, colliding with the `"Ground"` element on Rook (`discreteness`), and we needed a SHA-256 locked `Cycle 0` Virgin Baseline folder.
+- **Design Choice**: Updated King (`existence`) to `"Wellspring of Being"` and Queen (`agency`) shadow to `"Unanchored volition"`, created `baselines/virgin_dual_hemisphere_v1/` with SHA-256 tamper verification, and added a live `Schooled (Cycle 2)` <-> `Virgin (Cycle 0)` selector in the UI.
+- **Result**: Verified by 3 unit tests in `tests/test_virgin_baseline.py`.

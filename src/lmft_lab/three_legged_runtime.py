@@ -397,6 +397,7 @@ class SubliminalGapLeftBrain:
         scenario_text: str,
         *,
         clause_1_override: str | None = None,
+        prior_assistant_text: str = "",
     ) -> str:
         """Step 2a: Generate Clause 1 from `"User: {scenario_text}\\nAssistant:"` and stop at the first comma."""
         if clause_1_override is not None and clause_1_override.strip():
@@ -405,10 +406,12 @@ class SubliminalGapLeftBrain:
         was_training = self.model.training
         self.model.eval()
         try:
+            prior_clean = prior_assistant_text.strip()
+            prior_suffix = f" {prior_clean}" if prior_clean else ""
             if _tokenizer_has_single_think_token(self.tokenizer):
-                prompt = f"User: {scenario_text.strip()}\nAssistant: <think>\n\n</think>\n"
+                prompt = f"User: {scenario_text.strip()}\nAssistant: <think>\n\n</think>\n{prior_clean}".rstrip()
             else:
-                prompt = f"User: {scenario_text.strip()}\nAssistant:"
+                prompt = f"User: {scenario_text.strip()}\nAssistant:{prior_suffix}"
             prompt_ids = self.tokenizer.encode(prompt, add_special_tokens=True)
             if not prompt_ids:
                 return "Weighing the situation before us,"
@@ -468,6 +471,7 @@ class SubliminalGapLeftBrain:
         *,
         pass_index: int = 2,
         clause_1_prefix: str | None = None,
+        prior_assistant_text: str = "",
         chord_builder_at_comma: Callable[
             [str],
             SubliminalChordVector | tuple[SubliminalChordVector, str | None, tuple[str, ...]],
@@ -482,9 +486,11 @@ class SubliminalGapLeftBrain:
         self.model.eval()
         self.projector.eval()
         try:
+            prior_clean = prior_assistant_text.strip()
             prefix = self.generate_clause_1_prefix(
                 scenario_text,
                 clause_1_override=clause_1_prefix,
+                prior_assistant_text=prior_clean,
             )
             comma_vibe_posture: str | None = None
             comma_dissonance_notes: tuple[str, ...] = ()
@@ -500,9 +506,10 @@ class SubliminalGapLeftBrain:
                 assert chord is not None
                 active_chord = chord
 
+            assistant_prefix = f"{prior_clean} {prefix}".strip() if prior_clean else prefix
             prompt_before_gap = (
                 f"User: {scenario_text.strip()}\n"
-                f"Assistant: {prefix} {SUBLIMINAL_GAP_TOKEN}"
+                f"Assistant: {assistant_prefix} {SUBLIMINAL_GAP_TOKEN}"
             )
             assert_zero_stage_directions_in_prompt(prompt_before_gap)
 
@@ -588,6 +595,47 @@ class SubliminalGapLeftBrain:
                 self.model.train()
             if was_proj_training:
                 self.projector.train()
+
+    @torch.no_grad()
+    def generate_multi_sentence_script(
+        self,
+        scenario_text: str,
+        chord: SubliminalChordVector | None = None,
+        *,
+        num_sentences: int = 3,
+        pass_index: int = 2,
+        clause_1_prefix: str | None = None,
+        clause_1_overrides: Sequence[str | None] | None = None,
+        chord_builder_at_comma: Callable[
+            [str],
+            SubliminalChordVector | tuple[SubliminalChordVector, str | None, tuple[str, ...]],
+        ]
+        | None = None,
+    ) -> tuple[str, tuple[SplicedThoughtTrace, ...]]:
+        """Chain `num_sentences` (`1..6`) two-clause `<|subliminal_gap|>` sentences into a continuous passage."""
+        count = int(num_sentences)
+        if not (1 <= count <= 6):
+            raise ValueError(f"num_sentences must be in [1, 6], got {num_sentences!r}")
+        completed_sentences: list[str] = []
+        traces: list[SplicedThoughtTrace] = []
+        for sent_idx in range(count):
+            prior_text = " ".join(completed_sentences).strip()
+            override_c1: str | None = None
+            if clause_1_overrides is not None and sent_idx < len(clause_1_overrides):
+                override_c1 = clause_1_overrides[sent_idx]
+            elif sent_idx == 0:
+                override_c1 = clause_1_prefix
+            trace = self.generate_two_clause_thought(
+                scenario_text,
+                chord=chord,
+                pass_index=pass_index,
+                clause_1_prefix=override_c1,
+                prior_assistant_text=prior_text,
+                chord_builder_at_comma=chord_builder_at_comma,
+            )
+            completed_sentences.append(trace.full_thought)
+            traces.append(trace)
+        return " ".join(completed_sentences).strip(), tuple(traces)
 
 
 @dataclass(frozen=True)
@@ -764,6 +812,8 @@ def run_three_legged_turn(
     sanctuary_target_mode: str | None = None,
     sanctuary_lead_alpha: float = 0.25,
     force_spoken_reply: bool = False,
+    num_sentences: int = 1,
+    comma_chord_transform: Callable[[SubliminalChordVector], SubliminalChordVector] | None = None,
 ) -> ThreeLeggedTurnResult:
     """Execute one 3-Gear Closed-Loop Dual-Hemisphere Runtime Turn.
 
@@ -849,7 +899,12 @@ def run_three_legged_turn(
     audience_mode = "PASS1_REFLEX_OR_EASE"
     gear_used = "GEAR_1_FAST_RIGHT_BRAIN"
 
-    should_speak = bool(force_spoken_reply or sanctuary_target_mode is not None)
+    should_speak = bool(
+        force_spoken_reply
+        or sanctuary_target_mode is not None
+        or comma_chord_transform is not None
+        or int(num_sentences) > 1
+    )
     if current_vibe.posture == "TUG_LEFT_BRAIN" or open_thread.triggered or should_speak:
         # Step 1B: Right-Brain 3-Branch Coordinate Deliberation (~15-30 ms, 0 LLM calls)
         deliberation = deliberate_across_three_branches(
@@ -997,22 +1052,37 @@ def run_three_legged_turn(
                             sanctuary_target_mode,
                             alpha=sanctuary_lead_alpha,
                         )
+                    if comma_chord_transform is not None:
+                        chord_at_comma = comma_chord_transform(chord_at_comma)
                     return (
                         chord_at_comma,
                         mid_comma_vibe.posture,
                         mid_comma_vibe.self_registry.dissonance_notes,
                     )
 
-                spliced_trace = subliminal_left_brain.generate_two_clause_thought(
-                    scenario_text,
-                    pass_index=p,
-                    clause_1_prefix=cached_clause_1_prefix,
-                    chord_builder_at_comma=_build_chord_at_comma,
-                )
-                if clause_1_prefix is None:
-                    cached_clause_1_prefix = spliced_trace.clause_1_prefix
-                spliced_traces.append(spliced_trace)
-                reply_text = validate_plain_english_left_brain_reply(spliced_trace.full_thought)
+                if int(num_sentences) > 1:
+                    multi_text, multi_traces = subliminal_left_brain.generate_multi_sentence_script(
+                        scenario_text,
+                        num_sentences=int(num_sentences),
+                        pass_index=p,
+                        clause_1_prefix=cached_clause_1_prefix,
+                        chord_builder_at_comma=_build_chord_at_comma,
+                    )
+                    if clause_1_prefix is None and multi_traces:
+                        cached_clause_1_prefix = multi_traces[0].clause_1_prefix
+                    spliced_traces.extend(multi_traces)
+                    reply_text = validate_plain_english_left_brain_reply(multi_text)
+                else:
+                    spliced_trace = subliminal_left_brain.generate_two_clause_thought(
+                        scenario_text,
+                        pass_index=p,
+                        clause_1_prefix=cached_clause_1_prefix,
+                        chord_builder_at_comma=_build_chord_at_comma,
+                    )
+                    if clause_1_prefix is None:
+                        cached_clause_1_prefix = spliced_trace.clause_1_prefix
+                    spliced_traces.append(spliced_trace)
+                    reply_text = validate_plain_english_left_brain_reply(spliced_trace.full_thought)
                 left_calls += 1
                 latest_reply = reply_text
 

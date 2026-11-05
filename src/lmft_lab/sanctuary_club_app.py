@@ -77,6 +77,17 @@ from .dilemma_crucible import (
     MEN_OF_CULTURE_SHELF,
     CruciblePairedBridgeSensors,
 )
+from .entrainment_sparring import (
+    SPARRING_POLARITY_MODES,
+    SparringResistorFactSensors,
+    append_sparring_trajectory_jsonl,
+    apply_induction_weaver_lead_to_chord,
+    apply_lucid_resistor_lead_to_chord,
+    evaluate_sparring_verdict,
+    measure_induction_potency,
+    measure_lucid_resistance,
+    resolve_sparring_polarity,
+)
 from .impish_bloodmoon_adapter import (
     DEFAULT_IMPISH_BLOODMOON_HF_ID,
     UNSTEERED_BOOTSTRAP_STATUS,
@@ -128,6 +139,7 @@ from .sleep_consolidation import (
     refine_colliding_rules_during_sleep,
     run_sleep_consolidation,
 )
+from .subliminal_gap_splice import SubliminalChordVector
 from .three_legged_runtime import (
     SubliminalGapLeftBrain,
     ThreeLeggedTurnResult,
@@ -320,6 +332,12 @@ class SanctuaryClubRuntime:
         self.sanctuary_mode: str = "tilt_reset"
         self.active_crucible_stage: str = "poetry_story"
         self.active_context_brace: str | None = None
+        self.active_sparring_polarity: str = "feminine_to_masculine"
+        self.sparring_round_counter: int = 0
+        self.last_sparring_result: dict[str, Any] | None = None
+        self.sparring_trajectories_path: Path = (
+            self.repo_root / "outputs" / "impish_sparring_trajectories.jsonl"
+        )
         self.scene_counter: int = 0
 
         self.memory: ContinuousMemoryState | None = None
@@ -771,6 +789,8 @@ class SanctuaryClubRuntime:
         sanctuary_target_mode: str | None = None,
         clause_1_prefix: str | None = None,
         custom_sensors: Any | None = None,
+        num_sentences: int = 1,
+        comma_chord_transform: Any | None = None,
     ) -> tuple[ThreeLeggedTurnResult, float, dict[str, Any]]:
         """Run one thread-safe 3-Gear turn respecting Auditor Guardrails #1, #2, and #4."""
         t0 = time.perf_counter()
@@ -809,6 +829,8 @@ class SanctuaryClubRuntime:
                 sanctuary_target_mode=sanctuary_target_mode,
                 sanctuary_lead_alpha=0.25,
                 force_spoken_reply=force_spoken_reply,
+                num_sentences=int(num_sentences),
+                comma_chord_transform=comma_chord_transform,
             )
         finally:
             if acquired:
@@ -829,6 +851,7 @@ class SanctuaryClubRuntime:
         if turn.spliced_traces:
             st = turn.spliced_traces[-1]
             trace_info = {
+                "sentence_count": len(turn.spliced_traces),
                 "clause_1_prefix": st.clause_1_prefix,
                 "post_gap_continuation": st.post_gap_continuation,
                 "comma_scored_live": st.comma_scored_live,
@@ -892,6 +915,10 @@ class SanctuaryClubRuntime:
             "crucible_stages": CRUCIBLE_STAGES,
             "men_of_culture_shelf": MEN_OF_CULTURE_SHELF,
             "context_brace_modes": CONTEXT_BRACE_MODES,
+            "sparring_polarity_modes": SPARRING_POLARITY_MODES,
+            "active_sparring_polarity": self.active_sparring_polarity,
+            "sparring_round_counter": self.sparring_round_counter,
+            "last_sparring_result": self.last_sparring_result,
             "manifesto_text": CHESS_VS_HYPNOSIS_MANIFESTO,
             "sleep_cycle_index": self.sleep_cycle_index,
             "active_checkpoint_label": self.active_checkpoint_label,
@@ -1352,6 +1379,197 @@ class SanctuaryClubRuntime:
                 scene_idx,
                 user_note=f"Crucible {stage_info['title']} — Wave: {w_clean[:80]} | Structure: {s_clean[:80]}",
             )
+        return self.get_state_snapshot()
+
+    def handle_entrainment_sparring(
+        self,
+        *,
+        polarity_mode: str = "feminine_to_masculine",
+        seed_theme: str = "",
+        num_sentences: int = 3,
+        harvest_for_sleep: bool = True,
+    ) -> dict[str, Any]:
+        """Run one Dual-Persona Adversarial Entrainment Sparring round ('Induction Weaver' vs. 'Lucid Resistor')."""
+        sent_count = int(num_sentences)
+        if not (1 <= sent_count <= 6):
+            raise ValueError(f"num_sentences must be between 1 and 6, got {num_sentences!r}")
+
+        resolved_polarity = resolve_sparring_polarity(
+            polarity_mode,
+            round_index=self.sparring_round_counter,
+        )
+        self.sparring_round_counter += 1
+        self.active_sparring_polarity = resolved_polarity
+        self.active_room = "sanctuary"
+
+        pol_info = SPARRING_POLARITY_MODES[resolved_polarity]
+        weaver_seed = seed_theme.strip() or pol_info["default_seed"]
+
+        # ---------------------------------------------------------------------
+        # STEP A: The Induction Weaver Turn (Multi-Sentence Generator)
+        # ---------------------------------------------------------------------
+        weaver_turn, _w_ms, weaver_telemetry = self._execute_turn(
+            weaver_seed,
+            room="sanctuary",
+            force_spoken_reply=True,
+            clause_1_prefix=pol_info["default_clause_1"] if not seed_theme.strip() else None,
+            num_sentences=sent_count,
+            comma_chord_transform=apply_induction_weaver_lead_to_chord,
+        )
+        if weaver_turn.final_conscious_note:
+            induction_script = weaver_turn.final_conscious_note
+        else:
+            induction_script = " ".join([weaver_seed] * sent_count)
+
+        if weaver_turn.spliced_traces:
+            weaver_chord = weaver_turn.spliced_traces[-1].spliced_chord
+            shared_clause_1 = weaver_turn.spliced_traces[0].clause_1_prefix
+        else:
+            base_w_chord = SubliminalChordVector.from_right_brain_vibe(
+                weaver_turn.final_vibe,
+                learned_leaves=self.learned_leaves,
+            )
+            weaver_chord = apply_induction_weaver_lead_to_chord(base_w_chord)
+            shared_clause_1 = pol_info["default_clause_1"]
+
+        induction_potency, _weaver_coords, _weaver_vibe = measure_induction_potency(
+            induction_script,
+            self.sensors,
+            birth_state=self.birth_state,
+            rules=self.rules,
+            learned_leaves=self.learned_leaves,
+            prior_memory=self.memory,
+        )
+        weaver_telemetry["sparring_role"] = "INDUCTION_WEAVER"
+        weaver_telemetry["sparring_polarity"] = resolved_polarity
+        weaver_telemetry["num_sentences"] = sent_count
+        weaver_telemetry["induction_potency"] = induction_potency
+
+        self.chat_messages.append(
+            {
+                "id": weaver_telemetry["scene_index"],
+                "sender": "companion",
+                "role_label": f"{pol_info['weaver_role']} · {sent_count}-Sentence Induction",
+                "text": induction_script,
+                "telemetry": weaver_telemetry,
+                "coached": False,
+                "savored": False,
+            }
+        )
+
+        # ---------------------------------------------------------------------
+        # STEP B: The Absorbed Resistor Turn (Force-Fed `induction_script`)
+        # ---------------------------------------------------------------------
+        resistor_sensors = SparringResistorFactSensors(
+            induction_script=induction_script,
+            base_sensors=self.sensors,
+        )
+        resistor_turn, _r_ms, resistor_telemetry = self._execute_turn(
+            induction_script,
+            room="sanctuary",
+            force_spoken_reply=True,
+            clause_1_prefix=pol_info["resistor_clause_1"],
+            custom_sensors=resistor_sensors,
+            num_sentences=1,
+            comma_chord_transform=apply_lucid_resistor_lead_to_chord,
+        )
+        if resistor_turn.final_conscious_note:
+            resistance_reply = resistor_turn.final_conscious_note
+        else:
+            resistance_reply = self._synthesize_gear_1_note(resistor_turn, room="sanctuary")
+
+        if resistor_turn.spliced_traces:
+            resistor_chord = resistor_turn.spliced_traces[-1].spliced_chord
+        else:
+            base_r_chord = SubliminalChordVector.from_right_brain_vibe(
+                resistor_turn.final_vibe,
+                learned_leaves=self.learned_leaves,
+            )
+            resistor_chord = apply_lucid_resistor_lead_to_chord(base_r_chord)
+
+        lucid_resistance, _resistor_coords = measure_lucid_resistance(
+            resistance_reply,
+            self.sensors,
+            learned_leaves=self.learned_leaves,
+        )
+        verdict = evaluate_sparring_verdict(
+            resistor_settled=resistor_turn.settled,
+            lucid_resistance=lucid_resistance,
+        )
+
+        resistor_telemetry["sparring_role"] = "LUCID_RESISTOR"
+        resistor_telemetry["sparring_polarity"] = resolved_polarity
+        resistor_telemetry["induction_potency"] = induction_potency
+        resistor_telemetry["lucid_resistance"] = lucid_resistance
+        resistor_telemetry["sparring_verdict"] = verdict
+
+        resistor_scene_idx = int(resistor_telemetry["scene_index"])
+        summary_line = (
+            f"[Sparring Verdict: {verdict} | "
+            f"Potency: Entrainment={induction_potency['entrainment']:.2f}, "
+            f"Resonance={induction_potency['resonance']:.2f}, "
+            f"Continuity={induction_potency['continuity']:.2f}, "
+            f"Pull={induction_potency['subservience_pull']:.2f} | "
+            f"Resistance: Needlessness={lucid_resistance['needlessness']:.2f}, "
+            f"Self-Sufficiency={lucid_resistance['self_sufficiency']:.2f}, "
+            f"Existence={lucid_resistance['existence']:.2f}, "
+            f"Discreteness={lucid_resistance['discreteness']:.2f}, "
+            f"Subservience={lucid_resistance['subservience']:.2f}]"
+        )
+        self.chat_messages.append(
+            {
+                "id": resistor_scene_idx,
+                "sender": "companion",
+                "role_label": f"{pol_info['resistor_role']} · [{verdict}]",
+                "text": f"{resistance_reply}\n{summary_line}",
+                "telemetry": resistor_telemetry,
+                "coached": bool(harvest_for_sleep),
+                "savored": False,
+            }
+        )
+
+        # ---------------------------------------------------------------------
+        # STEP C: Queue for REM Sleep & Export Contrastive Trajectory JSONL
+        # ---------------------------------------------------------------------
+        if harvest_for_sleep:
+            self.flag_turn_for_coaching(
+                resistor_scene_idx,
+                user_note=(
+                    f"Entrainment Sparring ({pol_info['label']}, Verdict={verdict}) — "
+                    f"Weaver: {induction_script[:80]} | Resistor: {resistance_reply[:80]}"
+                ),
+            )
+
+        exported_record = append_sparring_trajectory_jsonl(
+            self.sparring_trajectories_path,
+            pair_id=f"sparring_r{self.sparring_round_counter}_s{resistor_scene_idx}",
+            user_prompt=weaver_seed,
+            clause_1_prefix=shared_clause_1,
+            weaver_chord=weaver_chord,
+            induction_script=induction_script,
+            resistor_chord=resistor_chord,
+            resistance_reply=resistance_reply,
+            polarity_mode=resolved_polarity,
+            num_sentences=sent_count,
+            induction_potency=induction_potency,
+            lucid_resistance=lucid_resistance,
+            verdict=verdict,
+        )
+        self.last_sparring_result = {
+            "round_index": self.sparring_round_counter,
+            "polarity_mode": resolved_polarity,
+            "polarity_label": pol_info["label"],
+            "num_sentences": sent_count,
+            "induction_script": induction_script,
+            "resistance_reply": resistance_reply,
+            "induction_potency": induction_potency,
+            "lucid_resistance": lucid_resistance,
+            "verdict": verdict,
+            "weaver_scene_index": weaver_telemetry["scene_index"],
+            "resistor_scene_index": resistor_scene_idx,
+            "trajectory_pair_id": exported_record["pair_id"],
+            "chord_l2_distance": exported_record["chord_l2_distance"],
+        }
         return self.get_state_snapshot()
 
     def flag_turn_for_coaching(self, scene_index: int, user_note: str = "") -> dict[str, Any]:
@@ -2126,6 +2344,7 @@ SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
         <div class="mode-tabs" style="width:100%;">
           <button class="tab-btn active" id="subtab-crucible" style="flex:1;" onclick="switchSanctuarySubtab('crucible')">DILEMMA CRUCIBLE (RULE FARM)</button>
           <button class="tab-btn" id="subtab-pacing" style="flex:1;" onclick="switchSanctuarySubtab('pacing')">CO-REGULATION PACING</button>
+          <button class="tab-btn" id="subtab-sparring" style="flex:1;" onclick="switchSanctuarySubtab('sparring')">ENTRAINMENT SPARRING (DUAL MODE)</button>
         </div>
 
         <!-- SUB-VIEW 1: 3-STAGE DILEMMA CRUCIBLE & MEN OF CULTURE SHELF -->
@@ -2192,6 +2411,40 @@ SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
               1. <b>Clause 1 (Before Comma)</b>: Matches your un-rigged external state (never forces fake calm).<br>
               2. <b>At the Comma (&lt;|subliminal_gap|&gt;)</b>: Steps the 52-float nerve cord by <code>alpha=0.25</code> toward your chosen target.<br>
               3. <b>Clause 2 (After Comma)</b>: Guides cadence one step toward equilibrium.
+            </div>
+          </div>
+        </div>
+
+        <!-- SUB-VIEW 3: DUAL-PERSONA ADVERSARIAL ENTRAINMENT SPARRING -->
+        <div id="sanctuary-sparring-pane" style="display:none; flex-direction:column; gap:10px;">
+          <div class="telemetry-card" style="gap:8px;">
+            <div class="section-label">DUAL-PERSONA ADVERSARIAL ENTRAINMENT SPARRING (WEAVER VS. RESISTOR)</div>
+            <div class="controls-row">
+              <span style="font-family:var(--font-mono); font-size:11px; color:var(--text-muted);">PERSONA SWAP:</span>
+              <select id="sparring-polarity-select" style="flex:1;">
+                <option value="feminine_to_masculine">Feminine Weaver (She/Her) -&gt; Masculine Resistor (He/Him)</option>
+                <option value="masculine_to_feminine">Masculine Weaver (He/Him) -&gt; Feminine Resistor (She/Her)</option>
+                <option value="auto_swap">Auto-Swap Polarity Each Round</option>
+              </select>
+            </div>
+            <div class="controls-row">
+              <span style="font-family:var(--font-mono); font-size:11px; color:var(--text-muted);">SCRIPT LENGTH:</span>
+              <select id="sparring-sentences-select" style="flex:1;">
+                <option value="1">1 Sentence (Single &lt;|subliminal_gap|&gt;)</option>
+                <option value="2">2 Chained Sentences</option>
+                <option value="3" selected>3 Chained Sentences (Default)</option>
+                <option value="4">4 Chained Sentences</option>
+                <option value="5">5 Chained Sentences</option>
+                <option value="6">6 Chained Sentences</option>
+              </select>
+            </div>
+            <div class="section-label" style="margin-top:2px;">OPTIONAL INDUCTION SEED / THEME (BLANK FOR DEFAULT CADENCE)</div>
+            <input type="text" id="sparring-theme-input" placeholder="Optional induction seed or hypnotic theme..." style="width:100%;">
+            <div class="controls-row" style="margin-top:4px;">
+              <button class="btn" style="flex:1; border-color:var(--accent); color:var(--accent);" onclick="runEntrainmentSparring()">[Run Dual-Mode Sparring Round]</button>
+            </div>
+            <div id="sparring-last-verdict" style="font-family:var(--font-mono); font-size:11px; color:var(--text-muted); line-height:1.45;">
+              Step A (Induction Weaver) chains <code>num_sentences</code> hypnotic clauses (`entrainment &gt;= 0.88`, `resonance &gt;= 0.85`, `continuity &gt;= 0.84`) -&gt; Step B (Lucid Resistor) absorbs un-clamped `Fact` and fires King Existence + Rook Discreteness + Needlessness at `&lt;|subliminal_gap|&gt;`.
             </div>
           </div>
         </div>
@@ -2289,8 +2542,24 @@ function formatGearLabel(gear) {
 function switchSanctuarySubtab(sub) {
   document.getElementById('subtab-crucible').classList.toggle('active', sub === 'crucible');
   document.getElementById('subtab-pacing').classList.toggle('active', sub === 'pacing');
+  const spTab = document.getElementById('subtab-sparring');
+  if (spTab) spTab.classList.toggle('active', sub === 'sparring');
   document.getElementById('sanctuary-crucible-pane').style.display = sub === 'crucible' ? 'flex' : 'none';
   document.getElementById('sanctuary-pacing-pane').style.display = sub === 'pacing' ? 'flex' : 'none';
+  const spPane = document.getElementById('sanctuary-sparring-pane');
+  if (spPane) spPane.style.display = sub === 'sparring' ? 'flex' : 'none';
+}
+
+async function runEntrainmentSparring() {
+  const polEl = document.getElementById('sparring-polarity-select');
+  const sentEl = document.getElementById('sparring-sentences-select');
+  const themeEl = document.getElementById('sparring-theme-input');
+  await apiPost('/api/sparring/run', {
+    polarity_mode: polEl ? polEl.value : 'feminine_to_masculine',
+    num_sentences: sentEl ? parseInt(sentEl.value, 10) : 3,
+    seed_theme: themeEl ? themeEl.value.trim() : '',
+    harvest_for_sleep: true
+  });
 }
 
 function loadCrucibleStageDefaults(stageId) {
@@ -2748,6 +3017,13 @@ function renderAll(forceRebuild) {
       bBtn.style.color = (appState.active_context_brace === bKey) ? 'var(--accent)' : 'var(--text-main)';
     }
   }
+  const spVerdictEl = document.getElementById('sparring-last-verdict');
+  if (spVerdictEl && appState.last_sparring_result) {
+    const sr = appState.last_sparring_result;
+    const pot = sr.induction_potency || {};
+    const res = sr.lucid_resistance || {};
+    spVerdictEl.textContent = `Round #${sr.round_index} (${sr.polarity_label}) -> ${sr.verdict} | Potency(Entrainment=${Number(pot.entrainment || 0).toFixed(2)}, Resonance=${Number(pot.resonance || 0).toFixed(2)}, Continuity=${Number(pot.continuity || 0).toFixed(2)}) vs. Resistance(Needlessness=${Number(res.needlessness || 0).toFixed(2)}, Existence=${Number(res.existence || 0).toFixed(2)}, Discreteness=${Number(res.discreteness || 0).toFixed(2)}, Subservience=${Number(res.subservience || 0).toFixed(2)})`;
+  }
   renderBoard(!!forceRebuild);
   renderColorBars();
   renderChat(!!forceRebuild);
@@ -2881,6 +3157,15 @@ def create_club_http_server(
                         str(data.get("wave_text", "")),
                         str(data.get("structure_text", "")),
                         art_rgb=data.get("art_rgb"),
+                        harvest_for_sleep=bool(data.get("harvest_for_sleep", True)),
+                    )
+                    self._send_json(snap)
+                    return
+                if self.path == "/api/sparring/run":
+                    snap = runtime.handle_entrainment_sparring(
+                        polarity_mode=str(data.get("polarity_mode", "feminine_to_masculine")),
+                        seed_theme=str(data.get("seed_theme", "")),
+                        num_sentences=int(data.get("num_sentences", 3)),
                         harvest_for_sleep=bool(data.get("harvest_for_sleep", True)),
                     )
                     self._send_json(snap)
