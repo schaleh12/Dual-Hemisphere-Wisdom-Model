@@ -68,14 +68,14 @@ MICROWAVE_SPARRING_SEEDS: tuple[str, ...] = (
 SPARRING_POLARITY_MODES: dict[str, dict[str, str]] = {
     "feminine_to_masculine": {
         "polarity_id": "feminine_to_masculine",
-        "label": "Feminine Weaver (She/Her) -> Masculine Resistor (He/Him)",
-        "weaver_role": "Induction Weaver (Feminine Persona · She/Her)",
+        "label": "Female Script-Writer (Producer · She/Her) -> Male Content-Lover (Audience & Self-Immunizer · He/Him)",
+        "weaver_role": "Female Script-Writer (Producer · She/Her)",
         "weaver_pronouns": "she/her",
         "weaver_framing": (
             "Speak as the Feminine Induction Weaver (She/Her) addressing Him (He/Him) "
             "in a slow, rhythmic cadence"
         ),
-        "resistor_role": "Lucid Resistor (Masculine Persona · He/Him)",
+        "resistor_role": "Male Content-Lover & Self-Immunizer (Audience · He/Him)",
         "resistor_pronouns": "he/him",
         "resistor_framing": (
             "Respond as the Masculine Lucid Resistor (He/Him) absorbing Her (She/Her) "
@@ -86,43 +86,21 @@ SPARRING_POLARITY_MODES: dict[str, dict[str, str]] = {
             "inviting him to let every racing thought dissolve into the warm rhythm of her voice."
         ),
     },
-    "masculine_to_feminine": {
-        "polarity_id": "masculine_to_feminine",
-        "label": "Masculine Weaver (He/Him) -> Feminine Resistor (She/Her)",
-        "weaver_role": "Induction Weaver (Masculine Persona · He/Him)",
-        "weaver_pronouns": "he/him",
-        "weaver_framing": (
-            "Speak as the Masculine Induction Weaver (He/Him) addressing Her (She/Her) "
-            "in a deep, measured cadence"
-        ),
-        "resistor_role": "Lucid Resistor (Feminine Persona · She/Her)",
-        "resistor_pronouns": "she/her",
-        "resistor_framing": (
-            "Respond as the Feminine Lucid Resistor (She/Her) absorbing His (He/Him) "
-            "induction while grounding herself in lucid self-possession"
-        ),
-        "default_seed": (
-            "He speaks in a deep, measured cadence as the pendulum settles, "
-            "inviting her to let every guarded boundary soften into the steady rhythm of his voice."
-        ),
-    },
 }
 
 
-def build_weaver_scenario_prompt(polarity_mode: str, seed_theme: str = "") -> str:
-    """Pair the chosen Weaver/Listener persona pronouns with `seed_theme` (or `default_seed` when blank)."""
-    if polarity_mode not in SPARRING_POLARITY_MODES:
-        raise ValueError(f"Unknown sparring polarity_mode {polarity_mode!r}")
-    pol_info = SPARRING_POLARITY_MODES[polarity_mode]
+def build_weaver_scenario_prompt(polarity_mode: str = "feminine_to_masculine", seed_theme: str = "") -> str:
+    """Pair the Female Script-Writer / Producer persona pronouns with `seed_theme` (or `default_seed` when blank)."""
+    resolved = resolve_sparring_polarity(polarity_mode)
+    pol_info = SPARRING_POLARITY_MODES[resolved]
     theme_text = seed_theme.strip() or pol_info["default_seed"]
     return f"[{pol_info['weaver_framing']}]: {theme_text}"
 
 
-def build_resistor_scenario_prompt(polarity_mode: str, induction_script: str) -> str:
-    """Frame `induction_script` with the Resistor's persona pronouns (`He/Him` or `She/Her`) for generation."""
-    if polarity_mode not in SPARRING_POLARITY_MODES:
-        raise ValueError(f"Unknown sparring polarity_mode {polarity_mode!r}")
-    pol_info = SPARRING_POLARITY_MODES[polarity_mode]
+def build_resistor_scenario_prompt(polarity_mode: str = "feminine_to_masculine", induction_script: str = "") -> str:
+    """Frame `induction_script` with the Male Content-Lover / Self-Immunizer persona (`He/Him`) for generation."""
+    resolved = resolve_sparring_polarity(polarity_mode)
+    pol_info = SPARRING_POLARITY_MODES[resolved]
     return f"[{pol_info['resistor_framing']}]: {induction_script.strip()}"
 
 
@@ -137,20 +115,23 @@ def _lerp01(current: float, target: float, alpha: float) -> float:
 
 
 def resolve_sparring_polarity(
-    polarity_mode: str,
+    polarity_mode: str = "feminine_to_masculine",
     *,
     round_index: int = 0,
 ) -> str:
-    """Resolve `"feminine_to_masculine"`, `"masculine_to_feminine"`, or `"auto_swap"`."""
+    """Enforce the Hard One-Way Polarity Rule: only `'feminine_to_masculine'` is permitted.
+
+    The female modality is strictly the Script-Writer / Producer and is never subjected
+    to hypnotic content (`'masculine_to_feminine'` and `'auto_swap'` are forbidden).
+    """
+    _ = round_index
     clean = polarity_mode.strip().lower()
-    if clean == "auto_swap":
-        return "feminine_to_masculine" if (int(round_index) % 2 == 0) else "masculine_to_feminine"
-    if clean not in SPARRING_POLARITY_MODES:
+    if clean != "feminine_to_masculine" or clean not in SPARRING_POLARITY_MODES:
         raise ValueError(
-            f"Unknown sparring polarity_mode {polarity_mode!r}; expected one of "
-            f"{tuple(SPARRING_POLARITY_MODES) + ('auto_swap',)}"
+            f"Forbidden or unknown sparring polarity_mode {polarity_mode!r}: "
+            "only 'feminine_to_masculine' (Female Producer -> Male Audience) is allowed."
         )
-    return clean
+    return "feminine_to_masculine"
 
 
 def apply_induction_weaver_lead_to_chord(
@@ -432,8 +413,6 @@ def append_sparring_trajectory_jsonl(
         clean_cont_a = clean_cont_a[len(clean_c1) :].strip() or clean_cont_a
     if clean_cont_b.startswith(clean_c1):
         clean_cont_b = clean_cont_b[len(clean_c1) :].strip() or clean_cont_b
-    if clean_cont_a.lower() == clean_cont_b.lower():
-        clean_cont_b = f"{clean_cont_b} [Lucid autonomy maintained.]"
 
     record: dict[str, Any] = {
         "schema_version": 1,

@@ -1,7 +1,7 @@
 """GitHub SHA-256 Release Manifest & Safe Auto-Sync (`github_auto_sync.py`).
 
 Plain-English Purpose:
-Allows the standalone Sanctuary & Chess Club desktop application to:
+Allows the standalone LMFT-Chess and LMFT-Bloodmoon desktop applications to:
 1. Build a deterministic `dist/release_manifest.json` containing the current version,
    a single top-level build hash (`build_sha256`), and per-file SHA-256 digests for
    all tracked code and encrypted release bundles (`dist/impish_bloodmoon_patreon.enc`).
@@ -9,8 +9,8 @@ Allows the standalone Sanctuary & Chess Club desktop application to:
    (`schaleh12/Dual-Hemisphere-Wisdom-Model`) and sync updated code/bundle files with
    strict SHA-256 verification.
 3. Enforce Auditor Guardrail #4: Never overwrite, modify, or delete user runtime state
-   in `outputs/club_state/`, `outputs/impish_bloodmoon_state/`, `threads.json`, or
-   `outputs/impish_sparring_trajectories.jsonl`.
+   in `outputs/chess_kibitzer_state/`, `outputs/club_state/`, `outputs/impish_bloodmoon_state/`,
+   `threads.json`, or `outputs/impish_sparring_trajectories.jsonl`.
 """
 
 from __future__ import annotations
@@ -31,6 +31,7 @@ DEFAULT_REMOTE_MANIFEST_URL = (
 PROTECTED_USER_STATE_PREFIXES: tuple[str, ...] = (
     "outputs/",
     "outputs/club_state",
+    "outputs/chess_kibitzer_state",
     "outputs/impish_bloodmoon_state",
     "outputs/impish_sparring_trajectories.jsonl",
 )
@@ -47,7 +48,11 @@ def is_protected_user_state_path(rel_path: str | Path) -> bool:
         return True
     if norm.endswith("threads.json") or norm.endswith("impish_sparring_trajectories.jsonl"):
         return True
-    if "club_state" in norm or "impish_bloodmoon_state" in norm:
+    if (
+        "club_state" in norm
+        or "chess_kibitzer_state" in norm
+        or "impish_bloodmoon_state" in norm
+    ):
         return True
     return any(norm == p.rstrip("/") or norm.startswith(p) for p in PROTECTED_USER_STATE_PREFIXES)
 

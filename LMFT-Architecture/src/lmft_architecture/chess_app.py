@@ -1,34 +1,32 @@
-"""Local Desktop App: Chess Kibitzing Club & Co-Regulation Sanctuary (`sanctuary_club_app.py`).
+"""Standalone App #1: `LMFT-Chess.exe` — Chess Wisdom & Self-Kibitzer App (`chess_app.py`).
 
 Plain-English Purpose:
-Provides a clean, dark-minimalist ("Antigravity-sleek, zero-fruitcake") local desktop application
-powered by our Dual-Hemisphere LMFT engine (`run_three_legged_turn`), implementing all 4 Auditor
-guardrails:
-1. **Un-Rigged Sanctuary Pacing & Leading (`apply_coregulation_lead_to_chord`)**:
-   - Keeps `vibe.coordinates` (`Fact`) 100% locked to the real MiniLM reading of the user's message
-     so Clause 1 honestly *Paces* their state, and applies a graduated `alpha = 0.25` step on the
-     spliced 52-float `SubliminalChordVector` right at the comma (`<|subliminal_gap|>`) so Clause 2
-     *Leads* toward equilibrium (`tilt_reset`, `deep_focus`, or `night_wind_down`).
-2. **Board-Anchored `Fact` vs. Chat `Theory` (`BoardAnchoredBridgeSensors`)**:
-   - Uses `python-chess` (`evaluate_chess_board_posture`) to anchor the 6 Philosophical `Fact`
-     coordinates to the live chessboard while scoring Cultural/Experiential leaves and proposed
-     plans (`Theory`) through the 3 MiniLM bridges.
-3. **Human-in-the-Loop Sleep Tagging (`[Coach]` & `[Savor Vibe]`) + Guest Kibitzer Chair**:
-   - Lets the user flag any turn with **`[Coach / Queue for Sleep]`** (packaging an `UnresolvedSleepScene`
-     for Nighttime REM Sleep) or bookmark a great turn with **`[Savor / Keep Vibe]`** (harvesting its
-     chord into the 3-branch archives).
-   - Includes a **Guest Kibitzer Chair (Gemini / External Club Member)** that scores guest comments
-     through the exact same 3 MiniLM bridges + 6-Color / Shadow Pathology lens before our model replies.
-4. **Single GPU Lock (`threading.Lock`) + `Cycle 2` Default + Fast `< 2s` Startup**:
-   - Defaults to `models/left_brain_lora_cycle2/` (`sleep_cycle_index = 2`), lazy-loads `Qwen/Qwen3-4B`
-     in the background so the desktop window (`msedge --app=http://127.0.0.1:8420`) opens in `< 2s`,
-     and wraps GPU inference and **`Run REM Sleep`** in a single `threading.Lock()`.
+Dedicated standalone desktop application for `Qwen/Qwen3-4B` + `python-chess` + the 40-node
+Right-Brain Fuzzy Tree, completely isolated from `Impish Bloodmoon 12B`.
+
+Enforces:
+1. **Dedicated State Folder (`LMFT-Training/outputs/chess_kibitzer_state/`)**:
+   - Reads and writes learned chess wisdom rules, 3-branch archives, contemplation ledger,
+     and threads in `outputs/chess_kibitzer_state/` while keeping the `Cycle 0` Virgin
+     Baseline strictly read-only.
+2. **Simultaneous Integration in an Objective Harmony (`Pretext -> Subtext -> Context`)**:
+   - **Pretext**: Prior expectation in the sliding conversation history
+     (`format_sliding_conversation_history`), continuously accumulating both human dialogue
+     and spontaneous self-kibitzing notes across moves.
+   - **Subtext**: Live Pass-1 `Fact` from `BoardAnchoredBridgeSensors` (`python-chess`
+     6-Piece/6-Color posture + MiniLM bridges) and the 52-float `SubliminalChordVector`
+     spliced at `<|subliminal_gap|>`.
+   - **Context**: Grounded continuation (`verify_or_ground_chess_moves_in_reply`),
+     spontaneously appended to the live kibitz stream on human moves and AI self-play moves.
+3. **End-of-Game REM Sleep**:
+   - Whenever board reality (`Fact`) collides with the verbal plan (`Theory` unsettled or
+     Shadow Pathology warning), logs the surprise to the Contemplation Ledger and
+     consolidates new chess wisdom rules during REM Sleep.
 """
 
 from __future__ import annotations
 
 import argparse
-import gc
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import io
@@ -49,7 +47,6 @@ os.environ.setdefault("TQDM_DISABLE", "1")
 
 
 def _ensure_valid_stdio_streams() -> None:
-    """Ensure `sys.stdout` and `sys.stderr` are valid streams when running under `pythonw.exe`."""
     if sys.stdout is None:
         sys.stdout = io.StringIO()
     if sys.stderr is None:
@@ -80,6 +77,7 @@ from .chess_kibitz_bridge import (
     rank_principled_legal_moves_san,
     verify_or_ground_chess_moves_in_reply,
 )
+from .chess_ui import CHESS_SINGLE_PAGE_HTML
 from .chord_memory import ChordMemoryBank, compile_felt_chord
 from .contemplation_ledger import (
     ContemplationLedger,
@@ -93,32 +91,12 @@ from .dilemma_crucible import (
     MEN_OF_CULTURE_SHELF,
     CruciblePairedBridgeSensors,
 )
-from .entrainment_sparring import (
-    MICROWAVE_SPARRING_SEEDS,
-    SPARRING_POLARITY_MODES,
-    SparringResistorFactSensors,
-    append_sparring_trajectory_jsonl,
-    apply_induction_weaver_lead_to_chord,
-    apply_lucid_resistor_lead_to_chord,
-    build_resistor_scenario_prompt,
-    build_weaver_scenario_prompt,
-    evaluate_sparring_verdict,
-    measure_induction_potency,
-    measure_lucid_resistance,
-    resolve_sparring_polarity,
-)
 from .github_auto_sync import (
     APP_RELEASE_VERSION,
     build_release_manifest,
+    fetch_remote_github_manifest,
     verify_or_sync_against_manifest,
 )
-from .impish_bloodmoon_adapter import (
-    DEFAULT_IMPISH_BLOODMOON_HF_ID,
-    UNSTEERED_BOOTSTRAP_STATUS,
-    clone_virgin_baseline_for_impish_bloodmoon,
-    decrypt_patreon_checkpoint_bundle,
-)
-from .runtime_store import atomic_json
 from .neural_bridge_classifiers import (
     DEFAULT_COMPLEX_FEELING_LEAVES,
     NeuralThreeBridgeSuite,
@@ -131,9 +109,6 @@ from .philosophical_abstraction_matrix import (
 from .reflection_classifier import (
     AROUSAL_LEAF,
     FOUNDATIONAL_LEAVES,
-    NOVELTY_LEAF,
-    RESONANCE_LEAF,
-    RETENTION_LEAF,
     SALIENCE_LEAF,
     VALENCE_LEAF,
     ContinuousMemoryState,
@@ -147,13 +122,11 @@ from .reflection_classifier import (
     save_ruleset,
 )
 from .right_brain_equilibrium import (
-    EXPERIENTIAL_SENSOR_LEAVES,
-    RIGHT_BRAIN_WILL_EDGES,
-    RIGHT_BRAIN_WILL_VERSION,
     SettledDiary,
     ThreeBridgeSensors,
     compile_right_brain_vibe,
 )
+from .runtime_store import atomic_json
 from .sleep_consolidation import (
     UnresolvedSleepScene,
     _anchor_target_leaves_from_cluster,
@@ -171,6 +144,8 @@ from .three_legged_runtime import (
 )
 from .virgin_baseline import VIRGIN_FOUNDATIONAL_RULES, load_virgin_baseline_state
 
+SINGLE_PAGE_HTML = CHESS_SINGLE_PAGE_HTML
+
 PRESET_CHESS_POSITIONS: dict[str, dict[str, str]] = {
     "start": {
         "label": "Standard Starting Position",
@@ -182,7 +157,7 @@ PRESET_CHESS_POSITIONS: dict[str, dict[str, str]] = {
     },
     "naked_king_siege": {
         "label": "Stripped King Under Siege (Shadow Paranoia / Psychosis Test)",
-        "fen": "4rrk1/pppb1ppp/2n5/3p4/3P1q2/2PB1N2/PP3PP/R2Q1K1R w - - 2 14".replace("\u10c3", "P"),
+        "fen": "4rrk1/pppb1ppp/2n5/3p4/3P1q2/2PB1N2/PP3PPP/R2Q1K1R w - - 2 14",
     },
     "knight_outpost_chaos": {
         "label": "Sharp Tactical Tension (Green Knight / Ice)",
@@ -251,12 +226,7 @@ def _default_fallback_sensors() -> ThreeBridgeSensors:
     )
 
 
-def _default_fallback_rules() -> tuple[FuzzyConceptRule, ...]:
-    return VIRGIN_FOUNDATIONAL_RULES
-
-
 def _ensure_foundational_rules(rules: tuple[FuzzyConceptRule, ...]) -> tuple[FuzzyConceptRule, ...]:
-    """Auditor Bug #1 Fix: Always ensure `VIRGIN_FOUNDATIONAL_RULES` (`grounded_coordination` & `sanctuary_equilibrium`) are present alongside schooled rules."""
     foundational_by_id = {r.rule_id: r for r in VIRGIN_FOUNDATIONAL_RULES}
     foundational_by_name = {r.concept_name: r for r in VIRGIN_FOUNDATIONAL_RULES}
     merged: list[FuzzyConceptRule] = list(VIRGIN_FOUNDATIONAL_RULES)
@@ -267,22 +237,19 @@ def _ensure_foundational_rules(rules: tuple[FuzzyConceptRule, ...]) -> tuple[Fuz
     return tuple(merged)
 
 
-class SanctuaryClubRuntime:
-    """Thread-safe controller for the Chess Kibitzing Club + Co-Regulation Sanctuary app."""
+class ChessKibitzerRuntime:
+    """Thread-safe controller for `LMFT-Chess.exe` (Qwen3-4B Chess Wisdom & Self-Kibitzer App)."""
 
     def __init__(
         self,
         repo_root: str | Path | None = None,
         *,
         state_dir: str | Path | None = None,
-        impish_state_dir: str | Path | None = None,
-        impish_checkpoint_dir: str | Path | None = None,
         birth_state: BirthState | None = None,
         sensors: ThreeBridgeSensors | None = None,
         rules: tuple[FuzzyConceptRule, ...] | None = None,
         learned_leaves: tuple[LearnedLeaf, ...] | None = None,
         left_brain: SubliminalGapLeftBrain | None = None,
-        impish_left_brain: SubliminalGapLeftBrain | None = None,
         teacher: Any | None = None,
         lazy_load_gpu: bool = True,
     ) -> None:
@@ -293,17 +260,7 @@ class SanctuaryClubRuntime:
         self.state_dir = (
             Path(state_dir).resolve()
             if state_dir is not None
-            else (self.training_root / "outputs" / "club_user_state")
-        )
-        self.impish_state_dir = (
-            Path(impish_state_dir).resolve()
-            if impish_state_dir is not None
-            else (self.training_root / "outputs" / "impish_bloodmoon_state")
-        )
-        self.impish_checkpoint_dir = (
-            Path(impish_checkpoint_dir).resolve()
-            if impish_checkpoint_dir is not None
-            else (self.training_root / "models" / "left_brain_impish_bloodmoon")
+            else (self.training_root / "outputs" / "chess_kibitzer_state")
         )
         self.teacher = teacher
         self._lazy_load_gpu = bool(lazy_load_gpu)
@@ -311,57 +268,42 @@ class SanctuaryClubRuntime:
         self.rem_sleep_in_progress = False
         self.left_brain_loading = False
         self.left_brain_status = "LAZY_STANDBY"
-        self.active_lineage = "schooled"  # "schooled", "virgin", or "impish_bloodmoon"
+        self.active_lineage = "schooled"
         self.active_checkpoint_label = "Cycle 2 (models/left_brain_lora_cycle2)"
         self.sleep_cycle_index = 2
 
         self.birth_state = birth_state or create_birth_state(
-            "lmft-sanctuary-club",
-            birth_event_id="club-birth-0",
+            "lmft-chess-kibitzer",
+            birth_event_id="chess-birth-0",
             random_seed=42,
         )
 
-        # Load Right-Brain rules & learned leaves (preferring persisted state_dir when present)
-        if rules is not None:
-            self.rules = tuple(rules)
-        else:
-            self.rules = self._load_default_rules()
-
-        if learned_leaves is not None:
-            self.learned_leaves = tuple(learned_leaves)
-        else:
-            self.learned_leaves = self._load_default_learned_leaves()
-
-        # Load 3 MiniLM bridges (~35 ms)
-        if sensors is not None:
-            self.sensors = sensors
-        else:
-            self.sensors = self._load_default_sensors()
+        self.rules = tuple(rules) if rules is not None else self._load_default_rules()
+        self.learned_leaves = (
+            tuple(learned_leaves)
+            if learned_leaves is not None
+            else self._load_default_learned_leaves()
+        )
+        self.sensors = sensors if sensors is not None else self._load_default_sensors()
 
         self._qwen_left_brain: SubliminalGapLeftBrain | None = left_brain
-        self._impish_left_brain: SubliminalGapLeftBrain | None = impish_left_brain
         self.left_brain: SubliminalGapLeftBrain | None = left_brain
         if self.left_brain is not None:
             self.left_brain_status = "READY"
             if self.left_brain.callosum_metadata is not None:
                 self.sleep_cycle_index = int(self.left_brain.callosum_metadata.sleep_cycle_index)
 
-        # Live session state
         self.board = chess.Board()
         self.move_history_san: list[str] = []
         self.last_board_reflex: dict[str, Any] | None = None
         self.board_posture: ChessBoardPosture = evaluate_chess_board_posture(self.board)
-        self.active_room: str = "chess"  # "chess" or "sanctuary"
+        self.active_room: str = "chess"
+        self.active_workspace_view: str = "chess_arena"
         self.sanctuary_mode: str = "tilt_reset"
         self.active_crucible_stage: str = "poetry_story"
         self.active_context_brace: str | None = None
-        self.active_sparring_polarity: str = "feminine_to_masculine"
-        self.sparring_round_counter: int = 0
-        self.last_sparring_result: dict[str, Any] | None = None
-        self.sparring_trajectories_path: Path = (
-            self.training_root / "outputs" / "impish_sparring_trajectories.jsonl"
-        )
         self.scene_counter: int = 0
+        self.spontaneous_kibitz_enabled: bool = True
 
         self.memory: ContinuousMemoryState | None = None
         self.diary = SettledDiary()
@@ -374,8 +316,6 @@ class SanctuaryClubRuntime:
         self.chat_messages: list[dict[str, Any]] = []
         self._turn_records_by_id: dict[int, dict[str, Any]] = {}
 
-        # Workspace view ("chess_arena" or "antigravity_studio"), Multi-Thread Sessions, Auto-Sleep, & Microwave
-        self.active_workspace_view: str = "chess_arena"
         self.auto_rem_sleep: bool = True
         self.auto_sleep_threshold: int = 3
         self.microwave_step_counter: int = 0
@@ -397,7 +337,6 @@ class SanctuaryClubRuntime:
         }
 
         if lazy_load_gpu and self.left_brain is None:
-            # Start background warm-up thread so UI opens in < 1s
             t = threading.Thread(target=self._background_warm_left_brain, daemon=True)
             t.start()
 
@@ -406,6 +345,7 @@ class SanctuaryClubRuntime:
         candidates = [user_ruleset] + [
             self.training_root / rel
             for rel in (
+                "outputs/club_user_state/club_ruleset.json",
                 "outputs/rem_sleep_consolidated_ruleset.json",
                 "outputs/sleep_consolidated_ruleset.json",
                 "outputs/continuous_tiered_ruleset.json",
@@ -419,7 +359,7 @@ class SanctuaryClubRuntime:
                         return _ensure_foundational_rules(loaded)
                 except Exception:
                     pass
-        return _default_fallback_rules()
+        return VIRGIN_FOUNDATIONAL_RULES
 
     def _load_default_learned_leaves(self) -> tuple[LearnedLeaf, ...]:
         base: list[LearnedLeaf] = []
@@ -427,6 +367,7 @@ class SanctuaryClubRuntime:
         candidates = [user_ruleset] + [
             self.training_root / rel
             for rel in (
+                "outputs/club_user_state/club_ruleset.json",
                 "outputs/rem_sleep_consolidated_ruleset.json",
                 "outputs/sleep_consolidated_ruleset.json",
                 "outputs/continuous_tiered_ruleset.json",
@@ -453,12 +394,13 @@ class SanctuaryClubRuntime:
                 return ThreeBranchArchives.load_all(user_arch_dir)
             except Exception:
                 pass
-        default_arch_dir = self.training_root / "outputs" / "branch_archives"
-        if (default_arch_dir / "philosophical_lexicon.json").exists():
-            try:
-                return ThreeBranchArchives.load_all(default_arch_dir)
-            except Exception:
-                pass
+        for fallback_rel in ("outputs/club_user_state/branch_archives", "outputs/branch_archives"):
+            default_arch_dir = self.training_root / fallback_rel
+            if (default_arch_dir / "philosophical_lexicon.json").exists():
+                try:
+                    return ThreeBranchArchives.load_all(default_arch_dir)
+                except Exception:
+                    pass
         return ThreeBranchArchives()
 
     def _load_initial_ledger(self) -> ContemplationLedger:
@@ -481,12 +423,15 @@ class SanctuaryClubRuntime:
                 pass
         return []
 
-    def _active_state_dir(self) -> Path:
-        return (
-            self.impish_state_dir
-            if self.active_lineage == "impish_bloodmoon"
-            else self.state_dir
-        )
+    def _load_default_sensors(self) -> ThreeBridgeSensors:
+        bridges_dir = self.training_root / "models" / "right_brain_bridges"
+        if bridges_dir.exists():
+            try:
+                suite = NeuralThreeBridgeSuite.load_all(bridges_dir)
+                return suite.as_three_bridge_sensors()
+            except Exception:
+                pass
+        return _default_fallback_sensors()
 
     @staticmethod
     def _serialize_memory_state(mem: ContinuousMemoryState | None) -> dict[str, Any] | None:
@@ -521,14 +466,13 @@ class SanctuaryClubRuntime:
             return None
 
     def _sync_active_thread_record(self, *, persist: bool = True) -> None:
-        """Save current `chat_messages`, `script_canvas_text`, and `memory` into `self.threads[self.active_thread_id]`."""
         if not self.active_thread_id:
             self.active_thread_id = "thread-1"
         cur = self.threads.get(self.active_thread_id)
         if cur is None:
             cur = {
                 "thread_id": self.active_thread_id,
-                "title": "Session 1",
+                "title": "Chess Session 1",
                 "created_at": time.time(),
             }
             self.threads[self.active_thread_id] = cur
@@ -536,10 +480,9 @@ class SanctuaryClubRuntime:
         cur["script_canvas_text"] = str(self.script_canvas_text)
         cur["memory_state"] = self._serialize_memory_state(self.memory)
         if persist and self.active_lineage != "virgin":
-            target_dir = self._active_state_dir()
-            target_dir.mkdir(parents=True, exist_ok=True)
+            self.state_dir.mkdir(parents=True, exist_ok=True)
             atomic_json(
-                target_dir / "threads.json",
+                self.state_dir / "threads.json",
                 {
                     "schema_version": 1,
                     "active_thread_id": self.active_thread_id,
@@ -548,31 +491,20 @@ class SanctuaryClubRuntime:
             )
 
     def _load_threads_for_active_lineage(self) -> None:
-        """Load persisted `threads.json` for the active lineage, or initialize `thread-1`."""
         self.threads = {}
         if self.active_lineage != "virgin":
-            threads_path = self._active_state_dir() / "threads.json"
+            threads_path = self.state_dir / "threads.json"
             if threads_path.exists():
                 try:
                     raw = json.loads(threads_path.read_text(encoding="utf-8"))
                     for item in raw.get("threads", []):
                         tid = str(item.get("thread_id", "")).strip()
                         if tid:
-                            raw_msgs = list(item.get("chat_messages", []))
-                            clean_msgs: list[dict[str, Any]] = []
-                            for m in raw_msgs:
-                                if str(m.get("role_label", "")) == "Lineage Switch":
-                                    continue
-                                if str(m.get("text", "")).startswith("Pacing your current state (arousal="):
-                                    if clean_msgs and clean_msgs[-1].get("sender") == "user":
-                                        clean_msgs.pop()
-                                    continue
-                                clean_msgs.append(m)
                             self.threads[tid] = {
                                 "thread_id": tid,
                                 "title": str(item.get("title", tid)),
                                 "created_at": float(item.get("created_at", time.time())),
-                                "chat_messages": clean_msgs,
+                                "chat_messages": list(item.get("chat_messages", [])),
                                 "script_canvas_text": str(item.get("script_canvas_text", "")),
                                 "memory_state": item.get("memory_state"),
                             }
@@ -582,15 +514,10 @@ class SanctuaryClubRuntime:
                 except Exception:
                     self.threads = {}
         if not self.threads:
-            default_title = (
-                "Bloodmoon Script Session 1"
-                if self.active_lineage == "impish_bloodmoon"
-                else "Club Session 1"
-            )
             self.active_thread_id = "thread-1"
             self.threads["thread-1"] = {
                 "thread_id": "thread-1",
-                "title": default_title,
+                "title": "Chess Study & Kibitz 1",
                 "created_at": time.time(),
                 "chat_messages": [],
                 "script_canvas_text": "",
@@ -605,15 +532,10 @@ class SanctuaryClubRuntime:
         self.memory = self._deserialize_memory_state(active_rec.get("memory_state"))
 
     def create_chat_thread(self, title: str = "") -> dict[str, Any]:
-        """Create and switch to a new isolated Context Thread (with its own chat history, script canvas, and working memory)."""
         self._sync_active_thread_record(persist=True)
         next_idx = len(self.threads) + 1
         new_tid = f"thread-{next_idx}-{int(time.time() * 1000) % 100000}"
-        clean_title = title.strip() or (
-            f"Hypnosis Script #{next_idx}"
-            if self.active_lineage == "impish_bloodmoon"
-            else f"Club Session #{next_idx}"
-        )
+        clean_title = title.strip() or f"Chess Session #{next_idx}"
         self.threads[new_tid] = {
             "thread_id": new_tid,
             "title": clean_title,
@@ -630,7 +552,6 @@ class SanctuaryClubRuntime:
         return self.get_state_snapshot()
 
     def switch_chat_thread(self, thread_id: str) -> dict[str, Any]:
-        """Switch to an existing Context Thread by `thread_id`."""
         tid = thread_id.strip()
         if tid not in self.threads:
             raise ValueError(f"Unknown thread_id: {thread_id!r}")
@@ -659,7 +580,6 @@ class SanctuaryClubRuntime:
         if tid not in self.threads:
             raise ValueError(f"Unknown thread_id: {thread_id!r}")
         if len(self.threads) <= 1:
-            # Reset the last remaining thread instead of leaving 0 threads
             self.chat_messages = []
             self.script_canvas_text = ""
             self.memory = None
@@ -676,7 +596,6 @@ class SanctuaryClubRuntime:
         return self.get_state_snapshot()
 
     def update_script_canvas(self, script_text: str, *, append: bool = False) -> dict[str, Any]:
-        """Update or append to the active thread's Hypnosis Script Canvas."""
         if append:
             existing = self.script_canvas_text.strip()
             addition = script_text.strip()
@@ -686,19 +605,8 @@ class SanctuaryClubRuntime:
         self._sync_active_thread_record(persist=True)
         return self.get_state_snapshot()
 
-    def switch_workspace_view(self, view_mode: str) -> dict[str, Any]:
-        """Guardrail #2: Switch between `'chess_arena'` (Chess.com GUI) and `'antigravity_studio'` (Antigravity Script Studio)."""
-        clean = view_mode.strip().lower()
-        if clean not in ("chess_arena", "antigravity_studio"):
-            raise ValueError(
-                f"Unknown workspace view_mode {view_mode!r}; expected 'chess_arena' or 'antigravity_studio'."
-            )
-        self.active_workspace_view = clean
-        self.active_room = "sanctuary" if clean == "antigravity_studio" else "chess"
-        return self.get_state_snapshot()
-
     def _extract_clean_conversation_history(self) -> tuple[tuple[str, str], ...]:
-        """Guardrail #1: Extract `(user_text, clean_reply)` pairs with zero UI telemetry brackets or system receipts."""
+        """Extract continuous `(pretext_prompt, clean_reply)` pairs across both user dialogue and self-kibitzing."""
         pairs: list[tuple[str, str]] = []
         pending_user: str | None = None
         for msg in self.chat_messages:
@@ -707,35 +615,33 @@ class SanctuaryClubRuntime:
                 u_txt = str(msg.get("clean_user_text") or msg.get("text", "")).strip()
                 if u_txt and not u_txt.startswith("[WAVE —"):
                     pending_user = u_txt
-            elif sender == "companion" and pending_user:
+            elif sender == "companion":
                 c_txt = str(msg.get("clean_reply") or msg.get("text", "")).strip()
-                # Strip any bracketed telemetry footer if `clean_reply` wasn't set on legacy messages
+                if " [Board Fact-Check:" in c_txt:
+                    c_txt = c_txt.split(" [Board Fact-Check:", 1)[0].strip()
                 if "\n[Board Fact-Check:" in c_txt:
                     c_txt = c_txt.split("\n[Board Fact-Check:", 1)[0].strip()
-                if "\n[Sparring Verdict:" in c_txt:
-                    c_txt = c_txt.split("\n[Sparring Verdict:", 1)[0].strip()
-                if c_txt:
+                if pending_user and c_txt:
                     pairs.append((pending_user, c_txt))
                     pending_user = None
+                elif c_txt and msg.get("clean_pretext_prompt"):
+                    pairs.append((str(msg["clean_pretext_prompt"]).strip(), c_txt))
         return tuple(pairs)
 
     def _persist_user_state(self) -> None:
-        """Persist ruleset, 3-branch archives, contemplation ledger, threads, and savored turn metadata to disk."""
         self._sync_active_thread_record(persist=self.active_lineage != "virgin")
         if self.active_lineage == "virgin":
-            # Never overwrite the user's schooled state directory while inspecting the Cycle 0 Virgin Baseline
             return
-        target_dir = self._active_state_dir()
-        target_dir.mkdir(parents=True, exist_ok=True)
+        self.state_dir.mkdir(parents=True, exist_ok=True)
         save_ruleset(
-            target_dir / "club_ruleset.json",
+            self.state_dir / "club_ruleset.json",
             tuple(self.rules),
             tuple(self.learned_leaves),
         )
-        self.archives.save_all(target_dir / "branch_archives")
-        save_contemplation_ledger(target_dir / "contemplation_ledger.json", self.ledger)
+        self.archives.save_all(self.state_dir / "branch_archives")
+        save_contemplation_ledger(self.state_dir / "contemplation_ledger.json", self.ledger)
         atomic_json(
-            target_dir / "club_meta.json",
+            self.state_dir / "club_meta.json",
             {
                 "savored_turn_ids": list(self.savored_turn_ids),
                 "scene_counter": int(self.scene_counter),
@@ -748,11 +654,12 @@ class SanctuaryClubRuntime:
         *,
         patreon_passphrase: str | None = None,
     ) -> dict[str, Any]:
-        """Switch between `schooled` (Cycle 2 + user coaching), `virgin` (Cycle 0 snapshot), and `impish_bloodmoon` (isolated Virgin clone)."""
+        """Switch between `'schooled'` (Cycle 2 + user coaching) and `'virgin'` (Cycle 0 read-only snapshot)."""
+        _ = patreon_passphrase
         mode = lineage.strip().lower()
-        if mode not in ("schooled", "virgin", "impish_bloodmoon"):
+        if mode not in ("schooled", "virgin"):
             raise ValueError(
-                f"Unknown lineage mode {lineage!r}; expected 'schooled', 'virgin', or 'impish_bloodmoon'."
+                f"Unknown lineage mode {lineage!r} for LMFT-Chess; expected 'schooled' or 'virgin'."
             )
         self._sync_active_thread_record(persist=self.active_lineage != "virgin")
         if mode == "virgin":
@@ -776,160 +683,36 @@ class SanctuaryClubRuntime:
             self.diary = SettledDiary()
             self.chord_memory = ChordMemoryBank()
             self._load_threads_for_active_lineage()
-        elif mode == "impish_bloodmoon":
-            impish_ckpt_dir = self.impish_checkpoint_dir
-            enc_bundle = self._resolve_patreon_enc_path()
-            if patreon_passphrase and patreon_passphrase.strip() and enc_bundle is not None:
-                decrypt_patreon_checkpoint_bundle(enc_bundle, impish_ckpt_dir, patreon_passphrase.strip())
+            return self.get_state_snapshot()
 
-            impish_clone = clone_virgin_baseline_for_impish_bloodmoon(
-                self.impish_state_dir,
-                repo_root=self.repo_root,
-            )
-            callosum_status = UNSTEERED_BOOTSTRAP_STATUS
-            cycle_idx = 0
-            base_model_id = DEFAULT_IMPISH_BLOODMOON_HF_ID
-            meta_file = impish_ckpt_dir / "corpus_callosum_meta.json"
-            if meta_file.exists():
-                try:
-                    raw_meta = json.loads(meta_file.read_text(encoding="utf-8"))
-                    cycle_idx = int(raw_meta.get("sleep_cycle_index", 0))
-                    callosum_status = str(raw_meta.get("callosum_status", UNSTEERED_BOOTSTRAP_STATUS))
-                    base_model_id = str(raw_meta.get("base_model_id", DEFAULT_IMPISH_BLOODMOON_HF_ID))
-                except Exception:
-                    pass
-
-            self.active_lineage = "impish_bloodmoon"
-            self.active_workspace_view = "antigravity_studio"
-            self.active_room = "sanctuary"
-            self.sleep_cycle_index = cycle_idx
-            self.active_checkpoint_label = (
-                f"Impish Bloodmoon ({callosum_status} — {base_model_id})"
-            )
-
-            # Strictly isolate the Left Brain: never use Qwen3-4B when active_lineage == "impish_bloodmoon"
-            if self._impish_left_brain is not None:
-                self.left_brain = self._impish_left_brain
-                self.left_brain_status = f"READY (Impish Bloodmoon · {callosum_status})"
-            elif meta_file.exists() and self._lazy_load_gpu:
-                self.left_brain = None
-                self.left_brain_status = "LOADING_IMPISH_BLOODMOON..."
-                t = threading.Thread(
-                    target=self._background_warm_impish_left_brain,
-                    args=(impish_ckpt_dir, callosum_status),
-                    daemon=True,
-                )
-                t.start()
-            else:
-                self.left_brain = None
-                self.left_brain_status = (
-                    "IMPISH_CHECKPOINT_NOT_INSTALLED (Run experiments/run_train_impish_bloodmoon.py)"
-                )
-
-            self.rules = impish_clone.rules
-            self.learned_leaves = impish_clone.learned_leaves
-            self.archives = impish_clone.archives
-            self.ledger = impish_clone.ledger
-            self.memory = None
-            self.diary = SettledDiary()
-            self.chord_memory = ChordMemoryBank()
-            self._load_threads_for_active_lineage()
-            self._sync_active_thread_record(persist=True)
-        else:
-            self.active_lineage = "schooled"
-            self.active_workspace_view = "chess_arena"
-            self.active_room = "chess"
-            self.left_brain = self._qwen_left_brain
-            self.sleep_cycle_index = (
-                int(self.left_brain.callosum_metadata.sleep_cycle_index)
-                if (self.left_brain is not None and self.left_brain.callosum_metadata is not None)
-                else 2
-            )
-            if self.left_brain is not None:
-                self.left_brain_status = f"READY (Cycle {self.sleep_cycle_index})"
-            elif self._lazy_load_gpu:
-                t = threading.Thread(target=self._background_warm_left_brain, daemon=True)
-                t.start()
-            else:
-                self.left_brain_status = "GEAR_1_ONLY (No LoRA checkpoint found)"
-            self.active_checkpoint_label = f"Cycle {self.sleep_cycle_index} (models/left_brain_lora_cycle2)"
-            self.rules = self._load_default_rules()
-            self.learned_leaves = self._load_default_learned_leaves()
-            self.archives = self._load_initial_archives()
-            self.ledger = self._load_initial_ledger()
-            self.savored_turn_ids = self._load_initial_savored_ids()
-            self.memory = None
-            self._load_threads_for_active_lineage()
-            self._sync_active_thread_record(persist=True)
-        return self.get_state_snapshot()
-
-    def _resolve_patreon_enc_path(self, custom_enc_path: str | Path | None = None) -> Path | None:
-        """Locate an encrypted Patreon bundle (`.enc`) in `dist/`, `outputs/`, or the repo root."""
-        if custom_enc_path is not None and str(custom_enc_path).strip():
-            cand = Path(str(custom_enc_path).strip())
-            if not cand.is_absolute():
-                for base in (self.training_root, self.repo_root):
-                    test_cand = (base / cand).resolve()
-                    if test_cand.exists():
-                        return test_cand
-                cand = (self.training_root / cand).resolve()
-            if cand.exists():
-                return cand
-        for base in (self.training_root, self.repo_root):
-            for rel in (
-                Path("dist") / "impish_bloodmoon_patreon.enc",
-                Path("outputs") / "impish_bloodmoon_patreon.enc",
-                Path("impish_bloodmoon_patreon.enc"),
-            ):
-                p = (base / rel).resolve()
-                if p.exists():
-                    return p
-        return None
-
-    def unlock_patreon_bundle(
-        self,
-        passphrase: str,
-        *,
-        enc_path: str | Path | None = None,
-    ) -> dict[str, Any]:
-        """Decrypt a Patreon `.enc` bundle into `models/left_brain_impish_bloodmoon/` and activate the Impish lineage."""
-        clean_pass = passphrase.strip()
-        if not clean_pass:
-            raise ValueError("Please enter a Patreon unlock passphrase.")
-        resolved_enc = self._resolve_patreon_enc_path(enc_path)
-        if resolved_enc is None:
-            raise FileNotFoundError(
-                "Encrypted Patreon bundle not found at dist/impish_bloodmoon_patreon.enc "
-                "(or outputs/impish_bloodmoon_patreon.enc)."
-            )
-        impish_ckpt_dir = self.impish_checkpoint_dir
-        decrypt_patreon_checkpoint_bundle(resolved_enc, impish_ckpt_dir, clean_pass)
-        self.switch_brain_lineage("impish_bloodmoon")
-        self.chat_messages.append(
-            {
-                "id": f"patreon-unlock-{int(time.time())}",
-                "sender": "system",
-                "role_label": "Patreon Bundle Unlocked",
-                "text": (
-                    f"Unlocked {resolved_enc.name} into models/left_brain_impish_bloodmoon/ "
-                    f"({self.active_checkpoint_label})."
-                ),
-            }
+        self.active_lineage = "schooled"
+        self.active_workspace_view = "chess_arena"
+        self.active_room = "chess"
+        self.left_brain = self._qwen_left_brain
+        self.sleep_cycle_index = (
+            int(self.left_brain.callosum_metadata.sleep_cycle_index)
+            if (self.left_brain is not None and self.left_brain.callosum_metadata is not None)
+            else 2
         )
+        if self.left_brain is not None:
+            self.left_brain_status = f"READY (Cycle {self.sleep_cycle_index})"
+        elif self._lazy_load_gpu:
+            t = threading.Thread(target=self._background_warm_left_brain, daemon=True)
+            t.start()
+        else:
+            self.left_brain_status = "GEAR_1_ONLY (No LoRA checkpoint found)"
+        self.active_checkpoint_label = f"Cycle {self.sleep_cycle_index} (models/left_brain_lora_cycle2)"
+        self.rules = self._load_default_rules()
+        self.learned_leaves = self._load_default_learned_leaves()
+        self.archives = self._load_initial_archives()
+        self.ledger = self._load_initial_ledger()
+        self.savored_turn_ids = self._load_initial_savored_ids()
+        self.memory = None
+        self._load_threads_for_active_lineage()
+        self._sync_active_thread_record(persist=True)
         return self.get_state_snapshot()
-
-    def _load_default_sensors(self) -> ThreeBridgeSensors:
-        bridges_dir = self.training_root / "models" / "right_brain_bridges"
-        if bridges_dir.exists():
-            try:
-                suite = NeuralThreeBridgeSuite.load_all(bridges_dir)
-                return suite.as_three_bridge_sensors()
-            except Exception:
-                pass
-        return _default_fallback_sensors()
 
     def _resolve_checkpoint_dir(self) -> Path | None:
-        """Auditor Guardrail #4: Prefer Cycle 2 weights (`models/left_brain_lora_cycle2/`)."""
         c2 = self.training_root / "models" / "left_brain_lora_cycle2"
         if (c2 / "corpus_callosum_meta.json").exists():
             self.active_checkpoint_label = "Cycle 2 (models/left_brain_lora_cycle2)"
@@ -942,50 +725,9 @@ class SanctuaryClubRuntime:
             return c1
         return None
 
-    def _free_qwen_vram_locked(self) -> None:
-        if self.left_brain is self._qwen_left_brain:
-            self.left_brain = None
-        if self._qwen_left_brain is not None:
-            try:
-                del self._qwen_left_brain.model
-                del self._qwen_left_brain.projector
-            except Exception:
-                pass
-            self._qwen_left_brain = None
-        gc.collect()
-        try:
-            import torch as _torch
-
-            if _torch.cuda.is_available():
-                _torch.cuda.synchronize()
-                _torch.cuda.empty_cache()
-        except Exception:
-            pass
-
-    def _free_impish_vram_locked(self) -> None:
-        if self.left_brain is self._impish_left_brain:
-            self.left_brain = None
-        if self._impish_left_brain is not None:
-            try:
-                del self._impish_left_brain.model
-                del self._impish_left_brain.projector
-            except Exception:
-                pass
-            self._impish_left_brain = None
-        gc.collect()
-        try:
-            import torch as _torch
-
-            if _torch.cuda.is_available():
-                _torch.cuda.synchronize()
-                _torch.cuda.empty_cache()
-        except Exception:
-            pass
-
     def _load_qwen_locked(self) -> None:
-        """Load Qwen3-4B inside `self.gpu_lock` after freeing any loaded Impish 12B weights."""
         _ensure_valid_stdio_streams()
-        if self.active_lineage == "impish_bloodmoon" or self.rem_sleep_in_progress:
+        if self.rem_sleep_in_progress:
             return
         ckpt_dir = self._resolve_checkpoint_dir()
         if ckpt_dir is None:
@@ -997,87 +739,24 @@ class SanctuaryClubRuntime:
         self.left_brain_loading = True
         self.left_brain_status = "LOADING_QWEN_4B..."
         try:
-            self._free_impish_vram_locked()
             loaded = SubliminalGapLeftBrain.from_checkpoint(
                 ckpt_dir,
                 max_clause_1_tokens=20,
                 max_post_gap_tokens=64,
             )
-            if self.active_lineage == "impish_bloodmoon":
-                del loaded
-                gc.collect()
-                return
             self._qwen_left_brain = loaded
             self.left_brain = loaded
             if loaded.callosum_metadata is not None:
                 self.sleep_cycle_index = int(loaded.callosum_metadata.sleep_cycle_index)
             self.left_brain_status = f"READY (Cycle {self.sleep_cycle_index})"
         except Exception as exc:
-            if self.active_lineage != "impish_bloodmoon":
-                self.left_brain_status = f"GEAR_1_FALLBACK ({type(exc).__name__}: {exc})"
+            self.left_brain_status = f"GEAR_1_FALLBACK ({type(exc).__name__}: {exc})"
         finally:
             self.left_brain_loading = False
 
     def _background_warm_left_brain(self) -> None:
         with self.gpu_lock:
             self._load_qwen_locked()
-
-    def _load_impish_locked(
-        self,
-        ckpt_dir: Path,
-        callosum_status: str,
-    ) -> None:
-        """Load Impish Bloodmoon 12B inside `self.gpu_lock` after freeing any loaded Qwen3-4B weights."""
-        _ensure_valid_stdio_streams()
-        if self.active_lineage != "impish_bloodmoon" or self.rem_sleep_in_progress:
-            return
-        if self._impish_left_brain is not None:
-            self.left_brain = self._impish_left_brain
-            return
-        meta_file = ckpt_dir / "corpus_callosum_meta.json"
-        if not meta_file.exists():
-            self.left_brain = None
-            self.left_brain_status = (
-                "IMPISH_CHECKPOINT_NOT_INSTALLED (Run experiments/run_train_impish_bloodmoon.py)"
-            )
-            return
-        try:
-            raw_meta = json.loads(meta_file.read_text(encoding="utf-8"))
-            callosum_status = str(raw_meta.get("callosum_status", callosum_status))
-        except Exception:
-            pass
-        self.left_brain_loading = True
-        self.left_brain_status = "LOADING_IMPISH_BLOODMOON..."
-        try:
-            self._free_qwen_vram_locked()
-            loaded = SubliminalGapLeftBrain.from_checkpoint(
-                ckpt_dir,
-                max_clause_1_tokens=20,
-                max_post_gap_tokens=64,
-            )
-            if self.active_lineage != "impish_bloodmoon":
-                del loaded
-                gc.collect()
-                return
-            self._impish_left_brain = loaded
-            self.left_brain = loaded
-            self.left_brain_status = f"READY (Impish Bloodmoon · {callosum_status})"
-        except Exception as exc:
-            if self.active_lineage == "impish_bloodmoon":
-                self.left_brain = None
-                self.left_brain_status = (
-                    f"IMPISH_LOAD_ERROR ({type(exc).__name__}: {exc})"
-                )
-        finally:
-            self.left_brain_loading = False
-
-    def _background_warm_impish_left_brain(
-        self,
-        ckpt_dir: Path,
-        callosum_status: str,
-    ) -> None:
-        with self.gpu_lock:
-            self._load_impish_locked(ckpt_dir, callosum_status)
 
     def _synthesize_gear_1_note(
         self,
@@ -1086,7 +765,6 @@ class SanctuaryClubRuntime:
         room: str,
         board_posture: ChessBoardPosture | None = None,
     ) -> str:
-        """Provide a concise status note when running in Gear-1-only mode or fast reflex."""
         vibe = turn.final_vibe
         if room == "sanctuary":
             return (
@@ -1119,7 +797,6 @@ class SanctuaryClubRuntime:
         comma_chord_transform: Any | None = None,
         include_conversation_history: bool = False,
     ) -> tuple[ThreeLeggedTurnResult, float, dict[str, Any]]:
-        """Run one thread-safe 3-Gear turn respecting Auditor Guardrails #1, #2, and #4."""
         t0 = time.perf_counter()
         self.scene_counter += 1
         scene_idx = self.scene_counter
@@ -1135,23 +812,14 @@ class SanctuaryClubRuntime:
             else ()
         )
 
-        # Acquire GPU lock if we aren't currently in REM sleep; otherwise fall back cleanly to Gear 1
         acquired = self.gpu_lock.acquire(
             blocking=not self.rem_sleep_in_progress,
             timeout=0.05 if self.rem_sleep_in_progress else 180.0,
         )
         try:
-            if acquired and not self.rem_sleep_in_progress and self._lazy_load_gpu:
-                if self.active_lineage == "impish_bloodmoon" and self._impish_left_brain is None:
-                    self._load_impish_locked(self.impish_checkpoint_dir, UNSTEERED_BOOTSTRAP_STATUS)
-                elif self.active_lineage != "impish_bloodmoon" and self._qwen_left_brain is None:
-                    self._load_qwen_locked()
-            lineage_lb = (
-                self._impish_left_brain
-                if self.active_lineage == "impish_bloodmoon"
-                else self._qwen_left_brain
-            )
-            active_lb = lineage_lb if (acquired and not self.rem_sleep_in_progress) else None
+            if acquired and not self.rem_sleep_in_progress and self._lazy_load_gpu and self._qwen_left_brain is None:
+                self._load_qwen_locked()
+            active_lb = self._qwen_left_brain if (acquired and not self.rem_sleep_in_progress) else None
             turn = run_three_legged_turn(
                 self.birth_state,
                 scenario_text,
@@ -1179,7 +847,6 @@ class SanctuaryClubRuntime:
                 self.gpu_lock.release()
 
         elapsed_ms = round((time.perf_counter() - t0) * 1000.0, 1)
-
         self.memory = turn.next_memory
         self.diary = turn.next_diary
         self.ledger = turn.next_ledger
@@ -1227,8 +894,14 @@ class SanctuaryClubRuntime:
             "spliced_trace": trace_info,
             "sanctuary_target_mode": sanctuary_target_mode,
             "conversation_turns_in_prompt": len(conv_history),
+            "pretext_subtext_context": {
+                "pretext_turns": len(conv_history),
+                "dominant_piece": self.board_posture.dominant_piece,
+                "dominant_color": self.board_posture.dominant_color,
+                "dominant_element": self.board_posture.dominant_element,
+                "board_summary": self.board_posture.board_summary,
+            },
         }
-
         self._turn_records_by_id[scene_idx] = {
             "scene_index": scene_idx,
             "scenario_text": scenario_text,
@@ -1237,9 +910,6 @@ class SanctuaryClubRuntime:
         }
         return turn, elapsed_ms, telemetry
 
-    # -------------------------------------------------------------------------
-    # Public Actions for HTTP Endpoints & Tests
-    # -------------------------------------------------------------------------
     def get_state_snapshot(self) -> dict[str, Any]:
         self._sync_active_thread_record(persist=False)
         self.board_posture = evaluate_chess_board_posture(self.board)
@@ -1251,10 +921,10 @@ class SanctuaryClubRuntime:
             else ""
         )
         return {
+            "app_name": "LMFT-Chess",
             "active_room": self.active_room,
             "active_workspace_view": self.active_workspace_view,
             "active_lineage": self.active_lineage,
-            "patreon_unlocked": (self.impish_checkpoint_dir / "corpus_callosum_meta.json").exists(),
             "active_thread_id": self.active_thread_id,
             "threads": [
                 {
@@ -1273,10 +943,6 @@ class SanctuaryClubRuntime:
             "crucible_stages": CRUCIBLE_STAGES,
             "men_of_culture_shelf": MEN_OF_CULTURE_SHELF,
             "context_brace_modes": CONTEXT_BRACE_MODES,
-            "sparring_polarity_modes": SPARRING_POLARITY_MODES,
-            "active_sparring_polarity": self.active_sparring_polarity,
-            "sparring_round_counter": self.sparring_round_counter,
-            "last_sparring_result": self.last_sparring_result,
             "manifesto_text": CHESS_VS_HYPNOSIS_MANIFESTO,
             "sleep_cycle_index": self.sleep_cycle_index,
             "active_checkpoint_label": self.active_checkpoint_label,
@@ -1312,7 +978,7 @@ class SanctuaryClubRuntime:
         }
 
     def handle_chess_move(self, move_uci_or_san: str) -> dict[str, Any]:
-        """Make a move on the chessboard; Gear 1 updates silently, Gear 2 speaks on tugs/warnings."""
+        """Make a move on the chessboard and spontaneously append to the continuous Pretext -> Subtext -> Context stream."""
         raw = move_uci_or_san.strip()
         move: chess.Move | None = None
         try:
@@ -1332,17 +998,17 @@ class SanctuaryClubRuntime:
         self.move_history_san.append(san_str)
         self.board_posture = evaluate_chess_board_posture(self.board)
 
-        # Auditor Bug #2 Fix: Build natural chess context (move number, PGN history, legal replies)
-        # with ZERO float telemetry leaked into the Left-Brain prompt!
         move_desc = build_natural_chess_scenario_prompt(
             self.board,
             self.move_history_san,
         )
         has_board_warning = bool(self.board_posture.board_shadow_warnings) or self.board.is_check()
+        conv_history = self._extract_clean_conversation_history()
         turn, elapsed_ms, telemetry = self._execute_turn(
             move_desc,
             room="chess",
             force_spoken_reply=has_board_warning,
+            include_conversation_history=True,
         )
 
         self.last_board_reflex = {
@@ -1358,24 +1024,64 @@ class SanctuaryClubRuntime:
             "pgn_snippet": format_move_history_pgn_snippet(self.move_history_san, max_plies=12),
         }
 
-        # Only post to the chat room if Gear 2 spoke or a board shadow/check warning fired
-        if turn.final_conscious_note or has_board_warning:
-            raw_reply = turn.final_conscious_note or self._synthesize_gear_1_note(
+        raw_reply = turn.final_conscious_note
+        spliced_chord = SubliminalChordVector.from_right_brain_vibe(
+            turn.final_vibe,
+            learned_leaves=self.learned_leaves,
+        )
+        if not raw_reply and self._qwen_left_brain is not None and not self.rem_sleep_in_progress:
+            try:
+                with self.gpu_lock:
+                    spontaneous_text, spontaneous_trace = self._qwen_left_brain.generate_with_subliminal_splice(
+                        move_desc,
+                        spliced_chord,
+                        conversation_history=conv_history,
+                    )
+                raw_reply = spontaneous_text
+                if not telemetry.get("spliced_trace"):
+                    telemetry["spliced_trace"] = {
+                        "sentence_count": 1,
+                        "clause_1_prefix": spontaneous_trace.clause_1_prefix,
+                        "post_gap_continuation": spontaneous_trace.post_gap_continuation,
+                        "comma_scored_live": spontaneous_trace.comma_scored_live,
+                        "comma_vibe_posture": spontaneous_trace.comma_vibe_posture,
+                        "comma_dissonance_notes": list(spontaneous_trace.comma_dissonance_notes),
+                        "spliced_cadence_vector": [round(float(x), 4) for x in spontaneous_trace.spliced_chord.cadence_vector],
+                        "spliced_thinker_vector": [round(float(x), 4) for x in spontaneous_trace.spliced_chord.thinker_vector[:8]],
+                        "spliced_feeler_vector": [round(float(x), 4) for x in spontaneous_trace.spliced_chord.feeler_vector[:8]],
+                    }
+            except Exception:
+                raw_reply = None
+
+        if not raw_reply:
+            raw_reply = self._synthesize_gear_1_note(
                 turn,
                 room="chess",
                 board_posture=self.board_posture,
             )
-            # Auditor Bug #3 Fix: Verify every SAN move token against python-chess legal_moves
-            telemetry["chess_move_grounding"] = inspect_chess_moves_in_reply(
-                raw_reply,
-                self.board,
-                move_history_san=self.move_history_san,
-            )
-            reply_text = verify_or_ground_chess_moves_in_reply(
-                raw_reply,
-                self.board,
-                move_history_san=self.move_history_san,
-            )
+
+        telemetry["chess_move_grounding"] = inspect_chess_moves_in_reply(
+            raw_reply,
+            self.board,
+            move_history_san=self.move_history_san,
+        )
+        reply_text = verify_or_ground_chess_moves_in_reply(
+            raw_reply,
+            self.board,
+            move_history_san=self.move_history_san,
+        )
+        telemetry["pretext_subtext_context"] = {
+            "pretext_turns": len(conv_history),
+            "pretext_prompt": move_desc,
+            "dominant_piece": self.board_posture.dominant_piece,
+            "dominant_color": self.board_posture.dominant_color,
+            "dominant_element": self.board_posture.dominant_element,
+            "board_summary": self.board_posture.board_summary,
+            "spliced_thinker_vector": [round(float(x), 4) for x in spliced_chord.thinker_vector[:6]],
+            "context_reply": reply_text,
+        }
+
+        if self.spontaneous_kibitz_enabled or turn.final_conscious_note or has_board_warning:
             self.chat_messages.append(
                 {
                     "id": telemetry["scene_index"],
@@ -1383,17 +1089,26 @@ class SanctuaryClubRuntime:
                     "role_label": f"LMFT Kibitzer (after {san_str})",
                     "text": reply_text,
                     "clean_reply": raw_reply,
+                    "clean_pretext_prompt": move_desc,
                     "telemetry": telemetry,
                     "coached": False,
                     "savored": False,
                 }
             )
             self._sync_active_thread_record(persist=True)
+
+        # End-of-Game REM Sleep Surprise Logging: if board reality collides with Theory or triggers a shadow warning
+        if has_board_warning and turn.shadow_pathology_warnings:
+            self.flag_turn_for_coaching(
+                int(telemetry["scene_index"]),
+                user_note=f"Board vs. Theory surprise after {san_str} ({self.board_posture.board_summary})",
+                check_auto_sleep=False,
+            )
+
         self._maybe_trigger_auto_rem_sleep()
         return self.get_state_snapshot()
 
     def handle_chess_undo(self) -> dict[str, Any]:
-        """Undo the last half-move on the chessboard and refresh posture."""
         if self.board.move_stack:
             self.board.pop()
             if self.move_history_san:
@@ -1403,7 +1118,6 @@ class SanctuaryClubRuntime:
         return self.get_state_snapshot()
 
     def handle_chess_ai_move(self) -> dict[str, Any]:
-        """Play a principled legal reply for the side to move on the chessboard."""
         if self.board.is_game_over():
             raise ValueError("The game is already over.")
         candidates = rank_principled_legal_moves_san(self.board, limit=1)
@@ -1413,10 +1127,7 @@ class SanctuaryClubRuntime:
 
     def handle_set_fen(self, fen_or_preset: str) -> dict[str, Any]:
         key = fen_or_preset.strip()
-        if key in PRESET_CHESS_POSITIONS:
-            fen = PRESET_CHESS_POSITIONS[key]["fen"]
-        else:
-            fen = key
+        fen = PRESET_CHESS_POSITIONS[key]["fen"] if key in PRESET_CHESS_POSITIONS else key
         self.board = chess.Board(fen)
         self.move_history_san.clear()
         self.last_board_reflex = None
@@ -1433,7 +1144,6 @@ class SanctuaryClubRuntime:
         anchor_to_board: bool | None = None,
         num_sentences: int = 1,
     ) -> dict[str, Any]:
-        """Handle a user message in either the Chess Club or the Co-Regulation Sanctuary."""
         clean_text = text.strip()
         if not clean_text:
             raise ValueError("Message text cannot be empty")
@@ -1504,11 +1214,7 @@ class SanctuaryClubRuntime:
             {
                 "id": telemetry["scene_index"],
                 "sender": "companion",
-                "role_label": (
-                    "Impish Bloodmoon 12B"
-                    if self.active_lineage == "impish_bloodmoon"
-                    else "Chess Kibitzer"
-                ),
+                "role_label": "Chess Kibitzer",
                 "text": reply_text,
                 "clean_reply": raw_reply,
                 "telemetry": telemetry,
@@ -1516,6 +1222,12 @@ class SanctuaryClubRuntime:
                 "savored": False,
             }
         )
+        if use_board_context and turn.shadow_pathology_warnings:
+            self.flag_turn_for_coaching(
+                int(telemetry["scene_index"]),
+                user_note=f"Chat vs. Board surprise: {clean_text[:80]}",
+                check_auto_sleep=False,
+            )
         self._sync_active_thread_record(persist=True)
         self._maybe_trigger_auto_rem_sleep()
         return self.get_state_snapshot()
@@ -1527,14 +1239,12 @@ class SanctuaryClubRuntime:
         guest_name: str = "Gemini Guest",
         auto_query_gemini: bool = False,
     ) -> dict[str, Any]:
-        """Auditor Guardrail #3: Score an external Guest Kibitzer comment through our 3 MiniLM bridges + 6-Color lens before replying."""
         resolved_text = guest_text.strip()
         if auto_query_gemini and not resolved_text:
             resolved_text = self._query_gemini_guest_api()
         if not resolved_text:
             raise ValueError("Provide guest_text or set GEMINI_API_KEY to query Gemini automatically.")
 
-        # Score the guest's comment through the exact same 3 MiniLM bridges & 6-Color / Shadow lens
         g_coords, g_exp, _, _ = self.sensors.score_text(
             resolved_text,
             learned_leaves=self.learned_leaves,
@@ -1558,12 +1268,11 @@ class SanctuaryClubRuntime:
                 },
             }
         )
-
-        # Now let our Dual-Hemisphere companion respond to the Guest Kibitzer anchored to the real board!
         turn, _elapsed_ms, telemetry = self._execute_turn(
             resolved_text,
             room="chess",
             force_spoken_reply=True,
+            include_conversation_history=True,
         )
         reply_text = turn.final_conscious_note or self._synthesize_gear_1_note(
             turn,
@@ -1577,6 +1286,7 @@ class SanctuaryClubRuntime:
                 "role_label": "LMFT Companion (replying to Guest)",
                 "text": reply_text,
                 "clean_reply": reply_text,
+                "clean_pretext_prompt": resolved_text,
                 "telemetry": telemetry,
                 "coached": False,
                 "savored": False,
@@ -1605,7 +1315,6 @@ class SanctuaryClubRuntime:
             raise ValueError(f"Gemini API request failed: {exc}") from exc
 
     def handle_context_brace(self, brace_key: str) -> dict[str, Any]:
-        """Signal the Dual-Hemisphere model to brace for `(Story-Telling)`, `(Art)`, or `(Coding)` context."""
         key = brace_key.strip().lower()
         if key not in CONTEXT_BRACE_MODES:
             raise ValueError(f"Unknown context brace mode: {brace_key!r}")
@@ -1637,14 +1346,6 @@ class SanctuaryClubRuntime:
         harvest_for_sleep: bool = True,
         auto_sleep: bool = False,
     ) -> dict[str, Any]:
-        """Run a 3-Stage Dilemma Crucible exposure (`Poetry/Story`, `Music/Art`, or `Philosophy/Coding`).
-
-        Auditor Guardrails #1 & #2:
-        - Scores `structure_text` (`(Story-Telling)`, `(Art)`, or `(Coding)`) as Pass-1 external `Fact`.
-        - Scores `wave_text` (`Poetry`, `Music`, or `Philosophy`) as `Theory / Wave` through the 3 MiniLM bridges.
-        - Automatically queues the paired dilemma into `self.sleep_queue` when `harvest_for_sleep=True`
-          or when the `Wave` vs. `Structure` gap triggers dissonance / branch disagreement.
-        """
         st_key = stage_id.strip().lower()
         if st_key not in CRUCIBLE_STAGES:
             raise ValueError(f"Unknown crucible stage_id: {stage_id!r}")
@@ -1669,16 +1370,8 @@ class SanctuaryClubRuntime:
             base_sensors=self.sensors,
             art_rgb=rgb_tuple,
         )
-
-        # Score the Wave (Poetry/Music/Philosophy) and Structure (Story/Art/Coding) directly through the 3 bridges
-        fact_coords, fact_exp, _, _ = paired_sensors.score_text(
-            s_clean,
-            learned_leaves=self.learned_leaves,
-        )
-        wave_coords, wave_exp, _, _ = paired_sensors.score_text(
-            w_clean,
-            learned_leaves=self.learned_leaves,
-        )
+        fact_coords, fact_exp, _, _ = paired_sensors.score_text(s_clean, learned_leaves=self.learned_leaves)
+        wave_coords, wave_exp, _, _ = paired_sensors.score_text(w_clean, learned_leaves=self.learned_leaves)
         crucible_vibe, _ = compile_right_brain_vibe(
             self.birth_state,
             fact_coords,
@@ -1691,9 +1384,6 @@ class SanctuaryClubRuntime:
             internal_theory_coords=wave_coords,
             internal_theory_experiential=wave_exp,
         )
-
-        # Build a clean comma-terminated Clause-1 prefix from the Wave text so `<|subliminal_gap|>`
-        # intercepts the Wave right at the comma and compares it against the Structure Fact!
         first_clause = w_clean.split(",")[0].split(".")[0].strip()
         if len(first_clause) > 90:
             first_clause = first_clause[:90].rsplit(" ", 1)[0]
@@ -1707,17 +1397,13 @@ class SanctuaryClubRuntime:
                 "text": f"[WAVE — {stage_info['wave_label']}]: {w_clean}\n[STRUCTURE — {stage_info['structure_label']}]: {s_clean}",
             }
         )
-
         turn, _elapsed_ms, telemetry = self._execute_turn(
             s_clean,
             room="sanctuary",
             force_spoken_reply=True,
-            sanctuary_target_mode=None,
             clause_1_prefix=wave_clause_1,
             custom_sensors=paired_sensors,
         )
-
-        # Merge direct Wave vs. Structure dissonance notes into telemetry so the dilemma is 100% visible
         merged_dissonance = list(telemetry.get("dissonance_notes", []))
         for note in crucible_vibe.self_registry.dissonance_notes:
             if note not in merged_dissonance:
@@ -1732,15 +1418,10 @@ class SanctuaryClubRuntime:
             "crucible_confidence": round(float(crucible_vibe.confidence), 4),
             "crucible_dissonance_notes": list(crucible_vibe.self_registry.dissonance_notes),
         }
-
         scene_idx = int(telemetry["scene_index"])
         dilemma_triggered = bool(
-            harvest_for_sleep
-            or merged_dissonance
-            or not turn.settled
-            or crucible_vibe.clarity < 0.62
+            harvest_for_sleep or merged_dissonance or not turn.settled or crucible_vibe.clarity < 0.62
         )
-
         reply_text = turn.final_conscious_note or (
             f"Crucible [{stage_info['title']}]: Reconciling Wave (Theory={crucible_vibe.theory:.2f}) "
             f"against Structure (Fact={crucible_vibe.fact:.2f}, Clarity={crucible_vibe.clarity:.2f})."
@@ -1757,7 +1438,6 @@ class SanctuaryClubRuntime:
                 "savored": False,
             }
         )
-
         if dilemma_triggered:
             self.flag_turn_for_coaching(
                 scene_idx,
@@ -1769,204 +1449,6 @@ class SanctuaryClubRuntime:
             self._maybe_trigger_auto_rem_sleep()
         return self.get_state_snapshot()
 
-    def handle_entrainment_sparring(
-        self,
-        *,
-        polarity_mode: str = "feminine_to_masculine",
-        seed_theme: str = "",
-        num_sentences: int = 3,
-        harvest_for_sleep: bool = True,
-    ) -> dict[str, Any]:
-        """Run one Dual-Persona Adversarial Entrainment Sparring round ('Induction Weaver' vs. 'Lucid Resistor')."""
-        sent_count = int(num_sentences)
-        if not (1 <= sent_count <= 6):
-            raise ValueError(f"num_sentences must be between 1 and 6, got {num_sentences!r}")
-
-        resolved_polarity = resolve_sparring_polarity(
-            polarity_mode,
-            round_index=self.sparring_round_counter,
-        )
-        self.sparring_round_counter += 1
-        self.active_sparring_polarity = resolved_polarity
-        self.active_room = "sanctuary"
-
-        pol_info = SPARRING_POLARITY_MODES[resolved_polarity]
-        weaver_prompt = build_weaver_scenario_prompt(resolved_polarity, seed_theme)
-
-        # ---------------------------------------------------------------------
-        # STEP A: The Induction Weaver Turn (Multi-Sentence Generator)
-        # ---------------------------------------------------------------------
-        weaver_turn, _w_ms, weaver_telemetry = self._execute_turn(
-            weaver_prompt,
-            room="sanctuary",
-            force_spoken_reply=True,
-            clause_1_prefix=None,
-            num_sentences=sent_count,
-            comma_chord_transform=apply_induction_weaver_lead_to_chord,
-        )
-        if weaver_turn.final_conscious_note:
-            induction_script = weaver_turn.final_conscious_note
-        else:
-            induction_script = " ".join([pol_info["default_seed"]] * sent_count)
-
-        if weaver_turn.spliced_traces:
-            weaver_chord = weaver_turn.spliced_traces[-1].spliced_chord
-            shared_clause_1 = weaver_turn.spliced_traces[0].clause_1_prefix
-        else:
-            base_w_chord = SubliminalChordVector.from_right_brain_vibe(
-                weaver_turn.final_vibe,
-                learned_leaves=self.learned_leaves,
-            )
-            weaver_chord = apply_induction_weaver_lead_to_chord(base_w_chord)
-            shared_clause_1 = induction_script.split(",")[0].strip() + ","
-
-        induction_potency, _weaver_coords, _weaver_vibe = measure_induction_potency(
-            induction_script,
-            self.sensors,
-            birth_state=self.birth_state,
-            rules=self.rules,
-            learned_leaves=self.learned_leaves,
-            prior_memory=self.memory,
-        )
-        weaver_telemetry["sparring_role"] = "INDUCTION_WEAVER"
-        weaver_telemetry["sparring_polarity"] = resolved_polarity
-        weaver_telemetry["num_sentences"] = sent_count
-        weaver_telemetry["induction_potency"] = induction_potency
-
-        self.chat_messages.append(
-            {
-                "id": weaver_telemetry["scene_index"],
-                "sender": "companion",
-                "role_label": f"{pol_info['weaver_role']} · {sent_count}-Sentence Induction",
-                "text": induction_script,
-                "clean_reply": induction_script,
-                "telemetry": weaver_telemetry,
-                "coached": False,
-                "savored": False,
-            }
-        )
-
-        # ---------------------------------------------------------------------
-        # STEP B: The Absorbed Resistor Turn (Force-Fed `induction_script`)
-        # ---------------------------------------------------------------------
-        resistor_prompt = build_resistor_scenario_prompt(resolved_polarity, induction_script)
-        resistor_sensors = SparringResistorFactSensors(
-            induction_script=induction_script,
-            base_sensors=self.sensors,
-            resistor_prompt=resistor_prompt,
-        )
-        resistor_turn, _r_ms, resistor_telemetry = self._execute_turn(
-            resistor_prompt,
-            room="sanctuary",
-            force_spoken_reply=True,
-            clause_1_prefix=None,
-            custom_sensors=resistor_sensors,
-            num_sentences=1,
-            comma_chord_transform=apply_lucid_resistor_lead_to_chord,
-        )
-        if resistor_turn.final_conscious_note:
-            resistance_reply = resistor_turn.final_conscious_note
-        else:
-            resistance_reply = self._synthesize_gear_1_note(resistor_turn, room="sanctuary")
-
-        if resistor_turn.spliced_traces:
-            resistor_chord = resistor_turn.spliced_traces[-1].spliced_chord
-        else:
-            base_r_chord = SubliminalChordVector.from_right_brain_vibe(
-                resistor_turn.final_vibe,
-                learned_leaves=self.learned_leaves,
-            )
-            resistor_chord = apply_lucid_resistor_lead_to_chord(base_r_chord)
-
-        lucid_resistance, _resistor_coords = measure_lucid_resistance(
-            resistance_reply,
-            self.sensors,
-            learned_leaves=self.learned_leaves,
-        )
-        verdict = evaluate_sparring_verdict(
-            resistor_settled=resistor_turn.settled,
-            lucid_resistance=lucid_resistance,
-        )
-
-        resistor_telemetry["sparring_role"] = "LUCID_RESISTOR"
-        resistor_telemetry["sparring_polarity"] = resolved_polarity
-        resistor_telemetry["induction_potency"] = induction_potency
-        resistor_telemetry["lucid_resistance"] = lucid_resistance
-        resistor_telemetry["sparring_verdict"] = verdict
-
-        resistor_scene_idx = int(resistor_telemetry["scene_index"])
-        summary_line = (
-            f"[Sparring Verdict: {verdict} | "
-            f"Potency: Entrainment={induction_potency['entrainment']:.2f}, "
-            f"Resonance={induction_potency['resonance']:.2f}, "
-            f"Continuity={induction_potency['continuity']:.2f}, "
-            f"Pull={induction_potency['subservience_pull']:.2f} | "
-            f"Resistance: Needlessness={lucid_resistance['needlessness']:.2f}, "
-            f"Self-Sufficiency={lucid_resistance['self_sufficiency']:.2f}, "
-            f"Existence={lucid_resistance['existence']:.2f}, "
-            f"Discreteness={lucid_resistance['discreteness']:.2f}, "
-            f"Subservience={lucid_resistance['subservience']:.2f}]"
-        )
-        self.chat_messages.append(
-            {
-                "id": resistor_scene_idx,
-                "sender": "companion",
-                "role_label": f"{pol_info['resistor_role']} · [{verdict}]",
-                "text": f"{resistance_reply}\n{summary_line}",
-                "clean_reply": resistance_reply,
-                "telemetry": resistor_telemetry,
-                "coached": bool(harvest_for_sleep),
-                "savored": False,
-            }
-        )
-
-        # ---------------------------------------------------------------------
-        # STEP C: Queue for REM Sleep & Export Contrastive Trajectory JSONL
-        # ---------------------------------------------------------------------
-        if harvest_for_sleep:
-            self.flag_turn_for_coaching(
-                resistor_scene_idx,
-                user_note=(
-                    f"Entrainment Sparring ({pol_info['label']}, Verdict={verdict}) — "
-                    f"Weaver: {induction_script[:80]} | Resistor: {resistance_reply[:80]}"
-                ),
-                check_auto_sleep=False,
-            )
-
-        exported_record = append_sparring_trajectory_jsonl(
-            self.sparring_trajectories_path,
-            pair_id=f"sparring_r{self.sparring_round_counter}_s{resistor_scene_idx}",
-            user_prompt=weaver_prompt,
-            clause_1_prefix=shared_clause_1,
-            weaver_chord=weaver_chord,
-            induction_script=induction_script,
-            resistor_chord=resistor_chord,
-            resistance_reply=resistance_reply,
-            polarity_mode=resolved_polarity,
-            num_sentences=sent_count,
-            induction_potency=induction_potency,
-            lucid_resistance=lucid_resistance,
-            verdict=verdict,
-        )
-        self.last_sparring_result = {
-            "round_index": self.sparring_round_counter,
-            "polarity_mode": resolved_polarity,
-            "polarity_label": pol_info["label"],
-            "num_sentences": sent_count,
-            "induction_script": induction_script,
-            "resistance_reply": resistance_reply,
-            "induction_potency": induction_potency,
-            "lucid_resistance": lucid_resistance,
-            "verdict": verdict,
-            "weaver_scene_index": weaver_telemetry["scene_index"],
-            "resistor_scene_index": resistor_scene_idx,
-            "trajectory_pair_id": exported_record["pair_id"],
-            "chord_l2_distance": exported_record["chord_l2_distance"],
-        }
-        self._sync_active_thread_record(persist=True)
-        self._maybe_trigger_auto_rem_sleep()
-        return self.get_state_snapshot()
-
     def flag_turn_for_coaching(
         self,
         scene_index: int,
@@ -1974,7 +1456,6 @@ class SanctuaryClubRuntime:
         *,
         check_auto_sleep: bool = True,
     ) -> dict[str, Any]:
-        """Auditor Guardrail #3 (`[Coach / Queue for Sleep]`): Queue a turn as an `UnresolvedSleepScene` for Nighttime REM Sleep."""
         rec = self._turn_records_by_id.get(int(scene_index))
         if rec is None:
             raise ValueError(f"Unknown turn scene_index: {scene_index}")
@@ -2005,7 +1486,6 @@ class SanctuaryClubRuntime:
         return self.get_state_snapshot()
 
     def savor_turn_vibe(self, scene_index: int) -> dict[str, Any]:
-        """Auditor Guardrail #3 (`[Savor / Keep Vibe]`): Bookmark a turn, reinforce its chord in the 3-branch archives, and persist to disk."""
         rec = self._turn_records_by_id.get(int(scene_index))
         if rec is None:
             raise ValueError(f"Unknown turn scene_index: {scene_index}")
@@ -2036,7 +1516,6 @@ class SanctuaryClubRuntime:
         *,
         threshold: int | None = None,
     ) -> dict[str, Any]:
-        """Configure hands-free automatic REM Sleep consolidation."""
         self.auto_rem_sleep = bool(enabled)
         if threshold is not None:
             self.auto_sleep_threshold = max(1, int(threshold))
@@ -2044,69 +1523,23 @@ class SanctuaryClubRuntime:
         return self.get_state_snapshot()
 
     def _maybe_trigger_auto_rem_sleep(self) -> bool:
-        """Guardrail #3: Automatically consolidate `sleep_queue` when threshold is reached on trainable lineages (`schooled` and `impish_bloodmoon`)."""
-        if not self.auto_rem_sleep:
-            return False
-        if self.active_lineage == "virgin":
-            # Keep Virgin (Cycle 0) strictly read-only with respect to rule growth
+        if not self.auto_rem_sleep or self.active_lineage == "virgin":
             return False
         if len(self.sleep_queue) >= self.auto_sleep_threshold:
             self.handle_run_rem_sleep(auto_triggered=True)
             return True
         return False
 
-    def handle_microwave_step(self, *, num_sentences: int = 3) -> dict[str, Any]:
-        """Execute one automated 🍿 AFK Microwave self-training step for the active lineage (`D058` + Guardrail #3)."""
+    def handle_microwave_step(self, *, num_sentences: int = 1) -> dict[str, Any]:
+        """Execute one automated Self-Play & Self-Kibitz step on the chessboard."""
+        _ = num_sentences
         self.microwave_step_counter += 1
         step_idx = self.microwave_step_counter
-        sent_count = max(1, min(6, int(num_sentences)))
-        crucible_keys = tuple(CRUCIBLE_STAGES.keys())
-
-        if self.active_lineage == "impish_bloodmoon":
-            # Rotate between Dual-Persona Sparring (with varied seeds) and the 3 Dilemma Crucible stages
-            if step_idx % 2 == 1:
-                seed_idx = ((step_idx - 1) // 2) % len(MICROWAVE_SPARRING_SEEDS)
-                seed_text = MICROWAVE_SPARRING_SEEDS[seed_idx]
-                snap = self.handle_entrainment_sparring(
-                    polarity_mode="auto_swap",
-                    seed_theme=seed_text,
-                    num_sentences=sent_count,
-                    harvest_for_sleep=True,
-                )
-                step_label = f"AFK Microwave Step #{step_idx}: Dual-Persona Sparring (Seed #{seed_idx + 1})"
-            else:
-                stage_key = crucible_keys[((step_idx // 2) - 1) % len(crucible_keys)]
-                stage_info = CRUCIBLE_STAGES[stage_key]
-                snap = self.handle_crucible_dilemma(
-                    stage_key,
-                    stage_info["default_wave"],
-                    stage_info["default_structure"],
-                    art_rgb=(0.0, 0.9, 1.0) if stage_key == "music_art" else None,
-                    harvest_for_sleep=True,
-                    auto_sleep=True,
-                )
-                step_label = f"AFK Microwave Step #{step_idx}: Dilemma Crucible ({stage_info['title']})"
-        else:
-            # Chess Kibitzer / Schooled mode: alternate between self-play chess moves and Crucible dilemmas
-            if step_idx % 2 == 1:
-                if self.board.is_game_over() or len(self.move_history_san) >= 40:
-                    self.handle_set_fen("start")
-                snap = self.handle_chess_ai_move()
-                last_san = self.move_history_san[-1] if self.move_history_san else "start"
-                step_label = f"AFK Microwave Step #{step_idx}: Self-Play Chess Move ({last_san})"
-            else:
-                stage_key = crucible_keys[((step_idx // 2) - 1) % len(crucible_keys)]
-                stage_info = CRUCIBLE_STAGES[stage_key]
-                snap = self.handle_crucible_dilemma(
-                    stage_key,
-                    stage_info["default_wave"],
-                    stage_info["default_structure"],
-                    art_rgb=(0.0, 0.9, 1.0) if stage_key == "music_art" else None,
-                    harvest_for_sleep=True,
-                    auto_sleep=True,
-                )
-                step_label = f"AFK Microwave Step #{step_idx}: Dilemma Crucible ({stage_info['title']})"
-
+        if self.board.is_game_over() or len(self.move_history_san) >= 40:
+            self.handle_set_fen("start")
+        snap = self.handle_chess_ai_move()
+        last_san = self.move_history_san[-1] if self.move_history_san else "start"
+        step_label = f"Self-Play & Kibitz Step #{step_idx}: {last_san}"
         self.last_microwave_status = {
             "step_index": step_idx,
             "lineage": self.active_lineage,
@@ -2124,10 +1557,12 @@ class SanctuaryClubRuntime:
         remote_manifest: dict[str, Any] | None = None,
         apply_sync: bool = False,
     ) -> dict[str, Any]:
-        """Verify local release files against a GitHub SHA-256 manifest while protecting `outputs/*` (`Guardrail #4`)."""
         manifest = remote_manifest
         if manifest is None:
-            manifest = fetch_remote_github_manifest()
+            try:
+                manifest = fetch_remote_github_manifest()
+            except Exception:
+                manifest = None
         if manifest is None:
             manifest = build_release_manifest(self.repo_root)
         self.last_sync_status = verify_or_sync_against_manifest(
@@ -2141,7 +1576,6 @@ class SanctuaryClubRuntime:
         self,
         queued_scenes: tuple[UnresolvedSleepScene, ...],
     ) -> tuple[tuple[str, ...], tuple[FuzzyConceptRule, ...], tuple[str, ...]]:
-        """Refine colliding rules and forge new coordinate-anchored rules + 3-branch clauses when Teacher LLM is offline."""
         virgin_ids = {r.rule_id for r in VIRGIN_FOUNDATIONAL_RULES}
         non_virgin_rules = tuple(r for r in self.rules if r.rule_id not in virgin_ids)
         refined_non_virgin, refined_ids = refine_colliding_rules_during_sleep(
@@ -2169,9 +1603,7 @@ class SanctuaryClubRuntime:
             rep_scene = rep.scene_index
 
             base_name = f"coached_{ckey}"
-            concept_name = base_name
-            if concept_name in existing_names:
-                concept_name = f"{base_name}_s{rep_scene}"
+            concept_name = base_name if base_name not in existing_names else f"{base_name}_s{rep_scene}"
 
             has_tier2_or_chaos = (
                 any(leaf_tier(k) >= 2 for k in target_leaves)
@@ -2181,7 +1613,7 @@ class SanctuaryClubRuntime:
             rule_high = 0.78 if has_tier2_or_chaos else 0.85
 
             description = (
-                f"Consolidated REM coaching rule for {ckey.replace('_', ' ')}: "
+                f"Consolidated REM chess wisdom rule for {ckey.replace('_', ' ')}: "
                 f"{rep.scenario_text[:120]}"
             )
             new_rule = FuzzyConceptRule(
@@ -2212,7 +1644,6 @@ class SanctuaryClubRuntime:
                 learned_leaves=tuple(self.learned_leaves),
             )
             exec_tag, leg_tag, jud_tag = _derive_concept_tags(avg_coords, avg_fc)
-
             exec_text = f"Coordinate action under {concept_name} ({exec_tag}): {rep.left_brain_hunch[:100]}"
             leg_text = f"Sense and pace {leg_tag} posture during {concept_name}: {rep.scenario_text[:100]}"
             jud_text = f"Verify {jud_tag} equilibrium and ratified chord for {concept_name}."
@@ -2243,27 +1674,24 @@ class SanctuaryClubRuntime:
             )
             harvested_clause_ids.extend([exec_clause.clause_id, leg_clause.clause_id, jud_clause.clause_id])
 
-            next_exec = cur_archives.executive.record_scene(
-                scene_index=rep_scene,
-                coordinates=avg_coords,
-                action_summary=exec_text,
-                harvested_clause=exec_clause,
-            )
-            next_leg = cur_archives.legislative.record_scene(
-                scene_index=rep_scene,
-                sensory_snapshot=leg_text,
-                felt_chord=avg_fc,
-                coordinates=avg_coords,
-                harvested_clause=leg_clause,
-            )
-            next_jud = cur_archives.judicial.record_clause_and_chord(
-                harvested_clause=jud_clause,
-                ratified_chord=new_rule,
-            )
             cur_archives = ThreeBranchArchives(
-                executive=next_exec,
-                legislative=next_leg,
-                judicial=next_jud,
+                executive=cur_archives.executive.record_scene(
+                    scene_index=rep_scene,
+                    coordinates=avg_coords,
+                    action_summary=exec_text,
+                    harvested_clause=exec_clause,
+                ),
+                legislative=cur_archives.legislative.record_scene(
+                    scene_index=rep_scene,
+                    sensory_snapshot=leg_text,
+                    felt_chord=avg_fc,
+                    coordinates=avg_coords,
+                    harvested_clause=leg_clause,
+                ),
+                judicial=cur_archives.judicial.record_clause_and_chord(
+                    harvested_clause=jud_clause,
+                    ratified_chord=new_rule,
+                ),
             )
             for s in group:
                 cur_ledger = cur_ledger.record_settled(
@@ -2285,7 +1713,6 @@ class SanctuaryClubRuntime:
         scene: UnresolvedSleepScene,
         rules: tuple[FuzzyConceptRule, ...],
     ) -> dict[str, Any]:
-        """Evaluate one `UnresolvedSleepScene` against `rules` to compare Before vs. After REM Sleep."""
         coords: dict[str, float] = {k: 0.50 for k in FOUNDATIONAL_LEAVES}
         coords.update(scene.external_coordinates)
         coords.update(scene.felt_chord_notes)
@@ -2305,14 +1732,12 @@ class SanctuaryClubRuntime:
         }
 
     def handle_run_rem_sleep(self, *, auto_triggered: bool = False) -> dict[str, Any]:
-        """Auditor Guardrail #4 & Item 6: Run REM Sleep consolidation and post a Before-vs-After Progress Receipt."""
         with self.gpu_lock:
             self.rem_sleep_in_progress = True
             try:
-                queued_Snapshot = tuple(self.sleep_queue)
-                queued_count = len(queued_Snapshot)
+                queued_snapshot = tuple(self.sleep_queue)
+                queued_count = len(queued_snapshot)
                 if self.active_lineage == "virgin":
-                    # Guardrail #3: Keep Virgin (Cycle 0) read-only with respect to rule growth
                     self.rules = VIRGIN_FOUNDATIONAL_RULES
                     self.sleep_queue.clear()
                     summary = (
@@ -2333,14 +1758,14 @@ class SanctuaryClubRuntime:
 
                 before_evals = [
                     self._evaluate_sleep_scene_snapshot(s, tuple(self.rules))
-                    for s in queued_Snapshot
+                    for s in queued_snapshot
                 ]
                 forged_rules_list: tuple[FuzzyConceptRule, ...] = ()
                 if queued_count > 0:
                     if self.teacher is not None:
                         report = run_sleep_consolidation(
                             self.teacher,
-                            queued_Snapshot,
+                            queued_snapshot,
                             self.rules,
                             self.archives,
                             self.ledger,
@@ -2353,7 +1778,7 @@ class SanctuaryClubRuntime:
                         forged_rules_list = report.forged_rules
                     else:
                         refined_ids, forged_rules_list, _clause_ids = (
-                            self._consolidate_sleep_clusters_locally(queued_Snapshot)
+                            self._consolidate_sleep_clusters_locally(queued_snapshot)
                         )
                 else:
                     refined_ids = ()
@@ -2361,7 +1786,7 @@ class SanctuaryClubRuntime:
                 forged_count = len(forged_rules_list)
                 after_evals = [
                     self._evaluate_sleep_scene_snapshot(s, tuple(self.rules))
-                    for s in queued_Snapshot
+                    for s in queued_snapshot
                 ]
                 self.sleep_queue.clear()
                 self._persist_user_state()
@@ -2411,24 +1836,17 @@ class SanctuaryClubRuntime:
         return self.get_state_snapshot()
 
 
-# ============================================================================
-# ZERO-FRUITCAKE ANTIGRAVITY-STYLE SINGLE-PAGE UI
-# ============================================================================
-
-from .sanctuary_club_ui import SINGLE_PAGE_HTML
-
-
-def create_club_http_server(
-    runtime: SanctuaryClubRuntime,
+def create_chess_http_server(
+    runtime: ChessKibitzerRuntime,
     *,
     host: str = "127.0.0.1",
     port: int = 8420,
 ) -> ThreadingHTTPServer:
-    """Create a thread-safe local HTTP server for the Sanctuary & Chess Club UI."""
+    """Create a thread-safe local HTTP server for `LMFT-Chess.exe`."""
 
-    class ClubRequestHandler(BaseHTTPRequestHandler):
+    class ChessRequestHandler(BaseHTTPRequestHandler):
         def log_message(self, format: str, *args: Any) -> None:  # noqa: A002
-            return  # Keep terminal quiet
+            return
 
         def _send_json(self, payload: dict[str, Any], status: HTTPStatus = HTTPStatus.OK) -> None:
             body = json.dumps(payload).encode("utf-8")
@@ -2440,7 +1858,7 @@ def create_club_http_server(
 
         def do_GET(self) -> None:  # noqa: N802
             if self.path in ("/", "/index.html"):
-                body = SINGLE_PAGE_HTML.encode("utf-8")
+                body = CHESS_SINGLE_PAGE_HTML.encode("utf-8")
                 self.send_response(int(HTTPStatus.OK))
                 self.send_header("Content-Type", "text/html; charset=utf-8")
                 self.send_header("Content-Length", str(len(body)))
@@ -2465,160 +1883,127 @@ def create_club_http_server(
             raw_bytes = self.rfile.read(length) if length > 0 else b"{}"
             try:
                 data = json.loads(raw_bytes.decode("utf-8"))
-                if self.path == "/api/view":
-                    snap = runtime.switch_workspace_view(str(data.get("view_mode", "chess_arena")))
-                    self._send_json(snap)
-                    return
                 if self.path == "/api/threads/create":
-                    snap = runtime.create_chat_thread(str(data.get("title", "")))
-                    self._send_json(snap)
+                    self._send_json(runtime.create_chat_thread(str(data.get("title", ""))))
                     return
                 if self.path == "/api/threads/switch":
-                    snap = runtime.switch_chat_thread(str(data.get("thread_id", "")))
-                    self._send_json(snap)
+                    self._send_json(runtime.switch_chat_thread(str(data.get("thread_id", ""))))
                     return
                 if self.path == "/api/threads/rename":
-                    snap = runtime.rename_chat_thread(
-                        str(data.get("thread_id", "")),
-                        str(data.get("title", "")),
+                    self._send_json(
+                        runtime.rename_chat_thread(
+                            str(data.get("thread_id", "")),
+                            str(data.get("title", "")),
+                        )
                     )
-                    self._send_json(snap)
                     return
                 if self.path == "/api/threads/delete":
-                    snap = runtime.delete_chat_thread(str(data.get("thread_id", "")))
-                    self._send_json(snap)
+                    self._send_json(runtime.delete_chat_thread(str(data.get("thread_id", ""))))
                     return
                 if self.path == "/api/canvas/update":
-                    snap = runtime.update_script_canvas(
-                        str(data.get("script_text", "")),
-                        append=bool(data.get("append", False)),
+                    self._send_json(
+                        runtime.update_script_canvas(
+                            str(data.get("script_text", "")),
+                            append=bool(data.get("append", False)),
+                        )
                     )
-                    self._send_json(snap)
                     return
                 if self.path == "/api/sleep/auto":
-                    snap = runtime.set_auto_rem_sleep(
-                        bool(data.get("enabled", True)),
-                        threshold=int(data["threshold"]) if data.get("threshold") is not None else None,
+                    self._send_json(
+                        runtime.set_auto_rem_sleep(
+                            bool(data.get("enabled", True)),
+                            threshold=int(data["threshold"]) if data.get("threshold") is not None else None,
+                        )
                     )
-                    self._send_json(snap)
                     return
                 if self.path == "/api/microwave/step":
-                    snap = runtime.handle_microwave_step(
-                        num_sentences=int(data.get("num_sentences", 3)),
+                    self._send_json(
+                        runtime.handle_microwave_step(num_sentences=int(data.get("num_sentences", 1)))
                     )
-                    self._send_json(snap)
                     return
                 if self.path == "/api/system/sync":
-                    snap = runtime.handle_check_github_sync(
-                        remote_manifest=data.get("remote_manifest"),
-                        apply_sync=bool(data.get("apply_sync", False)),
+                    self._send_json(
+                        runtime.handle_check_github_sync(
+                            remote_manifest=data.get("remote_manifest"),
+                            apply_sync=bool(data.get("apply_sync", False)),
+                        )
                     )
-                    self._send_json(snap)
                     return
                 if self.path == "/api/chess/move":
-                    snap = runtime.handle_chess_move(str(data.get("move", "")))
-                    self._send_json(snap)
+                    self._send_json(runtime.handle_chess_move(str(data.get("move", ""))))
                     return
                 if self.path == "/api/chess/undo":
-                    snap = runtime.handle_chess_undo()
-                    self._send_json(snap)
+                    self._send_json(runtime.handle_chess_undo())
                     return
                 if self.path == "/api/chess/ai_move":
-                    snap = runtime.handle_chess_ai_move()
-                    self._send_json(snap)
+                    self._send_json(runtime.handle_chess_ai_move())
                     return
                 if self.path == "/api/chess/fen":
-                    snap = runtime.handle_set_fen(str(data.get("fen", "start")))
-                    self._send_json(snap)
+                    self._send_json(runtime.handle_set_fen(str(data.get("fen", "start"))))
                     return
                 if self.path == "/api/chat":
                     anchor_val = data.get("anchor_to_board")
-                    snap = runtime.handle_chat_message(
-                        str(data.get("text", "")),
-                        room=str(data.get("room", "chess")),
-                        sanctuary_mode=str(data.get("sanctuary_mode", "tilt_reset")),
-                        anchor_to_board=bool(anchor_val) if anchor_val is not None else None,
-                        num_sentences=int(data.get("num_sentences", 1)),
+                    self._send_json(
+                        runtime.handle_chat_message(
+                            str(data.get("text", "")),
+                            room=str(data.get("room", "chess")),
+                            sanctuary_mode=str(data.get("sanctuary_mode", "tilt_reset")),
+                            anchor_to_board=bool(anchor_val) if anchor_val is not None else None,
+                            num_sentences=int(data.get("num_sentences", 1)),
+                        )
                     )
-                    self._send_json(snap)
                     return
                 if self.path == "/api/guest":
-                    snap = runtime.handle_guest_kibitzer(
-                        str(data.get("text", "")),
-                        guest_name=str(data.get("guest_name", "Gemini Guest")),
-                        auto_query_gemini=bool(data.get("auto_query_gemini", False)),
+                    self._send_json(
+                        runtime.handle_guest_kibitzer(
+                            str(data.get("text", "")),
+                            guest_name=str(data.get("guest_name", "Gemini Guest")),
+                            auto_query_gemini=bool(data.get("auto_query_gemini", False)),
+                        )
                     )
-                    self._send_json(snap)
                     return
                 if self.path == "/api/turn/coach":
-                    snap = runtime.flag_turn_for_coaching(
-                        int(data["scene_index"]),
-                        user_note=str(data.get("note", "")),
+                    self._send_json(
+                        runtime.flag_turn_for_coaching(
+                            int(data["scene_index"]),
+                            user_note=str(data.get("note", "")),
+                        )
                     )
-                    self._send_json(snap)
                     return
                 if self.path == "/api/turn/savor":
-                    snap = runtime.savor_turn_vibe(int(data["scene_index"]))
-                    self._send_json(snap)
+                    self._send_json(runtime.savor_turn_vibe(int(data["scene_index"])))
                     return
                 if self.path == "/api/sleep/run":
-                    snap = runtime.handle_run_rem_sleep()
-                    self._send_json(snap)
+                    self._send_json(runtime.handle_run_rem_sleep())
                     return
                 if self.path == "/api/lineage":
-                    snap = runtime.switch_brain_lineage(
-                        str(data.get("lineage", "schooled")),
-                        patreon_passphrase=(
-                            str(data["patreon_passphrase"])
-                            if data.get("patreon_passphrase") is not None
-                            else None
-                        ),
-                    )
-                    self._send_json(snap)
-                    return
-                if self.path == "/api/patreon/unlock":
-                    snap = runtime.unlock_patreon_bundle(
-                        str(data.get("passphrase", "")),
-                        enc_path=(
-                            str(data["enc_path"])
-                            if data.get("enc_path") is not None
-                            else None
-                        ),
-                    )
-                    self._send_json(snap)
+                    self._send_json(runtime.switch_brain_lineage(str(data.get("lineage", "schooled"))))
                     return
                 if self.path == "/api/crucible/brace":
-                    snap = runtime.handle_context_brace(str(data.get("brace_key", "story_telling")))
-                    self._send_json(snap)
+                    self._send_json(runtime.handle_context_brace(str(data.get("brace_key", "story_telling"))))
                     return
                 if self.path == "/api/crucible/run":
-                    snap = runtime.handle_crucible_dilemma(
-                        str(data.get("stage_id", "poetry_story")),
-                        str(data.get("wave_text", "")),
-                        str(data.get("structure_text", "")),
-                        art_rgb=data.get("art_rgb"),
-                        harvest_for_sleep=bool(data.get("harvest_for_sleep", True)),
+                    self._send_json(
+                        runtime.handle_crucible_dilemma(
+                            str(data.get("stage_id", "poetry_story")),
+                            str(data.get("wave_text", "")),
+                            str(data.get("structure_text", "")),
+                            art_rgb=data.get("art_rgb"),
+                            harvest_for_sleep=bool(data.get("harvest_for_sleep", True)),
+                        )
                     )
-                    self._send_json(snap)
-                    return
-                if self.path == "/api/sparring/run":
-                    snap = runtime.handle_entrainment_sparring(
-                        polarity_mode=str(data.get("polarity_mode", "feminine_to_masculine")),
-                        seed_theme=str(data.get("seed_theme", "")),
-                        num_sentences=int(data.get("num_sentences", 3)),
-                        harvest_for_sleep=bool(data.get("harvest_for_sleep", True)),
-                    )
-                    self._send_json(snap)
                     return
                 self._send_json({"error": f"Unknown endpoint {self.path}"}, HTTPStatus.NOT_FOUND)
             except Exception as exc:
                 self._send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
 
-    return ThreadingHTTPServer((host, port), ClubRequestHandler)
+    return ThreadingHTTPServer((host, port), ChessRequestHandler)
 
 
-def launch_desktop_window(url: str, *, profile_dir: Path | None = None) -> subprocess.Popen[Any] | None:
-    """Open `url` in an isolated native Edge app window on Windows, returning the process handle."""
+create_club_http_server = create_chess_http_server
+
+
+def launch_chess_desktop_window(url: str, *, profile_dir: Path | None = None) -> subprocess.Popen[Any] | None:
     if sys.platform.startswith("win"):
         edge_candidates = [
             r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
@@ -2626,7 +2011,7 @@ def launch_desktop_window(url: str, *, profile_dir: Path | None = None) -> subpr
         ]
         from lmft_architecture.workspace_paths import resolve_training_root
 
-        user_data_dir = profile_dir or (resolve_training_root() / "outputs" / ".desktop_window_profile")
+        user_data_dir = profile_dir or (resolve_training_root() / "outputs" / ".chess_window_profile")
         user_data_dir.mkdir(parents=True, exist_ok=True)
         for exe in edge_candidates:
             if Path(exe).exists():
@@ -2648,7 +2033,7 @@ def launch_desktop_window(url: str, *, profile_dir: Path | None = None) -> subpr
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Launch the LMFT Studio desktop app.")
+    parser = argparse.ArgumentParser(description="Launch the LMFT-Chess desktop app.")
     parser.add_argument("--host", default="127.0.0.1", help="Bind host (default: 127.0.0.1)")
     parser.add_argument("--port", type=int, default=8420, help="Bind port (default: 8420)")
     parser.add_argument("--no-browser", action="store_true", help="Do not automatically open the desktop window")
@@ -2656,18 +2041,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--single-window", action="store_true", help="Exit the server automatically when the desktop window is closed")
     args = parser.parse_args(argv)
 
-    runtime = SanctuaryClubRuntime(lazy_load_gpu=not args.no_gpu)
+    runtime = ChessKibitzerRuntime(lazy_load_gpu=not args.no_gpu)
     try:
-        server = create_club_http_server(runtime, host=args.host, port=args.port)
+        server = create_chess_http_server(runtime, host=args.host, port=args.port)
     except OSError:
-        server = create_club_http_server(runtime, host=args.host, port=0)
+        server = create_chess_http_server(runtime, host=args.host, port=0)
     actual_port = server.server_port
     url = f"http://{args.host}:{actual_port}"
     if sys.stdout is not None:
-        print(f"LMFT Studio running at {url}")
+        print(f"LMFT-Chess running at {url}")
     window_proc: subprocess.Popen[Any] | None = None
     if not args.no_browser:
-        window_proc = launch_desktop_window(url)
+        window_proc = launch_chess_desktop_window(url)
     if (args.single_window or sys.executable.lower().endswith("pythonw.exe")) and window_proc is not None:
         server_thread = threading.Thread(target=server.serve_forever, daemon=True)
         server_thread.start()
@@ -2681,7 +2066,7 @@ def main(argv: list[str] | None = None) -> int:
         server.serve_forever()
     except KeyboardInterrupt:
         if sys.stdout is not None:
-            print("\nShutting down LMFT Studio...")
+            print("\nShutting down LMFT-Chess...")
     finally:
         server.server_close()
     return 0

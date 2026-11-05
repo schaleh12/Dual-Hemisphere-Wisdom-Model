@@ -37,7 +37,7 @@ internal static class Program
             ProcessStartInfo psi = new ProcessStartInfo
             {
                 FileName = exePath,
-                Arguments = "-m lmft_architecture.sanctuary_club_app --single-window" + extraArgs,
+                Arguments = "-m lmft_architecture.bloodmoon_app --single-window" + extraArgs,
                 WorkingDirectory = archDir,
                 UseShellExecute = false,
                 CreateNoWindow = true,
@@ -51,8 +51,8 @@ internal static class Program
         catch (Exception ex)
         {
             MessageBox.Show(
-                "Could not launch LMFT-Architecture:\n" + ex.Message,
-                "LMFT-Architecture Launcher",
+                "Could not launch LMFT-Bloodmoon:\n" + ex.Message,
+                "LMFT-Bloodmoon Launcher",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error
             );

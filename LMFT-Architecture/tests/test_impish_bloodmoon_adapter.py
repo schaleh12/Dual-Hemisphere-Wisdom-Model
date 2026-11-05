@@ -2,9 +2,9 @@
 
 Verifies all 4 Auditor guardrails:
 1. Tokenizer- & dimension-agnostic `SubliminalGapLeftBrain` (`<think>` only for tokenizers with `<think>` in vocab, `hidden_size` mismatch check, and `.gguf` rejection).
-2. Isolated Virgin Baseline clone (`outputs/impish_bloodmoon_state/`) without contaminating `baselines/virgin_dual_hemisphere_v1/` or `outputs/club_user_state/`.
+2. Isolated Virgin Baseline clone (`outputs/impish_bloodmoon_state/`) without contaminating `baselines/virgin_dual_hemisphere_v1/` or `outputs/chess_kibitzer_state/`.
 3. Honest `UNSTEERED_BOOTSTRAP_CYCLE_0` vs. `TRAINED_STEERED_CALLOSUM` status + Holdout Checks A, B, and C.
-4. Desktop App `switch_brain_lineage("impish_bloodmoon")` selector and Patreon passphrase encryption/decryption.
+4. Standalone `BloodmoonClockRuntime` isolation from `ChessKibitzerRuntime` (`Qwen3-4B`) and Patreon passphrase encryption/decryption.
 """
 
 from __future__ import annotations
@@ -13,10 +13,11 @@ from pathlib import Path
 import pytest
 import torch
 
-from lmft_architecture.gap_trajectory_schema import compile_chess_posture_chords
+from lmft_architecture.bloodmoon_app import BLOODMOON_SINGLE_PAGE_HTML, BloodmoonClockRuntime
+from lmft_architecture.chess_app import ChessKibitzerRuntime
 from lmft_architecture.impish_bloodmoon_adapter import (
-    DEFAULT_IMPISH_BLOODMOON_HIDDEN_SIZE,
     DEFAULT_IMPISH_BLOODMOON_HF_ID,
+    DEFAULT_IMPISH_BLOODMOON_HIDDEN_SIZE,
     TRAINED_STEERED_STATUS,
     UNSTEERED_BOOTSTRAP_STATUS,
     bootstrap_impish_bloodmoon_virgin_checkpoint,
@@ -27,7 +28,6 @@ from lmft_architecture.impish_bloodmoon_adapter import (
     encrypt_patreon_checkpoint_bundle,
     train_impish_bloodmoon_callosum_and_lora,
 )
-from lmft_architecture.sanctuary_club_app import SINGLE_PAGE_HTML, SanctuaryClubRuntime
 from lmft_architecture.subliminal_gap_splice import SubliminalGapProjector, load_corpus_callosum_checkpoint
 from lmft_architecture.three_legged_runtime import (
     SubliminalGapLeftBrain,
@@ -58,7 +58,6 @@ def test_guardrail_1_gguf_rejection_think_token_detection_and_hidden_size_check(
     assert DEFAULT_IMPISH_BLOODMOON_HIDDEN_SIZE == 5120
     assert validate_pytorch_hf_model_source(DEFAULT_IMPISH_BLOODMOON_HF_ID) == DEFAULT_IMPISH_BLOODMOON_HF_ID
 
-    # Llama/Impish Bloodmoon tokenizer without `<think>` vs. Qwen3 tokenizer with `<think>`
     llama_tok = _WordLevelTestTokenizer()
     assert _tokenizer_has_single_think_token(llama_tok) is False
 
@@ -66,7 +65,6 @@ def test_guardrail_1_gguf_rejection_think_token_detection_and_hidden_size_check(
     qwen_tok.add_special_tokens({"additional_special_tokens": ["<think>", "</think>"]})
     assert _tokenizer_has_single_think_token(qwen_tok) is True
 
-    # Dimension mismatch between model (hidden_size=48) and projector (hidden_size=32) raises ValueError
     gap_id = ensure_subliminal_gap_token(llama_tok)
     model_48 = _MiniCausalLM(vocab_size=64, hidden_size=48, num_layers=2)
     proj_32 = SubliminalGapProjector(hidden_size=32)
@@ -86,7 +84,6 @@ def test_guardrail_2_isolated_virgin_clone_never_contaminates_baseline(tmp_path:
     assert (impish_state_dir / "club_ruleset.json").exists()
     assert (impish_state_dir / "impish_bloodmoon_lineage_meta.json").exists()
 
-    # Canonical `baselines/virgin_dual_hemisphere_v1/` remains 100% intact
     verify_virgin_baseline_snapshot()
 
 
@@ -99,7 +96,6 @@ def test_guardrail_3_bootstrap_vs_trained_callosum_and_holdout_checks(tmp_path: 
     tok.encode(pair.format_full_text("A"))
     tok.encode(pair.format_full_text("B"))
 
-    # Use non-Qwen hidden_size=48 to verify dimension-agnostic projector + LoRA
     model = _MiniCausalLM(vocab_size=len(tok.get_vocab()) + 16, hidden_size=48, num_layers=2)
     assert detect_model_hidden_size(model) == 48
     assert detect_lora_target_modules(model) == ("q_proj", "k_proj", "v_proj", "o_proj")
@@ -119,13 +115,11 @@ def test_guardrail_3_bootstrap_vs_trained_callosum_and_holdout_checks(tmp_path: 
     assert boot_meta.base_model_id == DEFAULT_IMPISH_BLOODMOON_HF_ID
     assert boot_meta.hidden_size == 48
 
-    # Verify zero-initialized bootstrap projector emits 0.0 virtual tokens before training
     loaded_proj, loaded_meta = load_corpus_callosum_checkpoint(boot_dir)
     assert loaded_meta.callosum_status == UNSTEERED_BOOTSTRAP_STATUS
     virt_tokens = loaded_proj(pair.chord_a.to_tensor().unsqueeze(0))
     assert float(virt_tokens.abs().max().item()) == 0.0
 
-    # Now train the Corpus Callosum + LoRA on `pair` and run Holdout Checks A, B, and C
     train_dir = tmp_path / "impish_ckpt_trained"
     model_train = _MiniCausalLM(vocab_size=len(tok.get_vocab()) + 16, hidden_size=48, num_layers=2)
     report = train_impish_bloodmoon_callosum_and_lora(
@@ -150,12 +144,11 @@ def test_guardrail_3_bootstrap_vs_trained_callosum_and_holdout_checks(tmp_path: 
     assert report["holdout_report"]["max_unplugged_chord_swap_shift"] == 0.0
 
 
-def test_guardrail_4_app_lineage_selector_and_patreon_encryption(tmp_path: Path) -> None:
-    """Verify `switch_brain_lineage('impish_bloodmoon')` never secretly uses Qwen3-4B and tests Patreon encryption."""
-    assert 'value="impish_bloodmoon"' in SINGLE_PAGE_HTML
-    assert 'id="patreon-unlock-bar"' in SINGLE_PAGE_HTML
+def test_guardrail_4_standalone_bloodmoon_isolation_and_patreon_encryption(tmp_path: Path) -> None:
+    """Verify `BloodmoonClockRuntime` is 100% isolated from `ChessKibitzerRuntime` (`Qwen3-4B`) and tests Patreon encryption."""
+    assert 'id="patreon-unlock-bar"' in BLOODMOON_SINGLE_PAGE_HTML
+    assert 'id="clockwise-evolution-dial"' in BLOODMOON_SINGLE_PAGE_HTML
 
-    # Initialize runtime with a Qwen Left Brain (`qwen_lb`) and no Impish checkpoint installed
     qwen_tok = _WordLevelTestTokenizer()
     qwen_gap_id = ensure_subliminal_gap_token(qwen_tok)
     qwen_model = _MiniCausalLM(vocab_size=64, hidden_size=32, num_layers=2)
@@ -169,57 +162,51 @@ def test_guardrail_4_app_lineage_selector_and_patreon_encryption(tmp_path: Path)
         max_post_gap_tokens=5,
     )
 
-    schooled_dir = tmp_path / "club_schooled_state"
+    chess_dir = tmp_path / "chess_kibitzer_state"
     impish_dir = tmp_path / "impish_bloodmoon_state"
     impish_ckpt_dir = tmp_path / "test_impish_ckpt"
-    runtime = SanctuaryClubRuntime(
-        state_dir=schooled_dir,
-        impish_state_dir=impish_dir,
-        impish_checkpoint_dir=impish_ckpt_dir,
+
+    chess_runtime = ChessKibitzerRuntime(
+        state_dir=chess_dir,
         left_brain=qwen_lb,
         lazy_load_gpu=False,
     )
-    assert runtime.left_brain is qwen_lb
-    schooled_rules_count = len(runtime.rules)
+    bloodmoon_runtime = BloodmoonClockRuntime(
+        impish_state_dir=impish_dir,
+        impish_checkpoint_dir=impish_ckpt_dir,
+        lazy_load_gpu=False,
+    )
+    assert chess_runtime.left_brain is qwen_lb
+    assert bloodmoon_runtime.left_brain is None
 
-    # Switch to `impish_bloodmoon` -> must unload/detach `qwen_lb` and report IMPISH_CHECKPOINT_NOT_INSTALLED!
-    snap_impish = runtime.switch_brain_lineage("impish_bloodmoon")
+    snap_impish = bloodmoon_runtime.get_state_snapshot()
     assert snap_impish["active_lineage"] == "impish_bloodmoon"
     assert snap_impish["rules_count"] == 2
     assert "Impish Bloodmoon" in snap_impish["active_checkpoint_label"]
-    assert runtime.left_brain is None
     assert snap_impish["left_brain_status"].startswith("IMPISH_CHECKPOINT_NOT_INSTALLED")
 
-    # Verify a chat turn in `impish_bloodmoon` mode NEVER calls `qwen_lb`!
+    # Verify a chat turn in `BloodmoonClockRuntime` NEVER touches `qwen_lb`!
     qwen_lb.last_traces.clear()
-    snap_chat = runtime.handle_chat_message("Testing Impish lineage isolation.", room="sanctuary")
+    snap_chat = bloodmoon_runtime.handle_chat_message("Testing Impish lineage isolation.")
     assert len(qwen_lb.last_traces) == 0
     chat_turn_id = int(snap_chat["chat_messages"][-1]["id"])
-    assert runtime._turn_records_by_id[chat_turn_id]["turn"].left_brain_calls == 0
-    assert snap_chat["chat_messages"][-1]["telemetry"]["spliced_trace"] == {}
+    assert bloodmoon_runtime._turn_records_by_id[chat_turn_id]["turn"].left_brain_calls == 0
 
-    # Forge a rule during REM Sleep while in `impish_bloodmoon` mode -> saves ONLY to `impish_dir`!
+    # Forge a rule during REM Sleep in `BloodmoonClockRuntime` -> saves ONLY to `impish_dir`!
     from lmft_architecture.dilemma_crucible import CRUCIBLE_STAGES
 
     stage = CRUCIBLE_STAGES["poetry_story"]
-    runtime.handle_crucible_dilemma(
+    bloodmoon_runtime.handle_crucible_dilemma(
         "poetry_story",
         stage["default_wave"],
         stage["default_structure"],
         harvest_for_sleep=True,
     )
-    snap_rem = runtime.handle_run_rem_sleep()
+    snap_rem = bloodmoon_runtime.handle_run_rem_sleep()
     assert snap_rem["rules_count"] > 2
     assert (impish_dir / "club_ruleset.json").exists()
-    assert not (schooled_dir / "club_ruleset.json").exists()
+    assert not (chess_dir / "club_ruleset.json").exists()
     verify_virgin_baseline_snapshot()
-
-    # Switch back to `schooled` -> restores `qwen_lb` and original schooled rule count
-    snap_back = runtime.switch_brain_lineage("schooled")
-    assert snap_back["active_lineage"] == "schooled"
-    assert snap_back["rules_count"] == schooled_rules_count
-    assert runtime.left_brain is qwen_lb
-    assert snap_back["left_brain_status"].startswith("READY")
 
     # Verify Patreon encrypted checkpoint bundle round-trip and wrong-passphrase rejection
     raw_ckpt = tmp_path / "raw_impish_ckpt"
@@ -237,7 +224,7 @@ def test_guardrail_4_app_lineage_selector_and_patreon_encryption(tmp_path: Path)
     assert unlocked_meta.hidden_size == 64
     assert unlocked_meta.callosum_status == UNSTEERED_BOOTSTRAP_STATUS
 
-    snap_unlocked = runtime.unlock_patreon_bundle("bloodmoon-secret-2026", enc_path=enc_file)
+    snap_unlocked = bloodmoon_runtime.unlock_patreon_bundle("bloodmoon-secret-2026", enc_path=enc_file)
     assert snap_unlocked["active_lineage"] == "impish_bloodmoon"
     assert (impish_ckpt_dir / "corpus_callosum_meta.json").exists()
     assert snap_unlocked["chat_messages"][-1]["role_label"] == "Patreon Bundle Unlocked"

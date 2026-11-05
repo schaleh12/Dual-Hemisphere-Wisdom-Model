@@ -72,3 +72,9 @@
 - **Context**: Needed a rule-generating dilemma farm in the Sanctuary pitting `Wave / Theory` against `Structure / Fact` across `1. Poetry <-> (Story-Telling)`, `2. Music <-> (Art)`, and `3. Philosophy <-> (Coding)`.
 - **Design Choice**: Built `CruciblePairedBridgeSensors` to score both slots through the 3 MiniLM bridges (with 25% RGB color-wheel math on `Art` and 25% `ast.parse` invariants on `Coding`), wired the Men of Culture shelf and context-bracing buttons into the Sanctuary, and queued Crucible dilemmas for REM Sleep.
 - **Result**: Verified by `test_dilemma_crucible_three_stages_context_bracing_and_rem_rule_forging`.
+
+
+## D054: Chess Kibitzer Grounding, UI/UX Polish, & Zero Canned Templates (`chess_kibitz_bridge.py`, 2026-11-04)
+- **Context**: Playtesting caught opening moves failing to settle in Gear 1, float telemetry leaking into the chess prompt, illegal move hallucinations (`Bf5+`, `Re8#`), and UI layout/scroll glitches.
+- **Design Choice**: Calibrated `VIRGIN_FOUNDATIONAL_RULES` and opening posture so standard openings (`1. e4 e5 2. Nf3 Bc5`) settle in Gear 1; added `build_natural_chess_scenario_prompt` and `verify_or_ground_chess_moves_in_reply`; and added board coordinates, `[Undo]`/`[Play AI Move]`, and scroll-preserving poll updates.
+- **Result**: Verified in `tests/test_chess_app.py`.

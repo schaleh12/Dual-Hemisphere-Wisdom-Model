@@ -1,8 +1,8 @@
-"""Build a portable GitHub Release zip bundle for the LMFT-Architecture desktop app (`build_release_bundle.py`).
+"""Build a portable GitHub Release zip bundle for the LMFT-Chess and LMFT-Bloodmoon desktop apps (`build_release_bundle.py`).
 
 Creates `dist/lmft-sanctuary-club-v0.1.0-win64.zip` containing:
-- `LMFT-Architecture.exe` (one-click Windows launcher)
-- `src/lmft_architecture/*.py` (all core runtime, right-brain, comma-splice, chess & sanctuary modules)
+- `LMFT-Chess.exe` & `LMFT-Bloodmoon.exe` (standalone Windows launchers)
+- `src/lmft_architecture/*.py` (all core runtime, right-brain, comma-splice, chess & bloodmoon modules)
 - `outputs/rem_sleep_consolidated_ruleset.json` & `outputs/continuous_tiered_ruleset.json`
 - `models/right_brain_bridges/` & `models/left_brain_lora_cycle2/` (when present on disk)
 """
@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-import sys
 import zipfile
 
 RELEASE_VERSION = "v0.1.0"
@@ -43,7 +42,7 @@ def build_release_zip(
     zip_path = out_dir / BUNDLE_NAME
 
     include_pairs: list[tuple[str, Path]] = []
-    for root_file in ("LMFT-Architecture.exe", "README.md"):
+    for root_file in ("LMFT-Chess.exe", "LMFT-Bloodmoon.exe", "README.md"):
         for base in (ws_root, arch_root):
             p = base / root_file
             if p.exists():

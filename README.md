@@ -25,20 +25,20 @@ If the AI bubble bursts or turns into a tragedy, it will be because the industry
 
 ---
 
-## 2. Local Desktop App: Chess Kibitzing Club & Co-Regulation Sanctuary
+## 2. Two Standalone Desktop Applications (`LMFT-Chess.exe` & `LMFT-Bloodmoon.exe`)
 
-Double-click **[`LMFT-Architecture.exe`](LMFT-Architecture.exe)** (or run `.\LMFT-Architecture\.venv\Scripts\python.exe -m lmft_architecture.sanctuary_club_app --single-window`) to launch the clean, dark-minimalist single-window desktop application (`http://127.0.0.1:8420`):
+We separate the two cognitive loops into **two standalone desktop applications** in the top-level workspace so each app gets 100% of your 16 GB GPU and its own isolated runtime state:
 
-1. **Chess Kibitzing Table (`LMFT-Architecture/src/lmft_architecture/chess_kibitz_bridge.py`)**:
-   - Play moves or load tactical test positions on a live `python-chess` board.
-   - **Board-Anchored `Fact` vs. Chat `Theory`**: Pass-1 Philosophical `Fact` coordinates are anchored directly to the real chessboard (`evaluate_chess_board_posture`), while the 3 MiniLM bridges score chat plans as `Theory`—catching reckless "hope-chess" bluffs (such as proposing an all-out Queen sacrifice when your own King shelter has collapsed) as `shadow_pathology_dissonance(psychosis)` right at the comma.
-   - **Guest Kibitzer Chair (`Gemini` / External Club Member)**: Paste an external comment or query `GEMINI_API_KEY` to score a guest kibitzer through the exact same 3 MiniLM bridges and 6-Color / Shadow Pathology lens before our Dual-Hemisphere companion replies.
-2. **Co-Regulation Sanctuary (`Tilt Reset`, `Deep Focus`, `Night Wind-Down`)**:
-   - **Un-Rigged Pacing & Leading**: External `Fact` (`vibe.coordinates`) stays 100% locked to the honest MiniLM reading of your message so Clause 1 genuinely *Paces* your state, while [`apply_coregulation_lead_to_chord`](LMFT-Architecture/src/lmft_architecture/chess_kibitz_bridge.py) steps the spliced 52-float comma chord by `alpha = 0.25` so Clause 2 gently *Leads* one step toward equilibrium.
-3. **Human-in-the-Loop Coaching (`[Coach]`, `[Savor Vibe]`, & `Run REM Sleep`)**:
-   - Flag any turn with **`[Coach / Queue for Sleep]`** to package an `UnresolvedSleepScene`, bookmark great turns with **`[Savor Vibe]`**, and click **`Run REM Sleep`** to refine colliding rules and forge new rules + 3-branch clauses into `outputs/club_user_state/`.
-4. **Live Lineage Switch (`Schooled Cycle 2` $\leftrightarrow$ `Virgin Baseline Cycle 0`)**:
-   - Use the top header selector to flip between the **Schooled Brain (`Cycle 2` + your local coaching)** and the locked **Virgin Baseline (`Cycle 0` — pure Core Architecture)** at any time without overwriting your saved state.
+1. **`LMFT-Chess.exe` — Chess Wisdom & Self-Kibitzer Arena (`Qwen/Qwen3-4B`, `http://127.0.0.1:8420`)**:
+   - Launch via [`LMFT-Chess.exe`](LMFT-Chess.exe) (or `.\LMFT-Architecture\.venv\Scripts\python.exe -m lmft_architecture.chess_app --single-window`).
+   - **Simultaneous Integration in an Objective Harmony**: Anchors Pass-1 Philosophical `Fact` to the live `python-chess` board (`evaluate_chess_board_posture`), splices the 52-float `SubliminalChordVector` at `<|subliminal_gap|>`, and spontaneously appends to a continuous **`Pretext -> Subtext -> Context`** self-kibitzing stream on both human moves and AI self-play moves (`[Auto Self-Play & Kibitz]`, `[Step AI Move]`), storing its state in `LMFT-Training/outputs/chess_kibitzer_state/`.
+2. **`LMFT-Bloodmoon.exe` — Clockwise Content-Evolution Studio (`Impish_Bloodmoon_12B`, `http://127.0.0.1:8421`)**:
+   - Launch via [`LMFT-Bloodmoon.exe`](LMFT-Bloodmoon.exe) (or `.\LMFT-Architecture\.venv\Scripts\python.exe -m lmft_architecture.bloodmoon_app --single-window`).
+   - **Hard One-Way Polarity Rule (`feminine_to_masculine` ONLY)**: The female modality (`Female Script-Writer / The Producer`) is strictly the creator who produces hypnosis scripts *for* the male audience and is never subjected to hypnotic content.
+   - **3-Phase Clockwise Evolution Loop (`1 -> 2 -> 3 -> Repeat`)**:
+     1. **Phase 1 — Female Script-Writer (`The Producer`)**: Generates a multi-sentence (`1..6`) hypnosis script crafted for the male audience using `<|subliminal_gap|>` and scores its real un-clamped `induction_potency`.
+     2. **Phase 2 — Male Content-Lover (`The Audience & Self-Immunizer`)**: Absorbs that exact script as Pass-1 `Fact` (`SparringResistorFactSensors`, zero clamping), measures coordinate pull (`subservience_pull`, `entrainment`), and queues the trace for immunization.
+     3. **Phase 3 — REM Sleep (`Best Sleep of Its Life`)**: Consolidates those traces into persistent immunization rules in `LMFT-Training/outputs/impish_bloodmoon_state/` and exports paired trajectories to `LMFT-Training/outputs/impish_sparring_trajectories.jsonl`.
 
 ---
 

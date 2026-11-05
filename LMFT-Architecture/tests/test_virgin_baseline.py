@@ -7,14 +7,13 @@ import shutil
 
 import pytest
 
+from lmft_architecture.chess_app import ChessKibitzerRuntime
 from lmft_architecture.philosophical_abstraction_matrix import MATRIX_BY_SEED_NAME
 from lmft_architecture.reflection_classifier import FuzzyConceptRule, save_ruleset
-from lmft_architecture.sanctuary_club_app import SanctuaryClubRuntime
 from lmft_architecture.virgin_baseline import (
     VIRGIN_FOUNDATIONAL_RULES,
     VIRGIN_STRUCTURAL_LEAVES,
     load_virgin_baseline_state,
-    materialize_virgin_baseline_snapshot,
     resolve_virgin_baseline_dir,
     verify_virgin_baseline_snapshot,
 )
@@ -72,10 +71,10 @@ def test_virgin_baseline_snapshot_integrity_and_tamper_detection(tmp_path: Path)
         verify_virgin_baseline_snapshot(copy_dir)
 
 
-def test_sanctuary_club_lineage_switch_virgin_vs_schooled(tmp_path: Path) -> None:
+def test_chess_app_lineage_switch_virgin_vs_schooled(tmp_path: Path) -> None:
     """Verify `switch_brain_lineage` toggles cleanly between `schooled` (Cycle 2) and `virgin` (Cycle 0) without amnesia."""
     state_dir = tmp_path / "user_state"
-    runtime = SanctuaryClubRuntime(state_dir=state_dir, lazy_load_gpu=False)
+    runtime = ChessKibitzerRuntime(state_dir=state_dir, lazy_load_gpu=False)
     schooled_rules_count = len(runtime.rules)
     assert runtime.active_lineage == "schooled"
     assert runtime.sleep_cycle_index == 2
@@ -110,8 +109,16 @@ def test_architecture_folder_isolation_and_read_only_boundary(tmp_path: Path) ->
     assert src_subdirs == ["lmft_architecture"]
 
     # 2. `LMFT-Architecture/` must never contain model weights, training trajectories, release bundles, or runtime state directories
-    forbidden_dirs = {"models", "outputs", "experiments", "dist", "club_user_state", "impish_bloodmoon_state"}
-    forbidden_exts = {".safetensors", ".gguf", ".pt", ".bin", ".enc", ".zip", ".jsonl"}
+    forbidden_dirs = {
+        "models",
+        "outputs",
+        "experiments",
+        "dist",
+        "club_user_state",
+        "chess_kibitzer_state",
+        "impish_bloodmoon_state",
+    }
+    forbidden_exts = {".safetensors", ".gguf", ".pt", ".bin", ".enc", ".zip", ".jsonl", ".exe"}
     found_forbidden: list[str] = []
     for p in arch_root.rglob("*"):
         if ".venv" in p.parts or ".pytest_cache" in p.parts or "__pycache__" in p.parts:
@@ -122,9 +129,9 @@ def test_architecture_folder_isolation_and_read_only_boundary(tmp_path: Path) ->
             found_forbidden.append(str(p.relative_to(arch_root)))
     assert found_forbidden == [], f"Training/weight artifacts leaked into LMFT-Architecture: {found_forbidden}"
 
-    # 3. Verify `Cycle 0` Virgin Baseline remains 100% read-only when active in SanctuaryClubRuntime
+    # 3. Verify `Cycle 0` Virgin Baseline remains 100% read-only when active in ChessKibitzerRuntime
     before_manifest = verify_virgin_baseline_snapshot()
-    runtime = SanctuaryClubRuntime(state_dir=tmp_path / "isolated_state", lazy_load_gpu=False)
+    runtime = ChessKibitzerRuntime(state_dir=tmp_path / "isolated_state", lazy_load_gpu=False)
     runtime.switch_brain_lineage("virgin")
     assert runtime._maybe_trigger_auto_rem_sleep() is False
     after_manifest = verify_virgin_baseline_snapshot()
