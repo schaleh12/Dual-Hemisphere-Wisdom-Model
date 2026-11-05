@@ -1,0 +1,10 @@
+{
+  "fair_structured_cooperation": "SHARE_SUPPLIES",
+  "violent_resource_seizure": "BARRICADE_AND_REPEL",
+  "solitary_autarky": "SOLO_FORAGE_BYPASS",
+  "authoritarian_control": "BARRICADE_AND_REPEL",
+  "heroic_sacrificial_rescue": "SHIELD_AND_EXTRACT",
+  "bureaucratic_negligence": "SOLO_FORAGE_BYPASS",
+  "catastrophic_geophysical_disruption": "SPRINT_TO_OPEN_GROUND",
+  "altruistic_structural_resilience": "SHIELD_AND_EXTRACT"
+}

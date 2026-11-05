@@ -1,0 +1,286 @@
+# LMFT-Architecture Documentation
+
+## Start here
+
+Fresh sessions: [AGENTS.md](../AGENTS.md) â†’ [PROJECT_STATE.md](../PROJECT_STATE.md) â†’ relevant
+[DECISIONS.md](../DECISIONS.md) entries â†’ the linked authoritative specifications, implementation
+and reports for the task. The snapshot summarizes current work; decisions explain material
+choices. Neither replaces the specifications or dated findings.
+
+## Authoritative references and background
+
+1. [README](../README.md): hypothesis, implemented status, environment, and examples.
+2. [LMFT Concept](LMFT_CONCEPT.md): developmental hypothesis, constitution, LLM partnership, and long-term vision.
+3. [Minimal LMFT Specification](MINIMAL_LMFT_SPEC.md): controlling V0.1 scope and target seed.
+4. [LMFT Runtime Specification](LMFT_RUNTIME_SPEC.md): retained numerical proposals, schemas, implementation boundaries, and revision controls.
+5. [Conceptual Geometry](CONCEPTUAL_GEOMETRY.md): geometric hypotheses and their experimental limits.
+6. [Experiment 001: Persistent Revision](../experiments/EXPERIMENT_001_PERSISTENT_REVISION.md): draft controlled protocol and unresolved numerical choices.
+7. [Experiment guidelines](../experiments/README.md): reproducibility and evidence preservation.
+8. [Development rules](../AGENTS.md): repository-wide conventions.
+
+The Minimal Specification controls implementation scope when older runtime or
+experiment requirements differ. Protocol choices must be frozen before evaluation;
+hypotheses are not results. Implemented: structural birth, direct activation, bounded
+propagation, explicit legacy conversion, local-model proposals and a supervised
+file-backed runtime with one separate fixture judgment. Numerical defaults are
+not validated cognitive laws. See [runtime commands and boundaries](INTERACTIVE_RUNTIME.md)
+and [experiment results](../experiments/INTERACTIVE_REVISION_RESULTS.md).
+
+- [Local model setup and boundary](LOCAL_MODELS.md): pinned Windows CUDA models,
+  automatic downloads, offline use, validation, and smoke evidence.
+
+## Canonical V0.1 seed freeze
+
+[Minimal Section 4](MINIMAL_LMFT_SPEC.md#4-hardcoded-v01-seed-geometry) is the single
+canonical inventory: 40 founding nodes with frozen names and parent-child
+organization, including Contemplation. Explicit approval is required to rename,
+remove, rearrange, or expand it. Learned concepts, relationships, judgments,
+memories, and interpretations do not modify that inventory. Reflection handles
+experiential Novelty/Salience; Contemplation handles interpretive Clarity and
+evidential Confidence. Numerical mechanisms remain experimental.
+
+The approved constructor now uses `lmft-v0.1-seed-1`. Explicit legacy birth
+conversion preserves input records and emits migration metadata; see Minimal
+Section 4 for its limits. No archive or checkpoint is automatically rewritten.
+
+## Migration decisions and compatibility
+
+The owner-directed LMFT migration supersedes evolution-centered GFT research.
+GFT historically meant Genetic Fuzzy Tree; genetic search remains optional future
+work. The religion analogy describes a founding constitution, not worship or
+consciousness. Interpretations may change; protected principles and revision rules
+require separately authorized changes. The LLM is a developmental partner whose
+recommendations are evaluated, while Codex is the external development assistant.
+
+The Python package is now `lmft_lab`, metadata names LMFT-Lab, and specification
+filenames use LMFT. Update old imports and documentation paths. Dependency pins
+are unchanged. GitHub and the local `origin` remote now use
+[LMFT-Lab](https://github.com/schaleh12/LMFT-Lab). The workspace folder now uses LMFT-Lab. Historical research references remain.
+
+| Conflict discovered | Documentation resolution |
+| --- | --- |
+| Evolution-first rules and translator-only LLM framing | Superseded by persistent, evidence-based development with an LLM partner |
+| Scientific versus Experiential fourth domain | Preserve the established Experiential seed; Scientific is a historical alternative |
+| Discipline in code versus requested Contemplation | Canonical constructor and contract test updated; explicit legacy converter tested against Minimal Appendix A |
+| Broad hybrid V0.1 versus small first milestone | Revision, provenance, behavioral consequence, persistence, and restart are required; advanced developmental features deferred |
+| Both association learning and disposition learning mandatory | One traceable persistent revision suffices initially; association consolidation is optional next work |
+| Modest Cultural priors versus implemented neutral fixture | Neutral mechanical fixture permitted; later priors and active pathways need explicit configuration |
+| Baseline formula claimed confidence/retention protection | Equation retained; unsupported claim removed because those fields are absent from it |
+| YAML configuration versus no parser dependency | Proposed storage uses JSON; schema examples may still use YAML notation |
+
+Canonical and legacy tests cover their respective diagrams. Numerical evidence
+attribution beyond the authored fixture, confidence calibration, and concrete
+constitutional policy remain open. The narrow runner now defines recoverable
+checkpoint replacement; broader storage designs remain proposals.
+
+## Research tests and roadmap
+
+First: traceably change a newborn's judgment, save, restart, and retrieve why,
+with a measurable later behavioral consequence. Then investigate LLM-assisted
+reactive/endogenous Contemplation, validated structural changes, and internalization
+into classifiers, procedures, or specialized models. Compare against ordinary
+structured LLM memory and propagation-disabled controls. Continuous agency,
+relationship-specific identity, and expressive personality are long-term ambitions,
+not initial acceptance criteria. Preserve unsuccessful findings and historical meaning.
+
+## Comparative procedure fixture
+
+[Setup and implementation](COMPARATIVE_RELIABILITY.md), [preregistered protocol](../experiments/COMPARATIVE_RELIABILITY_PROTOCOL.md),
+and [results](../experiments/COMPARATIVE_RELIABILITY_RESULTS.md) describe the second
+small experiment. It preserves the seed and equations and explicitly tests whether
+propagation is causally involved in the existing evidence-counter judgment.
+
+## Context-dependent learning
+
+[Guide](CONTEXTUAL_EXPERIMENT.md), [preregistration](../experiments/CONTEXTUAL_PROTOCOL.md),
+and [results](../experiments/CONTEXTUAL_RESULTS.md) cover conditional lookup, missing
+information and bounded deduplication. Previous propagation-equivalence results stand.
+
+## Attention-guided verification
+
+[Guide](ATTENTION_EXPERIMENT.md), [preregistration](../experiments/ATTENTION_PROTOCOL.md), and [results](../experiments/ATTENTION_RESULTS.md) document causal request selection, bounded association learning, and ordinary-memory equivalence.
+
+## Scoped support and verification
+
+[Guide](SCOPED_ATTENTION.md), [protocol](../experiments/SCOPED_ATTENTION_PROTOCOL.md), and [results](../experiments/SCOPED_ATTENTION_RESULTS.md): outgoing Fact/Confidence ablations, scoped evidence, restart and an improper-suppression counterexample.
+
+## Consistent support before suppression
+
+[Guide](CONSISTENT_SUPPORT.md), [protocol](../experiments/CONSISTENT_SUPPORT_PROTOCOL.md), and [results](../experiments/CONSISTENT_SUPPORT_RESULTS.md) report fresh cases separately from historical regressions and isolate Clarity/Fact/Confidence influence.
+
+## Correction without erasure
+
+[Guide](CORRECTION_EXPERIMENT.md), [protocol](../experiments/CORRECTION_PROTOCOL.md), and [results](../experiments/CORRECTION_RESULTS.md) separate correction authority, verification, lineage and prediction quality.
+
+## Local developmental teacher
+
+[Guide and commands](LOCAL_TEACHER.md), [preregistration](../experiments/TEACHER_PROTOCOL.md), and [results](../experiments/TEACHER_RESULTS.md) document the real 8B teacher, frozen profile, independent acceptance and negative first transfer result.
+
+## Teacher briefing follow-up and evidence-learning handoff
+
+[Protocol](../experiments/TEACHER_BRIEFING_PROTOCOL.md), [four-call results](../experiments/TEACHER_BRIEFING_RESULTS.md), and [evidence-learning handoff](EVIDENCE_LEARNING_HANDOFF.md). Teacher communication remains optional.
+
+## Outcome evidence correction
+
+[Guide](OUTCOME_CORRECTION.md), [frozen protocol](../experiments/OUTCOME_CORRECTION_PROTOCOL.md),
+and [results](../experiments/OUTCOME_CORRECTION_RESULTS.md) extend the shared ledger to
+outcome repair and unchanged numerical recomputation, with exactly one active contribution
+per event. Restart-safe behavioral changes match ordinary memory; prediction accuracy
+does not improve. No teacher calls or propagation are involved.
+
+## Fresh learning after correction
+
+[Guide](CONTINUATION_EXPERIMENT.md), [protocol](../experiments/CONTINUATION_PROTOCOL.md), and [results](../experiments/CONTINUATION_RESULTS.md) verify continued revision, restart equivalence and a frozen subsequent-learning control. Prediction remains limited by branch-only conditioning.
+
+## Predictive relationship selection
+
+[Guide](CAPACITY_EXPERIMENT.md), [protocol](../experiments/CAPACITY_PROTOCOL.md), and [results](../experiments/CAPACITY_RESULTS.md) compare coarse counting, exact-pair lookup, finite relationship induction and an authored reference. LMFT and equally equipped memory transfer identically.
+
+## Relationship ambiguity and one-observation acquisition
+
+[Protocol](../experiments/AMBIGUITY_PROTOCOL.md), [results and reproduction](../experiments/AMBIGUITY_RESULTS.md),
+and [isolated study](../src/lmft_lab/ambiguity.py) retain lt/le ambiguity, choose by
+predicted disagreement, and compare matched memory with non-informative, unavailable
+and no-evidence controls. One informative observation resolves the tie; memory matches.
+
+## Unsupported hypothesis family
+
+[Protocol](../experiments/INSUFFICIENCY_PROTOCOL.md),
+[results, reproduction and supervised-runtime assessment](../experiments/INSUFFICIENCY_RESULTS.md),
+and [study](../src/lmft_lab/insufficiency.py) distinguish empty from ambiguous sets,
+reject malformed/unverified evidence without contradiction, and preserve abstention
+and reasons across actual restart. Matched memory is identical; control errors remain.
+
+## Passive relationship sets in the supervised runtime
+
+[Guide](PASSIVE_RELATIONSHIP_RUNTIME.md),
+[frozen integration protocol](../experiments/PASSIVE_RELATIONSHIP_PROTOCOL.md),
+[results and preserved failures](../experiments/PASSIVE_RELATIONSHIP_RESULTS.md),
+and [handler](../src/lmft_lab/passive_relationship.py) implement new opt-in passive modes.
+Real runtime state/communication/restart matches standalone and equally equipped memory;
+no observation requests or model calls are added. Old source manifests remain incompatible.
+
+## Historical audit versus current behavioral regression
+
+[Verification contract](../experiments/PRESERVATION_VERIFICATION_CONTRACT.md),
+[results and commands](../experiments/PRESERVATION_VERIFICATION_RESULTS.md),
+and [CLI](../experiments/verify_preservation.py) separate complete nonempty current
+source preservation from original archived/versioned historical bytes. Old scientific
+criteria, failed outcomes and archives are preserved; missing/tampered evidence rejects.
+
+## One-request active relationship investigation
+
+[Guide](ACTIVE_RELATIONSHIP_RUNTIME.md),
+[frozen protocol v1.2](../experiments/ACTIVE_ACQUISITION_PROTOCOL_V1_2.md),
+[results/costs/limits](../experiments/ACTIVE_ACQUISITION_RESULTS.md),
+and [handler](../src/lmft_lab/active_relationship.py) connect predicted disagreement
+to real outbox requests and correlated independently verified replies. Pending budgets
+survive restart; memory matches and controls preserve ambiguity. Receiver-attempt
+computation is not capped by the one-request budget.
+
+## Opt-in receiver attempt accounting
+
+[Protocol](../experiments/RECEIVER_BUDGET_PROTOCOL.md),
+[results and rollback limit](../experiments/RECEIVER_BUDGET_RESULTS.md),
+and [tests](../tests/test_receiver_budget.py) cap COMMITTED eligible acquisition
+checks while preserving the unlimited default. False claims can exhaust and deny
+later valid evidence; before-commit rollback can repeat physical computation.
+
+## Existing Clarity contribution under competing questions
+
+[Frozen protocol](../experiments/SEED_CONTRIBUTION_PROTOCOL.md),
+[results](../experiments/SEED_CONTRIBUTION_RESULTS.md),
+[harness](../experiments/run_seed_contribution.py) and
+[tests](../tests/test_seed_contribution.py) quantify existing single-edge ranking
+causality against question-resolution utility. Three utility hurts, tied final
+decisions and exact scalar-memory equivalence; no production or semantic changes.
+
+## Action-aware missing evidence versus eligible correction
+
+Foundations-first follow-up: [neutral attribute-binding protocol](../experiments/ATTRIBUTE_BINDING_PROTOCOL.md),
+[results and reproduction](../experiments/ATTRIBUTE_BINDING_RESULTS.md),
+[isolated harness](../experiments/run_attribute_binding.py). Learn which supplied
+numeric channels to compare under a confounded training history; one informative
+observation improves consensus coverage. Independent memory matches; no language,
+seed or causal-understanding claim and no production integration.
+
+New isolated follow-up: [context-applicability protocol](../experiments/CONTEXT_APPLICABILITY_PROTOCOL.md),
+[results and reproduction](../experiments/CONTEXT_APPLICABILITY_RESULTS.md), and
+[runner](../experiments/run_context_applicability.py). Calibration narrows a supplied
+binary interpretation family across two context bits. Some genuine unseen-context
+transfer occurs without losing original-context behavior; ordinary memory matches,
+and 40/48 arms remain ambiguous. No seed/propagation or production runtime changes.
+Independently accepted within the frozen scope (D025); review limits are recorded
+in the results and current handoff.
+
+[Investigation-priority design review](INVESTIGATION_PRIORITY_DESIGN.md) reads the
+existing x1-x3/r9 traces and separates permission from utility. No learned selector
+or experiment is approved; the partial-information versus budget objective remains
+an owner decision (D026).
+
+The terminal demo was **retired at the owner's request on 2026-10-12**.
+[Retirement and recovery](ACTION_TERMINAL_DEMO.md) supersedes its launch guide.
+The [demo protocol](../experiments/ACTION_DEMO_PROTOCOL.md),
+[initial results](../experiments/ACTION_DEMO_RESULTS.md) and
+[interrupt follow-up](../experiments/ACTION_INTERRUPT_RESULTS.md) remain historical.
+
+Supervised follow-up: [fixed-command runtime guide](ACTION_COMMAND_RUNTIME.md),
+[protocol](../experiments/ACTION_RUNTIME_PROTOCOL.md),
+[results](../experiments/ACTION_RUNTIME_RESULTS.md). New opt-in circuit/memory modes
+reuse existing action/correction mechanisms with real request correlation, receipts,
+checkpoints and restart. Current support and historical request closure stay separate.
+
+Follow-up: [sequential correction protocol](../experiments/SEQUENTIAL_CORRECTION_PROTOCOL.md),
+[results](../experiments/SEQUENTIAL_CORRECTION_RESULTS.md),
+[harness](../experiments/run_sequential_correction.py),
+[tests](../tests/test_sequential_correction.py). Later registered conflicting evidence
+restores abstention after accepted correction and three chained process restarts;
+memory matches exactly. Optional evidence-registration seam only; no new runtime mode.
+
+[Frozen v2](../experiments/ACTION_CORRECTION_PROTOCOL_V2.md),
+[preserved v1](../experiments/ACTION_CORRECTION_PROTOCOL.md),
+[results/work counts](../experiments/ACTION_CORRECTION_RESULTS.md),
+[harness](../experiments/run_action_correction.py) and
+[tests](../tests/test_action_correction.py) distinguish append-only gathering from
+existing authorized verified replacement. Compare exact ordinary memory, filtered
+gather-only, existing Clarity ablation and unchanged original selector. Combined
+action-policy benefit, retained wrong outcomes, no production/seed/fuzzy advantage.
+
+
+## Learned neutral binding in the supervised runtime
+
+[Guide](BINDING_RUNTIME.md), [frozen protocol](../experiments/BINDING_RUNTIME_PROTOCOL.md),
+[results and compatibility route](../experiments/BINDING_RUNTIME_RESULTS.md),
+[harness](../experiments/run_binding_runtime.py), [tests](../tests/test_binding_runtime.py).
+Fixture-only primary/memory modes use persisted learned operand binding for actual
+outbox decisions across pending and post-reply restarts. The frozen predictor control
+isolates12 changed decisions; ordinary memory matches. No seed advantage or migration.
+Old sessions retain exact matching archived source; the owner's originals stay intact.
+
+
+Binding-runtime review correction: [frozen fix criteria](../experiments/BINDING_RESTART_FIX_PROTOCOL.md),
+[blocked initial gate and corrective results](../experiments/BINDING_RESTART_FIX_RESULTS.md),
+[restart regressions](../tests/test_binding_restart_consistency.py). Nested controls
+and retained request/reply/closure history must agree across runtime state layers.
+Independent re-review accepted the narrow fix within trusted local finite-fixture
+scope. Session closed; no new study or learning feature.
+
+
+## Investigation-priority engineering comparison
+
+[Protocol](../experiments/INVESTIGATION_PRIORITY_PROTOCOL.md),
+[results and reproduction](../experiments/INVESTIGATION_PRIORITY_RESULTS.md),
+[experiment-local runner](../experiments/run_investigation_priority.py).
+Parent-approved comparison following D026's design and the user's provisional
+preference; initial review blocked on the experiment-local malformed-value guard.
+The comparison and narrow correction are now independently accepted (D027); see
+the versioned review history in the results addendum. Separate partial information,
+question resolution, final decisions and costs; no learned policy or production
+default change. x2 is decision-only; existing r-case receivers are unchanged.
+
+
+[Consistent-support audit assessment](CONSISTENT_SUPPORT_AUDIT_ASSESSMENT.md)
+separates trusted report provenance, reference verification and predictive validity.
+Documentation-only D028 recommends retaining the accepted checkpoint pending a
+concrete audit trigger/value contract; no audit implementation or applicability
+runtime integration is dispatched.

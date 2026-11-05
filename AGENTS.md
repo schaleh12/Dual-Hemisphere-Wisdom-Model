@@ -1,4 +1,4 @@
-# LMFT-Lab Development Rules
+# LMFT-Architecture Development Rules
 
 These rules apply throughout this repository.
 

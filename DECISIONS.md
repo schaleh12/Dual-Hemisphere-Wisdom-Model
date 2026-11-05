@@ -1,4 +1,4 @@
-# LMFT-Lab — Design Decisions (Rolling 5-Decision Window)
+# LMFT-Architecture — Design Decisions (Rolling 5-Decision Window)
 
 *(Keep only the 5 most recent decisions here, under 80 lines AND 5,000 characters in plain English. Earlier decisions `D001–D053` are archived in `docs/archive/`.)*
 

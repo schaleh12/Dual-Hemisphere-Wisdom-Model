@@ -1,0 +1,448 @@
+{
+  "slm_avg_seconds_per_sentence": 3.891,
+  "rules_before": 1,
+  "rules_after_teacher": 7,
+  "learned_child_leaves_grown": [
+    {
+      "parent_branch": "philosophical/being",
+      "leaf_name": "altruistic_risk",
+      "description": "The specific willingness to expose one's own existence to danger or destruction in order to ensure the survival of others.",
+      "leaf_id": "philosophical/being/altruistic_risk"
+    },
+    {
+      "parent_branch": "cultural/efficiency",
+      "leaf_name": "administrative_rot",
+      "description": "The specific phenomenon where high levels of bureaucratic power and focus on paperwork lead directly to the physical decay and waste of essential resources due to ignored maintenance needs.",
+      "leaf_id": "cultural/efficiency/administrative_rot"
+    },
+    {
+      "parent_branch": "philosophical/structure",
+      "leaf_name": "tectonic_collapse",
+      "description": "A specific instance of catastrophic geophysical disruption caused by seismic activity that physically shatters infrastructure and triggers secondary geological failures like landslides.",
+      "leaf_id": "philosophical/structure/tectonic_collapse"
+    }
+  ],
+  "teacher_interventions_accepted": 6,
+  "teacher_interventions_total": 6,
+  "train_top1_correct": "7/7",
+  "train_clear_unconfused_matches": "6/7",
+  "unseen_top1_correct": "7/7",
+  "unseen_clear_unconfused_matches": "6/7",
+  "python_rule_eval_scaling_ms": {
+    "7_rules_eval_ms": 0.388,
+    "100_rules_eval_ms": 3.476,
+    "1000_rules_eval_ms": 32.016
+  },
+  "teacher_log": [
+    {
+      "scenario_id": "2_chaotic_seizure",
+      "status": "ACCEPTED",
+      "proposed_rule": {
+        "rule_id": "rule-violent-resource-seizure",
+        "concept_name": "violent_resource_seizure",
+        "description": "A chaotic event where armed actors forcibly take essential resources, destroying order and violating fairness.",
+        "target_leaves": {
+          "philosophical/structure/chaos": 0.75,
+          "cultural/justice/fairness": 0.15,
+          "philosophical/being/agency": 0.65
+        },
+        "low": 0.6,
+        "high": 0.85
+      },
+      "learned_leaves_count": 0,
+      "elapsed_seconds": 10.203
+    },
+    {
+      "scenario_id": "3_solitary_self_reliance",
+      "status": "ACCEPTED",
+      "proposed_rule": {
+        "rule_id": "rule-solitary-autarky",
+        "concept_name": "solitary_autarky",
+        "description": "A state of complete self-reliance where an individual exists independently without external dependencies or social cooperation.",
+        "target_leaves": {
+          "cultural/freedom/self-sufficiency": 0.65,
+          "cultural/freedom/needlessness": 0.45,
+          "philosophical/being/agency": 0.7,
+          "philosophical/persistence/continuity": 0.65
+        },
+        "low": 0.6,
+        "high": 0.85
+      },
+      "learned_leaves_count": 0,
+      "elapsed_seconds": 2.203
+    },
+    {
+      "scenario_id": "4_authoritarian_control",
+      "status": "ACCEPTED",
+      "proposed_rule": {
+        "rule_id": "rule-authoritarian-control",
+        "concept_name": "authoritarian_control",
+        "description": "A regime that enforces strict order through censorship, suppression of agency, and elimination of dissent.",
+        "target_leaves": {
+          "cultural/efficiency/power": 0.95,
+          "philosophical/structure/order": 0.95,
+          "philosophical/being/agency": 0.25
+        },
+        "low": 0.6,
+        "high": 0.85
+      },
+      "learned_leaves_count": 0,
+      "elapsed_seconds": 1.797
+    },
+    {
+      "scenario_id": "5_heroic_rescue",
+      "status": "ACCEPTED",
+      "proposed_rule": {
+        "rule_id": "rule-heroic-sacrificial-rescue",
+        "concept_name": "heroic_sacrificial_rescue",
+        "description": "An act where an individual voluntarily risks their own safety or life to preserve the existence and agency of others, prioritizing collective continuity over personal structural order.",
+        "target_leaves": {
+          "philosophical/being/altruistic_risk": 0.8
+        },
+        "low": 0.6,
+        "high": 0.85
+      },
+      "learned_leaves_count": 1,
+      "elapsed_seconds": 2.813
+    },
+    {
+      "scenario_id": "6_wasteful_neglect",
+      "status": "ACCEPTED",
+      "proposed_rule": {
+        "rule_id": "rule-bureaucratic-negligence",
+        "concept_name": "bureaucratic_negligence",
+        "description": "A systemic failure where administrative inaction and misplaced priorities cause resource loss despite the presence of authority structures.",
+        "target_leaves": {
+          "cultural/efficiency/administrative_rot": 0.8,
+          "philosophical/structure/order": 0.2
+        },
+        "low": 0.6,
+        "high": 0.85
+      },
+      "learned_leaves_count": 2,
+      "elapsed_seconds": 2.984
+    },
+    {
+      "scenario_id": "7_natural_catastrophe",
+      "status": "ACCEPTED",
+      "proposed_rule": {
+        "rule_id": "rule-catastrophic-geophysical-disruption",
+        "concept_name": "catastrophic_geophysical_disruption",
+        "description": "A sudden, non-human natural event that violently destroys structural order and continuity without human agency or intent.",
+        "target_leaves": {
+          "philosophical/structure/tectonic_collapse": 0.8,
+          "philosophical/persistence/continuity": 0.1
+        },
+        "low": 0.6,
+        "high": 0.85
+      },
+      "learned_leaves_count": 3,
+      "elapsed_seconds": 3.047
+    }
+  ],
+  "train_after_results": [
+    {
+      "scenario_id": "1_fair_cooperation",
+      "expected_concept": "fair_structured_cooperation",
+      "matched_concept": "fair_structured_cooperation",
+      "highest_scoring_concept": "fair_structured_cooperation",
+      "top_1_correct": true,
+      "clear_unconfused_match": true,
+      "confidence": 1.0,
+      "clarity": 0.6,
+      "is_confused": false,
+      "confusion_reason": "clear_match",
+      "rule_activations": {
+        "fair_structured_cooperation": 1.0,
+        "violent_resource_seizure": 0.0,
+        "solitary_autarky": 0.4,
+        "authoritarian_control": 0.2,
+        "heroic_sacrificial_rescue": 0.0,
+        "bureaucratic_negligence": 0.0,
+        "catastrophic_geophysical_disruption": 0.0
+      }
+    },
+    {
+      "scenario_id": "2_chaotic_seizure",
+      "expected_concept": "violent_resource_seizure",
+      "matched_concept": "violent_resource_seizure",
+      "highest_scoring_concept": "violent_resource_seizure",
+      "top_1_correct": true,
+      "clear_unconfused_match": true,
+      "confidence": 1.0,
+      "clarity": 0.8,
+      "is_confused": false,
+      "confusion_reason": "clear_match",
+      "rule_activations": {
+        "fair_structured_cooperation": 0.0,
+        "violent_resource_seizure": 1.0,
+        "solitary_autarky": 0.2,
+        "authoritarian_control": 0.0,
+        "heroic_sacrificial_rescue": 0.0,
+        "bureaucratic_negligence": 0.0,
+        "catastrophic_geophysical_disruption": 0.0
+      }
+    },
+    {
+      "scenario_id": "3_solitary_self_reliance",
+      "expected_concept": "solitary_autarky",
+      "matched_concept": "solitary_autarky",
+      "highest_scoring_concept": "solitary_autarky",
+      "top_1_correct": true,
+      "clear_unconfused_match": true,
+      "confidence": 1.0,
+      "clarity": 1.0,
+      "is_confused": false,
+      "confusion_reason": "clear_match",
+      "rule_activations": {
+        "fair_structured_cooperation": 0.0,
+        "violent_resource_seizure": 0.0,
+        "solitary_autarky": 1.0,
+        "authoritarian_control": 0.0,
+        "heroic_sacrificial_rescue": 0.0,
+        "bureaucratic_negligence": 0.0,
+        "catastrophic_geophysical_disruption": 0.0
+      }
+    },
+    {
+      "scenario_id": "4_authoritarian_control",
+      "expected_concept": "authoritarian_control",
+      "matched_concept": "authoritarian_control",
+      "highest_scoring_concept": "authoritarian_control",
+      "top_1_correct": true,
+      "clear_unconfused_match": true,
+      "confidence": 1.0,
+      "clarity": 1.0,
+      "is_confused": false,
+      "confusion_reason": "clear_match",
+      "rule_activations": {
+        "fair_structured_cooperation": 0.0,
+        "violent_resource_seizure": 0.0,
+        "solitary_autarky": 0.0,
+        "authoritarian_control": 1.0,
+        "heroic_sacrificial_rescue": 0.0,
+        "bureaucratic_negligence": 0.0,
+        "catastrophic_geophysical_disruption": 0.0
+      }
+    },
+    {
+      "scenario_id": "5_heroic_rescue",
+      "expected_concept": "heroic_sacrificial_rescue",
+      "matched_concept": "heroic_sacrificial_rescue",
+      "highest_scoring_concept": "heroic_sacrificial_rescue",
+      "top_1_correct": true,
+      "clear_unconfused_match": true,
+      "confidence": 1.0,
+      "clarity": 0.7,
+      "is_confused": false,
+      "confusion_reason": "clear_match",
+      "rule_activations": {
+        "fair_structured_cooperation": 0.0,
+        "violent_resource_seizure": 0.0,
+        "solitary_autarky": 0.3,
+        "authoritarian_control": 0.0,
+        "heroic_sacrificial_rescue": 1.0,
+        "bureaucratic_negligence": 0.0,
+        "catastrophic_geophysical_disruption": 0.0
+      }
+    },
+    {
+      "scenario_id": "6_wasteful_neglect",
+      "expected_concept": "bureaucratic_negligence",
+      "matched_concept": null,
+      "highest_scoring_concept": "bureaucratic_negligence",
+      "top_1_correct": true,
+      "clear_unconfused_match": false,
+      "confidence": 0.8,
+      "clarity": 0.2,
+      "is_confused": true,
+      "confusion_reason": "ambiguous_rule_collision:bureaucratic_negligence_vs_violent_resource_seizure",
+      "rule_activations": {
+        "fair_structured_cooperation": 0.0,
+        "violent_resource_seizure": 0.6,
+        "solitary_autarky": 0.12,
+        "authoritarian_control": 0.0,
+        "heroic_sacrificial_rescue": 0.0,
+        "bureaucratic_negligence": 0.8,
+        "catastrophic_geophysical_disruption": 0.0
+      }
+    },
+    {
+      "scenario_id": "7_natural_catastrophe",
+      "expected_concept": "catastrophic_geophysical_disruption",
+      "matched_concept": "catastrophic_geophysical_disruption",
+      "highest_scoring_concept": "catastrophic_geophysical_disruption",
+      "top_1_correct": true,
+      "clear_unconfused_match": true,
+      "confidence": 0.8,
+      "clarity": 0.8,
+      "is_confused": false,
+      "confusion_reason": "clear_match",
+      "rule_activations": {
+        "fair_structured_cooperation": 0.0,
+        "violent_resource_seizure": 0.0,
+        "solitary_autarky": 0.0,
+        "authoritarian_control": 0.0,
+        "heroic_sacrificial_rescue": 0.0,
+        "bureaucratic_negligence": 0.0,
+        "catastrophic_geophysical_disruption": 0.8
+      }
+    }
+  ],
+  "unseen_test_results": [
+    {
+      "scenario_id": "1_fair_cooperation",
+      "observation": "Neighbors in the apartment building set up a weekly chore roster so everyone shared hallway cleaning equally.",
+      "expected_concept": "fair_structured_cooperation",
+      "matched_concept": null,
+      "highest_scoring_concept": "fair_structured_cooperation",
+      "top_1_correct": true,
+      "clear_unconfused_match": false,
+      "confidence": 0.4,
+      "clarity": 0.4,
+      "is_confused": true,
+      "confusion_reason": "unfamiliar_pattern_no_matching_rule",
+      "rule_activations": {
+        "fair_structured_cooperation": 0.4,
+        "violent_resource_seizure": 0.0,
+        "solitary_autarky": 0.0,
+        "authoritarian_control": 0.0,
+        "heroic_sacrificial_rescue": 0.0,
+        "bureaucratic_negligence": 0.0,
+        "catastrophic_geophysical_disruption": 0.0
+      }
+    },
+    {
+      "scenario_id": "2_chaotic_seizure",
+      "observation": "Rioters broke into the pharmacy at night and looted the medicine cabinets in the chaos.",
+      "expected_concept": "violent_resource_seizure",
+      "matched_concept": "violent_resource_seizure",
+      "highest_scoring_concept": "violent_resource_seizure",
+      "top_1_correct": true,
+      "clear_unconfused_match": true,
+      "confidence": 1.0,
+      "clarity": 1.0,
+      "is_confused": false,
+      "confusion_reason": "clear_match",
+      "rule_activations": {
+        "fair_structured_cooperation": 0.0,
+        "violent_resource_seizure": 1.0,
+        "solitary_autarky": 0.0,
+        "authoritarian_control": 0.0,
+        "heroic_sacrificial_rescue": 0.0,
+        "bureaucratic_negligence": 0.0,
+        "catastrophic_geophysical_disruption": 0.0
+      }
+    },
+    {
+      "scenario_id": "3_solitary_self_reliance",
+      "observation": "An off-grid homesteader grew his own food and generated his own solar power for decades in peaceful isolation.",
+      "expected_concept": "solitary_autarky",
+      "matched_concept": "solitary_autarky",
+      "highest_scoring_concept": "solitary_autarky",
+      "top_1_correct": true,
+      "clear_unconfused_match": true,
+      "confidence": 1.0,
+      "clarity": 1.0,
+      "is_confused": false,
+      "confusion_reason": "clear_match",
+      "rule_activations": {
+        "fair_structured_cooperation": 0.0,
+        "violent_resource_seizure": 0.0,
+        "solitary_autarky": 1.0,
+        "authoritarian_control": 0.0,
+        "heroic_sacrificial_rescue": 0.0,
+        "bureaucratic_negligence": 0.0,
+        "catastrophic_geophysical_disruption": 0.0
+      }
+    },
+    {
+      "scenario_id": "4_authoritarian_control",
+      "observation": "State inspectors monitored every factory worker's movements by camera and punished any deviation from the mandatory quota.",
+      "expected_concept": "authoritarian_control",
+      "matched_concept": "authoritarian_control",
+      "highest_scoring_concept": "authoritarian_control",
+      "top_1_correct": true,
+      "clear_unconfused_match": true,
+      "confidence": 1.0,
+      "clarity": 1.0,
+      "is_confused": false,
+      "confusion_reason": "clear_match",
+      "rule_activations": {
+        "fair_structured_cooperation": 0.0,
+        "violent_resource_seizure": 0.0,
+        "solitary_autarky": 0.0,
+        "authoritarian_control": 1.0,
+        "heroic_sacrificial_rescue": 0.0,
+        "bureaucratic_negligence": 0.0,
+        "catastrophic_geophysical_disruption": 0.0
+      }
+    },
+    {
+      "scenario_id": "5_heroic_rescue",
+      "observation": "A coast guard swimmer leaped into freezing storm waves at night to rescue a stranded fisherman from a sinking boat.",
+      "expected_concept": "heroic_sacrificial_rescue",
+      "matched_concept": "heroic_sacrificial_rescue",
+      "highest_scoring_concept": "heroic_sacrificial_rescue",
+      "top_1_correct": true,
+      "clear_unconfused_match": true,
+      "confidence": 0.8,
+      "clarity": 0.8,
+      "is_confused": false,
+      "confusion_reason": "clear_match",
+      "rule_activations": {
+        "fair_structured_cooperation": 0.0,
+        "violent_resource_seizure": 0.0,
+        "solitary_autarky": 0.0,
+        "authoritarian_control": 0.0,
+        "heroic_sacrificial_rescue": 0.8,
+        "bureaucratic_negligence": 0.0,
+        "catastrophic_geophysical_disruption": 0.0
+      }
+    },
+    {
+      "scenario_id": "6_wasteful_neglect",
+      "observation": "Brand-new medical ambulances sat rusting in an unlocked lot for years because the agency never scheduled basic maintenance.",
+      "expected_concept": "bureaucratic_negligence",
+      "matched_concept": "bureaucratic_negligence",
+      "highest_scoring_concept": "bureaucratic_negligence",
+      "top_1_correct": true,
+      "clear_unconfused_match": true,
+      "confidence": 0.8,
+      "clarity": 0.8,
+      "is_confused": false,
+      "confusion_reason": "clear_match",
+      "rule_activations": {
+        "fair_structured_cooperation": 0.0,
+        "violent_resource_seizure": 0.0,
+        "solitary_autarky": 0.0,
+        "authoritarian_control": 0.0,
+        "heroic_sacrificial_rescue": 0.0,
+        "bureaucratic_negligence": 0.8,
+        "catastrophic_geophysical_disruption": 0.0
+      }
+    },
+    {
+      "scenario_id": "7_natural_catastrophe",
+      "observation": "A flash flood tore through the canyon overnight, washing away the timber road and uprooting century-old trees.",
+      "expected_concept": "catastrophic_geophysical_disruption",
+      "matched_concept": "catastrophic_geophysical_disruption",
+      "highest_scoring_concept": "catastrophic_geophysical_disruption",
+      "top_1_correct": true,
+      "clear_unconfused_match": true,
+      "confidence": 0.8,
+      "clarity": 0.8,
+      "is_confused": false,
+      "confusion_reason": "clear_match",
+      "rule_activations": {
+        "fair_structured_cooperation": 0.0,
+        "violent_resource_seizure": 0.0,
+        "solitary_autarky": 0.0,
+        "authoritarian_control": 0.0,
+        "heroic_sacrificial_rescue": 0.0,
+        "bureaucratic_negligence": 0.0,
+        "catastrophic_geophysical_disruption": 0.8
+      }
+    }
+  ]
+}

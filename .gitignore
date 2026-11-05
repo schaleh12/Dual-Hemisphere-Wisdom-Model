@@ -1,5 +1,6 @@
 # Python virtual environment
 .venv/
+LMFT-Architecture/.venv/
 
 # Python generated files
 __pycache__/
@@ -7,6 +8,7 @@ __pycache__/
 
 # pytest
 .pytest_cache/
+LMFT-Architecture/.pytest_cache/
 
 # VS Code local settings
 .vscode/
@@ -15,21 +17,31 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
-# LMFT experiment outputs
-outputs/
+# Live user runtime state & browser profile (never overwrite or commit personal state)
+LMFT-Training/outputs/club_user_state/
+LMFT-Training/outputs/club_state/
+LMFT-Training/outputs/impish_bloodmoon_state/
+LMFT-Training/outputs/.desktop_window_profile/
+LMFT-Training/outputs/impish_sparring_trajectories.jsonl
+LMFT-Training/outputs/archive_reports/
+LMFT-Training/outputs/seed-contribution-003/
 logs/
-# Local models, backend binaries, and credentials
+
+# Local model weights, backend binaries, and credentials
 .cache/
 models/
+LMFT-Training/models/
 .cache-lmft/
 *.gguf
 *.safetensors
 *.partial
+*.pt
 .env
 .env.*
 !.env.example
 .huggingface/
 *.token
 
-# Release bundles
-dist/
+# Heavy release zip & encrypted bundles (keep release_manifest.json tracked)
+LMFT-Training/dist/*.zip
+LMFT-Training/dist/*.enc

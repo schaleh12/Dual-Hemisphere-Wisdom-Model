@@ -1,4 +1,4 @@
-# Dual-Hemisphere Wisdom Model (`LMFT-Lab`)
+# Dual-Hemisphere Wisdom Model (`LMFT-Architecture`)
 
 > **Bridging a Persistent 40-Node Emotional & Constitutional Right Brain with a Local Language Model Left Brain in a Non-Verbal "Three-Legged Race."**
 
@@ -27,14 +27,14 @@ If the AI bubble bursts or turns into a tragedy, it will be because the industry
 
 ## 2. Local Desktop App: Chess Kibitzing Club & Co-Regulation Sanctuary
 
-Double-click **[`Start-LMFT-Club.bat`](Start-LMFT-Club.bat)** (or run `.\.venv\Scripts\python.exe -m lmft_lab.sanctuary_club_app`) to launch the clean, dark-minimalist desktop application (`http://127.0.0.1:8420`):
+Double-click **[`LMFT-Architecture.exe`](LMFT-Architecture.exe)** (or run `.\LMFT-Architecture\.venv\Scripts\python.exe -m lmft_architecture.sanctuary_club_app --single-window`) to launch the clean, dark-minimalist single-window desktop application (`http://127.0.0.1:8420`):
 
-1. **Chess Kibitzing Table (`src/lmft_lab/chess_kibitz_bridge.py`)**:
+1. **Chess Kibitzing Table (`LMFT-Architecture/src/lmft_architecture/chess_kibitz_bridge.py`)**:
    - Play moves or load tactical test positions on a live `python-chess` board.
    - **Board-Anchored `Fact` vs. Chat `Theory`**: Pass-1 Philosophical `Fact` coordinates are anchored directly to the real chessboard (`evaluate_chess_board_posture`), while the 3 MiniLM bridges score chat plans as `Theory`—catching reckless "hope-chess" bluffs (such as proposing an all-out Queen sacrifice when your own King shelter has collapsed) as `shadow_pathology_dissonance(psychosis)` right at the comma.
    - **Guest Kibitzer Chair (`Gemini` / External Club Member)**: Paste an external comment or query `GEMINI_API_KEY` to score a guest kibitzer through the exact same 3 MiniLM bridges and 6-Color / Shadow Pathology lens before our Dual-Hemisphere companion replies.
 2. **Co-Regulation Sanctuary (`Tilt Reset`, `Deep Focus`, `Night Wind-Down`)**:
-   - **Un-Rigged Pacing & Leading**: External `Fact` (`vibe.coordinates`) stays 100% locked to the honest MiniLM reading of your message so Clause 1 genuinely *Paces* your state, while [`apply_coregulation_lead_to_chord`](src/lmft_lab/chess_kibitz_bridge.py) steps the spliced 52-float comma chord by `alpha = 0.25` so Clause 2 gently *Leads* one step toward equilibrium.
+   - **Un-Rigged Pacing & Leading**: External `Fact` (`vibe.coordinates`) stays 100% locked to the honest MiniLM reading of your message so Clause 1 genuinely *Paces* your state, while [`apply_coregulation_lead_to_chord`](LMFT-Architecture/src/lmft_architecture/chess_kibitz_bridge.py) steps the spliced 52-float comma chord by `alpha = 0.25` so Clause 2 gently *Leads* one step toward equilibrium.
 3. **Human-in-the-Loop Coaching (`[Coach]`, `[Savor Vibe]`, & `Run REM Sleep`)**:
    - Flag any turn with **`[Coach / Queue for Sleep]`** to package an `UnresolvedSleepScene`, bookmark great turns with **`[Savor Vibe]`**, and click **`Run REM Sleep`** to refine colliding rules and forge new rules + 3-branch clauses into `outputs/club_user_state/`.
 4. **Live Lineage Switch (`Schooled Cycle 2` $\leftrightarrow$ `Virgin Baseline Cycle 0`)**:
@@ -135,77 +135,57 @@ Perception is split across **three specialized neural bridge classifiers** (`Min
 To keep Core Architecture debugging, official curriculum training, and personal user tinkering cleanly separated, the repository is organized into distinct layers:
 
 ```text
-LMFT-Lab/
-├── Start-LMFT-Club.bat                  # One-click Windows launcher for the Chess & Sanctuary Desktop App
+Language Model Fuzzy Tree Research/      # Top-level Git repository & Desktop project root
+├── LMFT-Architecture.exe                # One-click Windows desktop app (zero terminal window)
 ├── AGENTS.md                            # Anti-delusion, plain-English, and zero-rigging development rules
-├── PROJECT_STATE.md                     # Concise (<60 lines) current status & benchmark summary
-├── DECISIONS.md                         # Chronological engineering decision log (D001–D052)
-├── baselines/
-│   └── virgin_dual_hemisphere_v1/       # [LAB / CYCLE 0] SHA-256 locked "Virgin" Core Architecture snapshot
-│       ├── virgin_manifest.json         # Pinned SHA-256 hashes (40 nodes, 10 Tier-2 leaves, 2 rules, 0 precedents)
-│       ├── virgin_ruleset.json          # Foundational equilibrium rules + structural leaves only
-│       ├── branch_archives/             # Empty Cycle 0 Executive, Legislative, and Judicial archives
-│       └── contemplation_ledger.json    # Empty Cycle 0 Contemplation Ledger
-├── src/lmft_lab/                        # Core Python package
-│   ├── birth.py                         # Frozen 40-node founding seed (24 founding leaves)
-│   ├── philosophical_abstraction_matrix.py # 5-Tier Color, Element, Chess Piece, & Shadow Pathology matrix
-│   ├── virgin_baseline.py               # Cycle 0 Virgin Baseline verifier & loader
-│   ├── reflection_classifier.py         # Fuzzy rules, shoulder curves, & Tier 1 -> Tier 2 -> Tier 3 child leaves
-│   ├── neural_bridge_classifiers.py     # 3 fast MiniLM cross-encoder bridges (~35 ms)
-│   ├── right_brain_equilibrium.py       # Two-pass Right-Brain equilibrium & dissonance self-registry
-│   ├── branch_archives.py               # Executive, Legislative, & Judicial archives + 3-branch deliberation
-│   ├── subliminal_gap_splice.py         # 52-float SubliminalChordVector & K=4 SubliminalGapProjector
-│   ├── train_left_brain_lora.py         # Stage 3 Qwen3-4B LoRA + Corpus Callosum trainer & evaluator
-│   ├── three_legged_runtime.py          # Stage 4 3-Gear runtime with live mid-sentence comma scoring (D050)
-│   ├── rem_sleep_cycle.py               # Stage 5 Daytime -> REM Sleep -> Next-Day maturation loop
-│   ├── chess_kibitz_bridge.py           # Live python-chess Fact sensor & Sanctuary Pacing/Leading helper
-│   └── sanctuary_club_app.py            # Local HTTP server & Antigravity-style UI for Chess & Sanctuary
-├── models/                              # [SCHOOL / WEIGHTS] Local neural checkpoints (git-ignored .pt weights)
-│   ├── right_brain_bridges/             # 3 calibrated MiniLM Right-Brain bridge classifiers
-│   ├── left_brain_lora/                 # Cycle 1 Qwen3-4B LoRA + SubliminalGapProjector
-│   └── left_brain_lora_cycle2/          # Cycle 2 REM-matured Qwen3-4B LoRA + SubliminalGapProjector
-├── outputs/                             # [SCHOOL & USER STATE] Rulesets, evaluation reports, and local app state
-│   ├── rem_sleep_consolidated_ruleset.json # Official Cycle 2 consolidated Right-Brain ruleset
-│   └── club_user_state/                 # Personal coached rules, archives & savored vibes (git-ignored)
-├── scripts/
-│   └── build_release_bundle.py          # Builds portable dist/lmft-sanctuary-club-v0.1.0-win64.zip
-├── experiments/                         # Live GPU benchmark & curriculum runners
-├── tests/                               # 1,369 automated pytest unit & integration tests
-└── docs/                                # Architecture specifications, blueprints, and archived history
+├── PROJECT_STATE.md                     # Concise (<40 lines) current status & benchmark summary
+├── DECISIONS.md                         # Rolling engineering decision log
+├── LMFT-Architecture/                   # [PURE CORE ARCHITECTURE] Strictly isolated from training outputs
+│   ├── baselines/
+│   │   └── virgin_dual_hemisphere_v1/   # [CYCLE 0] SHA-256 locked "Virgin" Core Architecture snapshot
+│   ├── config/                          # Core architecture & teacher configuration
+│   ├── docs/                            # Architecture specifications, blueprints, and archived history
+│   ├── src/lmft_architecture/           # Core Python package (seed, bridges, equilibrium, comma splice, UI)
+│   ├── tests/                           # Automated pytest unit & integration tests
+│   └── pyproject.toml                   # Package metadata (lmft-architecture)
+└── LMFT-Training/                       # [TRAINING, WEIGHTS, & RUNTIME STATE]
+    ├── models/                          # Local neural checkpoints (right_brain_bridges, left_brain_lora_cycle2, left_brain_impish_bloodmoon)
+    ├── outputs/                         # Consolidated rulesets, evaluation reports, and local user state (club_user_state, impish_bloodmoon_state)
+    ├── experiments/                     # Live GPU benchmark & curriculum training scripts
+    ├── dist/                            # Portable release zip & encrypted model bundles
+    └── scripts/                         # Native launcher & release bundle builders
 ```
 
 ### Why This Layout Prevents Sync Headaches and Blame Confusion
-1. **`baselines/virgin_dual_hemisphere_v1/` (`Cycle 0` — "Lab" / Core Architecture)**:
+1. **`LMFT-Architecture/baselines/virgin_dual_hemisphere_v1/` (`Cycle 0` — Core Architecture)**:
    - Locked with SHA-256 hashes (`verify_virgin_baseline_snapshot()`). If a bug happens in `Cycle 0`, we know immediately it is an oversight in the **Core Architecture** rather than bad training data.
-2. **`outputs/rem_sleep_consolidated_ruleset.json` & `models/left_brain_lora_cycle2/` (`Cycle 2` — Official "School" Checkpoint)**:
+2. **`LMFT-Training/outputs/rem_sleep_consolidated_ruleset.json` & `LMFT-Training/models/left_brain_lora_cycle2/` (`Cycle 2` — Official Schooled Checkpoint)**:
    - Tracks the official repository's vetted REM-Sleep training progress.
-3. **`outputs/club_user_state/` (Personal Local Coaching — Git-Ignored)**:
+3. **`LMFT-Training/outputs/club_user_state/` (Personal Local Coaching — Git-Ignored)**:
    - When you or anyone else uses the desktop app to coach turns, savor vibes, and run REM Sleep, all personal progress is saved automatically to `outputs/club_user_state/`. It survives app restarts, never pollutes official benchmarks, and never causes `git pull` conflicts unless someone intentionally forks the repo to publish their own lineage.
 
 ---
 
 ## 7. Quickstart & Verification (Windows / RTX 4080)
 
-### 1. Launch the Desktop App (`Chess Club & Co-Regulation Sanctuary`)
+### 1. Launch the Desktop App (`Chess Club & Hypnosis Script Studio`)
 ```powershell
-.\Start-LMFT-Club.bat
+.\LMFT-Architecture.exe
 ```
 
-### 2. Run the Full Automated Test Suite (`1,369` Passing Tests)
+### 2. Run the Full Automated Test Suite (`1,380` Passing Tests)
 ```powershell
-$env:PYTHONPATH='src;.'
-.\.venv\Scripts\python.exe -m pytest -q
+.\LMFT-Architecture\.venv\Scripts\python.exe -m pytest LMFT-Architecture/tests -q
 ```
 
-### 3. Run the Targeted Core & App Tests (`< 10 seconds`)
+### 3. Run the Targeted Core & App Tests (`< 15 seconds`)
 ```powershell
-$env:PYTHONPATH='src;.'
-.\.venv\Scripts\python.exe -m pytest tests/test_virgin_baseline.py tests/test_philosophical_abstraction_matrix.py tests/test_three_legged_runtime.py tests/test_sanctuary_club_app.py -v
+.\LMFT-Architecture\.venv\Scripts\python.exe -m pytest LMFT-Architecture/tests/test_virgin_baseline.py LMFT-Architecture/tests/test_philosophical_abstraction_matrix.py LMFT-Architecture/tests/test_three_legged_runtime.py LMFT-Architecture/tests/test_sanctuary_club_app.py -v
 ```
 
-### 4. Build the Portable GitHub Release Bundle (`dist/lmft-sanctuary-club-v0.1.0-win64.zip`)
+### 4. Build the Portable GitHub Release Bundle (`LMFT-Training/dist/lmft-sanctuary-club-v0.1.0-win64.zip`)
 ```powershell
-.\.venv\Scripts\python.exe scripts/build_release_bundle.py
+.\LMFT-Architecture\.venv\Scripts\python.exe LMFT-Training/scripts/build_release_bundle.py
 ```
 
 ---
