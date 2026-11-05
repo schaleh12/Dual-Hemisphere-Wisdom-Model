@@ -239,6 +239,7 @@ def test_clockwise_three_phase_state_machine_and_http_endpoints(tmp_path: Path) 
     snap3 = runtime.step_clockwise_phase()
     assert snap3["clockwise_phase"] == 1
     assert snap3["clockwise_cycle_count"] == 1
+    assert snap3["script_canvas_text"] == ""
     assert snap3["sleep_queue_count"] == 0
     assert len(runtime.rules) >= initial_rules_count + 1
     assert (impish_dir / "club_ruleset.json").exists()

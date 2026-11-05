@@ -1218,15 +1218,18 @@ class BloodmoonClockRuntime:
         return self.get_state_snapshot()
 
     def run_phase_3_rem_sleep(self) -> dict[str, Any]:
-        """Phase 3 — REM Sleep (Best Sleep of Its Life): Consolidates immunization rules and advances dial back to Phase 1."""
+        """Phase 3 — REM Sleep (Best Sleep of Its Life): Consolidates immunization rules, clears active script canvas, and advances dial back to Phase 1."""
         snap = self.handle_run_rem_sleep(auto_triggered=False)
         self.clockwise_cycle_count += 1
         self.clockwise_phase = 1
+        self.script_canvas_text = ""
         self._pending_clockwise = {}
+        self._sync_active_thread_record(persist=True)
         self._persist_user_state()
         snap["clockwise_phase"] = self.clockwise_phase
         snap["clockwise_phase_label"] = CLOCKWISE_PHASE_LABELS[1]
         snap["clockwise_cycle_count"] = self.clockwise_cycle_count
+        snap["script_canvas_text"] = ""
         return snap
 
     def step_clockwise_phase(

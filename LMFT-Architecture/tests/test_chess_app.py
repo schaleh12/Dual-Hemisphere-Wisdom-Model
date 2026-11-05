@@ -212,6 +212,7 @@ def test_guardrail_1_and_2_board_fen_anchors_fact_and_catches_psychosis() -> Non
 def test_continuous_pretext_subtext_context_self_kibitzing_and_rem_sleep(tmp_path: Path) -> None:
     """Verify continuous `Pretext -> Subtext -> Context` self-kibitzing stream, coaching, savoring, and REM Sleep."""
     assert "STAUNTON_SVG_PIECES" in CHESS_SINGLE_PAGE_HTML
+    assert '<svg class="chess-piece-svg" viewBox="0 0 45 45">' in CHESS_SINGLE_PAGE_HTML
     assert "LEAF_TO_PIECE" in CHESS_SINGLE_PAGE_HTML
     assert 'id="auto-self-play-btn"' in CHESS_SINGLE_PAGE_HTML
     assert 'id="step-ai-move-btn"' in CHESS_SINGLE_PAGE_HTML
