@@ -2,8 +2,8 @@
   "schema_version": 1,
   "version": "0.2.0",
   "github_repo": "schaleh12/Dual-Hemisphere-Wisdom-Model",
-  "build_sha256": "fa0987f774430a6938257c56d5b694139900bda61ce2eaff2350dae4d8e78efe",
-  "build_short_hash": "fa0987f77443",
+  "build_sha256": "65eae0c30ff7093846257254d977cd7ff9dad82cbc96772007b74a90a6bb97e1",
+  "build_short_hash": "65eae0c30ff7",
   "files": {
     "src/lmft_architecture/__init__.py": {
       "sha256": "a89f56c2195e87129adbffa5065d8769ea096e13ba98783d217c4d120ee92623",
@@ -90,12 +90,12 @@
       "size_bytes": 3267
     },
     "src/lmft_architecture/chess_app.py": {
-      "sha256": "8d860231636fb0c97e3e6f55407de6787eb2e48f75ab922c2215569eb37ccd63",
-      "size_bytes": 90835
+      "sha256": "a5f09e664907e841b6327cd600bade07e7395c1b8f2eb059445fa943ff136eaf",
+      "size_bytes": 96588
     },
     "src/lmft_architecture/chess_kibitz_bridge.py": {
-      "sha256": "8a7be060598adc43e14de08aaaae5fe3db0e45476243a1f78bc82153f4728225",
-      "size_bytes": 30307
+      "sha256": "7ba851f67f7f7a68e6ed960005166a46ad04edff90ec304072b9f84359119f37",
+      "size_bytes": 37482
     },
     "src/lmft_architecture/chess_ui.py": {
       "sha256": "5ff583790e545f9addc2f213ca7fa4cd69c89457dc4a355dea9654c8c3045406",
@@ -298,8 +298,8 @@
       "size_bytes": 3352
     },
     "dist/lmft-sanctuary-club-v0.1.0-win64.zip": {
-      "sha256": "c18470e54c8c9fa7a8ab2fbaf0c836a1edc5edcbc14442cbd82816cbf7a1a46e",
-      "size_bytes": 348990
+      "sha256": "3385386941817c7f368058e634e6d5b64322c3fa987c761593ecec8983d3690e",
+      "size_bytes": 346667
     },
     "dist/impish_bloodmoon_patreon.enc": {
       "sha256": "3681d17af7be9e303b53bfe1119851686d8a2ad326e28329cd38020c14a36bdd",

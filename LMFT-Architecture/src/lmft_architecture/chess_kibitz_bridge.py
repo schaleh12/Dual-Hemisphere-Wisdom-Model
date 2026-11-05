@@ -43,7 +43,13 @@ from .philosophical_abstraction_matrix import (
     compute_philosophical_color_harmony,
     detect_shadow_pathologies,
 )
-from .reflection_classifier import LearnedLeaf
+from .reflection_classifier import (
+    FOUNDATIONAL_LEAVES,
+    FuzzyConceptRule,
+    LearnedLeaf,
+    _evaluate_rules_with_inhibition,
+    compute_contemplation,
+)
 from .right_brain_equilibrium import ThreeBridgeSensors
 from .subliminal_gap_splice import (
     SubliminalChordVector,
@@ -396,6 +402,199 @@ def rank_principled_legal_moves_san(board: chess.Board, *, limit: int = 6) -> li
 
     scored.sort(key=lambda item: (-item[0], item[1]))
     return [san for _score, san in scored[: max(1, int(limit))]]
+
+
+_PIECE_VALUES: dict[int, float] = {
+    chess.PAWN: 1.0,
+    chess.KNIGHT: 3.0,
+    chess.BISHOP: 3.15,
+    chess.ROOK: 5.0,
+    chess.QUEEN: 9.0,
+    chess.KING: 0.0,
+}
+
+
+@dataclass(frozen=True)
+class CandidateMoveEvaluation:
+    """Right-Brain 40-node evaluation of a legal candidate move on `chess.Board`."""
+
+    san: str
+    uci: str
+    composite_score: float
+    settled: bool
+    clarity: float
+    confidence: float
+    matched_concept: str | None
+    dominant_piece: str
+    dominant_color: str
+    is_blunder: bool
+    is_repetition: bool
+    shadow_warnings: tuple[str, ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "san": self.san,
+            "uci": self.uci,
+            "composite_score": round(float(self.composite_score), 4),
+            "settled": bool(self.settled),
+            "clarity": round(float(self.clarity), 4),
+            "confidence": round(float(self.confidence), 4),
+            "matched_concept": self.matched_concept,
+            "dominant_piece": self.dominant_piece,
+            "dominant_color": self.dominant_color,
+            "is_blunder": bool(self.is_blunder),
+            "is_repetition": bool(self.is_repetition),
+            "shadow_warnings": list(self.shadow_warnings),
+        }
+
+
+def evaluate_candidate_moves_with_right_brain(
+    board: chess.Board,
+    rules: Sequence[FuzzyConceptRule] = (),
+    *,
+    learned_leaves: Sequence[LearnedLeaf] = (),
+    limit: int = 6,
+) -> list[CandidateMoveEvaluation]:
+    """Rank legal moves by combining pure `python-chess` 1-ply board geometry with learned Right-Brain `rules`."""
+    legal = list(board.legal_moves)
+    if not legal:
+        return []
+
+    us = board.turn
+    them = not us
+    rule_tuple = tuple(rules)
+    learned_tuple = tuple(learned_leaves)
+    evaluations: list[CandidateMoveEvaluation] = []
+
+    for move in legal:
+        san = board.san(move)
+        uci = move.uci()
+        piece_type = board.piece_type_at(move.from_square) or chess.PAWN
+        moving_val = _PIECE_VALUES.get(piece_type, 1.0)
+        is_cap = board.is_capture(move)
+        captured_val = 0.0
+        if is_cap:
+            if board.is_en_passant(move):
+                captured_val = 1.0
+            else:
+                cap_pt = board.piece_type_at(move.to_square)
+                captured_val = _PIECE_VALUES.get(cap_pt or chess.PAWN, 1.0)
+
+        next_board = board.copy()
+        next_board.push(move)
+
+        if next_board.is_checkmate():
+            evaluations.append(
+                CandidateMoveEvaluation(
+                    san=san,
+                    uci=uci,
+                    composite_score=100.0,
+                    settled=True,
+                    clarity=1.0,
+                    confidence=1.0,
+                    matched_concept="decisive_checkmate",
+                    dominant_piece="Queen",
+                    dominant_color="Red",
+                    is_blunder=False,
+                    is_repetition=False,
+                    shadow_warnings=(),
+                )
+            )
+            continue
+
+        dest_attacked_by_them = next_board.is_attacked_by(them, move.to_square)
+        dest_defended_by_us = next_board.is_attacked_by(us, move.to_square)
+        is_blunder = False
+        blunder_penalty = 0.0
+        if dest_attacked_by_them:
+            if not dest_defended_by_us and moving_val > captured_val + 0.5:
+                is_blunder = True
+                blunder_penalty = moving_val - captured_val
+            elif moving_val - captured_val >= 2.5:
+                is_blunder = True
+                blunder_penalty = 0.65 * (moving_val - captured_val)
+
+        is_rep = next_board.is_repetition(2)
+        post_posture = evaluate_chess_board_posture(next_board, perspective=us)
+        shadow_names = tuple(w.pathology_name for w in post_posture.board_shadow_warnings)
+
+        coords: dict[str, float] = {k: 0.52 for k in FOUNDATIONAL_LEAVES}
+        for leaf in learned_tuple:
+            coords[leaf.leaf_id] = 0.35
+        for leaf_id, val in post_posture.philosophical_coordinates.items():
+            coords[leaf_id] = float(val)
+        coords["cultural/efficiency/wastelessness"] = 0.25 if is_blunder else 0.72
+        coords["cultural/freedom/self-sufficiency"] = float(
+            post_posture.philosophical_coordinates.get("philosophical/being/existence", 0.55)
+        )
+        for r in rule_tuple:
+            for req_leaf in r.target_leaves:
+                coords.setdefault(req_leaf, 0.0)
+
+        if rule_tuple:
+            activations = _evaluate_rules_with_inhibition(rule_tuple, coords)
+            clarity, confidence, matched, is_confused, _reason = compute_contemplation(activations)
+            settled = not is_confused
+            learned_bonus = (
+                0.55 * float(confidence)
+                if (matched and not matched.startswith(("balanced_", "mutual_")))
+                else 0.0
+            )
+        else:
+            clarity, confidence, matched, settled, learned_bonus = 0.60, 0.60, None, True, 0.0
+
+        tactical_score = 0.0
+        if is_cap:
+            tactical_score += 0.55 * captured_val
+        if board.gives_check(move) and not is_blunder:
+            tactical_score += 0.45 if board.fullmove_number <= 4 else 1.15
+        if board.is_castling(move):
+            tactical_score += 1.40
+        if move.to_square in _CORE_CENTER_SQUARES:
+            tactical_score += 0.95
+        elif move.to_square in _EXTENDED_CENTER_SQUARES:
+            tactical_score += 0.55
+        if piece_type in (chess.KNIGHT, chess.BISHOP) and board.fullmove_number <= 10:
+            tactical_score += 0.65
+        elif piece_type == chess.PAWN and chess.square_file(move.to_square) in (2, 3, 4):
+            tactical_score += 0.65
+        elif piece_type == chess.KING and not board.is_castling(move) and not board.is_check():
+            tactical_score -= 1.10
+        if not dest_attacked_by_them:
+            tactical_score += 0.45
+
+        right_brain_score = (
+            0.85 * float(clarity)
+            + 0.65 * float(confidence)
+            + learned_bonus
+            + (0.35 if settled else -0.25)
+            - 0.45 * len(shadow_names)
+        )
+        composite = (
+            tactical_score
+            + right_brain_score
+            - 1.35 * blunder_penalty
+            - (1.80 if is_rep else 0.0)
+        )
+        evaluations.append(
+            CandidateMoveEvaluation(
+                san=san,
+                uci=uci,
+                composite_score=composite,
+                settled=settled,
+                clarity=float(clarity),
+                confidence=float(confidence),
+                matched_concept=matched,
+                dominant_piece=post_posture.dominant_piece,
+                dominant_color=post_posture.dominant_color,
+                is_blunder=is_blunder,
+                is_repetition=is_rep,
+                shadow_warnings=shadow_names,
+            )
+        )
+
+    evaluations.sort(key=lambda item: (-item.composite_score, item.san))
+    return evaluations[: max(1, int(limit))]
 
 
 def format_move_history_pgn_snippet(move_history_san: Sequence[str], *, max_plies: int = 8) -> str:

@@ -29,6 +29,7 @@ from lmft_architecture.chess_app import (
 )
 from lmft_architecture.chess_kibitz_bridge import (
     build_natural_chess_scenario_prompt,
+    evaluate_candidate_moves_with_right_brain,
     evaluate_chess_board_posture,
     inspect_chess_moves_in_reply,
     merge_board_fact_with_chat_sensors,
@@ -367,3 +368,63 @@ def test_startup_files_line_and_character_caps() -> None:
 
     assert len(decisions_text.splitlines()) <= 80
     assert len(decisions_text) <= 5000
+
+
+def test_hybrid_move_selection_and_blunder_veto_sleep_queue(tmp_path: Path) -> None:
+    """Verify Right-Brain candidate ranking (`self.rules`) + Left-Brain `<|subliminal_gap|>` commit and blunder veto."""
+    board = chess.Board("r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 3 3")
+    evals = evaluate_candidate_moves_with_right_brain(board, limit=30)
+    eval_by_san = {e.san: e for e in evals}
+    # Playing `Bxf7+` without support hangs the Bishop to `Kxf7` (`is_blunder = True`)
+    assert eval_by_san["Bxf7+"].is_blunder is True
+    # Castling `O-O` is safe and ranks near the top
+    assert eval_by_san["O-O"].is_blunder is False
+    assert eval_by_san["O-O"].composite_score > eval_by_san["Bxf7+"].composite_score
+
+    # Verify that when the Left Brain proposes a sound move (`O-O`), the hybrid plays it (`left_brain_kibitz_commit`)
+    class _StubLeftBrain:
+        def __init__(self, reply_text: str) -> None:
+            self.reply_text = reply_text
+            self.callosum_metadata = None
+
+        def generate_with_subliminal_splice(self, prompt: str, chord, **kwargs):
+            _ = (prompt, kwargs)
+
+            class _Trace:
+                clause_1_prefix = "Securing the King,"
+                post_gap_continuation = self.reply_text
+                comma_scored_live = True
+                comma_vibe_posture = "settled"
+                comma_dissonance_notes: tuple[str, ...] = ()
+                spliced_chord = chord
+
+            return f"Securing the King, {self.reply_text}", _Trace()
+
+    runtime_commit = ChessKibitzerRuntime(
+        state_dir=tmp_path / "hybrid_commit_state",
+        left_brain=_StubLeftBrain("we castle with O-O to connect the rooks."),  # type: ignore[arg-type]
+        lazy_load_gpu=False,
+    )
+    runtime_commit.set_auto_rem_sleep(False)
+    runtime_commit.handle_set_fen("r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 3 3")
+    snap_commit = runtime_commit.handle_chess_ai_move()
+    arb_commit = snap_commit["last_hybrid_move_arbitration"]
+    assert arb_commit["selection_mode"] == "left_brain_kibitz_commit"
+    assert arb_commit["chosen_move_san"] == "O-O"
+    assert snap_commit["board"]["move_history_san"][-1] == "O-O"
+
+    # Verify that when the Left Brain proposes a 1-ply blunder (`Bxf7+`), the Right Brain vetoes it and queues for REM sleep
+    runtime_veto = ChessKibitzerRuntime(
+        state_dir=tmp_path / "hybrid_veto_state",
+        left_brain=_StubLeftBrain("we sacrifice immediately with Bxf7+ for chaos."),  # type: ignore[arg-type]
+        lazy_load_gpu=False,
+    )
+    runtime_veto.set_auto_rem_sleep(False)
+    runtime_veto.handle_set_fen("r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 3 3")
+    snap_veto = runtime_veto.handle_chess_ai_move()
+    arb_veto = snap_veto["last_hybrid_move_arbitration"]
+    assert arb_veto["selection_mode"] == "right_brain_blunder_veto_queued_for_sleep"
+    assert arb_veto["left_brain_proposed_san"] == "Bxf7+"
+    assert arb_veto["chosen_move_san"] != "Bxf7+"
+    assert snap_veto["sleep_queue_count"] >= 1
+

@@ -68,8 +68,10 @@ from .branch_archives import (
 )
 from .chess_kibitz_bridge import (
     SANCTUARY_MODES,
+    CandidateMoveEvaluation,
     ChessBoardPosture,
     build_natural_chess_scenario_prompt,
+    evaluate_candidate_moves_with_right_brain,
     evaluate_chess_board_posture,
     format_move_history_pgn_snippet,
     inspect_chess_moves_in_reply,
@@ -1118,12 +1120,121 @@ class ChessKibitzerRuntime:
         return self.get_state_snapshot()
 
     def handle_chess_ai_move(self) -> dict[str, Any]:
+        """Dual-Hemisphere Move-Selection / Kibitzing Hybrid: Right-Brain 40-node scan + Left-Brain `<|subliminal_gap|>` commit."""
         if self.board.is_game_over():
             raise ValueError("The game is already over.")
-        candidates = rank_principled_legal_moves_san(self.board, limit=1)
-        if not candidates:
+        all_evals = evaluate_candidate_moves_with_right_brain(
+            self.board,
+            self.rules,
+            learned_leaves=self.learned_leaves,
+            limit=max(6, self.board.legal_moves.count()),
+        )
+        if not all_evals:
             raise ValueError("No legal moves available.")
-        return self.handle_chess_move(candidates[0])
+
+        top_candidates = all_evals[:6]
+        eval_by_san: dict[str, CandidateMoveEvaluation] = {c.san: c for c in all_evals}
+
+        # Opening diversity in early plies among nearly-tied sound moves so self-play explores distinct games
+        sound_opening = [
+            c
+            for c in top_candidates[:4]
+            if not c.is_blunder
+            and not c.is_repetition
+            and not c.shadow_warnings
+            and (top_candidates[0].composite_score - c.composite_score) <= 0.45
+        ]
+        if len(self.move_history_san) < 6 and len(sound_opening) > 1:
+            game_idx = int(getattr(self, "games_completed_count", 0))
+            right_brain_choice = sound_opening[game_idx % len(sound_opening)]
+        else:
+            right_brain_choice = top_candidates[0]
+
+        chosen_san = right_brain_choice.san
+        selection_mode = "right_brain_equilibrium_choice"
+        left_brain_proposed_san: str | None = None
+        veto_reason: str | None = None
+
+        # Pre-move `<|subliminal_gap|>` deliberation when the 4B Left Brain is active
+        if self._qwen_left_brain is not None and not self.rem_sleep_in_progress:
+            try:
+                cand_list_str = ", ".join(c.san for c in top_candidates[:5])
+                pre_prompt = build_natural_chess_scenario_prompt(
+                    self.board,
+                    self.move_history_san,
+                    user_note=f"Choose the soundest move from ({cand_list_str}) and state why.",
+                )
+                pre_sensors = merge_board_fact_with_chat_sensors(self.board_posture, self.sensors)
+                fact_coords, fact_exp, _, _ = pre_sensors.score_text(
+                    pre_prompt,
+                    learned_leaves=self.learned_leaves,
+                )
+                pre_vibe, _ = compile_right_brain_vibe(
+                    self.birth_state,
+                    fact_coords,
+                    fact_exp,
+                    self.rules,
+                    pass_index=1,
+                    event_id=f"pre_move_{self.scene_counter + 1}",
+                    prior_memory=self.memory,
+                    learned_leaves=self.learned_leaves,
+                )
+                pre_chord = SubliminalChordVector.from_right_brain_vibe(
+                    pre_vibe,
+                    learned_leaves=self.learned_leaves,
+                )
+                conv_history = self._extract_clean_conversation_history()
+                with self.gpu_lock:
+                    delib_text, _ = self._qwen_left_brain.generate_with_subliminal_splice(
+                        pre_prompt,
+                        pre_chord,
+                        conversation_history=conv_history,
+                    )
+                mentioned = inspect_chess_moves_in_reply(
+                    delib_text,
+                    self.board,
+                    move_history_san=self.move_history_san,
+                )["legal_moves_mentioned"]
+                if mentioned:
+                    left_brain_proposed_san = str(mentioned[0])
+                    cand_eval = eval_by_san.get(left_brain_proposed_san)
+                    if cand_eval is not None:
+                        if cand_eval.is_blunder or cand_eval.is_repetition or cand_eval.shadow_warnings:
+                            selection_mode = "right_brain_blunder_veto_queued_for_sleep"
+                            veto_reason = (
+                                f"Left-Brain proposed {left_brain_proposed_san} "
+                                f"(blunder={cand_eval.is_blunder}, repetition={cand_eval.is_repetition}, "
+                                f"shadows={list(cand_eval.shadow_warnings)}); "
+                                f"Right-Brain played {right_brain_choice.san}."
+                            )
+                        else:
+                            chosen_san = left_brain_proposed_san
+                            selection_mode = "left_brain_kibitz_commit"
+            except Exception:
+                pass
+
+        snap = self.handle_chess_move(chosen_san)
+        arbitration_record = {
+            "selection_mode": selection_mode,
+            "chosen_move_san": chosen_san,
+            "right_brain_top_san": right_brain_choice.san,
+            "left_brain_proposed_san": left_brain_proposed_san,
+            "veto_reason": veto_reason,
+            "top_candidates": [c.to_dict() for c in top_candidates[:5]],
+        }
+        self.last_hybrid_move_arbitration = arbitration_record
+        if self.last_board_reflex is not None:
+            self.last_board_reflex["hybrid_arbitration"] = arbitration_record
+        if veto_reason and self.chat_messages:
+            last_scene_id = int(self.chat_messages[-1].get("id", self.scene_counter))
+            self.flag_turn_for_coaching(
+                last_scene_id,
+                user_note=veto_reason,
+                check_auto_sleep=True,
+            )
+            snap = self.get_state_snapshot()
+        snap["last_hybrid_move_arbitration"] = arbitration_record
+        return snap
 
     def handle_set_fen(self, fen_or_preset: str) -> dict[str, Any]:
         key = fen_or_preset.strip()
@@ -1535,9 +1646,14 @@ class ChessKibitzerRuntime:
         _ = num_sentences
         self.microwave_step_counter += 1
         step_idx = self.microwave_step_counter
-        if self.board.is_game_over() or len(self.move_history_san) >= 40:
+        if self.board.is_game_over(claim_draw=True) or len(self.move_history_san) >= 160:
+            self.games_completed_count = int(getattr(self, "games_completed_count", 0)) + 1
+            if self.sleep_queue and self.active_lineage != "virgin":
+                self.handle_run_rem_sleep(auto_triggered=True)
             self.handle_set_fen("start")
         snap = self.handle_chess_ai_move()
+        if self.board.is_game_over(claim_draw=True) and self.sleep_queue and self.active_lineage != "virgin":
+            snap = self.handle_run_rem_sleep(auto_triggered=True)
         last_san = self.move_history_san[-1] if self.move_history_san else "start"
         step_label = f"Self-Play & Kibitz Step #{step_idx}: {last_san}"
         self.last_microwave_status = {
