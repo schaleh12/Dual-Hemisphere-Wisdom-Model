@@ -502,3 +502,119 @@ def test_strict_airgap_sparring_engine_and_objective_elo_update(tmp_path: Path) 
     assert len(runtime.move_history_san) == 1
 
 
+def test_game_review_referee_and_contrastive_fuzzy_rule_normalization(tmp_path: Path) -> None:
+    """Verify Chess.com-style post-move Game Review (`??` vs. `!!`/`!`) and contrastive FuzzyConceptRule normalization with 9B Teacher collaboration."""
+    from lmft_architecture.chess_kibitz_bridge import (
+        ObjectiveCalibratedSparringEngine,
+        evaluate_candidate_moves_with_right_brain,
+    )
+    from lmft_architecture.sleep_consolidation import normalize_contrastive_target_leaves_and_thresholds
+
+    engine = ObjectiveCalibratedSparringEngine(use_stockfish_uci=False)
+    board = chess.Board("r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 3 3")
+
+    # 1. Post-move review of a 1-ply hanging sacrifice (`Bxf7+`) classifies as `BLUNDER_??`
+    blunder_rev = engine.audit_played_move_for_game_review(
+        board,
+        "Bxf7+",
+        perspective=chess.WHITE,
+    )
+    assert blunder_rev["classification"] == "BLUNDER_??"
+    assert blunder_rev["glyph"] == "??"
+    assert blunder_rev["is_hazard"] is True
+    assert blunder_rev["should_queue_for_sleep"] is True
+    assert engine.opponent_moves_played == 0
+
+    # 2. Contrastive normalization between `Bxf7+` (played blunder) and `best_move_coordinates`
+    #    must normalize `[rule_low, rule_high]` so the rule fires at 1.0 on the blunder and 0.0 on the best move
+    target_leaves, r_low, r_high = normalize_contrastive_target_leaves_and_thresholds(
+        "low_wastelessness_chaos_cluster",
+        blunder_rev["played_coordinates"],
+        blunder_rev["contrastive_reference_coordinates"],
+    )
+    from lmft_architecture.reflection_classifier import FuzzyConceptRule
+
+    norm_hazard_rule = FuzzyConceptRule(
+        rule_id="test-contrastive-hazard",
+        concept_name="hazard_unsound_bishop_sac",
+        description="Contrastive-normalized hazard rule separating unsound sacrifice from sound development.",
+        target_leaves=target_leaves,
+        low=r_low,
+        high=r_high,
+    )
+    assert norm_hazard_rule.evaluate(blunder_rev["played_coordinates"]) >= 0.85
+    assert norm_hazard_rule.evaluate(blunder_rev["contrastive_reference_coordinates"]) == 0.0
+
+    # 3. Post-move review of a winning undefended knight capture classifies as `BRILLIANCY_!!` or `GREAT_MOVE_!`
+    tactical_board = chess.Board("r1bqkbnr/pppp1ppp/2n5/4n3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 0 4")
+    brill_rev = engine.audit_played_move_for_game_review(
+        tactical_board,
+        "Nxe5",
+        perspective=chess.WHITE,
+    )
+    assert brill_rev["classification"] in ("BRILLIANCY_!!", "GREAT_MOVE_!")
+    assert brill_rev["is_hazard"] is False
+    assert brill_rev["should_queue_for_sleep"] is True
+
+    # 4. Verify 9B Sleep Teacher collaboration in `ChessKibitzerRuntime.handle_run_rem_sleep()`
+    captured_payloads: list[dict] = []
+
+    class _StubSleepTeacher:
+        def generate(self, role: str, req: dict, tag: str, validator):
+            _ = (role, tag)
+            user_msg = json.loads(req["messages"][1]["content"])
+            captured_payloads.append(user_msg)
+            raw_json = json.dumps(
+                {
+                    "concept_name": "reckless_unanchored_exposure",
+                    "description": "Over-extending aggressive force while leaving core stability undefended.",
+                    "executive_clause_text": "Restrain premature expenditure when foundational protection is absent.",
+                    "legislative_clause_text": "Sense the brittle tension of an unguarded structural commitment.",
+                    "judicial_clause_text": "Verify that defensive continuity holds before committing decisive agency.",
+                }
+            )
+            return validator(raw_json), {}
+
+    runtime = ChessKibitzerRuntime(
+        state_dir=tmp_path / "teacher_collab_state",
+        left_brain=_make_mini_left_brain(),
+        teacher=_StubSleepTeacher(),
+        lazy_load_gpu=False,
+    )
+    runtime.set_auto_rem_sleep(False)
+    runtime.handle_set_fen("r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 3 3")
+    before_evals = {
+        e.san: e.composite_score
+        for e in evaluate_candidate_moves_with_right_brain(runtime.board, runtime.rules, limit=30)
+    }
+    runtime.handle_chess_move("Bxf7+")
+    last_id = int(runtime.chat_messages[-1]["id"])
+    runtime.flag_turn_for_coaching(
+        last_id,
+        user_note=blunder_rev["annotation_summary"],
+        check_auto_sleep=False,
+        is_hazard=True,
+        override_coordinates=blunder_rev["played_coordinates"],
+        contrastive_reference_coordinates=blunder_rev["contrastive_reference_coordinates"],
+        game_review_annotation=blunder_rev["annotation_summary"],
+    )
+    runtime.handle_run_rem_sleep()
+
+    assert len(captured_payloads) == 1
+    assert "contrastive_coordinate_delta_vs_best_alternative" in captured_payloads[0]
+    assert "objective_referee_annotations" in captured_payloads[0]
+    forged_hazard = [r for r in runtime.rules if r.concept_name.startswith("hazard_")]
+    assert len(forged_hazard) == 1
+    assert forged_hazard[0].concept_name == "hazard_reckless_unanchored_exposure"
+
+    # Reset board to before `Bxf7+` and verify `Bxf7+` is strongly repelled while `O-O` is un-penalized
+    runtime.handle_set_fen("r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 3 3")
+    after_evals = {
+        e.san: e.composite_score
+        for e in evaluate_candidate_moves_with_right_brain(runtime.board, runtime.rules, limit=30)
+    }
+    assert after_evals["Bxf7+"] < before_evals["Bxf7+"] - 0.50
+    assert after_evals["O-O"] >= before_evals["O-O"] - 0.01
+
+
+

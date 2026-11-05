@@ -448,6 +448,59 @@ class CandidateMoveEvaluation:
         }
 
 
+def compute_candidate_move_fuzzy_coordinates(
+    board: chess.Board,
+    move: chess.Move,
+    *,
+    perspective: chess.Color | None = None,
+    learned_leaves: Sequence[LearnedLeaf] = (),
+) -> tuple[dict[str, float], bool, float, ChessBoardPosture, tuple[str, ...]]:
+    """Compute the 40-node Fuzzy Tree coordinate dictionary and 1-ply blunder check for `move` on `board`."""
+    us = board.turn if perspective is None else perspective
+    them = not us
+    piece_type = board.piece_type_at(move.from_square) or chess.PAWN
+    moving_val = _PIECE_VALUES.get(piece_type, 1.0)
+    is_cap = board.is_capture(move)
+    captured_val = 0.0
+    if is_cap:
+        if board.is_en_passant(move):
+            captured_val = 1.0
+        else:
+            cap_pt = board.piece_type_at(move.to_square)
+            captured_val = _PIECE_VALUES.get(cap_pt or chess.PAWN, 1.0)
+
+    next_board = board.copy()
+    next_board.push(move)
+
+    dest_attacked_by_them = next_board.is_attacked_by(them, move.to_square)
+    dest_defended_by_us = next_board.is_attacked_by(us, move.to_square)
+    is_blunder = False
+    blunder_penalty = 0.0
+    if dest_attacked_by_them:
+        if not dest_defended_by_us and moving_val > captured_val + 0.5:
+            is_blunder = True
+            blunder_penalty = moving_val - captured_val
+        elif moving_val - captured_val >= 2.5:
+            is_blunder = True
+            blunder_penalty = 0.65 * (moving_val - captured_val)
+
+    post_posture = evaluate_chess_board_posture(next_board, perspective=us)
+    shadow_names = tuple(w.pathology_name for w in post_posture.board_shadow_warnings)
+
+    coords: dict[str, float] = {k: 0.52 for k in FOUNDATIONAL_LEAVES}
+    for leaf in learned_leaves:
+        coords[leaf.leaf_id] = 0.35
+    for leaf_id, val in post_posture.philosophical_coordinates.items():
+        coords[leaf_id] = float(val)
+    for w in post_posture.board_shadow_warnings:
+        coords[w.leaf_id] = float(w.activation)
+    coords["cultural/efficiency/wastelessness"] = 0.25 if is_blunder else 0.72
+    coords["cultural/freedom/self-sufficiency"] = float(
+        post_posture.philosophical_coordinates.get("philosophical/being/existence", 0.55)
+    )
+    return coords, is_blunder, blunder_penalty, post_posture, shadow_names
+
+
 def evaluate_candidate_moves_with_right_brain(
     board: chess.Board,
     rules: Sequence[FuzzyConceptRule] = (),
@@ -470,7 +523,6 @@ def evaluate_candidate_moves_with_right_brain(
         san = board.san(move)
         uci = move.uci()
         piece_type = board.piece_type_at(move.from_square) or chess.PAWN
-        moving_val = _PIECE_VALUES.get(piece_type, 1.0)
         is_cap = board.is_capture(move)
         captured_val = 0.0
         if is_cap:
@@ -503,44 +555,49 @@ def evaluate_candidate_moves_with_right_brain(
             continue
 
         dest_attacked_by_them = next_board.is_attacked_by(them, move.to_square)
-        dest_defended_by_us = next_board.is_attacked_by(us, move.to_square)
-        is_blunder = False
-        blunder_penalty = 0.0
-        if dest_attacked_by_them:
-            if not dest_defended_by_us and moving_val > captured_val + 0.5:
-                is_blunder = True
-                blunder_penalty = moving_val - captured_val
-            elif moving_val - captured_val >= 2.5:
-                is_blunder = True
-                blunder_penalty = 0.65 * (moving_val - captured_val)
-
         is_rep = next_board.is_repetition(2)
-        post_posture = evaluate_chess_board_posture(next_board, perspective=us)
-        shadow_names = tuple(w.pathology_name for w in post_posture.board_shadow_warnings)
-
-        coords: dict[str, float] = {k: 0.52 for k in FOUNDATIONAL_LEAVES}
-        for leaf in learned_tuple:
-            coords[leaf.leaf_id] = 0.35
-        for leaf_id, val in post_posture.philosophical_coordinates.items():
-            coords[leaf_id] = float(val)
-        coords["cultural/efficiency/wastelessness"] = 0.25 if is_blunder else 0.72
-        coords["cultural/freedom/self-sufficiency"] = float(
-            post_posture.philosophical_coordinates.get("philosophical/being/existence", 0.55)
+        coords, is_blunder, blunder_penalty, post_posture, shadow_names = (
+            compute_candidate_move_fuzzy_coordinates(
+                board,
+                move,
+                perspective=us,
+                learned_leaves=learned_tuple,
+            )
         )
         for r in rule_tuple:
             for req_leaf in r.target_leaves:
                 coords.setdefault(req_leaf, 0.0)
 
+        is_hazard_match = False
         if rule_tuple:
             activations = _evaluate_rules_with_inhibition(rule_tuple, coords)
             clarity, confidence, matched, is_confused, _reason = compute_contemplation(activations)
             settled = not is_confused
+            hazard_peak = max(
+                (
+                    float(activations.get(r.concept_name, 0.0))
+                    for r in rule_tuple
+                    if r.concept_name.startswith(("hazard_", "blunder_", "avoid_"))
+                ),
+                default=0.0,
+            )
+            coached_peak = max(
+                (
+                    float(activations.get(r.concept_name, 0.0))
+                    for r in rule_tuple
+                    if r.concept_name.startswith(("coached_", "brilliancy_", "savored_"))
+                ),
+                default=0.0,
+            )
+            is_hazard_match = bool(
+                (matched and matched.startswith(("hazard_", "blunder_", "avoid_")))
+                or (hazard_peak >= 0.50 and hazard_peak >= coached_peak)
+            )
+            learned_bonus = 0.65 * coached_peak - 0.85 * hazard_peak
             if matched and matched.startswith(("hazard_", "blunder_", "avoid_")):
-                learned_bonus = -0.65 * float(confidence)
-            elif matched and not matched.startswith(("balanced_", "mutual_")):
-                learned_bonus = 0.55 * float(confidence)
-            else:
-                learned_bonus = 0.0
+                learned_bonus = min(learned_bonus, -0.65 * float(confidence))
+            elif matched and not matched.startswith(("balanced_", "mutual_")) and not is_hazard_match:
+                learned_bonus = max(learned_bonus, 0.55 * float(confidence))
         else:
             clarity, confidence, matched, settled, learned_bonus = 0.60, 0.60, None, True, 0.0
 
@@ -564,13 +621,22 @@ def evaluate_candidate_moves_with_right_brain(
         if not dest_attacked_by_them:
             tactical_score += 0.45
 
-        right_brain_score = (
-            0.85 * float(clarity)
-            + 0.65 * float(confidence)
-            + learned_bonus
-            + (0.35 if settled else -0.25)
-            - 0.45 * len(shadow_names)
-        )
+        if is_hazard_match:
+            right_brain_score = (
+                -0.45 * float(clarity)
+                - 0.55 * float(confidence)
+                + learned_bonus
+                - 0.25
+                - 0.45 * len(shadow_names)
+            )
+        else:
+            right_brain_score = (
+                0.85 * float(clarity)
+                + 0.65 * float(confidence)
+                + learned_bonus
+                + (0.35 if settled else -0.25)
+                - 0.45 * len(shadow_names)
+            )
         composite = (
             tactical_score
             + right_brain_score
@@ -1123,4 +1189,194 @@ class ObjectiveCalibratedSparringEngine:
             "target_elo": round(clamped_elo, 1),
             "engine_backend": "calibrated_builtin",
             "estimated_cp": chosen_cp,
+        }
+
+    def audit_played_move_for_game_review(
+        self,
+        board_before: chess.Board,
+        played_move_san: str,
+        *,
+        perspective: chess.Color | None = None,
+        learned_leaves: Sequence[LearnedLeaf] = (),
+    ) -> dict[str, Any]:
+        """Post-move Game Review referee (`??` Blunder, `?` Mistake, `!!` Brilliancy, `!` Great Move).
+
+        Strict Anti-Cheat Air-Gap:
+        - Called ONLY AFTER `LMFT` has already committed `played_move_san` on `board_before`.
+        - Never called during pre-move selection; never increments `self.opponent_moves_played`.
+        - Computes both `played_coordinates` and `contrastive_reference_coordinates` (`best_move_coordinates`
+          for blunders/mistakes, or `inferior_alternative_coordinates` for brilliancies/great moves)
+          so REM Sleep and the 9B Teacher can normalize fuzzy rule `target_leaves` and `[low, high]`
+          thresholds around the leaves that separated the two moves.
+        """
+        self.post_move_audits_run += 1
+        us = board_before.turn if perspective is None else perspective
+        legal = list(board_before.legal_moves)
+        if not legal:
+            raise ValueError("No legal moves on board_before for post-move review.")
+
+        try:
+            played_move = board_before.parse_san(played_move_san)
+        except Exception:
+            played_move = legal[0]
+            played_move_san = board_before.san(played_move)
+
+        learned_tuple = tuple(learned_leaves)
+        played_coords, played_is_blunder, played_b_pen, _p_post, _p_shad = (
+            compute_candidate_move_fuzzy_coordinates(
+                board_before,
+                played_move,
+                perspective=us,
+                learned_leaves=learned_tuple,
+            )
+        )
+
+        cp_before = _static_centipawns_for_color(board_before, us)
+        board_after_played = board_before.copy()
+        board_after_played.push(played_move)
+        cp_after = _static_centipawns_for_color(board_after_played, us) - (100.0 * played_b_pen)
+
+        scored_alternatives: list[tuple[float, chess.Move, str, bool]] = []
+        for mv in legal:
+            san = board_before.san(mv)
+            _c, is_b, b_pen, _post, _sh = compute_candidate_move_fuzzy_coordinates(
+                board_before,
+                mv,
+                perspective=us,
+                learned_leaves=learned_tuple,
+            )
+            nb = board_before.copy()
+            nb.push(mv)
+            est_cp = _static_centipawns_for_color(nb, us) - (100.0 * b_pen)
+            if nb.is_repetition(2):
+                est_cp -= 120.0
+            scored_alternatives.append((est_cp, mv, san, is_b))
+        scored_alternatives.sort(key=lambda item: (-item[0], item[2]))
+
+        best_cp, best_move, best_san, best_is_blunder = scored_alternatives[0]
+        if self.use_stockfish_uci and self.stockfish_path.exists():
+            try:
+                with self._chess_engine_mod.SimpleEngine.popen_uci(str(self.stockfish_path)) as eng:
+                    info_before = eng.analyse(board_before, self._chess_engine_mod.Limit(depth=6, time=0.04))
+                    pv_moves = info_before.get("pv") or []
+                    if pv_moves and pv_moves[0] in board_before.legal_moves:
+                        best_move = pv_moves[0]
+                        best_san = board_before.san(best_move)
+                    cp_b = info_before["score"].pov(us).score(mate_score=9999)
+                    if cp_b is not None:
+                        cp_before = float(cp_b)
+                        best_cp = float(cp_b)
+                    info_after = eng.analyse(board_after_played, self._chess_engine_mod.Limit(depth=6, time=0.04))
+                    cp_a = info_after["score"].pov(us).score(mate_score=9999)
+                    if cp_a is not None:
+                        cp_after = float(cp_a)
+            except Exception:
+                pass
+
+        best_coords, best_is_blunder, _best_pen, _b_post, _b_shad = (
+            compute_candidate_move_fuzzy_coordinates(
+                board_before,
+                best_move,
+                perspective=us,
+                learned_leaves=learned_tuple,
+            )
+        )
+
+        # Select an inferior alternative from the same position to contrast against when LMFT plays the best move
+        alt_move = scored_alternatives[-1][1] if len(scored_alternatives) > 1 else best_move
+        alt_cp = scored_alternatives[-1][0] if len(scored_alternatives) > 1 else best_cp
+        for est_cp, mv, _san, _is_b in reversed(scored_alternatives):
+            if mv != played_move:
+                alt_move = mv
+                alt_cp = est_cp
+                break
+        alt_coords, _alt_b, _alt_pen, _a_post, _a_shad = compute_candidate_move_fuzzy_coordinates(
+            board_before,
+            alt_move,
+            perspective=us,
+            learned_leaves=learned_tuple,
+        )
+
+        cp_drop = round(max(0.0, cp_before - cp_after, best_cp - cp_after), 1)
+        cp_gain = round(cp_after - cp_before, 1)
+        cp_edge_over_alt = round(cp_after - alt_cp, 1)
+        chaos_val = float(played_coords.get("philosophical/structure/chaos", 0.0))
+
+        if cp_drop >= 150.0 or (played_is_blunder and not best_is_blunder):
+            classification = "BLUNDER_??"
+            glyph = "??"
+            is_hazard = True
+            should_queue = True
+            ref_coords = best_coords
+        elif cp_drop >= 90.0:
+            classification = "MISTAKE_?"
+            glyph = "?"
+            is_hazard = True
+            should_queue = True
+            ref_coords = best_coords
+        elif not played_is_blunder and (
+            cp_gain >= 110.0
+            or (played_move == best_move and cp_edge_over_alt >= 140.0 and chaos_val >= 0.35)
+        ):
+            classification = "BRILLIANCY_!!"
+            glyph = "!!"
+            is_hazard = False
+            should_queue = True
+            ref_coords = alt_coords
+        elif not played_is_blunder and played_move == best_move and (
+            cp_gain >= 55.0 or cp_edge_over_alt >= 95.0
+        ):
+            classification = "GREAT_MOVE_!"
+            glyph = "!"
+            is_hazard = False
+            should_queue = True
+            ref_coords = alt_coords
+        else:
+            classification = "SOLID"
+            glyph = ""
+            is_hazard = False
+            should_queue = False
+            ref_coords = best_coords
+
+        coord_delta: dict[str, float] = {}
+        for k, v in played_coords.items():
+            diff = round(float(v) - float(ref_coords.get(k, v)), 4)
+            if abs(diff) >= 0.03:
+                coord_delta[k] = diff
+
+        top_deltas = sorted(coord_delta.items(), key=lambda kv: (-abs(kv[1]), kv[0]))[:3]
+        delta_str = ", ".join(
+            f"{k.split('/')[-1]} {('+' if d >= 0 else '')}{d:.2f}" for k, d in top_deltas
+        ) or "minimal posture delta"
+
+        if is_hazard:
+            summary = (
+                f"Game Review [{glyph} {classification}]: Played {played_move_san} "
+                f"(-{cp_drop / 100.0:.2f} pawns) instead of best move {best_san} ({delta_str})."
+            )
+        elif glyph:
+            summary = (
+                f"Game Review [{glyph} {classification}]: Found {played_move_san} "
+                f"(+{max(cp_gain, cp_edge_over_alt) / 100.0:.2f} pawns vs. alternatives; {delta_str})."
+            )
+        else:
+            summary = f"Game Review [SOLID]: Played {played_move_san} (best: {best_san})."
+
+        return {
+            "classification": classification,
+            "glyph": glyph,
+            "is_hazard": is_hazard,
+            "should_queue_for_sleep": should_queue,
+            "played_san": played_move_san,
+            "best_san": best_san,
+            "cp_before": round(cp_before, 1),
+            "cp_after": round(cp_after, 1),
+            "cp_best": round(best_cp, 1),
+            "cp_drop": cp_drop,
+            "cp_gain": cp_gain,
+            "played_coordinates": played_coords,
+            "best_move_coordinates": best_coords,
+            "contrastive_reference_coordinates": ref_coords,
+            "coordinate_delta": coord_delta,
+            "annotation_summary": summary,
         }

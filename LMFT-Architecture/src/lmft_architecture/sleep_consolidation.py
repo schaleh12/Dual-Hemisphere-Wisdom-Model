@@ -78,6 +78,9 @@ class UnresolvedSleepScene:
     left_brain_hunch: str
     social_drift_detected: bool = False
     active_concept_collision: str | None = None
+    is_hazard: bool = False
+    contrastive_reference_coordinates: dict[str, float] | None = None
+    game_review_annotation: str | None = None
 
 
 @dataclass(frozen=True)
@@ -179,6 +182,120 @@ def _average_cluster_coordinates(scenes: Sequence[UnresolvedSleepScene]) -> dict
     return avg
 
 
+def _average_contrastive_reference_coordinates(
+    scenes: Sequence[UnresolvedSleepScene],
+) -> dict[str, float] | None:
+    """Average `contrastive_reference_coordinates` across scenes in a cluster when present."""
+    ref_scenes = [s for s in scenes if s.contrastive_reference_coordinates]
+    if not ref_scenes:
+        return None
+    all_keys: set[str] = set()
+    for s in ref_scenes:
+        assert s.contrastive_reference_coordinates is not None
+        all_keys.update(s.contrastive_reference_coordinates.keys())
+    avg_ref: dict[str, float] = {}
+    for k in sorted(all_keys):
+        vals = [
+            float((s.contrastive_reference_coordinates or {}).get(k, 0.50))
+            for s in ref_scenes
+        ]
+        avg_ref[k] = round(sum(vals) / len(vals), 4)
+    return avg_ref
+
+
+def _raw_rule_min_similarity(
+    target_leaves: Mapping[str, float],
+    coords: Mapping[str, float],
+) -> float:
+    """Compute the raw `min_similarity` inside `FuzzyConceptRule.evaluate` before `[low, high]` trapezoidal scaling."""
+    if not target_leaves:
+        return 0.0
+    sims: list[float] = []
+    for leaf_id, target_val in target_leaves.items():
+        actual = float(coords.get(leaf_id, 0.50))
+        t_val = float(target_val)
+        if t_val >= 0.65 and actual >= t_val:
+            sim = 1.0
+        elif t_val <= 0.30 and actual <= t_val:
+            sim = 1.0
+        else:
+            sim = 1.0 - abs(actual - t_val)
+        sims.append(sim)
+    return min(sims)
+
+
+def normalize_contrastive_target_leaves_and_thresholds(
+    cluster_key: str,
+    avg_coords: Mapping[str, float],
+    avg_ref_coords: Mapping[str, float] | None = None,
+) -> tuple[dict[str, float], float, float]:
+    """Select `target_leaves` and normalize `[low, high]` activation thresholds using contrastive Game Review coordinates.
+
+    - When `avg_ref_coords` is `None`, preserves the standard `_anchor_target_leaves_from_cluster` behavior.
+    - When `avg_ref_coords` is present (e.g., comparing a played Blunder `??` against the missed Best Move `!`,
+      or a Brilliancy `!!` against an inferior alternative from the exact same board position):
+      1. Selects the 2–3 leaves with the largest contrastive divergence `|avg_coords[k] - avg_ref_coords[k]|`.
+      2. Sets each selected leaf's target value to `avg_coords[k]` so `min_similarity` peaks on `avg_coords`
+         and drops by `max_delta` on `avg_ref_coords`.
+      3. Normalizes `[rule_low, rule_high]` directly inside `[sim_ref, sim_target]` so the forged rule
+         fires at `~1.0` on `avg_coords` and `0.0` on `avg_ref_coords`.
+    """
+    base_targets = _anchor_target_leaves_from_cluster(cluster_key, avg_coords)
+    has_tier2_or_chaos = (
+        any(leaf_tier(k) >= 2 for k in base_targets)
+        or float(base_targets.get("philosophical/structure/chaos", 0.0)) >= 0.45
+    )
+    default_low = 0.55 if has_tier2_or_chaos else 0.72
+    default_high = 0.78 if has_tier2_or_chaos else 0.85
+
+    if not avg_ref_coords:
+        return base_targets, default_low, default_high
+
+    transient_exp = {
+        SALIENCE_LEAF,
+        VALENCE_LEAF,
+        AROUSAL_LEAF,
+        RESONANCE_LEAF,
+        RETENTION_LEAF,
+        NOVELTY_LEAF,
+    }
+    divergent: list[tuple[float, str, float, float]] = []
+    for k, raw_v in avg_coords.items():
+        if not is_valid_leaf_id(k) or k in transient_exp:
+            continue
+        if not k.startswith(("cultural/", "philosophical/", "experiential/")):
+            continue
+        v_act = float(raw_v)
+        v_ref = float(avg_ref_coords.get(k, v_act))
+        abs_diff = abs(v_act - v_ref)
+        if abs_diff >= 0.03:
+            divergent.append((abs_diff, k, v_act, v_ref))
+
+    divergent.sort(key=lambda item: (-item[0], item[1]))
+    target_leaves: dict[str, float] = {}
+    for idx, (abs_diff, k, v_act, _v_ref) in enumerate(divergent):
+        if idx >= 3 or (idx == 2 and abs_diff < 0.08):
+            break
+        target_leaves[k] = round(min(0.95, max(0.05, v_act)), 2)
+
+    if len(target_leaves) < 2:
+        for k, t_val in base_targets.items():
+            if k not in target_leaves:
+                target_leaves[k] = t_val
+                if len(target_leaves) >= 2:
+                    break
+
+    sim_target = _raw_rule_min_similarity(target_leaves, avg_coords)
+    sim_ref = _raw_rule_min_similarity(target_leaves, avg_ref_coords)
+    gap = sim_target - sim_ref
+    if gap >= 0.04:
+        rule_low = round(max(0.35, min(0.92, sim_ref + 0.25 * gap)), 4)
+        rule_high = round(max(rule_low + 0.02, min(0.98, sim_target - 0.15 * gap)), 4)
+        return target_leaves, rule_low, rule_high
+
+    return target_leaves, default_low, default_high
+
+
 def _build_sleep_teacher_forge_request(
     cluster_key: str,
     scenes: Sequence[UnresolvedSleepScene],
@@ -212,12 +329,24 @@ def _build_sleep_teacher_forge_request(
         if is_valid_leaf_id(k) and (v >= 0.45 or k == "cultural/justice/fairness")
     }
     hunches: list[str] = []
+    review_notes: list[str] = []
     for s in scenes:
         if s.left_brain_hunch:
             masked = s.left_brain_hunch
             for b in banned_substrings:
                 masked = re.sub(re.escape(b), "resource", masked, flags=re.IGNORECASE)
             hunches.append(masked)
+        if s.game_review_annotation:
+            review_notes.append(s.game_review_annotation)
+
+    avg_ref_coords = _average_contrastive_reference_coordinates(scenes)
+    contrastive_delta: dict[str, float] = {}
+    if avg_ref_coords:
+        for k, v in avg_coords.items():
+            if is_valid_leaf_id(k) and k in avg_ref_coords:
+                diff = round(float(v) - float(avg_ref_coords[k]), 4)
+                if abs(diff) >= 0.03:
+                    contrastive_delta[k] = diff
 
     system = (
         "You are the offline Sleep-Mode Teacher consolidating unresolved experiences into general, "
@@ -230,7 +359,7 @@ def _build_sleep_teacher_forge_request(
         "3. `concept_name` must be lower_snake_case.\n"
         "4. Return JSON only. /no_think"
     )
-    user_payload = {
+    user_payload: dict[str, object] = {
         "pattern_id": cluster_key,
         "observed_coordinate_profile": salient_coords,
         "unresolved_reflection_notes": hunches,
@@ -241,6 +370,10 @@ def _build_sleep_teacher_forge_request(
             "using zero scene-specific nouns."
         ),
     }
+    if contrastive_delta:
+        user_payload["contrastive_coordinate_delta_vs_best_alternative"] = contrastive_delta
+    if review_notes:
+        user_payload["objective_referee_annotations"] = review_notes
     import json
 
     return {
@@ -437,20 +570,21 @@ def run_sleep_consolidation(
     active_rules: list[FuzzyConceptRule] = list(refined_rules)
     existing_names = {r.concept_name for r in active_rules}
 
-    # 2. Group unresolved scenes into distinct coordinate clusters
-    clusters: dict[str, list[UnresolvedSleepScene]] = {}
+    # 2. Group unresolved scenes into distinct coordinate clusters (keeping hazard vs. non-hazard separate)
+    clusters: dict[tuple[str, bool], list[UnresolvedSleepScene]] = {}
     for s in unresolved_scenes:
         ckey = _cluster_key_for_unresolved(s)
         if ckey is not None:
-            clusters.setdefault(ckey, []).append(s)
+            clusters.setdefault((ckey, bool(s.is_hazard)), []).append(s)
 
     forged_rules: list[FuzzyConceptRule] = []
     harvested_clause_ids: list[str] = []
     resolved_scene_indices: list[int] = []
     cur_archives = archives
 
-    for ckey, group in clusters.items():
+    for (ckey, is_hazard_group), group in clusters.items():
         avg_coords = _average_cluster_coordinates(group)
+        avg_ref_coords = _average_contrastive_reference_coordinates(group)
         req = _build_sleep_teacher_forge_request(
             ckey,
             group,
@@ -501,18 +635,18 @@ def run_sleep_consolidation(
             _validate_teacher_sleep_json,
         )
 
-        target_leaves = _anchor_target_leaves_from_cluster(ckey, avg_coords)
+        target_leaves, rule_low, rule_high = normalize_contrastive_target_leaves_and_thresholds(
+            ckey,
+            avg_coords,
+            avg_ref_coords,
+        )
         concept_name = proposal["concept_name"]
+        if is_hazard_group and not concept_name.startswith(("hazard_", "blunder_", "avoid_")):
+            concept_name = f"hazard_{concept_name}"
         if concept_name in existing_names:
             concept_name = f"{concept_name}_{ckey.split('_')[0]}"
 
         rep_scene = group[0].scene_index
-        has_tier2_or_chaos = (
-            any(leaf_tier(k) >= 2 for k in target_leaves)
-            or float(target_leaves.get("philosophical/structure/chaos", 0.0)) >= 0.45
-        )
-        rule_low = 0.55 if has_tier2_or_chaos else 0.72
-        rule_high = 0.78 if has_tier2_or_chaos else 0.85
         new_rule = FuzzyConceptRule(
             rule_id=f"rule-sleep-s{rep_scene}-{concept_name[:28]}",
             concept_name=concept_name,

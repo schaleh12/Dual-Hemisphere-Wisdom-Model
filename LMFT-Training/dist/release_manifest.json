@@ -2,8 +2,8 @@
   "schema_version": 1,
   "version": "0.2.0",
   "github_repo": "schaleh12/Dual-Hemisphere-Wisdom-Model",
-  "build_sha256": "a1c538992aceef1932e114c2324456cbbcc7fd3e3fda7da890aad93c7b3bf434",
-  "build_short_hash": "a1c538992ace",
+  "build_sha256": "051c56ee47fb79da54367a70472c0b16d1419686b5604ba72d852958b2151877",
+  "build_short_hash": "051c56ee47fb",
   "files": {
     "src/lmft_architecture/__init__.py": {
       "sha256": "a89f56c2195e87129adbffa5065d8769ea096e13ba98783d217c4d120ee92623",
@@ -90,12 +90,12 @@
       "size_bytes": 3267
     },
     "src/lmft_architecture/chess_app.py": {
-      "sha256": "2ed9ebc8c0ef579ebaa45e83c76931888e0d65e88738e1c816525272a4f1e6f8",
-      "size_bytes": 108111
+      "sha256": "2e6eafd4e159388bd140ffd3fa8efdfbf1179b0a52c4dc1aa3c7e3cd47a9ecb9",
+      "size_bytes": 109808
     },
     "src/lmft_architecture/chess_kibitz_bridge.py": {
-      "sha256": "d24b331b5f7a51a1267d99339c12169c79ac0336b634371c72ac0c3d02ee9009",
-      "size_bytes": 44582
+      "sha256": "517b1f2716519e974651c02b6a94e1f7bbeff37876604315681001b9cc17ef24",
+      "size_bytes": 55334
     },
     "src/lmft_architecture/chess_ui.py": {
       "sha256": "907ae83054fe389f4cbf6269357929c00bc37dcab7a3c9cf50a94555dbe81b5c",
@@ -258,8 +258,8 @@
       "size_bytes": 2752
     },
     "src/lmft_architecture/sleep_consolidation.py": {
-      "sha256": "9f54e6a7d8587912e3860257790584331af49f767587b649c07d5df3d637a189",
-      "size_bytes": 24852
+      "sha256": "76dfd915c12778265206f0453dae475198b2e07634a4ec1a829d5a85768e4761",
+      "size_bytes": 30544
     },
     "src/lmft_architecture/subliminal_gap_splice.py": {
       "sha256": "1ef7a8a54a452ae8b0a4525691ec40ad9f581b68a6cf081d1d88c4c68e50ba01",
@@ -302,8 +302,8 @@
       "size_bytes": 3352
     },
     "dist/lmft-sanctuary-club-v0.1.0-win64.zip": {
-      "sha256": "45276a2f5472a1a5bf03a9c79f7904d509b4c86d5f87fc4ffca11b2db9eecfcb",
-      "size_bytes": 369093
+      "sha256": "3d7712518359510fdf2942306eea53cabf9ad018ca23b05b946b794358415614",
+      "size_bytes": 373105
     },
     "dist/impish_bloodmoon_patreon.enc": {
       "sha256": "30ee2d3b94331e70fba3afa30dd3aed006e007167e924b4a27afab9ee7a4c065",

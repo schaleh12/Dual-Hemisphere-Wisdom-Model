@@ -72,6 +72,7 @@ from .chess_kibitz_bridge import (
     ChessBoardPosture,
     ObjectiveCalibratedSparringEngine,
     build_natural_chess_scenario_prompt,
+    compute_candidate_move_fuzzy_coordinates,
     compute_fide_elo_update,
     evaluate_candidate_moves_with_right_brain,
     evaluate_chess_board_posture,
@@ -135,8 +136,10 @@ from .sleep_consolidation import (
     UnresolvedSleepScene,
     _anchor_target_leaves_from_cluster,
     _average_cluster_coordinates,
+    _average_contrastive_reference_coordinates,
     _cluster_key_for_unresolved,
     _derive_concept_tags,
+    normalize_contrastive_target_leaves_and_thresholds,
     refine_colliding_rules_during_sleep,
     run_sleep_consolidation,
 )
@@ -1233,6 +1236,7 @@ class ChessKibitzerRuntime:
         left_brain_proposed_san: str | None = None
         veto_reason: str | None = None
         vetoed_coords: dict[str, float] | None = None
+        safe_choice_coords: dict[str, float] | None = None
         pre_delib_pair: tuple[str, Any] | None = None
         top_san_set = {c.san for c in top_candidates[:5]}
 
@@ -1299,19 +1303,22 @@ class ChessKibitzerRuntime:
                                 f"Right-Brain played {right_brain_choice.san} (score={right_brain_choice.composite_score:.2f})."
                             )
                             try:
-                                b_copy = self.board.copy()
-                                us_color = b_copy.turn
-                                b_copy.push(b_copy.parse_san(left_brain_proposed_san))
-                                v_post = evaluate_chess_board_posture(b_copy, perspective=us_color)
-                                vetoed_coords = {k: 0.52 for k in FOUNDATIONAL_LEAVES}
-                                vetoed_coords.update(
-                                    {k: float(v) for k, v in v_post.philosophical_coordinates.items()}
+                                us_color = self.board.turn
+                                vetoed_coords, _, _, _, _ = compute_candidate_move_fuzzy_coordinates(
+                                    self.board,
+                                    self.board.parse_san(left_brain_proposed_san),
+                                    perspective=us_color,
+                                    learned_leaves=self.learned_leaves,
                                 )
-                                vetoed_coords["cultural/efficiency/wastelessness"] = (
-                                    0.18 if cand_eval.is_blunder else 0.30
+                                safe_choice_coords, _, _, _, _ = compute_candidate_move_fuzzy_coordinates(
+                                    self.board,
+                                    self.board.parse_san(right_brain_choice.san),
+                                    perspective=us_color,
+                                    learned_leaves=self.learned_leaves,
                                 )
                             except Exception:
                                 vetoed_coords = None
+                                safe_choice_coords = None
                         else:
                             chosen_san = left_brain_proposed_san
                             selection_mode = "left_brain_kibitz_commit"
@@ -1338,6 +1345,8 @@ class ChessKibitzerRuntime:
                 check_auto_sleep=True,
                 is_hazard=True,
                 override_coordinates=vetoed_coords,
+                contrastive_reference_coordinates=safe_choice_coords,
+                game_review_annotation=veto_reason,
             )
             snap = self.get_state_snapshot()
         snap["last_hybrid_move_arbitration"] = arbitration_record
@@ -1676,6 +1685,8 @@ class ChessKibitzerRuntime:
         check_auto_sleep: bool = True,
         is_hazard: bool = False,
         override_coordinates: dict[str, float] | None = None,
+        contrastive_reference_coordinates: dict[str, float] | None = None,
+        game_review_annotation: str | None = None,
     ) -> dict[str, Any]:
         rec = self._turn_records_by_id.get(int(scene_index))
         if rec is None:
@@ -1686,10 +1697,11 @@ class ChessKibitzerRuntime:
         scene_coords = dict(override_coordinates) if override_coordinates is not None else dict(vibe.coordinates)
         if is_hazard:
             self._hazard_scene_indices.add(int(scene_index))
-            scene_coords["cultural/efficiency/wastelessness"] = min(
-                float(scene_coords.get("cultural/efficiency/wastelessness", 0.20)),
-                0.20,
-            )
+            if override_coordinates is None:
+                scene_coords["cultural/efficiency/wastelessness"] = min(
+                    float(scene_coords.get("cultural/efficiency/wastelessness", 0.20)),
+                    0.20,
+                )
         sleep_scene = UnresolvedSleepScene(
             scene_index=int(scene_index),
             scenario_text=f"{rec['scenario_text']}{note_suffix}",
@@ -1700,7 +1712,14 @@ class ChessKibitzerRuntime:
             arousal=vibe.arousal,
             left_brain_hunch=turn.final_conscious_note or rec["scenario_text"],
             social_drift_detected=False,
-            active_concept_collision=vibe.active_concept,
+            active_concept_collision=None if override_coordinates is not None else vibe.active_concept,
+            is_hazard=bool(is_hazard),
+            contrastive_reference_coordinates=(
+                dict(contrastive_reference_coordinates)
+                if contrastive_reference_coordinates is not None
+                else None
+            ),
+            game_review_annotation=game_review_annotation or (user_note.strip() if user_note.strip() else None),
         )
         self.sleep_queue = [s for s in self.sleep_queue if s.scene_index != int(scene_index)]
         self.sleep_queue.append(sleep_scene)
@@ -1849,27 +1868,35 @@ class ChessKibitzerRuntime:
         is_lmft_turn = self.board.turn == lmft_color
 
         if is_lmft_turn:
-            cp_before = self.sparring_engine.evaluate_position_centipawns(
-                self.board,
-                perspective=lmft_color,
-            )
+            board_before = self.board.copy()
             snap = self.handle_chess_ai_move()
-            cp_after = self.sparring_engine.evaluate_position_centipawns(
-                self.board,
+            last_san = self.move_history_san[-1] if self.move_history_san else "?"
+            review = self.sparring_engine.audit_played_move_for_game_review(
+                board_before,
+                last_san,
                 perspective=lmft_color,
+                learned_leaves=self.learned_leaves,
             )
-            cp_drop = round(cp_before - cp_after, 1)
-            if cp_drop >= 150.0 and self.chat_messages:
+            if self.chat_messages:
+                self.chat_messages[-1].setdefault("telemetry", {})["game_review"] = review
+            already_vetoed = bool(
+                getattr(self, "last_hybrid_move_arbitration", None)
+                and self.last_hybrid_move_arbitration.get("veto_reason")
+            )
+            if (
+                review["should_queue_for_sleep"]
+                and self.chat_messages
+                and (not already_vetoed or review["is_hazard"])
+            ):
                 last_scene_id = int(self.chat_messages[-1].get("id", self.scene_counter))
-                last_san = self.move_history_san[-1] if self.move_history_san else "?"
                 self.flag_turn_for_coaching(
                     last_scene_id,
-                    user_note=(
-                        f"Objective Referee Blunder Flag: LMFT move {last_san} dropped evaluation "
-                        f"by {cp_drop / 100.0:.2f} pawns against {self.opponent_target_elo:.0f}-Elo opponent."
-                    ),
+                    user_note=review["annotation_summary"],
                     check_auto_sleep=True,
-                    is_hazard=True,
+                    is_hazard=bool(review["is_hazard"]),
+                    override_coordinates=review["played_coordinates"],
+                    contrastive_reference_coordinates=review["contrastive_reference_coordinates"],
+                    game_review_annotation=review["annotation_summary"],
                 )
                 snap = self.get_state_snapshot()
             mover_tag = "LMFT"
@@ -1940,36 +1967,34 @@ class ChessKibitzerRuntime:
         forged_rules: list[FuzzyConceptRule] = []
         harvested_clause_ids: list[str] = []
 
-        clusters: dict[str, list[UnresolvedSleepScene]] = {}
+        clusters: dict[tuple[str, bool], list[UnresolvedSleepScene]] = {}
         for s in queued_scenes:
             ckey = _cluster_key_for_unresolved(s)
             if ckey is not None:
-                clusters.setdefault(ckey, []).append(s)
+                is_s_haz = bool(s.is_hazard or s.scene_index in self._hazard_scene_indices)
+                clusters.setdefault((ckey, is_s_haz), []).append(s)
 
         cur_archives = self.archives
         cur_ledger = self.ledger
 
-        for ckey, group in clusters.items():
+        for (ckey, is_group_hazard), group in clusters.items():
             avg_coords = _average_cluster_coordinates(group)
-            target_leaves = _anchor_target_leaves_from_cluster(ckey, avg_coords)
+            avg_ref_coords = _average_contrastive_reference_coordinates(group)
+            target_leaves, rule_low, rule_high = normalize_contrastive_target_leaves_and_thresholds(
+                ckey,
+                avg_coords,
+                avg_ref_coords,
+            )
             rep = group[0]
             rep_scene = rep.scene_index
 
-            is_group_hazard = any(s.scene_index in self._hazard_scene_indices for s in group)
             prefix = "hazard" if is_group_hazard else "coached"
             base_name = f"{prefix}_{ckey}"
             concept_name = base_name if base_name not in existing_names else f"{base_name}_s{rep_scene}"
 
-            has_tier2_or_chaos = (
-                any(leaf_tier(k) >= 2 for k in target_leaves)
-                or float(target_leaves.get("philosophical/structure/chaos", 0.0)) >= 0.45
-            )
-            rule_low = 0.55 if has_tier2_or_chaos else 0.72
-            rule_high = 0.78 if has_tier2_or_chaos else 0.85
-
             description = (
                 f"Consolidated REM chess wisdom rule for {ckey.replace('_', ' ')}: "
-                f"{rep.scenario_text[:120]}"
+                f"{(rep.game_review_annotation or rep.scenario_text)[:140]}"
             )
             new_rule = FuzzyConceptRule(
                 rule_id=f"rule-sleep-s{rep_scene}-{concept_name[:28]}",
@@ -2118,15 +2143,17 @@ class ChessKibitzerRuntime:
                 forged_rules_list: tuple[FuzzyConceptRule, ...] = ()
                 if queued_count > 0:
                     if self.teacher is not None:
+                        virgin_ids = {r.rule_id for r in VIRGIN_FOUNDATIONAL_RULES}
+                        non_virgin_rules = tuple(r for r in self.rules if r.rule_id not in virgin_ids)
                         report = run_sleep_consolidation(
-                            self.teacher,
-                            queued_snapshot,
-                            self.rules,
-                            self.archives,
-                            self.ledger,
+                            unresolved_scenes=queued_snapshot,
+                            rules=non_virgin_rules,
                             learned_leaves=self.learned_leaves,
+                            archives=self.archives,
+                            ledger=self.ledger,
+                            teacher=self.teacher,
                         )
-                        self.rules = report.updated_rules
+                        self.rules = _ensure_foundational_rules(report.updated_rules)
                         self.archives = report.updated_archives
                         self.ledger = report.updated_ledger
                         refined_ids = report.refined_rule_ids
