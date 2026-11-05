@@ -429,7 +429,12 @@ async function apiPost(path, payload) {
     body: JSON.stringify(payload || {})
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || "Request failed");
+  if (!res.ok) {
+    const errMsg = data.error || "Request failed";
+    const strip = document.getElementById("board-reflex-strip");
+    if (strip) strip.textContent = "Notice: " + errMsg;
+    throw new Error(errMsg);
+  }
   renderState(data);
   return data;
 }
@@ -631,6 +636,16 @@ async function playAiMove() {
   }
 }
 
+async function stepSelfPlayOnce() {
+  if (autoSelfPlayBusy) return;
+  autoSelfPlayBusy = true;
+  try {
+    await apiPost("/api/microwave/step", {});
+  } finally {
+    autoSelfPlayBusy = false;
+  }
+}
+
 function toggleAutoSelfPlay() {
   const btn = document.getElementById("auto-self-play-btn");
   if (autoSelfPlayTimer) {
@@ -642,16 +657,8 @@ function toggleAutoSelfPlay() {
   }
   btn.classList.add("btn-active-loop");
   btn.textContent = "Stop Self-Play Loop";
-  apiPost("/api/microwave/step", {});
-  autoSelfPlayTimer = setInterval(async () => {
-    if (autoSelfPlayBusy) return;
-    autoSelfPlayBusy = true;
-    try {
-      await apiPost("/api/microwave/step", {});
-    } finally {
-      autoSelfPlayBusy = false;
-    }
-  }, 2200);
+  stepSelfPlayOnce();
+  autoSelfPlayTimer = setInterval(stepSelfPlayOnce, 2200);
 }
 
 async function undoChessMove() { await apiPost("/api/chess/undo", {}); }

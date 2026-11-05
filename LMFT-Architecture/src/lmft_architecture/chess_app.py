@@ -428,6 +428,7 @@ class ChessKibitzerRuntime:
         self.elo_draws: int = 0
         self.games_completed_count: int = 0
         self.lmft_playing_white: bool = True
+        self._current_game_adjudicated: bool = False
         self.last_elo_receipt: dict[str, Any] | None = None
         meta_path = self.state_dir / "club_meta.json"
         if meta_path.exists():
@@ -1191,6 +1192,7 @@ class ChessKibitzerRuntime:
             self.board.pop()
             if self.move_history_san:
                 self.move_history_san.pop()
+        self._current_game_adjudicated = False
         self.last_board_reflex = None
         self.board_posture = evaluate_chess_board_posture(self.board)
         return self.get_state_snapshot()
@@ -1346,6 +1348,7 @@ class ChessKibitzerRuntime:
         fen = PRESET_CHESS_POSITIONS[key]["fen"] if key in PRESET_CHESS_POSITIONS else key
         self.board = chess.Board(fen)
         self.move_history_san.clear()
+        self._current_game_adjudicated = False
         self.last_board_reflex = None
         self.board_posture = evaluate_chess_board_posture(self.board)
         return self.get_state_snapshot()
@@ -1813,6 +1816,7 @@ class ChessKibitzerRuntime:
             "next_lmft_color": next_color,
             "next_opponent_target_elo": self.opponent_target_elo,
         }
+        self._current_game_adjudicated = True
         self.last_elo_receipt = receipt
         self.chat_messages.append(
             {
@@ -1835,9 +1839,10 @@ class ChessKibitzerRuntime:
         self.microwave_step_counter += 1
         step_idx = self.microwave_step_counter
         if self.board.is_game_over(claim_draw=True) or len(self.move_history_san) >= 160:
-            self._adjudicate_and_record_game_outcome()
-            if self.sleep_queue and self.active_lineage != "virgin":
-                self.handle_run_rem_sleep(auto_triggered=True)
+            if not getattr(self, "_current_game_adjudicated", False):
+                self._adjudicate_and_record_game_outcome()
+                if self.sleep_queue and self.active_lineage != "virgin":
+                    self.handle_run_rem_sleep(auto_triggered=True)
             self.handle_set_fen("start")
 
         lmft_color = chess.WHITE if self.lmft_playing_white else chess.BLACK
@@ -1876,7 +1881,7 @@ class ChessKibitzerRuntime:
             snap = self.handle_chess_move(opp["move_san"])
             mover_tag = f"SparringEngine({self.opponent_target_elo:.0f})"
 
-        if self.board.is_game_over(claim_draw=True):
+        if self.board.is_game_over(claim_draw=True) and not getattr(self, "_current_game_adjudicated", False):
             self._adjudicate_and_record_game_outcome()
             if self.sleep_queue and self.active_lineage != "virgin":
                 snap = self.handle_run_rem_sleep(auto_triggered=True)

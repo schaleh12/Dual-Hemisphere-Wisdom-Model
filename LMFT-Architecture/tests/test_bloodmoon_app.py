@@ -208,6 +208,8 @@ def test_clockwise_three_phase_state_machine_and_http_endpoints(tmp_path: Path) 
     )
     assert snap1["clockwise_phase"] == 2
     assert snap1["script_canvas_text"] != ""
+    # Phase 1 (Female Producer) never queues her own prompt into `sleep_queue`
+    assert snap1["sleep_queue_count"] == 0
     weaver_msg = snap1["chat_messages"][-1]
     assert weaver_msg["telemetry"]["sparring_role"] == "INDUCTION_WEAVER"
     assert weaver_msg["telemetry"]["num_sentences"] == 3
@@ -216,7 +218,7 @@ def test_clockwise_three_phase_state_machine_and_http_endpoints(tmp_path: Path) 
     # Step 2: Phase 2 — Male Content-Lover (The Audience & Self-Immunizer)
     snap2 = runtime.step_clockwise_phase()
     assert snap2["clockwise_phase"] == 3
-    assert snap2["sleep_queue_count"] >= 1
+    assert snap2["sleep_queue_count"] == 1
     sr = snap2["last_sparring_result"]
     assert sr is not None
     assert sr["polarity_mode"] == "feminine_to_masculine"
@@ -339,6 +341,18 @@ def test_user_seeded_baseline_script_initiates_clockwise_cycle(tmp_path: Path) -
     assert alignment["master_sentence_count"] == 3
     assert 0.0 <= alignment["wave_alignment_score"] <= 1.0
     assert len(alignment["per_sentence_alignment"]) >= 1
+
+    # Verify restarting `BloodmoonClockRuntime` on the same `impish_state_dir` reconstructs `master_cadence_blueprint` on startup
+    restarted_runtime = BloodmoonClockRuntime(
+        repo_root=tmp_path,
+        impish_state_dir=tmp_path / "seeded_bloodmoon_state",
+        impish_left_brain=_make_mini_left_brain(),
+        lazy_load_gpu=False,
+    )
+    restarted_snap = restarted_runtime.get_state_snapshot()
+    assert restarted_snap["baseline_exemplar_script"] == owner_script
+    assert restarted_snap["master_cadence_blueprint"] is not None
+    assert restarted_snap["master_cadence_blueprint"]["sentence_count"] == 3
 
 
 def test_persistent_one_time_patreon_password_lock_and_unlock(tmp_path: Path) -> None:

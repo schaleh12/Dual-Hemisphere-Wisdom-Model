@@ -333,7 +333,7 @@ BLOODMOON_SINGLE_PAGE_HTML = """<!DOCTYPE html>
         <button class="btn" onclick="saveScriptCanvas()">Save Canvas</button>
       </div>
     </div>
-    <textarea id="script-canvas-textarea" placeholder="Paste your own baseline hypnosis script here to initiate the cycle at your standard, or let Phase 1 (Female Script-Writer) generate one..."></textarea>
+    <textarea id="script-canvas-textarea" oninput="markCanvasDirty()" placeholder="Paste your own baseline hypnosis script here to initiate the cycle at your standard, or let Phase 1 (Female Script-Writer) generate one..."></textarea>
     <div class="invariant-note" id="last-sparring-summary">Ready for Phase 1 (Female Script-Writer).</div>
   </section>
 
@@ -359,6 +359,12 @@ BLOODMOON_SINGLE_PAGE_HTML = """<!DOCTYPE html>
 let lastRenderedChatSig = "";
 let clockwiseLoopTimer = null;
 let clockwiseBusy = false;
+let canvasDirty = false;
+let lastServerCanvasText = null;
+
+function markCanvasDirty() {
+  canvasDirty = true;
+}
 
 function escapeHtml(str) {
   return String(str || "")
@@ -375,7 +381,12 @@ async function apiPost(path, payload) {
     body: JSON.stringify(payload || {})
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || "Request failed");
+  if (!res.ok) {
+    const errMsg = data.error || "Request failed";
+    const summaryEl = document.getElementById("last-sparring-summary");
+    if (summaryEl) summaryEl.textContent = "Notice: " + errMsg;
+    throw new Error(errMsg);
+  }
   renderState(data);
   return data;
 }
@@ -411,8 +422,13 @@ function renderState(s) {
     : "LOCKED — Enter Patreon Unlock Password once in the top bar";
 
   const canvasEl = document.getElementById("script-canvas-textarea");
-  if (document.activeElement !== canvasEl && typeof s.script_canvas_text === "string") {
-    canvasEl.value = s.script_canvas_text;
+  if (typeof s.script_canvas_text === "string") {
+    const serverChanged = s.script_canvas_text !== lastServerCanvasText;
+    lastServerCanvasText = s.script_canvas_text;
+    if (serverChanged || (!canvasDirty && document.activeElement !== canvasEl)) {
+      canvasEl.value = s.script_canvas_text;
+      if (serverChanged) canvasDirty = false;
+    }
   }
 
   if (s.last_sparring_result) {
@@ -466,6 +482,7 @@ async function seedWithMyScript() {
   }
   clockwiseBusy = true;
   try {
+    canvasDirty = false;
     await apiPost("/api/clockwise/seed_script", { script_text: txt });
   } finally {
     clockwiseBusy = false;
@@ -478,8 +495,9 @@ async function stepClockwisePhase() {
   try {
     const seed = document.getElementById("clockwise-seed-input").value;
     const sents = Number(document.getElementById("clockwise-sentences-select").value || 3);
-    const canvasTxt = document.getElementById("script-canvas-textarea").value.trim();
-    await apiPost("/api/clockwise/step", { seed_theme: seed, num_sentences: sents, custom_script: canvasTxt });
+    const customTxt = canvasDirty ? document.getElementById("script-canvas-textarea").value.trim() : "";
+    canvasDirty = false;
+    await apiPost("/api/clockwise/step", { seed_theme: seed, num_sentences: sents, custom_script: customTxt });
   } finally {
     clockwiseBusy = false;
   }
@@ -491,8 +509,9 @@ async function runFullClockwiseCycle() {
   try {
     const seed = document.getElementById("clockwise-seed-input").value;
     const sents = Number(document.getElementById("clockwise-sentences-select").value || 3);
-    const canvasTxt = document.getElementById("script-canvas-textarea").value.trim();
-    await apiPost("/api/clockwise/cycle", { seed_theme: seed, num_sentences: sents, custom_script: canvasTxt });
+    const customTxt = canvasDirty ? document.getElementById("script-canvas-textarea").value.trim() : "";
+    canvasDirty = false;
+    await apiPost("/api/clockwise/cycle", { seed_theme: seed, num_sentences: sents, custom_script: customTxt });
   } finally {
     clockwiseBusy = false;
   }
@@ -526,6 +545,7 @@ async function sendChatMessage() {
 
 async function saveScriptCanvas() {
   const txt = document.getElementById("script-canvas-textarea").value;
+  canvasDirty = false;
   await apiPost("/api/canvas/update", { script_text: txt, append: false });
 }
 

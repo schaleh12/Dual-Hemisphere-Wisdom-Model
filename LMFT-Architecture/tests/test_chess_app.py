@@ -493,4 +493,12 @@ def test_strict_airgap_sparring_engine_and_objective_elo_update(tmp_path: Path) 
     assert runtime.elo_wins == 1
     assert runtime.lmft_playing_white is False
 
+    # Verify the next `handle_microwave_step()` resets the board for Game #2 WITHOUT double-adjudicating Game #1
+    step_next_game = runtime.handle_microwave_step()
+    assert runtime.games_completed_count == 1
+    assert runtime.lmft_elo == 1012.0
+    assert runtime.lmft_playing_white is False
+    assert step_next_game["last_microwave_status"]["mover"].startswith("SparringEngine")
+    assert len(runtime.move_history_san) == 1
+
 

@@ -87,6 +87,7 @@ from .entrainment_sparring import (
     build_resistor_scenario_prompt,
     build_weaver_scenario_prompt,
     evaluate_sparring_verdict,
+    extract_master_cadence_wave,
     measure_induction_potency,
     measure_lucid_resistance,
     resolve_sparring_polarity,
@@ -385,6 +386,18 @@ class BloodmoonClockRuntime:
 
         self.sleep_queue: list[UnresolvedSleepScene] = []
         self.savored_turn_ids: list[int] = self._load_initial_savored_ids()
+        self.master_cadence_blueprint: Any | None = (
+            extract_master_cadence_wave(
+                self.baseline_exemplar_script,
+                self.sensors,
+                birth_state=self.birth_state,
+                rules=self.rules,
+                learned_leaves=self.learned_leaves,
+                prior_memory=self.memory,
+            )
+            if getattr(self, "baseline_exemplar_script", "").strip()
+            else None
+        )
         self.chat_messages: list[dict[str, Any]] = []
         self._turn_records_by_id: dict[int, dict[str, Any]] = {}
 
@@ -663,6 +676,8 @@ class BloodmoonClockRuntime:
         pairs: list[tuple[str, str]] = []
         pending_user: str | None = None
         for msg in self.chat_messages:
+            if msg.get("telemetry", {}).get("sparring_role"):
+                continue
             sender = msg.get("sender")
             if sender == "user":
                 u_txt = str(msg.get("clean_user_text") or msg.get("text", "")).strip()
@@ -752,6 +767,18 @@ class BloodmoonClockRuntime:
         self.archives = self._load_initial_archives()
         self.ledger = self._load_initial_ledger()
         self.savored_turn_ids = self._load_initial_savored_ids()
+        self.master_cadence_blueprint = (
+            extract_master_cadence_wave(
+                self.baseline_exemplar_script,
+                self.sensors,
+                birth_state=self.birth_state,
+                rules=self.rules,
+                learned_leaves=self.learned_leaves,
+                prior_memory=self.memory,
+            )
+            if getattr(self, "baseline_exemplar_script", "").strip()
+            else None
+        )
         self.memory = None
         self.diary = SettledDiary()
         self.chord_memory = ChordMemoryBank()
@@ -873,9 +900,12 @@ class BloodmoonClockRuntime:
         )
         resolved_enc = self._resolve_patreon_enc_path(enc_path)
 
+        existing_seal_key = self._load_seal_key_hex()
         if enc_path is not None and resolved_enc is not None:
             decrypt_patreon_checkpoint_bundle(resolved_enc, self.impish_checkpoint_dir, clean_pass)
-            receipt_digest = derived_hex or self._lock_digest_hex
+            receipt_digest = derived_hex if ok_hash else self._lock_digest_hex
+            if not ok_hash and existing_seal_key:
+                seal_key_hex = existing_seal_key
         else:
             if not ok_hash:
                 raise ValueError("Invalid Patreon unlock password.")
@@ -912,7 +942,7 @@ class BloodmoonClockRuntime:
             {
                 "id": f"patreon-unlock-{int(time.time())}",
                 "sender": "system",
-                "role_label": "Patreon Studio Permanently Unlocked",
+                "role_label": "Patreon Bundle Unlocked",
                 "text": (
                     "Verified Patreon unlock key (PBKDF2-HMAC-SHA256), decrypted bloodmoon_patreon_seal.enc, "
                     "and saved persistent unlock receipt. You will never need to enter the password again on this machine."
@@ -979,6 +1009,7 @@ class BloodmoonClockRuntime:
         num_sentences: int = 1,
         comma_chord_transform: Any | None = None,
         include_conversation_history: bool = False,
+        enqueue_unresolved_for_sleep: bool = True,
     ) -> tuple[ThreeLeggedTurnResult, float, dict[str, Any]]:
         t0 = time.perf_counter()
         self.scene_counter += 1
@@ -1031,7 +1062,7 @@ class BloodmoonClockRuntime:
         self.ledger = turn.next_ledger
         self.chord_memory = turn.next_chord_memory
         self.archives = turn.next_archives
-        if turn.unresolved_sleep_scene is not None:
+        if enqueue_unresolved_for_sleep and turn.unresolved_sleep_scene is not None:
             self.sleep_queue.append(turn.unresolved_sleep_scene)
 
         vibe = turn.final_vibe
