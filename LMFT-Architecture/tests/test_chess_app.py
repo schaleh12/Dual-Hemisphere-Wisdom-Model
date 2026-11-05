@@ -616,5 +616,27 @@ def test_game_review_referee_and_contrastive_fuzzy_rule_normalization(tmp_path: 
     assert after_evals["Bxf7+"] < before_evals["Bxf7+"] - 0.50
     assert after_evals["O-O"] >= before_evals["O-O"] - 0.01
 
+    # 5. Verify plateau guard when `v_act = 0.66 < v_ref = 0.85` (prevents `>= 0.65` plateau from erasing delta)
+    plateau_targets, p_low, p_high = normalize_contrastive_target_leaves_and_thresholds(
+        "moderate_cultural_structure_cluster",
+        {"philosophical/being/existence": 0.66, "philosophical/structure/order": 0.66},
+        {"philosophical/being/existence": 0.86, "philosophical/structure/order": 0.86},
+    )
+    plateau_rule = FuzzyConceptRule(
+        rule_id="test-plateau-guard",
+        concept_name="hazard_plateau_test",
+        description="Verify upper plateau guard keeps target<=0.64 when v_act < v_ref.",
+        target_leaves=plateau_targets,
+        low=p_low,
+        high=p_high,
+    )
+    assert plateau_rule.evaluate({"philosophical/being/existence": 0.66, "philosophical/structure/order": 0.66}) >= 0.85
+    assert plateau_rule.evaluate({"philosophical/being/existence": 0.86, "philosophical/structure/order": 0.86}) == 0.0
+
+    # 6. Verify `handle_microwave_step()` directly attaches `game_review` telemetry
+    mw_snap = runtime.handle_microwave_step()
+    assert "game_review" in mw_snap["chat_messages"][-1]["telemetry"]
+
+
 
 

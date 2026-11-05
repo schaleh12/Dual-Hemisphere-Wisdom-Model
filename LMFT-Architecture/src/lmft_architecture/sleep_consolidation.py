@@ -273,10 +273,15 @@ def normalize_contrastive_target_leaves_and_thresholds(
 
     divergent.sort(key=lambda item: (-item[0], item[1]))
     target_leaves: dict[str, float] = {}
-    for idx, (abs_diff, k, v_act, _v_ref) in enumerate(divergent):
+    for idx, (abs_diff, k, v_act, v_ref) in enumerate(divergent):
         if idx >= 3 or (idx == 2 and abs_diff < 0.08):
             break
-        target_leaves[k] = round(min(0.95, max(0.05, v_act)), 2)
+        t_val = round(min(0.95, max(0.05, v_act)), 2)
+        if v_act < v_ref and t_val >= 0.65:
+            t_val = 0.64
+        elif v_act > v_ref and t_val <= 0.30:
+            t_val = 0.31
+        target_leaves[k] = t_val
 
     if len(target_leaves) < 2:
         for k, t_val in base_targets.items():

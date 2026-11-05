@@ -585,7 +585,10 @@ def evaluate_candidate_moves_with_right_brain(
                 (
                     float(activations.get(r.concept_name, 0.0))
                     for r in rule_tuple
-                    if r.concept_name.startswith(("coached_", "brilliancy_", "savored_"))
+                    if r.rule_id not in ("rule_1", "rule_2")
+                    and not r.concept_name.startswith(
+                        ("hazard_", "blunder_", "avoid_", "balanced_", "mutual_")
+                    )
                 ),
                 default=0.0,
             )
