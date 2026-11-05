@@ -279,6 +279,7 @@ CHESS_SINGLE_PAGE_HTML = """<!DOCTYPE html>
       <option value="virgin">Virgin Baseline (Cycle 0 · Read-Only)</option>
     </select>
     <span class="pill" id="model-status-pill">Qwen3-4B</span>
+    <span class="pill" id="elo-status-pill" title="Objective FIDE Elo vs. Strength-Calibrated Sparring Engine">Elo: 1000.0 (0W-0L-0D)</span>
     <span class="pill" id="rules-count-pill">Rules: 2</span>
     <span class="pill" id="sleep-queue-pill">Sleep Queue: 0</span>
     <button class="btn" id="step-ai-move-btn" onclick="playAiMove()">Step AI Move</button>
@@ -534,6 +535,12 @@ function renderColorBars(posture) {
 function renderState(s) {
   if (!s) return;
   document.getElementById("model-status-pill").textContent = s.left_brain_status || "Qwen3-4B";
+  if (s.elo) {
+    const eloEl = document.getElementById("elo-status-pill");
+    if (eloEl) {
+      eloEl.textContent = `Elo: ${Number(s.elo.lmft_elo || 1000).toFixed(1)} (${s.elo.wins || 0}W-${s.elo.losses || 0}L-${s.elo.draws || 0}D · ${s.elo.lmft_color || "White"})`;
+    }
+  }
   document.getElementById("rules-count-pill").textContent = "Rules: " + (s.rules_count || 0);
   document.getElementById("sleep-queue-pill").textContent = "Sleep Queue: " + (s.sleep_queue_count || 0);
 

@@ -329,10 +329,11 @@ BLOODMOON_SINGLE_PAGE_HTML = """<!DOCTYPE html>
         <div class="invariant-note">Active script crafted for Phase 2 Male Audience absorption</div>
       </div>
       <div style="display:flex;gap:6px;">
+        <button class="btn btn-primary" id="seed-custom-script-btn" onclick="seedWithMyScript()">Seed Cycle with My Script ➔ Phase 2</button>
         <button class="btn" onclick="saveScriptCanvas()">Save Canvas</button>
       </div>
     </div>
-    <textarea id="script-canvas-textarea" placeholder="Phase 1 (Female Script-Writer) populates her hypnosis script here..."></textarea>
+    <textarea id="script-canvas-textarea" placeholder="Paste your own baseline hypnosis script here to initiate the cycle at your standard, or let Phase 1 (Female Script-Writer) generate one..."></textarea>
     <div class="invariant-note" id="last-sparring-summary">Ready for Phase 1 (Female Script-Writer).</div>
   </section>
 
@@ -443,13 +444,29 @@ function renderState(s) {
   }
 }
 
+async function seedWithMyScript() {
+  if (clockwiseBusy) return;
+  const txt = document.getElementById("script-canvas-textarea").value.trim();
+  if (!txt) {
+    alert("Paste your baseline hypnosis script into the canvas first.");
+    return;
+  }
+  clockwiseBusy = true;
+  try {
+    await apiPost("/api/clockwise/seed_script", { script_text: txt });
+  } finally {
+    clockwiseBusy = false;
+  }
+}
+
 async function stepClockwisePhase() {
   if (clockwiseBusy) return;
   clockwiseBusy = true;
   try {
     const seed = document.getElementById("clockwise-seed-input").value;
     const sents = Number(document.getElementById("clockwise-sentences-select").value || 3);
-    await apiPost("/api/clockwise/step", { seed_theme: seed, num_sentences: sents });
+    const canvasTxt = document.getElementById("script-canvas-textarea").value.trim();
+    await apiPost("/api/clockwise/step", { seed_theme: seed, num_sentences: sents, custom_script: canvasTxt });
   } finally {
     clockwiseBusy = false;
   }
@@ -461,7 +478,8 @@ async function runFullClockwiseCycle() {
   try {
     const seed = document.getElementById("clockwise-seed-input").value;
     const sents = Number(document.getElementById("clockwise-sentences-select").value || 3);
-    await apiPost("/api/clockwise/cycle", { seed_theme: seed, num_sentences: sents });
+    const canvasTxt = document.getElementById("script-canvas-textarea").value.trim();
+    await apiPost("/api/clockwise/cycle", { seed_theme: seed, num_sentences: sents, custom_script: canvasTxt });
   } finally {
     clockwiseBusy = false;
   }

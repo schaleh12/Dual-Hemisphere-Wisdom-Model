@@ -411,6 +411,7 @@ class BloodmoonClockRuntime:
         return ContemplationLedger()
 
     def _load_initial_savored_ids(self) -> list[int]:
+        self.baseline_exemplar_script: str = ""
         meta_path = self.impish_state_dir / "club_meta.json"
         if meta_path.exists():
             try:
@@ -420,6 +421,7 @@ class BloodmoonClockRuntime:
                 if self.clockwise_phase not in (1, 2, 3):
                     self.clockwise_phase = 1
                 self.clockwise_cycle_count = int(raw.get("clockwise_cycle_count", 0))
+                self.baseline_exemplar_script = str(raw.get("baseline_exemplar_script", "")).strip()
                 return [int(x) for x in raw.get("savored_turn_ids", [])]
             except Exception:
                 pass
@@ -644,6 +646,7 @@ class BloodmoonClockRuntime:
                 "scene_counter": int(self.scene_counter),
                 "clockwise_phase": int(self.clockwise_phase),
                 "clockwise_cycle_count": int(self.clockwise_cycle_count),
+                "baseline_exemplar_script": getattr(self, "baseline_exemplar_script", ""),
             },
         )
 
@@ -953,6 +956,7 @@ class BloodmoonClockRuntime:
                 CLOCKWISE_PHASE_LABELS[1],
             ),
             "clockwise_cycle_count": self.clockwise_cycle_count,
+            "baseline_exemplar_script": getattr(self, "baseline_exemplar_script", ""),
             "sparring_round_counter": self.sparring_round_counter,
             "last_sparring_result": self.last_sparring_result,
             "sleep_cycle_index": self.sleep_cycle_index,
@@ -977,14 +981,32 @@ class BloodmoonClockRuntime:
     # -------------------------------------------------------------------------
     # Strict 3-Phase Clockwise State Machine (Phase 1 -> Phase 2 -> Phase 3)
     # -------------------------------------------------------------------------
+    def seed_cycle_with_custom_script(
+        self,
+        script_text: str,
+        *,
+        polarity_mode: str = "feminine_to_masculine",
+    ) -> dict[str, Any]:
+        """Initiate the Clockwise Cycle at Phase 1 using the owner's custom baseline script as the gold standard."""
+        clean_script = script_text.strip()
+        if not clean_script:
+            raise ValueError("Custom baseline script cannot be empty.")
+        self.baseline_exemplar_script = clean_script
+        self.clockwise_phase = 1
+        return self.run_phase_1_female_producer(
+            custom_script=clean_script,
+            polarity_mode=polarity_mode,
+        )
+
     def run_phase_1_female_producer(
         self,
         *,
         seed_theme: str = "",
         num_sentences: int = 3,
         polarity_mode: str = "feminine_to_masculine",
+        custom_script: str = "",
     ) -> dict[str, Any]:
-        """Phase 1 — Female Script-Writer (The Producer): Writes a hypnosis script FOR the male audience."""
+        """Phase 1 — Female Script-Writer (The Producer): Writes a hypnosis script FOR the male audience (or seeds from `custom_script`)."""
         resolved_polarity = resolve_sparring_polarity(polarity_mode)
         sent_count = int(num_sentences)
         if not (1 <= sent_count <= 6):
@@ -992,54 +1014,107 @@ class BloodmoonClockRuntime:
 
         self.active_sparring_polarity = resolved_polarity
         pol_info = SPARRING_POLARITY_MODES[resolved_polarity]
-        if not seed_theme.strip():
-            seed_idx = self.sparring_round_counter % len(MICROWAVE_SPARRING_SEEDS)
-            seed_theme = MICROWAVE_SPARRING_SEEDS[seed_idx]
-        weaver_prompt = build_weaver_scenario_prompt(resolved_polarity, seed_theme)
 
-        weaver_turn, _w_ms, weaver_telemetry = self._execute_turn(
-            weaver_prompt,
-            force_spoken_reply=True,
-            clause_1_prefix=None,
-            num_sentences=sent_count,
-            comma_chord_transform=apply_induction_weaver_lead_to_chord,
+        # If the user supplied `custom_script` (or typed a script onto the canvas before starting Phase 1), use it directly!
+        user_seeded_script = custom_script.strip() or (
+            self.script_canvas_text.strip()
+            if (not self._pending_clockwise and self.script_canvas_text.strip())
+            else ""
         )
-        if weaver_turn.final_conscious_note:
-            induction_script = weaver_turn.final_conscious_note
-        else:
-            induction_script = " ".join([pol_info["default_seed"]] * sent_count)
-
-        if weaver_turn.spliced_traces:
-            weaver_chord = weaver_turn.spliced_traces[-1].spliced_chord
-            shared_clause_1 = weaver_turn.spliced_traces[0].clause_1_prefix
-        else:
+        if user_seeded_script:
+            self.baseline_exemplar_script = user_seeded_script
+            induction_script = user_seeded_script
+            weaver_prompt = build_weaver_scenario_prompt(
+                resolved_polarity,
+                f"Baseline exemplar script: {user_seeded_script[:160]}",
+            )
+            induction_potency, _weaver_coords, weaver_vibe = measure_induction_potency(
+                induction_script,
+                self.sensors,
+                birth_state=self.birth_state,
+                rules=self.rules,
+                learned_leaves=self.learned_leaves,
+                prior_memory=self.memory,
+            )
             base_w_chord = SubliminalChordVector.from_right_brain_vibe(
-                weaver_turn.final_vibe,
+                weaver_vibe,
                 learned_leaves=self.learned_leaves,
             )
             weaver_chord = apply_induction_weaver_lead_to_chord(base_w_chord)
             shared_clause_1 = induction_script.split(",")[0].strip() + ","
+            self.scene_counter += 1
+            weaver_scene_idx = self.scene_counter
+            weaver_telemetry: dict[str, Any] = {
+                "scene_index": weaver_scene_idx,
+                "gear_used": "USER_BASELINE_EXEMPLAR",
+                "settled": True,
+                "clarity": round(float(weaver_vibe.clarity), 2),
+                "confidence": round(float(weaver_vibe.confidence), 2),
+                "sparring_role": "INDUCTION_WEAVER",
+                "clockwise_phase": 1,
+                "sparring_polarity": resolved_polarity,
+                "num_sentences": sent_count,
+                "induction_potency": induction_potency,
+                "user_seeded_baseline": True,
+            }
+            role_label = f"Phase 1 · User-Seeded Baseline Script ({pol_info['weaver_role']})"
+        else:
+            if not seed_theme.strip():
+                if getattr(self, "baseline_exemplar_script", "").strip():
+                    seed_theme = (
+                        f"Match the cadence and depth of this baseline script: "
+                        f"{self.baseline_exemplar_script[:200]}"
+                    )
+                else:
+                    seed_idx = self.sparring_round_counter % len(MICROWAVE_SPARRING_SEEDS)
+                    seed_theme = MICROWAVE_SPARRING_SEEDS[seed_idx]
+            weaver_prompt = build_weaver_scenario_prompt(resolved_polarity, seed_theme)
 
-        induction_potency, _weaver_coords, _weaver_vibe = measure_induction_potency(
-            induction_script,
-            self.sensors,
-            birth_state=self.birth_state,
-            rules=self.rules,
-            learned_leaves=self.learned_leaves,
-            prior_memory=self.memory,
-        )
-        weaver_telemetry["sparring_role"] = "INDUCTION_WEAVER"
-        weaver_telemetry["clockwise_phase"] = 1
-        weaver_telemetry["sparring_polarity"] = resolved_polarity
-        weaver_telemetry["num_sentences"] = sent_count
-        weaver_telemetry["induction_potency"] = induction_potency
+            weaver_turn, _w_ms, weaver_telemetry = self._execute_turn(
+                weaver_prompt,
+                force_spoken_reply=True,
+                clause_1_prefix=None,
+                num_sentences=sent_count,
+                comma_chord_transform=apply_induction_weaver_lead_to_chord,
+            )
+            if weaver_turn.final_conscious_note:
+                induction_script = weaver_turn.final_conscious_note
+            else:
+                induction_script = " ".join([pol_info["default_seed"]] * sent_count)
+
+            if weaver_turn.spliced_traces:
+                weaver_chord = weaver_turn.spliced_traces[-1].spliced_chord
+                shared_clause_1 = weaver_turn.spliced_traces[0].clause_1_prefix
+            else:
+                base_w_chord = SubliminalChordVector.from_right_brain_vibe(
+                    weaver_turn.final_vibe,
+                    learned_leaves=self.learned_leaves,
+                )
+                weaver_chord = apply_induction_weaver_lead_to_chord(base_w_chord)
+                shared_clause_1 = induction_script.split(",")[0].strip() + ","
+
+            induction_potency, _weaver_coords, _weaver_vibe = measure_induction_potency(
+                induction_script,
+                self.sensors,
+                birth_state=self.birth_state,
+                rules=self.rules,
+                learned_leaves=self.learned_leaves,
+                prior_memory=self.memory,
+            )
+            weaver_telemetry["sparring_role"] = "INDUCTION_WEAVER"
+            weaver_telemetry["clockwise_phase"] = 1
+            weaver_telemetry["sparring_polarity"] = resolved_polarity
+            weaver_telemetry["num_sentences"] = sent_count
+            weaver_telemetry["induction_potency"] = induction_potency
+            weaver_telemetry["user_seeded_baseline"] = False
+            role_label = f"Phase 1 · {pol_info['weaver_role']} ({sent_count}-Sentence Script)"
 
         self.script_canvas_text = induction_script
         self.chat_messages.append(
             {
                 "id": weaver_telemetry["scene_index"],
                 "sender": "companion",
-                "role_label": f"Phase 1 · {pol_info['weaver_role']} ({sent_count}-Sentence Script)",
+                "role_label": role_label,
                 "text": induction_script,
                 "clean_reply": induction_script,
                 "telemetry": weaver_telemetry,
@@ -1238,6 +1313,7 @@ class BloodmoonClockRuntime:
         seed_theme: str = "",
         num_sentences: int = 3,
         polarity_mode: str = "feminine_to_masculine",
+        custom_script: str = "",
     ) -> dict[str, Any]:
         """Step the 3-Phase Clockwise State Machine (`Phase 1 -> Phase 2 -> Phase 3 -> Phase 1`)."""
         resolve_sparring_polarity(polarity_mode)
@@ -1246,6 +1322,7 @@ class BloodmoonClockRuntime:
                 seed_theme=seed_theme,
                 num_sentences=num_sentences,
                 polarity_mode=polarity_mode,
+                custom_script=custom_script,
             )
         if self.clockwise_phase == 2:
             return self.run_phase_2_male_audience(
@@ -1260,6 +1337,7 @@ class BloodmoonClockRuntime:
         seed_theme: str = "",
         num_sentences: int = 3,
         polarity_mode: str = "feminine_to_masculine",
+        custom_script: str = "",
     ) -> dict[str, Any]:
         """Complete a full 3-Phase Clockwise revolution (`Phase 1 -> Phase 2 -> Phase 3`)."""
         resolve_sparring_polarity(polarity_mode)
@@ -1268,6 +1346,7 @@ class BloodmoonClockRuntime:
                 seed_theme=seed_theme,
                 num_sentences=num_sentences,
                 polarity_mode=polarity_mode,
+                custom_script=custom_script,
             )
         if self.clockwise_phase == 2:
             self.run_phase_2_male_audience(
@@ -1926,11 +2005,19 @@ def create_bloodmoon_http_server(
             raw_bytes = self.rfile.read(length) if length > 0 else b"{}"
             try:
                 data = json.loads(raw_bytes.decode("utf-8"))
+                if self.path == "/api/clockwise/seed_script":
+                    snap = runtime.seed_cycle_with_custom_script(
+                        str(data.get("script_text", "")),
+                        polarity_mode=str(data.get("polarity_mode", "feminine_to_masculine")),
+                    )
+                    self._send_json(snap)
+                    return
                 if self.path == "/api/clockwise/step":
                     snap = runtime.step_clockwise_phase(
                         seed_theme=str(data.get("seed_theme", "")),
                         num_sentences=int(data.get("num_sentences", 3)),
                         polarity_mode=str(data.get("polarity_mode", "feminine_to_masculine")),
+                        custom_script=str(data.get("custom_script", "")),
                     )
                     self._send_json(snap)
                     return
@@ -1939,6 +2026,7 @@ def create_bloodmoon_http_server(
                         seed_theme=str(data.get("seed_theme", "")),
                         num_sentences=int(data.get("num_sentences", 3)),
                         polarity_mode=str(data.get("polarity_mode", "feminine_to_masculine")),
+                        custom_script=str(data.get("custom_script", "")),
                     )
                     self._send_json(snap)
                     return

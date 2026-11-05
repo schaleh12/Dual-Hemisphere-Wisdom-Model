@@ -70,7 +70,9 @@ from .chess_kibitz_bridge import (
     SANCTUARY_MODES,
     CandidateMoveEvaluation,
     ChessBoardPosture,
+    ObjectiveCalibratedSparringEngine,
     build_natural_chess_scenario_prompt,
+    compute_fide_elo_update,
     evaluate_candidate_moves_with_right_brain,
     evaluate_chess_board_posture,
     format_move_history_pgn_snippet,
@@ -415,11 +417,29 @@ class ChessKibitzerRuntime:
         return ContemplationLedger()
 
     def _load_initial_savored_ids(self) -> list[int]:
+        self.sparring_engine = ObjectiveCalibratedSparringEngine(
+            use_stockfish_uci=self._lazy_load_gpu
+        )
+        self.lmft_elo: float = 1000.0
+        self.opponent_target_elo: float = 1000.0
+        self.elo_wins: int = 0
+        self.elo_losses: int = 0
+        self.elo_draws: int = 0
+        self.games_completed_count: int = 0
+        self.lmft_playing_white: bool = True
+        self.last_elo_receipt: dict[str, Any] | None = None
         meta_path = self.state_dir / "club_meta.json"
         if meta_path.exists():
             try:
                 raw = json.loads(meta_path.read_text(encoding="utf-8"))
                 self.scene_counter = max(self.scene_counter, int(raw.get("scene_counter", 0)))
+                self.lmft_elo = float(raw.get("lmft_elo", 1000.0))
+                self.opponent_target_elo = float(raw.get("opponent_target_elo", self.lmft_elo))
+                self.elo_wins = int(raw.get("elo_wins", 0))
+                self.elo_losses = int(raw.get("elo_losses", 0))
+                self.elo_draws = int(raw.get("elo_draws", 0))
+                self.games_completed_count = int(raw.get("games_completed_count", 0))
+                self.lmft_playing_white = bool(raw.get("lmft_playing_white", True))
                 return [int(x) for x in raw.get("savored_turn_ids", [])]
             except Exception:
                 pass
@@ -647,6 +667,13 @@ class ChessKibitzerRuntime:
             {
                 "savored_turn_ids": list(self.savored_turn_ids),
                 "scene_counter": int(self.scene_counter),
+                "lmft_elo": float(self.lmft_elo),
+                "opponent_target_elo": float(self.opponent_target_elo),
+                "elo_wins": int(self.elo_wins),
+                "elo_losses": int(self.elo_losses),
+                "elo_draws": int(self.elo_draws),
+                "games_completed_count": int(self.games_completed_count),
+                "lmft_playing_white": bool(self.lmft_playing_white),
             },
         )
 
@@ -962,6 +989,17 @@ class ChessKibitzerRuntime:
             "savored_count": len(self.savored_turn_ids),
             "rules_count": len(self.rules),
             "ratified_chords_count": len(self.archives.judicial.ratified_chords),
+            "elo": {
+                "lmft_elo": round(float(self.lmft_elo), 1),
+                "opponent_target_elo": round(float(self.opponent_target_elo), 1),
+                "wins": int(self.elo_wins),
+                "losses": int(self.elo_losses),
+                "draws": int(self.elo_draws),
+                "games_completed": int(self.games_completed_count),
+                "lmft_color": "White" if self.lmft_playing_white else "Black",
+                "sparring_engine_label": self.sparring_engine.engine_label,
+                "last_elo_receipt": self.last_elo_receipt,
+            },
             "board": {
                 "fen": self.board.fen(),
                 "turn": "w" if self.board.turn == chess.WHITE else "b",
@@ -1641,25 +1679,142 @@ class ChessKibitzerRuntime:
             return True
         return False
 
+    def _adjudicate_and_record_game_outcome(self) -> dict[str, Any]:
+        """Score a finished sparring game objectively, update FIDE Elo, match opponent target Elo, and rotate colors."""
+        lmft_color = chess.WHITE if self.lmft_playing_white else chess.BLACK
+        outcome = self.board.outcome(claim_draw=True)
+        if outcome is not None:
+            if outcome.winner is None:
+                lmft_score = 0.5
+                result_label = "DRAW"
+            elif outcome.winner == lmft_color:
+                lmft_score = 1.0
+                result_label = "WIN"
+            else:
+                lmft_score = 0.0
+                result_label = "LOSS"
+        else:
+            cp = self.sparring_engine.evaluate_position_centipawns(
+                self.board,
+                perspective=lmft_color,
+            )
+            if cp >= 300.0:
+                lmft_score = 1.0
+                result_label = "WIN (Endgame Material Adjudication)"
+            elif cp <= -300.0:
+                lmft_score = 0.0
+                result_label = "LOSS (Endgame Material Adjudication)"
+            else:
+                lmft_score = 0.5
+                result_label = "DRAW (Endgame Cap)"
+
+        prev_elo = self.lmft_elo
+        opp_elo = self.opponent_target_elo
+        new_elo, delta = compute_fide_elo_update(prev_elo, opp_elo, lmft_score)
+        self.lmft_elo = new_elo
+        self.opponent_target_elo = new_elo
+        if lmft_score > 0.75:
+            self.elo_wins += 1
+        elif lmft_score < 0.25:
+            self.elo_losses += 1
+        else:
+            self.elo_draws += 1
+        self.games_completed_count += 1
+        played_color = "White" if self.lmft_playing_white else "Black"
+        self.lmft_playing_white = not self.lmft_playing_white
+        next_color = "White" if self.lmft_playing_white else "Black"
+
+        sign = "+" if delta >= 0 else ""
+        receipt = {
+            "game_number": self.games_completed_count,
+            "lmft_color": played_color,
+            "result_label": result_label,
+            "lmft_score": lmft_score,
+            "previous_elo": prev_elo,
+            "opponent_elo": opp_elo,
+            "new_elo": new_elo,
+            "elo_delta": delta,
+            "next_lmft_color": next_color,
+            "next_opponent_target_elo": self.opponent_target_elo,
+        }
+        self.last_elo_receipt = receipt
+        self.chat_messages.append(
+            {
+                "id": f"elo-{self.games_completed_count}-{int(time.time() * 1000) % 10000}",
+                "sender": "system",
+                "role_label": f"Objective Elo Arbiter — Game #{self.games_completed_count} ({result_label})",
+                "text": (
+                    f"LMFT ({played_color}) vs. {self.sparring_engine.engine_label} ({opp_elo:.0f} Elo): "
+                    f"{result_label} -> LMFT Elo {prev_elo:.1f} -> {new_elo:.1f} ({sign}{delta:.1f}). "
+                    f"Next game: LMFT rotates to {next_color} vs. {self.opponent_target_elo:.0f} Elo opponent."
+                ),
+            }
+        )
+        self._persist_user_state()
+        return receipt
+
     def handle_microwave_step(self, *, num_sentences: int = 1) -> dict[str, Any]:
-        """Execute one automated Self-Play & Self-Kibitz step on the chessboard."""
+        """Execute one Sparring & Self-Kibitz step (`LMFT` vs. strength-calibrated `ObjectiveCalibratedSparringEngine`)."""
         _ = num_sentences
         self.microwave_step_counter += 1
         step_idx = self.microwave_step_counter
         if self.board.is_game_over(claim_draw=True) or len(self.move_history_san) >= 160:
-            self.games_completed_count = int(getattr(self, "games_completed_count", 0)) + 1
+            self._adjudicate_and_record_game_outcome()
             if self.sleep_queue and self.active_lineage != "virgin":
                 self.handle_run_rem_sleep(auto_triggered=True)
             self.handle_set_fen("start")
-        snap = self.handle_chess_ai_move()
-        if self.board.is_game_over(claim_draw=True) and self.sleep_queue and self.active_lineage != "virgin":
-            snap = self.handle_run_rem_sleep(auto_triggered=True)
+
+        lmft_color = chess.WHITE if self.lmft_playing_white else chess.BLACK
+        is_lmft_turn = self.board.turn == lmft_color
+
+        if is_lmft_turn:
+            cp_before = self.sparring_engine.evaluate_position_centipawns(
+                self.board,
+                perspective=lmft_color,
+            )
+            snap = self.handle_chess_ai_move()
+            cp_after = self.sparring_engine.evaluate_position_centipawns(
+                self.board,
+                perspective=lmft_color,
+            )
+            cp_drop = round(cp_before - cp_after, 1)
+            if cp_drop >= 150.0 and self.chat_messages:
+                last_scene_id = int(self.chat_messages[-1].get("id", self.scene_counter))
+                last_san = self.move_history_san[-1] if self.move_history_san else "?"
+                self.flag_turn_for_coaching(
+                    last_scene_id,
+                    user_note=(
+                        f"Objective Referee Blunder Flag: LMFT move {last_san} dropped evaluation "
+                        f"by {cp_drop / 100.0:.2f} pawns against {self.opponent_target_elo:.0f}-Elo opponent."
+                    ),
+                    check_auto_sleep=True,
+                )
+                snap = self.get_state_snapshot()
+            mover_tag = "LMFT"
+        else:
+            opp = self.sparring_engine.select_sparring_opponent_move(
+                self.board,
+                target_elo=self.opponent_target_elo,
+            )
+            snap = self.handle_chess_move(opp["move_san"])
+            mover_tag = f"SparringEngine({self.opponent_target_elo:.0f})"
+
+        if self.board.is_game_over(claim_draw=True):
+            self._adjudicate_and_record_game_outcome()
+            if self.sleep_queue and self.active_lineage != "virgin":
+                snap = self.handle_run_rem_sleep(auto_triggered=True)
+            else:
+                snap = self.get_state_snapshot()
+
         last_san = self.move_history_san[-1] if self.move_history_san else "start"
-        step_label = f"Self-Play & Kibitz Step #{step_idx}: {last_san}"
+        step_label = f"Sparring Step #{step_idx} ({mover_tag}): {last_san}"
         self.last_microwave_status = {
             "step_index": step_idx,
             "lineage": self.active_lineage,
             "step_label": step_label,
+            "mover": mover_tag,
+            "lmft_elo": round(float(self.lmft_elo), 1),
+            "opponent_target_elo": round(float(self.opponent_target_elo), 1),
             "rules_count": len(self.rules),
             "sleep_queue_count": len(self.sleep_queue),
         }

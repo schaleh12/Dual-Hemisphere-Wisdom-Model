@@ -428,3 +428,49 @@ def test_hybrid_move_selection_and_blunder_veto_sleep_queue(tmp_path: Path) -> N
     assert arb_veto["chosen_move_san"] != "Bxf7+"
     assert snap_veto["sleep_queue_count"] >= 1
 
+
+def test_strict_airgap_sparring_engine_and_objective_elo_update(tmp_path: Path) -> None:
+    """Prove `LMFT` never queries the sparring engine for its own moves, and verify objective Elo + color rotation."""
+    from lmft_architecture.chess_kibitz_bridge import compute_fide_elo_update
+
+    win_elo, win_delta = compute_fide_elo_update(1000.0, 1000.0, 1.0)
+    loss_elo, loss_delta = compute_fide_elo_update(1000.0, 1000.0, 0.0)
+    assert win_elo == 1012.0 and win_delta == 12.0
+    assert loss_elo == 988.0 and loss_delta == -12.0
+
+    runtime = ChessKibitzerRuntime(
+        state_dir=tmp_path / "elo_airgap_state",
+        left_brain=_make_mini_left_brain(),
+        lazy_load_gpu=False,
+    )
+    assert runtime.sparring_engine.opponent_moves_played == 0
+    assert runtime.sparring_engine.post_move_audits_run == 0
+
+    # Calling `handle_chess_ai_move()` directly must NEVER touch `sparring_engine` (strict anti-cheat air-gap)
+    runtime.handle_chess_ai_move()
+    assert runtime.sparring_engine.opponent_moves_played == 0
+    assert runtime.sparring_engine.post_move_audits_run == 0
+
+    # Reset board and run 2 sparring steps via `handle_microwave_step()`:
+    # Step 1 = White (`LMFT`), Step 2 = Black (`SparringEngine`)
+    runtime.handle_set_fen("start")
+    step_1 = runtime.handle_microwave_step()
+    assert step_1["last_microwave_status"]["mover"] == "LMFT"
+    assert runtime.sparring_engine.opponent_moves_played == 0
+
+    step_2 = runtime.handle_microwave_step()
+    assert step_2["last_microwave_status"]["mover"].startswith("SparringEngine")
+    assert runtime.sparring_engine.opponent_moves_played == 1
+
+    # Verify Scholar's Mate win updates Elo to 1012.0, matches `opponent_target_elo`, and rotates `LMFT` to Black
+    runtime.handle_set_fen("r1bqkb1r/pppp1ppp/2n2n2/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 4 4")
+    runtime.handle_chess_move("Qxf7#")
+    assert runtime.board.is_checkmate() is True
+    receipt = runtime._adjudicate_and_record_game_outcome()
+    assert receipt["result_label"] == "WIN"
+    assert runtime.lmft_elo == 1012.0
+    assert runtime.opponent_target_elo == 1012.0
+    assert runtime.elo_wins == 1
+    assert runtime.lmft_playing_white is False
+
+

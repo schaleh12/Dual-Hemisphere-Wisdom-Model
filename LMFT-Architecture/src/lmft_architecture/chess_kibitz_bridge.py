@@ -957,3 +957,169 @@ def apply_coregulation_lead_to_chord(
         feeler_vector=tuple(feeler),
         cadence_vector=tuple(cadence),
     )
+
+
+def compute_fide_elo_update(
+    player_elo: float,
+    opponent_elo: float,
+    score: float,
+    *,
+    k_factor: float = 24.0,
+) -> tuple[float, float]:
+    """Compute an un-rigged FIDE Elo rating update (`score`: `1.0` win, `0.5` draw, `0.0` loss).
+
+    Returns `(new_player_elo, delta)`.
+    """
+    actual = min(1.0, max(0.0, float(score)))
+    expected = 1.0 / (1.0 + 10.0 ** ((float(opponent_elo) - float(player_elo)) / 400.0))
+    delta = round(float(k_factor) * (actual - expected), 2)
+    new_elo = round(max(400.0, float(player_elo) + delta), 2)
+    return new_elo, delta
+
+
+def _static_centipawns_for_color(board: chess.Board, color: chess.Color) -> float:
+    """Fast objective centipawn evaluation (`100.0 == 1 pawn`) from `color`'s perspective."""
+    if board.is_checkmate():
+        return -9999.0 if board.turn == color else 9999.0
+    if board.is_stalemate() or board.is_insufficient_material() or board.is_repetition(3):
+        return 0.0
+    cp = 0.0
+    for pt, val in _PIECE_VALUES.items():
+        if val <= 0.0:
+            continue
+        cp += 100.0 * val * (len(board.pieces(pt, color)) - len(board.pieces(pt, not color)))
+    for sq in _CORE_CENTER_SQUARES:
+        p = board.piece_at(sq)
+        if p is not None:
+            cp += 18.0 if p.color == color else -18.0
+    return round(cp, 1)
+
+
+class ObjectiveCalibratedSparringEngine:
+    """Strength-toggled chess sparring opponent & post-move referee (`Stockfish UCI` + calibrated fallback).
+
+    Anti-Cheat Air-Gap Invariant:
+    - This engine is ONLY used to:
+      1. Play the **Opponent's moves** on the opposite color from `LMFT` at `target_elo`.
+      2. Measure post-move centipawn drops *after* `LMFT` has already committed its own move,
+         so objective tactical blunders are queued for REM Sleep.
+    - `LMFT` NEVER queries this engine to select `LMFT`'s own moves.
+    """
+
+    def __init__(
+        self,
+        *,
+        stockfish_path: str | Any | None = None,
+        use_stockfish_uci: bool = True,
+    ) -> None:
+        from pathlib import Path
+        import chess.engine
+        from .workspace_paths import resolve_training_root
+
+        self.use_stockfish_uci = bool(use_stockfish_uci)
+        self._chess_engine_mod = chess.engine
+        if stockfish_path is not None:
+            self.stockfish_path = Path(stockfish_path)
+        else:
+            self.stockfish_path = (
+                resolve_training_root() / "models" / "chess_engine" / "stockfish.exe"
+            )
+        self.opponent_moves_played: int = 0
+        self.post_move_audits_run: int = 0
+
+    @property
+    def engine_label(self) -> str:
+        if self.use_stockfish_uci and self.stockfish_path.exists():
+            return "Stockfish 19 UCI (Strength-Calibrated)"
+        return "Calibrated Tactical Engine (Built-In)"
+
+    def evaluate_position_centipawns(
+        self,
+        board: chess.Board,
+        *,
+        perspective: chess.Color,
+    ) -> float:
+        """Evaluate `board` in centipawns from `perspective`'s point of view (post-move referee only)."""
+        self.post_move_audits_run += 1
+        if self.use_stockfish_uci and self.stockfish_path.exists():
+            try:
+                with self._chess_engine_mod.SimpleEngine.popen_uci(str(self.stockfish_path)) as eng:
+                    info = eng.analyse(board, self._chess_engine_mod.Limit(depth=6, time=0.04))
+                    pov_score = info["score"].pov(perspective)
+                    cp = pov_score.score(mate_score=9999)
+                    if cp is not None:
+                        return float(cp)
+            except Exception:
+                pass
+        return _static_centipawns_for_color(board, perspective)
+
+    def select_sparring_opponent_move(
+        self,
+        board: chess.Board,
+        *,
+        target_elo: float = 1000.0,
+    ) -> dict[str, Any]:
+        """Select a move for the **Sparring Opponent** calibrated to `target_elo`."""
+        legal = list(board.legal_moves)
+        if not legal:
+            raise ValueError("No legal moves available for sparring opponent.")
+
+        clamped_elo = min(2800.0, max(600.0, float(target_elo)))
+        self.opponent_moves_played += 1
+
+        if self.use_stockfish_uci and self.stockfish_path.exists():
+            try:
+                with self._chess_engine_mod.SimpleEngine.popen_uci(str(self.stockfish_path)) as eng:
+                    if clamped_elo >= 1320.0:
+                        eng.configure(
+                            {
+                                "UCI_LimitStrength": True,
+                                "UCI_Elo": int(round(clamped_elo)),
+                            }
+                        )
+                        depth_lim = max(2, min(10, int((clamped_elo - 900.0) / 160.0)))
+                        res = eng.play(board, self._chess_engine_mod.Limit(depth=depth_lim, time=0.06))
+                    else:
+                        skill = max(0, min(6, int((clamped_elo - 600.0) / 120.0)))
+                        eng.configure({"Skill Level": skill})
+                        nodes_lim = max(40, int((clamped_elo - 500.0) * 2.0))
+                        depth_lim = max(1, min(4, int((clamped_elo - 500.0) / 220.0)))
+                        res = eng.play(
+                            board,
+                            self._chess_engine_mod.Limit(nodes=nodes_lim, depth=depth_lim, time=0.04),
+                        )
+                    if res.move is not None and res.move in board.legal_moves:
+                        san = board.san(res.move)
+                        return {
+                            "move_san": san,
+                            "move_uci": res.move.uci(),
+                            "target_elo": round(clamped_elo, 1),
+                            "engine_backend": "stockfish_uci",
+                        }
+            except Exception:
+                pass
+
+        # Built-in strength-calibrated fallback when Stockfish subprocess is unavailable
+        us = board.turn
+        scored_moves: list[tuple[float, chess.Move, str]] = []
+        for mv in legal:
+            san = board.san(mv)
+            nb = board.copy()
+            nb.push(mv)
+            cp = _static_centipawns_for_color(nb, us)
+            if nb.is_repetition(2):
+                cp -= 120.0
+            scored_moves.append((cp, mv, san))
+        scored_moves.sort(key=lambda item: (-item[0], item[2]))
+
+        # Lower target_elo widens candidate pool slightly so play strength scales smoothly
+        pool_width = 1 if clamped_elo >= 1400.0 else (2 if clamped_elo >= 1000.0 else min(4, len(scored_moves)))
+        pick_idx = (len(board.move_stack) // 2) % pool_width
+        chosen_cp, chosen_mv, chosen_san = scored_moves[pick_idx]
+        return {
+            "move_san": chosen_san,
+            "move_uci": chosen_mv.uci(),
+            "target_elo": round(clamped_elo, 1),
+            "engine_backend": "calibrated_builtin",
+            "estimated_cp": chosen_cp,
+        }

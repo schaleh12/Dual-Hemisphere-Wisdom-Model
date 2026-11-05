@@ -291,3 +291,35 @@ def test_clockwise_three_phase_state_machine_and_http_endpoints(tmp_path: Path) 
         )
         == "SWEPT_BY_ENTRAINMENT"
     )
+
+
+def test_user_seeded_baseline_script_initiates_clockwise_cycle(tmp_path: Path) -> None:
+    """Verify the owner can initiate the clockwise cycle with their own baseline hypnosis script right out of the gate."""
+    assert 'id="seed-custom-script-btn"' in BLOODMOON_SINGLE_PAGE_HTML
+
+    runtime = BloodmoonClockRuntime(
+        repo_root=tmp_path,
+        impish_state_dir=tmp_path / "seeded_bloodmoon_state",
+        impish_left_brain=_make_mini_left_brain(),
+        lazy_load_gpu=False,
+    )
+    owner_script = (
+        "Follow the slow silver pendulum of my voice, letting every outside thought dissolve "
+        "into deep rhythmic stillness."
+    )
+    snap_p1 = runtime.seed_cycle_with_custom_script(owner_script)
+    assert snap_p1["clockwise_phase"] == 2
+    assert snap_p1["script_canvas_text"] == owner_script
+    assert snap_p1["baseline_exemplar_script"] == owner_script
+    assert snap_p1["chat_messages"][-1]["telemetry"]["user_seeded_baseline"] is True
+
+    # Step Phase 2 (Male Audience absorbs the owner's exact script) and Phase 3 (REM Sleep)
+    snap_p2 = runtime.step_clockwise_phase()
+    assert snap_p2["clockwise_phase"] == 3
+    assert snap_p2["last_sparring_result"]["induction_script"] == owner_script
+
+    snap_p3 = runtime.step_clockwise_phase()
+    assert snap_p3["clockwise_phase"] == 1
+    assert snap_p3["clockwise_cycle_count"] == 1
+    assert snap_p3["baseline_exemplar_script"] == owner_script
+
