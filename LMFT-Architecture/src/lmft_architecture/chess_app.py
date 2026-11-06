@@ -68,6 +68,7 @@ from .branch_archives import (
 )
 from .chess_kibitz_bridge import (
     SANCTUARY_MODES,
+    BitboardIntuitionSleeve,
     CandidateMoveEvaluation,
     ChessBoardPosture,
     ObjectiveCalibratedSparringEngine,
@@ -402,6 +403,7 @@ class ChessKibitzerRuntime:
         self.ledger = self._load_initial_ledger()
         self.chord_memory = ChordMemoryBank()
         self.archives = self._load_initial_archives()
+        self.bitboard_sleeve = self._load_initial_bitboard_sleeve()
 
         self.sleep_queue: list[UnresolvedSleepScene] = []
         self._hazard_scene_indices: set[int] = set()
@@ -530,6 +532,15 @@ class ChessKibitzerRuntime:
             except Exception:
                 pass
         return ContemplationLedger()
+
+    def _load_initial_bitboard_sleeve(self) -> BitboardIntuitionSleeve:
+        user_sleeve = self.state_dir / "bitboard_sleeve_weights.json"
+        if user_sleeve.exists():
+            return BitboardIntuitionSleeve.load(user_sleeve)
+        seed_sleeve = self.training_root / "outputs" / "bitboard_sleeve_weights.json"
+        if self._is_default_live_state_dir() and seed_sleeve.exists():
+            return BitboardIntuitionSleeve.load(seed_sleeve)
+        return BitboardIntuitionSleeve()
 
     def _load_initial_savored_ids(self) -> list[int]:
         self.sparring_engine = ObjectiveCalibratedSparringEngine(
@@ -776,6 +787,7 @@ class ChessKibitzerRuntime:
         )
         self.archives.save_all(self.state_dir / "branch_archives")
         save_contemplation_ledger(self.state_dir / "contemplation_ledger.json", self.ledger)
+        self.bitboard_sleeve.save(self.state_dir / "bitboard_sleeve_weights.json")
         atomic_json(
             self.state_dir / "club_meta.json",
             {
@@ -811,7 +823,9 @@ class ChessKibitzerRuntime:
         out_dir.mkdir(parents=True, exist_ok=True)
         rem_seed_path = out_dir / "rem_sleep_consolidated_ruleset.json"
         sleep_seed_path = out_dir / "sleep_consolidated_ruleset.json"
+        sleeve_seed_path = out_dir / "bitboard_sleeve_weights.json"
         save_ruleset(rem_seed_path, tuple(self.rules), tuple(self.learned_leaves))
+        self.bitboard_sleeve.save(sleeve_seed_path)
         if target_training_root is not None:
             save_ruleset(sleep_seed_path, tuple(self.rules), tuple(self.learned_leaves))
             self.archives.save_all(out_dir / "branch_archives")
@@ -822,6 +836,7 @@ class ChessKibitzerRuntime:
             "exported_learned_leaves_count": len(self.learned_leaves),
             "rem_seed_path": str(rem_seed_path),
             "sleep_seed_path": str(sleep_seed_path),
+            "sleeve_seed_path": str(sleeve_seed_path),
         }
 
     def merge_master_seed_rules(
@@ -853,6 +868,21 @@ class ChessKibitzerRuntime:
                             existing_leaf_ids.add(lf.leaf_id)
                 except Exception:
                     pass
+
+        sleeve_seed = seed_root / "outputs" / "bitboard_sleeve_weights.json"
+        if sleeve_seed.exists():
+            try:
+                seed_sleeve = BitboardIntuitionSleeve.load(sleeve_seed)
+                if seed_sleeve.steps_distilled > self.bitboard_sleeve.steps_distilled:
+                    for lk, sv in seed_sleeve.leaf_weights.items():
+                        cur_v = float(self.bitboard_sleeve.leaf_weights.get(lk, sv))
+                        self.bitboard_sleeve.leaf_weights[lk] = round(0.5 * cur_v + 0.5 * float(sv), 4)
+                    self.bitboard_sleeve.steps_distilled = max(
+                        self.bitboard_sleeve.steps_distilled,
+                        seed_sleeve.steps_distilled,
+                    )
+            except Exception:
+                pass
 
         self.rules = merged_rules
         self.learned_leaves = tuple(merged_leaves)
@@ -1445,6 +1475,7 @@ class ChessKibitzerRuntime:
             self.rules,
             learned_leaves=self.learned_leaves,
             limit=max(6, self.board.legal_moves.count()),
+            bitboard_sleeve=self.bitboard_sleeve,
         )
         if not all_evals:
             raise ValueError("No legal moves available.")
@@ -1545,12 +1576,14 @@ class ChessKibitzerRuntime:
                                     self.board.parse_san(left_brain_proposed_san),
                                     perspective=us_color,
                                     learned_leaves=self.learned_leaves,
+                                    bitboard_sleeve=self.bitboard_sleeve,
                                 )
                                 safe_choice_coords, _, _, _, _ = compute_candidate_move_fuzzy_coordinates(
                                     self.board,
                                     self.board.parse_san(right_brain_choice.san),
                                     perspective=us_color,
                                     learned_leaves=self.learned_leaves,
+                                    bitboard_sleeve=self.bitboard_sleeve,
                                 )
                             except Exception:
                                 vetoed_coords = None
@@ -2382,6 +2415,19 @@ class ChessKibitzerRuntime:
                 ]
                 forged_rules_list: tuple[FuzzyConceptRule, ...] = ()
                 if queued_count > 0:
+                    for s in queued_snapshot:
+                        if s.contrastive_reference_coordinates is not None or s.game_review_annotation:
+                            is_s_haz = bool(s.is_hazard or s.scene_index in self._hazard_scene_indices)
+                            if is_s_haz and s.game_review_annotation and (
+                                "[!! BRILLIANCY" in s.game_review_annotation
+                                or "[! GREAT_MOVE" in s.game_review_annotation
+                            ):
+                                is_s_haz = False
+                            self.bitboard_sleeve.distill_post_mortem_scene(
+                                s.external_coordinates,
+                                s.contrastive_reference_coordinates,
+                                is_hazard=is_s_haz,
+                            )
                     if self.teacher is not None:
                         virgin_ids = {r.rule_id for r in VIRGIN_FOUNDATIONAL_RULES}
                         non_virgin_rules = tuple(r for r in self.rules if r.rule_id not in virgin_ids)

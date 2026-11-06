@@ -819,6 +819,106 @@ def test_master_seed_sync_and_human_player_rating_coaching(tmp_path: Path) -> No
     assert all(r.concept_name != "hazard_high_self_sufficiency_chaos_cluster" for r in cleaned_rules)
 
 
+def test_bitboard_sensor_psychological_will_execution_bids_and_rem_distillation(tmp_path: Path) -> None:
+    """Verify Bitboard `Fact`/`Theory` sensor, `BitboardIntuitionSleeve` `Confidence`, `Execution` Action Bids, and REM Sleep distillation."""
+    from lmft_architecture.chess_kibitz_bridge import (
+        BitboardIntuitionSleeve,
+        compute_candidate_move_fuzzy_coordinates,
+        evaluate_candidate_moves_with_right_brain,
+    )
+
+    board = chess.Board("r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 3 3")
+    sleeve = BitboardIntuitionSleeve()
+
+    coords_oo, blun_oo, _, _, _ = compute_candidate_move_fuzzy_coordinates(
+        board,
+        board.parse_san("O-O"),
+        bitboard_sleeve=sleeve,
+    )
+    coords_bxf7, blun_bxf7, _, _, _ = compute_candidate_move_fuzzy_coordinates(
+        board,
+        board.parse_san("Bxf7+"),
+        bitboard_sleeve=sleeve,
+    )
+    assert blun_oo is False and blun_bxf7 is True
+    # 1. `psychological/truth/fact`, `theory`, `confidence`, `intention`, and `execution` vary dynamically across moves
+    assert coords_oo["psychological/truth/fact"] > coords_bxf7["psychological/truth/fact"] + 0.25
+    assert coords_oo["psychological/contemplation/confidence"] > coords_bxf7["psychological/contemplation/confidence"]
+    assert coords_oo["psychological/will/execution"] > coords_bxf7["psychological/will/execution"]
+
+    # 2. Evaluate all legal moves as competing Action Bids on `psychological/will/execution`
+    before_bids = {
+        e.san: e
+        for e in evaluate_candidate_moves_with_right_brain(
+            board,
+            limit=30,
+            bitboard_sleeve=sleeve,
+        )
+    }
+    assert before_bids["O-O"].execution_bid > before_bids["Bxf7+"].execution_bid
+    assert before_bids["O-O"].fact > before_bids["Bxf7+"].fact
+    assert "execution_bid" in before_bids["O-O"].to_dict()
+    assert "fact" in before_bids["O-O"].to_dict()
+    assert "theory" in before_bids["O-O"].to_dict()
+
+    # 3. Verify strict pre-move air-gap + post-mortem REM Sleep distillation of both Fuzzy Rules & Bitboard Sleeve
+    runtime = ChessKibitzerRuntime(
+        state_dir=tmp_path / "bitboard_will_state",
+        left_brain=_make_mini_left_brain(),
+        lazy_load_gpu=False,
+    )
+    runtime.set_auto_rem_sleep(False)
+    runtime.handle_set_fen("r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 3 3")
+    runtime.handle_chess_ai_move()
+    assert runtime.sparring_engine.opponent_moves_played == 0
+    assert runtime.sparring_engine.post_move_audits_run == 0
+
+    runtime.handle_set_fen("r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 3 3")
+    pre_sleep_evals = {
+        e.san: e
+        for e in evaluate_candidate_moves_with_right_brain(
+            runtime.board,
+            runtime.rules,
+            limit=30,
+            bitboard_sleeve=runtime.bitboard_sleeve,
+        )
+    }
+    rev = runtime.sparring_engine.audit_played_move_for_game_review(
+        runtime.board,
+        "Bxf7+",
+        perspective=chess.WHITE,
+    )
+    runtime.handle_chess_move("Bxf7+")
+    last_id = int(runtime.chat_messages[-1]["id"])
+    runtime.flag_turn_for_coaching(
+        last_id,
+        user_note=rev["annotation_summary"],
+        check_auto_sleep=False,
+        is_hazard=True,
+        override_coordinates=rev["played_coordinates"],
+        contrastive_reference_coordinates=rev["contrastive_reference_coordinates"],
+        game_review_annotation=rev["annotation_summary"],
+    )
+    runtime.handle_run_rem_sleep()
+
+    assert runtime.bitboard_sleeve.steps_distilled >= 1
+    assert (tmp_path / "bitboard_will_state" / "bitboard_sleeve_weights.json").exists()
+
+    runtime.handle_set_fen("r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 3 3")
+    post_sleep_evals = {
+        e.san: e
+        for e in evaluate_candidate_moves_with_right_brain(
+            runtime.board,
+            runtime.rules,
+            limit=30,
+            bitboard_sleeve=runtime.bitboard_sleeve,
+        )
+    }
+    assert post_sleep_evals["Bxf7+"].execution_bid < pre_sleep_evals["Bxf7+"].execution_bid - 0.50
+    assert post_sleep_evals["O-O"].execution_bid > pre_sleep_evals["O-O"].execution_bid
+
+
+
 
 
 

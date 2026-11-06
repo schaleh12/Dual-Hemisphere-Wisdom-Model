@@ -29,8 +29,10 @@ Plain-English Purpose:
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+import json
 import math
+from pathlib import Path
 import re
 from typing import Any, Mapping
 import chess
@@ -355,10 +357,325 @@ _PIECE_VALUES: dict[int, float] = {
     chess.KING: 0.0,
 }
 
+_BB_EXTENDED_CENTER: int = (
+    chess.BB_C3 | chess.BB_D3 | chess.BB_E3 | chess.BB_F3
+    | chess.BB_C4 | chess.BB_D4 | chess.BB_E4 | chess.BB_F4
+    | chess.BB_C5 | chess.BB_D5 | chess.BB_E5 | chess.BB_F5
+    | chess.BB_C6 | chess.BB_D6 | chess.BB_E6 | chess.BB_F6
+)
+
+
+def _sigmoid01(x: float) -> float:
+    x_clamped = max(-12.0, min(12.0, float(x)))
+    return _clamp01(1.0 / (1.0 + math.exp(-x_clamped)))
+
+
+def _union_attacks_bb(board: chess.Board, color: chess.Color) -> int:
+    mask = 0
+    for sq in chess.scan_forward(board.occupied_co[color]):
+        mask |= board.attacks_mask(sq)
+    return mask
+
+
+def extract_bitboard_features(
+    board: chess.Board,
+    move: chess.Move,
+    *,
+    perspective: chess.Color | None = None,
+    next_board: chess.Board | None = None,
+    blunder_penalty: float = 0.0,
+    captured_val: float = 0.0,
+) -> dict[str, float]:
+    """Extract normalized 64-square bitboard features in O(1) without lookahead or engine calls."""
+    us = board.turn if perspective is None else perspective
+    them = not us
+    nb = next_board if next_board is not None else board.copy()
+    if next_board is None:
+        nb.push(move)
+
+    our_mat = sum(
+        val * chess.popcount(nb.pieces_mask(pt, us))
+        for pt, val in _PIECE_VALUES.items()
+        if val > 0.0
+    )
+    their_mat = sum(
+        val * chess.popcount(nb.pieces_mask(pt, them))
+        for pt, val in _PIECE_VALUES.items()
+        if val > 0.0
+    )
+    material_balance_norm = max(-1.0, min(1.0, (our_mat - their_mat) / 15.0))
+
+    our_attacks_bb = _union_attacks_bb(nb, us)
+    their_attacks_bb = _union_attacks_bb(nb, them)
+    our_att_cnt = chess.popcount(our_attacks_bb)
+    their_att_cnt = chess.popcount(their_attacks_bb)
+    attack_control_share = our_att_cnt / max(1, our_att_cnt + their_att_cnt)
+
+    our_center_occ = chess.popcount(nb.occupied_co[us] & chess.BB_CENTER)
+    their_center_occ = chess.popcount(nb.occupied_co[them] & chess.BB_CENTER)
+    our_center_att = chess.popcount(our_attacks_bb & _BB_EXTENDED_CENTER)
+    their_center_att = chess.popcount(their_attacks_bb & _BB_EXTENDED_CENTER)
+    center_bitboard_control = max(
+        -1.0,
+        min(
+            1.0,
+            ((2.0 * our_center_occ + 0.35 * our_center_att) - (2.0 * their_center_occ + 0.35 * their_center_att))
+            / 6.0,
+        ),
+    )
+
+    king_sq = nb.king(us)
+    if king_sq is None:
+        king_shield_safety = 0.10
+    else:
+        king_ring_bb = chess.BB_KING_ATTACKS[king_sq]
+        shield_pawns = chess.popcount(nb.pieces_mask(chess.PAWN, us) & king_ring_bb)
+        ring_enemy_att = chess.popcount(their_attacks_bb & king_ring_bb)
+        in_check_pen = 0.35 if nb.is_attacked_by(them, king_sq) else 0.0
+        king_shield_safety = _clamp01(0.52 + 0.14 * min(3, shield_pawns) - 0.10 * min(4, ring_enemy_att) - in_check_pen)
+
+    our_non_king_bb = nb.occupied_co[us] & ~nb.pieces_mask(chess.KING, us)
+    non_king_cnt = max(1, chess.popcount(our_non_king_bb))
+    defended_cnt = chess.popcount(our_non_king_bb & our_attacks_bb)
+    piece_coordination_ratio = _clamp01(defended_cnt / non_king_cnt)
+
+    home_rank_bb = chess.BB_RANK_1 if us == chess.WHITE else chess.BB_RANK_8
+    our_minors_bb = nb.pieces_mask(chess.KNIGHT, us) | nb.pieces_mask(chess.BISHOP, us)
+    total_minors = max(1, chess.popcount(our_minors_bb))
+    developed_minors = chess.popcount(our_minors_bb & ~home_rank_bb)
+    castled_bonus = 0.25 if (king_sq is not None and chess.square_file(king_sq) in (2, 6)) else 0.0
+    development_progress = _clamp01(0.75 * (developed_minors / total_minors) + castled_bonus)
+
+    move_net_safety = max(-1.0, min(1.0, 0.45 + 0.20 * captured_val - 0.42 * blunder_penalty))
+
+    piece_type = board.piece_type_at(move.from_square) or chess.PAWN
+    to_bb = chess.BB_SQUARES[move.to_square]
+    from_bb = chess.BB_SQUARES[move.from_square]
+    pos_gain = 0.0
+    if board.is_castling(move):
+        pos_gain += 0.62
+    if piece_type == chess.PAWN and (to_bb & chess.BB_CENTER):
+        pos_gain += 0.52
+    elif piece_type in (chess.KNIGHT, chess.BISHOP) and (from_bb & home_rank_bb) and not (to_bb & home_rank_bb):
+        pos_gain += 0.42
+    if to_bb & _BB_EXTENDED_CENTER:
+        pos_gain += 0.22
+    if not nb.is_attacked_by(them, move.to_square):
+        pos_gain += 0.28
+    elif nb.attackers_mask(them, move.to_square) & nb.pieces_mask(chess.PAWN, them):
+        pos_gain -= 0.18
+    if piece_type == chess.KING and not board.is_castling(move) and not board.is_check() and board.fullmove_number <= 12:
+        pos_gain -= 0.55
+    move_positional_gain = max(-1.0, min(1.0, pos_gain))
+
+    return {
+        "material_balance_norm": round(float(material_balance_norm), 4),
+        "attack_control_share": round(float(attack_control_share), 4),
+        "center_bitboard_control": round(float(center_bitboard_control), 4),
+        "king_shield_safety": round(float(king_shield_safety), 4),
+        "piece_coordination_ratio": round(float(piece_coordination_ratio), 4),
+        "development_progress": round(float(development_progress), 4),
+        "move_net_safety": round(float(move_net_safety), 4),
+        "move_positional_gain": round(float(move_positional_gain), 4),
+    }
+
+
+DEFAULT_SLEEVE_VALUE_WEIGHTS: dict[str, float] = {
+    "material_balance_norm": 1.35,
+    "attack_control_share": 0.90,
+    "center_bitboard_control": 0.65,
+    "king_shield_safety": 0.95,
+    "piece_coordination_ratio": 0.70,
+    "development_progress": 0.45,
+    "move_net_safety": 1.55,
+    "move_positional_gain": 0.40,
+}
+
+DEFAULT_SLEEVE_POLICY_WEIGHTS: dict[str, float] = {
+    "material_balance_norm": 0.55,
+    "attack_control_share": 0.85,
+    "center_bitboard_control": 1.10,
+    "king_shield_safety": 0.65,
+    "piece_coordination_ratio": 0.80,
+    "development_progress": 0.95,
+    "move_net_safety": 1.15,
+    "move_positional_gain": 1.45,
+}
+
+DEFAULT_SLEEVE_LEAF_WEIGHTS: dict[str, float] = {
+    "philosophical/being/existence": 0.65,
+    "philosophical/structure/order": 0.60,
+    "philosophical/persistence/continuity": 0.55,
+    "philosophical/persistence/discreteness": 0.45,
+    "philosophical/being/agency": 0.35,
+    "philosophical/structure/chaos": -0.35,
+    "cultural/efficiency/wastelessness": 0.80,
+    "cultural/freedom/self-sufficiency": 0.45,
+}
+
+
+@dataclass
+class BitboardIntuitionSleeve:
+    """Single-pass AlphaZero/Leela-style Bitboard Intuition Sleeve feeding `Confidence`, `Fact`, and `Theory`.
+
+    Operates in O(1) strictly from 64-bit bitboard features and learned post-mortem weights
+    (zero lookahead tree search and zero Stockfish queries during live move selection).
+    """
+
+    value_weights: dict[str, float] = field(default_factory=lambda: dict(DEFAULT_SLEEVE_VALUE_WEIGHTS))
+    policy_weights: dict[str, float] = field(default_factory=lambda: dict(DEFAULT_SLEEVE_POLICY_WEIGHTS))
+    leaf_weights: dict[str, float] = field(default_factory=lambda: dict(DEFAULT_SLEEVE_LEAF_WEIGHTS))
+    value_bias: float = -0.55
+    policy_bias: float = -0.45
+    steps_distilled: int = 0
+
+    def evaluate_move(
+        self,
+        board: chess.Board,
+        move: chess.Move,
+        *,
+        perspective: chess.Color | None = None,
+        next_board: chess.Board | None = None,
+        blunder_penalty: float = 0.0,
+        captured_val: float = 0.0,
+        leaf_coords: Mapping[str, float] | None = None,
+    ) -> dict[str, Any]:
+        feats = extract_bitboard_features(
+            board,
+            move,
+            perspective=perspective,
+            next_board=next_board,
+            blunder_penalty=blunder_penalty,
+            captured_val=captured_val,
+        )
+        v_logit = float(self.value_bias) + sum(
+            float(self.value_weights.get(k, 0.0)) * float(v) for k, v in feats.items()
+        )
+        p_logit = float(self.policy_bias) + sum(
+            float(self.policy_weights.get(k, 0.0)) * float(v) for k, v in feats.items()
+        )
+        leaf_adj = 0.0
+        if leaf_coords:
+            for lk, lw in self.leaf_weights.items():
+                if lk in leaf_coords:
+                    leaf_adj += float(lw) * (float(leaf_coords[lk]) - 0.50)
+        value_prior = _sigmoid01(v_logit + 0.55 * leaf_adj)
+        policy_prior = _sigmoid01(p_logit + 0.75 * leaf_adj)
+        safety_gate = 0.25 if blunder_penalty >= 1.5 else 1.0
+        coherence = 1.0 - min(1.0, abs(value_prior - policy_prior))
+        sleeve_confidence = _clamp01(
+            safety_gate * (0.45 * value_prior + 0.35 * policy_prior + 0.20 * coherence)
+        )
+        return {
+            "value_prior": value_prior,
+            "policy_prior": policy_prior,
+            "sleeve_confidence": sleeve_confidence,
+            "leaf_adjustment": round(float(leaf_adj), 4),
+            "features": feats,
+        }
+
+    def distill_post_mortem_scene(
+        self,
+        played_coordinates: Mapping[str, float],
+        reference_coordinates: Mapping[str, float] | None,
+        *,
+        is_hazard: bool = True,
+        learning_rate: float = 0.08,
+    ) -> dict[str, Any]:
+        """Distill a post-mortem Game Review critique (`played` vs `best_alternative`) into the sleeve weights."""
+        lr = max(0.005, min(0.25, float(learning_rate)))
+        updated_keys: list[str] = []
+        ref_map = reference_coordinates or {}
+        for lk in list(self.leaf_weights.keys()):
+            if lk in played_coordinates and lk in ref_map:
+                p_val = float(played_coordinates[lk])
+                r_val = float(ref_map[lk])
+                # If `played` was a blunder (`is_hazard=True`), shift weights toward `ref_val - p_val`.
+                # If `played` was a Brilliancy/Great Move (`is_hazard=False`), shift toward `p_val - r_val`.
+                delta = (r_val - p_val) if is_hazard else (p_val - r_val)
+                if abs(delta) >= 0.01:
+                    new_w = max(-2.5, min(2.5, float(self.leaf_weights[lk]) + lr * delta))
+                    self.leaf_weights[lk] = round(new_w, 4)
+                    updated_keys.append(lk)
+
+        fact_p = float(played_coordinates.get("psychological/truth/fact", 0.50))
+        fact_r = float(ref_map.get("psychological/truth/fact", 0.70))
+        if is_hazard and fact_r > fact_p:
+            self.value_weights["move_net_safety"] = round(
+                min(3.0, float(self.value_weights.get("move_net_safety", 1.55)) + 0.5 * lr * (fact_r - fact_p)),
+                4,
+            )
+            self.policy_weights["move_net_safety"] = round(
+                min(3.0, float(self.policy_weights.get("move_net_safety", 1.15)) + 0.5 * lr * (fact_r - fact_p)),
+                4,
+            )
+        elif not is_hazard:
+            self.policy_weights["move_positional_gain"] = round(
+                min(3.0, float(self.policy_weights.get("move_positional_gain", 1.45)) + 0.25 * lr),
+                4,
+            )
+        self.steps_distilled += 1
+        return {
+            "steps_distilled": self.steps_distilled,
+            "updated_leaf_keys": updated_keys,
+        }
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "schema_version": 1,
+            "value_weights": dict(self.value_weights),
+            "policy_weights": dict(self.policy_weights),
+            "leaf_weights": dict(self.leaf_weights),
+            "value_bias": round(float(self.value_bias), 4),
+            "policy_bias": round(float(self.policy_bias), 4),
+            "steps_distilled": int(self.steps_distilled),
+        }
+
+    @classmethod
+    def from_dict(cls, raw: Mapping[str, Any]) -> BitboardIntuitionSleeve:
+        vw = dict(DEFAULT_SLEEVE_VALUE_WEIGHTS)
+        pw = dict(DEFAULT_SLEEVE_POLICY_WEIGHTS)
+        lw = dict(DEFAULT_SLEEVE_LEAF_WEIGHTS)
+        if isinstance(raw.get("value_weights"), Mapping):
+            for k, v in raw["value_weights"].items():
+                vw[str(k)] = float(v)
+        if isinstance(raw.get("policy_weights"), Mapping):
+            for k, v in raw["policy_weights"].items():
+                pw[str(k)] = float(v)
+        if isinstance(raw.get("leaf_weights"), Mapping):
+            for k, v in raw["leaf_weights"].items():
+                lw[str(k)] = float(v)
+        return cls(
+            value_weights=vw,
+            policy_weights=pw,
+            leaf_weights=lw,
+            value_bias=float(raw.get("value_bias", -0.55)),
+            policy_bias=float(raw.get("policy_bias", -0.45)),
+            steps_distilled=int(raw.get("steps_distilled", 0)),
+        )
+
+    def save(self, path: str | Path) -> None:
+        target = Path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(json.dumps(self.to_dict(), indent=2), encoding="utf-8")
+
+    @classmethod
+    def load(cls, path: str | Path) -> BitboardIntuitionSleeve:
+        target = Path(path)
+        if not target.exists():
+            return cls()
+        try:
+            return cls.from_dict(json.loads(target.read_text(encoding="utf-8")))
+        except Exception:
+            return cls()
+
+
+_DEFAULT_BITBOARD_SLEEVE = BitboardIntuitionSleeve()
+
 
 @dataclass(frozen=True)
 class CandidateMoveEvaluation:
-    """Right-Brain 40-node evaluation of a legal candidate move on `chess.Board`."""
+    """Right-Brain 40-node evaluation of a legal candidate move Action Bid on `psychological/will/execution`."""
 
     san: str
     uci: str
@@ -372,12 +689,20 @@ class CandidateMoveEvaluation:
     is_blunder: bool
     is_repetition: bool
     shadow_warnings: tuple[str, ...]
+    execution_bid: float = 0.0
+    fact: float = 0.5
+    theory: float = 0.5
+    intention: float = 0.5
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "san": self.san,
             "uci": self.uci,
             "composite_score": round(float(self.composite_score), 4),
+            "execution_bid": round(float(self.execution_bid or self.composite_score), 4),
+            "fact": round(float(self.fact), 4),
+            "theory": round(float(self.theory), 4),
+            "intention": round(float(self.intention), 4),
             "settled": bool(self.settled),
             "clarity": round(float(self.clarity), 4),
             "confidence": round(float(self.confidence), 4),
@@ -396,8 +721,9 @@ def compute_candidate_move_fuzzy_coordinates(
     *,
     perspective: chess.Color | None = None,
     learned_leaves: Sequence[LearnedLeaf] = (),
+    bitboard_sleeve: BitboardIntuitionSleeve | None = None,
 ) -> tuple[dict[str, float], bool, float, ChessBoardPosture, tuple[str, ...]]:
-    """Compute the 40-node Fuzzy Tree coordinate dictionary and 1-ply blunder check for `move` on `board`."""
+    """Compute the 40-node Fuzzy Tree coordinate dictionary (`Fact`, `Theory`, `Confidence`, `Intention`) for `move`."""
     us = board.turn if perspective is None else perspective
     them = not us
     piece_type = board.piece_type_at(move.from_square) or chess.PAWN
@@ -446,21 +772,101 @@ def compute_candidate_move_fuzzy_coordinates(
                 blunder_penalty = net_unprotected
 
     post_posture = evaluate_chess_board_posture(next_board, perspective=us)
-    shadow_names = tuple(w.shadow_pathology for w in post_posture.board_shadow_warnings)
 
     coords: dict[str, float] = {k: 0.52 for k in FOUNDATIONAL_LEAVES}
     for leaf in learned_leaves:
         coords[leaf.leaf_id] = 0.35
     for leaf_id, val in post_posture.philosophical_coordinates.items():
         coords[leaf_id] = float(val)
-    for w in post_posture.board_shadow_warnings:
-        if w.shadow_leaf_id:
-            coords[w.shadow_leaf_id] = float(w.severity)
     coords["cultural/efficiency/wastelessness"] = (
         0.25 if is_blunder else round(min(0.95, 0.72 + 0.06 * captured_val), 4)
     )
     coords["cultural/freedom/self-sufficiency"] = float(
         post_posture.philosophical_coordinates.get("philosophical/being/existence", 0.55)
+    )
+
+    sleeve = bitboard_sleeve if bitboard_sleeve is not None else _DEFAULT_BITBOARD_SLEEVE
+    sleeve_out = sleeve.evaluate_move(
+        board,
+        move,
+        perspective=us,
+        next_board=next_board,
+        blunder_penalty=blunder_penalty,
+        captured_val=captured_val,
+        leaf_coords=coords,
+    )
+    existence = float(coords.get("philosophical/being/existence", 0.50))
+    order = float(coords.get("philosophical/structure/order", 0.50))
+    continuity = float(coords.get("philosophical/persistence/continuity", 0.50))
+    discreteness = float(coords.get("philosophical/persistence/discreteness", 0.50))
+    agency = float(coords.get("philosophical/being/agency", 0.50))
+    chaos = float(coords.get("philosophical/structure/chaos", 0.50))
+
+    # 1. `psychological/truth/fact`: Concrete bitboard reality (material, attack control, king safety, piece safety)
+    fact_coord = _clamp01(
+        0.55 * float(sleeve_out["value_prior"])
+        + 0.45 * existence
+        - 0.22 * min(3.0, blunder_penalty)
+    )
+    # 2. `psychological/truth/theory`: Projected positional hypothesis on the bitboard
+    theory_coord = _clamp01(
+        0.50 * float(sleeve_out["policy_prior"])
+        + 0.25 * order
+        + 0.15 * continuity
+        + 0.10 * agency
+    )
+    # 3. `psychological/contemplation/confidence`: Bitboard Intuition Sleeve certainty
+    sleeve_conf = float(sleeve_out["sleeve_confidence"])
+
+    move_shadows = detect_shadow_pathologies(
+        post_posture.philosophical_coordinates,
+        fact=fact_coord,
+        arousal=max(0.45, chaos),
+        resonance=order,
+    )
+    all_warnings = list(post_posture.board_shadow_warnings)
+    seen_shadows = {w.shadow_pathology for w in all_warnings}
+    for mw in move_shadows:
+        if mw.shadow_pathology not in seen_shadows:
+            all_warnings.append(mw)
+            seen_shadows.add(mw.shadow_pathology)
+    for w in all_warnings:
+        if w.shadow_leaf_id:
+            coords[w.shadow_leaf_id] = float(w.severity)
+    shadow_names = tuple(w.shadow_pathology for w in all_warnings)
+
+    coords["psychological/truth/fact"] = fact_coord
+    coords["psychological/truth/theory"] = theory_coord
+    coords["psychological/contemplation/confidence"] = sleeve_conf
+    coords["cultural/efficiency/power"] = _clamp01(0.50 * agency + 0.50 * discreteness)
+    coords["cultural/freedom/needlessness"] = _clamp01(
+        0.08 + (0.45 if is_blunder else 0.0) + (0.20 if shadow_names else 0.0)
+    )
+    coords["experiential/reflection/salience"] = _clamp01(
+        0.45 + 0.08 * captured_val + 0.25 * float(sleeve_out["policy_prior"])
+    )
+    coords["experiential/phase/arousal"] = _clamp01(0.35 + 0.40 * agency + 0.25 * chaos)
+
+    # 4. `psychological/will/intention` via `RIGHT_BRAIN_WILL_EDGES` (`rb-will-0..3`)
+    intention_coord = _clamp01(
+        (
+            1.0 * coords["experiential/reflection/salience"]
+            + 1.0 * coords["experiential/phase/arousal"]
+            + 0.8 * coords["cultural/efficiency/power"]
+            - 0.8 * coords["cultural/freedom/needlessness"]
+        )
+        / 2.8
+    )
+    coords["psychological/will/intention"] = intention_coord
+    coords["psychological/will/execution"] = _clamp01(
+        (
+            1.0 * intention_coord
+            + 1.0 * fact_coord
+            + 0.7 * theory_coord
+            + 0.5 * sleeve_conf
+            - 0.8 * coords["cultural/freedom/needlessness"]
+        )
+        / 3.2
     )
     return coords, is_blunder, blunder_penalty, post_posture, shadow_names
 
@@ -471,30 +877,22 @@ def evaluate_candidate_moves_with_right_brain(
     *,
     learned_leaves: Sequence[LearnedLeaf] = (),
     limit: int = 6,
+    bitboard_sleeve: BitboardIntuitionSleeve | None = None,
 ) -> list[CandidateMoveEvaluation]:
-    """Rank legal moves by combining pure `python-chess` 1-ply board geometry with learned Right-Brain `rules`."""
+    """Rank legal moves as competing Action Bids on `psychological/will/execution` (`RIGHT_BRAIN_WILL_EDGES`)."""
     legal = list(board.legal_moves)
     if not legal:
         return []
 
     us = board.turn
-    them = not us
     rule_tuple = tuple(rules)
     learned_tuple = tuple(learned_leaves)
+    sleeve = bitboard_sleeve if bitboard_sleeve is not None else _DEFAULT_BITBOARD_SLEEVE
     evaluations: list[CandidateMoveEvaluation] = []
 
     for move in legal:
         san = board.san(move)
         uci = move.uci()
-        piece_type = board.piece_type_at(move.from_square) or chess.PAWN
-        is_cap = board.is_capture(move)
-        captured_val = 0.0
-        if is_cap:
-            if board.is_en_passant(move):
-                captured_val = 1.0
-            else:
-                cap_pt = board.piece_type_at(move.to_square)
-                captured_val = _PIECE_VALUES.get(cap_pt or chess.PAWN, 1.0)
 
         next_board = board.copy()
         next_board.push(move)
@@ -514,11 +912,14 @@ def evaluate_candidate_moves_with_right_brain(
                     is_blunder=False,
                     is_repetition=False,
                     shadow_warnings=(),
+                    execution_bid=100.0,
+                    fact=1.0,
+                    theory=1.0,
+                    intention=1.0,
                 )
             )
             continue
 
-        dest_attacked_by_them = next_board.is_attacked_by(them, move.to_square)
         is_rep = next_board.is_repetition(2)
         coords, is_blunder, blunder_penalty, post_posture, shadow_names = (
             compute_candidate_move_fuzzy_coordinates(
@@ -526,16 +927,18 @@ def evaluate_candidate_moves_with_right_brain(
                 move,
                 perspective=us,
                 learned_leaves=learned_tuple,
+                bitboard_sleeve=sleeve,
             )
         )
         for r in rule_tuple:
             for req_leaf in r.target_leaves:
                 coords.setdefault(req_leaf, 0.0)
 
+        sleeve_conf = float(coords.get("psychological/contemplation/confidence", 0.60))
         is_hazard_match = False
         if rule_tuple:
             activations = _evaluate_rules_with_inhibition(rule_tuple, coords)
-            clarity, confidence, matched, is_confused, _reason = compute_contemplation(activations)
+            clarity, rule_confidence, matched, is_confused, _reason = compute_contemplation(activations)
             settled = not is_confused
             hazard_peak = max(
                 (
@@ -575,14 +978,39 @@ def evaluate_candidate_moves_with_right_brain(
             )
             learned_bonus = 0.65 * coached_peak - 0.85 * hazard_peak
             if matched and matched.startswith(("hazard_", "blunder_", "avoid_")):
-                learned_bonus = min(learned_bonus, -0.65 * float(confidence))
+                learned_bonus = min(learned_bonus, -0.65 * float(rule_confidence))
             elif matched and not matched.startswith(("balanced_", "mutual_")) and not is_hazard_match:
-                learned_bonus = max(learned_bonus, 0.55 * float(confidence))
+                learned_bonus = max(learned_bonus, 0.55 * float(rule_confidence))
+            confidence = _clamp01(0.55 * float(rule_confidence) + 0.45 * sleeve_conf)
         else:
-            clarity, confidence, matched, settled, learned_bonus = 0.60, 0.60, None, True, 0.0
+            clarity, confidence, matched, settled, learned_bonus = (
+                0.60,
+                sleeve_conf,
+                None,
+                True,
+                0.0,
+            )
+            coached_peak, hazard_peak = 0.0, 0.0
 
+        fact_val = float(coords.get("psychological/truth/fact", 0.50))
+        theory_val = _clamp01(
+            float(coords.get("psychological/truth/theory", 0.50))
+            + 0.18 * coached_peak
+            - 0.22 * hazard_peak
+        )
+        intention_val = float(coords.get("psychological/will/intention", 0.50))
+        needlessness_val = float(coords.get("cultural/freedom/needlessness", 0.10))
+
+        # Action Bid on `psychological/will/execution` (`RIGHT_BRAIN_WILL_EDGES`: rb-will-4..8)
+        will_execution_drive = (
+            1.0 * intention_val
+            + 1.0 * fact_val
+            + 0.7 * theory_val
+            + 0.5 * float(confidence)
+            - 0.8 * needlessness_val
+        )
         if is_hazard_match:
-            right_brain_score = (
+            contemplation_drive = (
                 -0.45 * float(clarity)
                 - 0.55 * float(confidence)
                 + learned_bonus
@@ -590,24 +1018,25 @@ def evaluate_candidate_moves_with_right_brain(
                 - 0.45 * len(shadow_names)
             )
         else:
-            right_brain_score = (
-                0.85 * float(clarity)
-                + 0.65 * float(confidence)
+            contemplation_drive = (
+                0.65 * float(clarity)
+                + 0.55 * float(confidence)
                 + learned_bonus
-                + (0.35 if settled else -0.25)
+                + (0.30 if settled else -0.25)
                 - 0.45 * len(shadow_names)
             )
         leaf_posture_score = (
-            float(coords.get("cultural/efficiency/wastelessness", 0.50))
-            + 0.85 * float(coords.get("philosophical/being/existence", 0.50))
-            + 0.75 * float(coords.get("philosophical/structure/order", 0.50))
-            + 0.65 * float(coords.get("philosophical/persistence/continuity", 0.50))
-            + 0.55 * float(coords.get("philosophical/persistence/discreteness", 0.50))
-            + 0.45 * float(coords.get("philosophical/being/agency", 0.50))
-            - 0.35 * float(coords.get("philosophical/structure/chaos", 0.50))
+            0.55 * float(coords.get("cultural/efficiency/wastelessness", 0.50))
+            + 0.55 * float(coords.get("philosophical/being/existence", 0.50))
+            + 0.45 * float(coords.get("philosophical/structure/order", 0.50))
+            + 0.40 * float(coords.get("philosophical/persistence/continuity", 0.50))
+            + 0.35 * float(coords.get("philosophical/persistence/discreteness", 0.50))
+            + 0.25 * float(coords.get("philosophical/being/agency", 0.50))
+            - 0.25 * float(coords.get("philosophical/structure/chaos", 0.50))
         )
-        composite = (
-            right_brain_score
+        execution_bid = (
+            will_execution_drive
+            + contemplation_drive
             + leaf_posture_score
             - 1.35 * blunder_penalty
             - (1.80 if is_rep else 0.0)
@@ -616,7 +1045,7 @@ def evaluate_candidate_moves_with_right_brain(
             CandidateMoveEvaluation(
                 san=san,
                 uci=uci,
-                composite_score=composite,
+                composite_score=execution_bid,
                 settled=settled,
                 clarity=float(clarity),
                 confidence=float(confidence),
@@ -626,6 +1055,10 @@ def evaluate_candidate_moves_with_right_brain(
                 is_blunder=is_blunder,
                 is_repetition=is_rep,
                 shadow_warnings=shadow_names,
+                execution_bid=execution_bid,
+                fact=fact_val,
+                theory=theory_val,
+                intention=intention_val,
             )
         )
 
