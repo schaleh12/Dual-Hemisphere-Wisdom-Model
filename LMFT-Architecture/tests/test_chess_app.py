@@ -729,12 +729,29 @@ def test_master_seed_sync_and_human_player_rating_coaching(tmp_path: Path) -> No
     assert player_runtime.player_elo == 1012.0
     assert player_runtime.player_wins == 1
 
-    # 5. Human plays a non-first legal move (`e4`, whereas `legal[0]` is `Nh3`) and coaching grades `e4`
+    # 5. Human plays a non-first legal move (`e4`, whereas `legal[0]` is `Nh3`) and coaching grades `e4` as SOLID (not BRILLIANCY_!!)
     player_runtime.handle_set_fen("start")
     snap_e4 = player_runtime.handle_chess_move("e4")
     assert snap_e4["elo"]["last_player_coaching"]["played_san"] == "e4"
+    assert snap_e4["elo"]["last_player_coaching"]["classification"] == "SOLID"
+    assert "eval_white_cp" in snap_e4["board"]
+    snap_e5 = player_runtime.handle_chess_move("e5")
+    assert snap_e5["elo"]["last_player_coaching"]["played_san"] == "e5"
+    assert snap_e5["elo"]["last_player_coaching"]["classification"] == "SOLID"
 
-    # 6. When LMFT delivers checkmate on its AI turn (`Qh4#` in Fool's Mate), `handle_chess_ai_move`
+    # 6. Verify Chess.com-style 3-column UI, Eval Bar, 2-Button workflow, and New User Guide modal exist in HTML
+    for required_ui_token in (
+        'id="eval-bar-container"',
+        'id="mode-play-vs-ai-btn"',
+        'id="auto-self-play-btn"',
+        'id="new-user-tutorial-btn"',
+        'id="tutorial-modal-overlay"',
+        'id="game-review-tally-box"',
+        "playHumanMoveAndAutoReply",
+    ):
+        assert required_ui_token in CHESS_SINGLE_PAGE_HTML
+
+    # 7. When LMFT delivers checkmate on its AI turn (`Qh4#` in Fool's Mate), `handle_chess_ai_move`
     #    automatically adjudicates the human's loss and updates `player_elo` and `player_losses`
     player_runtime.handle_set_fen("rnbqkbnr/pppp1ppp/8/4p3/8/5P2/PPPPP1PP/RNBQKBNR w KQkq - 0 2")
     player_runtime.handle_chess_move("g4")
@@ -742,6 +759,7 @@ def test_master_seed_sync_and_human_player_rating_coaching(tmp_path: Path) -> No
     assert player_runtime.board.is_checkmate() is True
     assert player_runtime.player_losses == 1
     assert player_runtime.player_elo < 1012.0
+
 
 
 

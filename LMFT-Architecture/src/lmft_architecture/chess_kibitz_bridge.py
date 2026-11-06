@@ -1310,13 +1310,17 @@ class ObjectiveCalibratedSparringEngine:
             )
         )
 
-        # Select an inferior alternative from the same position to contrast against when LMFT plays the best move
+        # Find the second-best move (for `!`/`!!` edge detection) AND an inferior move (for REM Sleep coordinate contrast)
+        second_best_cp = best_cp
+        for est_cp, mv, _san, _is_b in scored_alternatives:
+            if mv != played_move:
+                second_best_cp = est_cp
+                break
+
         alt_move = scored_alternatives[-1][1] if len(scored_alternatives) > 1 else best_move
-        alt_cp = scored_alternatives[-1][0] if len(scored_alternatives) > 1 else best_cp
-        for est_cp, mv, _san, _is_b in reversed(scored_alternatives):
+        for _est_cp, mv, _san, _is_b in reversed(scored_alternatives):
             if mv != played_move:
                 alt_move = mv
-                alt_cp = est_cp
                 break
         alt_coords, _alt_b, _alt_pen, _a_post, _a_shad = compute_candidate_move_fuzzy_coordinates(
             board_before,
@@ -1325,9 +1329,10 @@ class ObjectiveCalibratedSparringEngine:
             learned_leaves=learned_tuple,
         )
 
+        static_played_cp = _static_centipawns_for_color(board_after_played, us) - (100.0 * played_b_pen)
         cp_drop = round(max(0.0, cp_before - cp_after, best_cp - cp_after), 1)
         cp_gain = round(cp_after - cp_before, 1)
-        cp_edge_over_alt = round(cp_after - alt_cp, 1)
+        cp_edge_over_alt = round(static_played_cp - second_best_cp, 1)
         chaos_val = float(played_coords.get("philosophical/structure/chaos", 0.0))
 
         if cp_drop >= 150.0 or (played_is_blunder and not best_is_blunder):
