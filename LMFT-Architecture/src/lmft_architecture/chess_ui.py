@@ -886,8 +886,8 @@ function renderState(s) {
   const isSelfTrain = !!autoSelfPlayTimer;
   const lmftColor = (s.elo && s.elo.lmft_color) || "White";
   const stockfishColor = lmftColor === "White" ? "Black" : "White";
-  const lmftColorBadge = lmftColor === "White" ? "⚪ Playing White" : "⚫ Playing Black";
-  const stockfishColorBadge = stockfishColor === "White" ? "⚪ Playing White" : "⚫ Playing Black";
+  const bottomBoardColor = boardFlipped ? "Black" : "White";
+  const topBoardColor = boardFlipped ? "White" : "Black";
 
   const topAvatar = document.getElementById("top-player-avatar");
   const topName = document.getElementById("top-player-name");
@@ -895,47 +895,67 @@ function renderState(s) {
   const botAvatar = document.getElementById("bottom-player-avatar");
   const botName = document.getElementById("bottom-player-name");
   const botSubtitle = document.getElementById("bottom-player-subtitle");
+  const eloEl = document.getElementById("elo-status-pill");
+  const pEloEl = document.getElementById("player-elo-pill");
 
-  if (topAvatar) topAvatar.textContent = "🪴";
-  if (topName) topName.textContent = "HousePlant 1.0";
-  if (topMeta) {
-    topMeta.textContent = isSelfTrain
-      ? `(${lmftColorBadge} · 40-Node Tree + Qwen3-4B)`
-      : `(40-Node Tree + Qwen3-4B · ${boardFlipped ? "⚪ Playing White" : "⚫ Playing Black"})`;
-  }
+  const eloData = s.elo || {};
+  const hpEloText = `HousePlant Elo: ${Number(eloData.lmft_elo || 1000).toFixed(1)} (${eloData.wins || 0}W-${eloData.losses || 0}L-${eloData.draws || 0}D · ${lmftColor})`;
+  const oppTarget = Number(eloData.opponent_target_elo || eloData.lmft_elo || 1000).toFixed(1);
+  const sfEloText = `Stockfish Target Elo: ${oppTarget} (${stockfishColor} · Game #${(eloData.games_completed || 0) + 1})`;
+  const pBase = Number(eloData.player_elo || 1000).toFixed(1);
+  const pAcc = eloData.player_game_accuracy_pct;
+  const pEst = Number(eloData.player_estimated_game_elo || eloData.player_elo || 1000).toFixed(0);
+  const humanEloText = pAcc != null
+    ? `Your Elo: ${pBase} · Acc: ${Number(pAcc).toFixed(0)}% (Est. ${pEst})`
+    : `Your Elo: ${pBase} (${eloData.player_wins || 0}W-${eloData.player_losses || 0}L-${eloData.player_draws || 0}D)`;
 
   if (isSelfTrain) {
-    if (botAvatar) botAvatar.textContent = "🐟";
-    if (botName) botName.textContent = `Stockfish (${stockfishColorBadge})`;
-    if (botSubtitle) {
-      botSubtitle.textContent = "Strength-Calibrated Stockfish Sparring Partner (Alternates White/Black Each Game)";
+    const housePlantOnBottom = (lmftColor === bottomBoardColor);
+    const topBadge = topBoardColor === "White" ? "⚪ Playing White" : "⚫ Playing Black";
+    const botBadge = bottomBoardColor === "White" ? "⚪ Playing White" : "⚫ Playing Black";
+    if (housePlantOnBottom) {
+      if (topAvatar) topAvatar.textContent = "🐟";
+      if (topName) topName.textContent = `Stockfish (${topBadge})`;
+      if (topMeta) topMeta.textContent = "(Strength-Calibrated Stockfish Sparring Partner)";
+      if (eloEl) eloEl.textContent = sfEloText;
+
+      if (botAvatar) botAvatar.textContent = "🪴";
+      if (botName) botName.textContent = `HousePlant 1.0 (${botBadge})`;
+      if (botSubtitle) botSubtitle.textContent = "40-Node Fuzzy Tree + Qwen3-4B (Swaps White/Black Each Game)";
+      if (pEloEl) pEloEl.textContent = hpEloText;
+    } else {
+      if (topAvatar) topAvatar.textContent = "🪴";
+      if (topName) topName.textContent = `HousePlant 1.0 (${topBadge})`;
+      if (topMeta) topMeta.textContent = "(40-Node Fuzzy Tree + Qwen3-4B)";
+      if (eloEl) eloEl.textContent = hpEloText;
+
+      if (botAvatar) botAvatar.textContent = "🐟";
+      if (botName) botName.textContent = `Stockfish (${botBadge})`;
+      if (botSubtitle) botSubtitle.textContent = "Strength-Calibrated Stockfish Sparring Partner (Swaps White/Black Each Game)";
+      if (pEloEl) pEloEl.textContent = sfEloText;
     }
   } else {
-    if (botAvatar) botAvatar.textContent = "👤";
-    if (botName) botName.textContent = `You (${boardFlipped ? "⚫ Playing Black" : "⚪ Playing White"})`;
-    if (botSubtitle) {
-      botSubtitle.textContent = "Auto-Coached on Every Move (!! / ! / ? / ??)";
-    }
-  }
+    const humanOnBottom = !boardFlipped;
+    if (humanOnBottom) {
+      if (topAvatar) topAvatar.textContent = "🪴";
+      if (topName) topName.textContent = "HousePlant 1.0";
+      if (topMeta) topMeta.textContent = "(40-Node Tree + Qwen3-4B · ⚫ Playing Black)";
+      if (eloEl) eloEl.textContent = hpEloText;
 
-  if (s.elo) {
-    const eloEl = document.getElementById("elo-status-pill");
-    if (eloEl) {
-      eloEl.textContent = `HousePlant Elo: ${Number(s.elo.lmft_elo || 1000).toFixed(1)} (${s.elo.wins || 0}W-${s.elo.losses || 0}L-${s.elo.draws || 0}D · ${lmftColor})`;
-    }
-    const pEloEl = document.getElementById("player-elo-pill");
-    if (pEloEl) {
-      if (isSelfTrain) {
-        const oppTarget = Number(s.elo.opponent_target_elo || s.elo.lmft_elo || 1000).toFixed(1);
-        pEloEl.textContent = `Stockfish Target Elo: ${oppTarget} (${stockfishColor} · Game #${(s.elo.games_completed || 0) + 1})`;
-      } else {
-        const pBase = Number(s.elo.player_elo || 1000).toFixed(1);
-        const pAcc = s.elo.player_game_accuracy_pct;
-        const pEst = Number(s.elo.player_estimated_game_elo || s.elo.player_elo || 1000).toFixed(0);
-        pEloEl.textContent = pAcc != null
-          ? `Your Elo: ${pBase} · Acc: ${Number(pAcc).toFixed(0)}% (Est. ${pEst})`
-          : `Your Elo: ${pBase} (${s.elo.player_wins || 0}W-${s.elo.player_losses || 0}L-${s.elo.player_draws || 0}D)`;
-      }
+      if (botAvatar) botAvatar.textContent = "👤";
+      if (botName) botName.textContent = "You (⚪ Playing White)";
+      if (botSubtitle) botSubtitle.textContent = "Auto-Coached on Every Move (!! / ! / ? / ??)";
+      if (pEloEl) pEloEl.textContent = humanEloText;
+    } else {
+      if (topAvatar) topAvatar.textContent = "👤";
+      if (topName) topName.textContent = "You (⚪ Playing White)";
+      if (topMeta) topMeta.textContent = "(Auto-Coached on Every Move)";
+      if (eloEl) eloEl.textContent = humanEloText;
+
+      if (botAvatar) botAvatar.textContent = "🪴";
+      if (botName) botName.textContent = "HousePlant 1.0 (⚫ Playing Black)";
+      if (botSubtitle) botSubtitle.textContent = "40-Node Fuzzy Tree + Qwen3-4B";
+      if (pEloEl) pEloEl.textContent = hpEloText;
     }
   }
   document.getElementById("rules-count-pill").textContent = "Rules: " + (s.rules_count || 0);
