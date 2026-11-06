@@ -280,6 +280,7 @@ CHESS_SINGLE_PAGE_HTML = """<!DOCTYPE html>
     </select>
     <span class="pill" id="model-status-pill">Qwen3-4B</span>
     <span class="pill" id="elo-status-pill" title="Objective FIDE Elo vs. Strength-Calibrated Sparring Engine">Elo: 1000.0 (0W-0L-0D)</span>
+    <span class="pill" id="player-elo-pill" title="Your Assigned Player Elo &amp; Live Move Accuracy">Your Elo: 1000.0</span>
     <span class="pill" id="rules-count-pill">Rules: 2</span>
     <span class="pill" id="sleep-queue-pill">Sleep Queue: 0</span>
     <button class="btn" id="step-ai-move-btn" onclick="playAiMove()">Step AI Move</button>
@@ -545,6 +546,15 @@ function renderState(s) {
     if (eloEl) {
       eloEl.textContent = `Elo: ${Number(s.elo.lmft_elo || 1000).toFixed(1)} (${s.elo.wins || 0}W-${s.elo.losses || 0}L-${s.elo.draws || 0}D · ${s.elo.lmft_color || "White"})`;
     }
+    const pEloEl = document.getElementById("player-elo-pill");
+    if (pEloEl) {
+      const pBase = Number(s.elo.player_elo || 1000).toFixed(1);
+      const pAcc = s.elo.player_game_accuracy_pct;
+      const pEst = Number(s.elo.player_estimated_game_elo || s.elo.player_elo || 1000).toFixed(0);
+      pEloEl.textContent = pAcc != null
+        ? `Your Elo: ${pBase} · Acc: ${Number(pAcc).toFixed(0)}% (Est. ${pEst})`
+        : `Your Elo: ${pBase} (${s.elo.player_wins || 0}W-${s.elo.player_losses || 0}L-${s.elo.player_draws || 0}D)`;
+    }
   }
   document.getElementById("rules-count-pill").textContent = "Rules: " + (s.rules_count || 0);
   document.getElementById("sleep-queue-pill").textContent = "Sleep Queue: " + (s.sleep_queue_count || 0);
@@ -596,6 +606,11 @@ function renderState(s) {
       const subHtml = sub
         ? `<div class="subtext-strip"><span>Pretext turns: ${sub.pretext_turns || 0}</span><span>Subtext Dominant: ${escapeHtml(sub.dominant_piece || "")} (${escapeHtml(sub.dominant_color || "")})</span><span>${escapeHtml(gearLabel)}</span></div>`
         : "";
+      const pc = t.player_coaching;
+      const gr = t.game_review;
+      const coachStripHtml = pc
+        ? `<div class="subtext-strip" style="color:var(--accent);"><span><strong>Custom Coach (${escapeHtml(pc.classification || "SOLID")} · ${Number(pc.move_accuracy_pct || 0).toFixed(0)}% Acc · Est. ${Number(pc.estimated_performance_elo || 1000).toFixed(0)} Elo):</strong> ${escapeHtml(pc.coaching_advice || "")}</span></div>`
+        : (gr ? `<div class="subtext-strip"><span>${escapeHtml(gr.annotation_summary || "")}</span></div>` : "");
       const actionsHtml = (m.sender === "companion" && typeof m.id === "number")
         ? `<div style="margin-top:6px;display:flex;gap:6px;">
              <button class="btn" style="padding:3px 8px;font-size:10px;" onclick="coachTurn(${m.id})">${m.coached ? "Queued for Sleep" : "Coach / Queue for Sleep"}</button>
@@ -610,6 +625,7 @@ function renderState(s) {
           </div>
           <div class="msg-text">${escapeHtml(m.text)}</div>
           ${subHtml}
+          ${coachStripHtml}
           ${actionsHtml}
         </div>
       `;

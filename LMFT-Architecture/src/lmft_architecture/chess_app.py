@@ -71,9 +71,12 @@ from .chess_kibitz_bridge import (
     CandidateMoveEvaluation,
     ChessBoardPosture,
     ObjectiveCalibratedSparringEngine,
+    build_human_move_coaching_report,
     build_natural_chess_scenario_prompt,
     compute_candidate_move_fuzzy_coordinates,
+    compute_estimated_game_elo,
     compute_fide_elo_update,
+    compute_move_accuracy_percent,
     evaluate_candidate_moves_with_right_brain,
     evaluate_chess_board_posture,
     format_move_history_pgn_snippet,
@@ -244,6 +247,23 @@ def _ensure_foundational_rules(rules: tuple[FuzzyConceptRule, ...]) -> tuple[Fuz
     return tuple(merged)
 
 
+def _merge_rulesets(
+    primary: tuple[FuzzyConceptRule, ...],
+    seed: tuple[FuzzyConceptRule, ...],
+) -> tuple[FuzzyConceptRule, ...]:
+    """Non-destructively merge `seed` rules into `primary` rules without losing local rules."""
+    base = list(_ensure_foundational_rules(primary))
+    seen_ids = {r.rule_id for r in base}
+    seen_names = {r.concept_name for r in base}
+    for r in seed:
+        if r.rule_id in seen_ids or r.concept_name in seen_names:
+            continue
+        base.append(r)
+        seen_ids.add(r.rule_id)
+        seen_names.add(r.concept_name)
+    return tuple(base)
+
+
 class ChessKibitzerRuntime:
     """Thread-safe controller for `LMFT-Chess.exe` (Qwen3-4B Chess Wisdom & Self-Kibitzer App)."""
 
@@ -348,9 +368,15 @@ class ChessKibitzerRuntime:
             t = threading.Thread(target=self._background_warm_left_brain, daemon=True)
             t.start()
 
+    def _is_default_live_state_dir(self) -> bool:
+        try:
+            return self.state_dir.resolve() == (self.training_root / "outputs" / "chess_kibitzer_state").resolve()
+        except Exception:
+            return False
+
     def _load_default_rules(self) -> tuple[FuzzyConceptRule, ...]:
         user_ruleset = self.state_dir / "club_ruleset.json"
-        candidates = [user_ruleset] + [
+        seed_candidates = [
             self.training_root / rel
             for rel in (
                 "outputs/club_user_state/club_ruleset.json",
@@ -359,7 +385,22 @@ class ChessKibitzerRuntime:
                 "outputs/continuous_tiered_ruleset.json",
             )
         ]
-        for p in candidates:
+        user_loaded: tuple[FuzzyConceptRule, ...] = ()
+        if user_ruleset.exists():
+            try:
+                user_loaded = load_ruleset(user_ruleset)
+            except Exception:
+                user_loaded = ()
+        if user_loaded:
+            if self._is_default_live_state_dir():
+                for seed_p in seed_candidates[1:3]:
+                    if seed_p.exists():
+                        try:
+                            user_loaded = _merge_rulesets(user_loaded, load_ruleset(seed_p))
+                        except Exception:
+                            pass
+            return _ensure_foundational_rules(user_loaded)
+        for p in seed_candidates:
             if p.exists():
                 try:
                     loaded = load_ruleset(p)
@@ -433,6 +474,16 @@ class ChessKibitzerRuntime:
         self.lmft_playing_white: bool = True
         self._current_game_adjudicated: bool = False
         self.last_elo_receipt: dict[str, Any] | None = None
+
+        self.player_elo: float = 1000.0
+        self.player_wins: int = 0
+        self.player_losses: int = 0
+        self.player_draws: int = 0
+        self.player_games_completed: int = 0
+        self.player_move_accuracies: list[float] = []
+        self.last_player_coaching: dict[str, Any] | None = None
+        self.last_player_elo_receipt: dict[str, Any] | None = None
+
         meta_path = self.state_dir / "club_meta.json"
         if meta_path.exists():
             try:
@@ -445,6 +496,11 @@ class ChessKibitzerRuntime:
                 self.elo_draws = int(raw.get("elo_draws", 0))
                 self.games_completed_count = int(raw.get("games_completed_count", 0))
                 self.lmft_playing_white = bool(raw.get("lmft_playing_white", True))
+                self.player_elo = float(raw.get("player_elo", 1000.0))
+                self.player_wins = int(raw.get("player_wins", 0))
+                self.player_losses = int(raw.get("player_losses", 0))
+                self.player_draws = int(raw.get("player_draws", 0))
+                self.player_games_completed = int(raw.get("player_games_completed", 0))
                 return [int(x) for x in raw.get("savored_turn_ids", [])]
             except Exception:
                 pass
@@ -679,8 +735,78 @@ class ChessKibitzerRuntime:
                 "elo_draws": int(self.elo_draws),
                 "games_completed_count": int(self.games_completed_count),
                 "lmft_playing_white": bool(self.lmft_playing_white),
+                "player_elo": float(self.player_elo),
+                "player_wins": int(self.player_wins),
+                "player_losses": int(self.player_losses),
+                "player_draws": int(self.player_draws),
+                "player_games_completed": int(self.player_games_completed),
             },
         )
+
+    def export_master_release_seed(
+        self,
+        *,
+        target_training_root: str | Path | None = None,
+    ) -> dict[str, Any]:
+        """Export the evolved ruleset and 3-branch archives into the shared GitHub/Release seed files."""
+        target_root = (
+            Path(target_training_root).resolve()
+            if target_training_root is not None
+            else self.training_root
+        )
+        out_dir = target_root / "outputs"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        rem_seed_path = out_dir / "rem_sleep_consolidated_ruleset.json"
+        sleep_seed_path = out_dir / "sleep_consolidated_ruleset.json"
+        save_ruleset(rem_seed_path, tuple(self.rules), tuple(self.learned_leaves))
+        save_ruleset(sleep_seed_path, tuple(self.rules), tuple(self.learned_leaves))
+        self.archives.save_all(out_dir / "branch_archives")
+        if target_root.resolve() == self.training_root.resolve():
+            self.release_manifest = build_release_manifest(self.repo_root, write_to_disk=True)
+        return {
+            "exported_rules_count": len(self.rules),
+            "exported_learned_leaves_count": len(self.learned_leaves),
+            "rem_seed_path": str(rem_seed_path),
+            "sleep_seed_path": str(sleep_seed_path),
+        }
+
+    def merge_master_seed_rules(
+        self,
+        *,
+        seed_training_root: str | Path | None = None,
+    ) -> dict[str, Any]:
+        """Non-destructively merge any new rules from the shared GitHub/Release seed into the active ruleset."""
+        if self.active_lineage == "virgin":
+            return {"merged_rules_count": 0, "total_rules_count": len(self.rules)}
+        seed_root = (
+            Path(seed_training_root).resolve()
+            if seed_training_root is not None
+            else self.training_root
+        )
+        before_count = len(self.rules)
+        merged_rules = tuple(self.rules)
+        existing_leaf_ids = {l.leaf_id for l in self.learned_leaves}
+        merged_leaves = list(self.learned_leaves)
+
+        for rel in ("outputs/rem_sleep_consolidated_ruleset.json", "outputs/sleep_consolidated_ruleset.json"):
+            seed_path = seed_root / rel
+            if seed_path.exists():
+                try:
+                    merged_rules = _merge_rulesets(merged_rules, load_ruleset(seed_path))
+                    for lf in load_learned_leaves(seed_path):
+                        if lf.leaf_id not in existing_leaf_ids:
+                            merged_leaves.append(lf)
+                            existing_leaf_ids.add(lf.leaf_id)
+                except Exception:
+                    pass
+
+        self.rules = merged_rules
+        self.learned_leaves = tuple(merged_leaves)
+        self._persist_user_state()
+        return {
+            "merged_rules_count": max(0, len(self.rules) - before_count),
+            "total_rules_count": len(self.rules),
+        }
 
     def switch_brain_lineage(
         self,
@@ -963,6 +1089,16 @@ class ChessKibitzerRuntime:
             if self.move_history_san
             else ""
         )
+        player_game_acc = (
+            round(sum(self.player_move_accuracies) / len(self.player_move_accuracies), 1)
+            if self.player_move_accuracies
+            else None
+        )
+        player_est_elo = (
+            compute_estimated_game_elo(player_game_acc, reference_elo=self.lmft_elo)
+            if player_game_acc is not None
+            else round(float(self.player_elo), 1)
+        )
         return {
             "app_name": "LMFT-Chess",
             "active_room": self.active_room,
@@ -1013,6 +1149,15 @@ class ChessKibitzerRuntime:
                 "lmft_color": "White" if self.lmft_playing_white else "Black",
                 "sparring_engine_label": self.sparring_engine.engine_label,
                 "last_elo_receipt": self.last_elo_receipt,
+                "player_elo": round(float(self.player_elo), 1),
+                "player_wins": int(self.player_wins),
+                "player_losses": int(self.player_losses),
+                "player_draws": int(self.player_draws),
+                "player_games_completed": int(self.player_games_completed),
+                "player_game_accuracy_pct": player_game_acc,
+                "player_estimated_game_elo": player_est_elo,
+                "last_player_coaching": self.last_player_coaching,
+                "last_player_elo_receipt": self.last_player_elo_receipt,
             },
             "board": {
                 "fen": self.board.fen(),
@@ -1036,6 +1181,7 @@ class ChessKibitzerRuntime:
         move_uci_or_san: str,
         *,
         pre_deliberation: tuple[str, Any] | None = None,
+        is_human_move: bool | None = None,
     ) -> dict[str, Any]:
         """Make a move on the chessboard and spontaneously append to the continuous Pretext -> Subtext -> Context stream."""
         raw = move_uci_or_san.strip()
@@ -1052,12 +1198,33 @@ class ChessKibitzerRuntime:
             except ValueError as exc:
                 raise ValueError(f"Illegal or unrecognized chess move: {raw!r}") from exc
 
+        human_turn = (pre_deliberation is None) if is_human_move is None else bool(is_human_move)
+        board_before = self.board.copy()
         mover_color = self.board.turn
         san_str = self.board.san(move)
         self.board.push(move)
         self.move_history_san.append(san_str)
         mover_posture = evaluate_chess_board_posture(self.board, perspective=mover_color)
         self.board_posture = mover_posture
+
+        human_review: dict[str, Any] | None = None
+        human_coaching: dict[str, Any] | None = None
+        if human_turn:
+            human_review = self.sparring_engine.audit_played_move_for_game_review(
+                board_before,
+                move,
+                perspective=mover_color,
+                learned_leaves=self.learned_leaves,
+            )
+            human_coaching = build_human_move_coaching_report(
+                human_review,
+                rules=self.rules,
+                player_elo=self.player_elo,
+                reference_elo=self.lmft_elo,
+                prior_move_accuracies=self.player_move_accuracies,
+            )
+            self.player_move_accuracies.append(float(human_coaching["move_accuracy_pct"]))
+            self.last_player_coaching = human_coaching
 
         move_desc = build_natural_chess_scenario_prompt(
             self.board,
@@ -1161,6 +1328,12 @@ class ChessKibitzerRuntime:
             "spliced_thinker_vector": [round(float(x), 4) for x in spliced_chord.thinker_vector[:6]],
             "context_reply": reply_text,
         }
+        if human_review is not None:
+            telemetry["game_review"] = human_review
+        if human_coaching is not None:
+            telemetry["player_coaching"] = human_coaching
+            if self.last_board_reflex is not None:
+                self.last_board_reflex["player_coaching"] = human_coaching
 
         if self.spontaneous_kibitz_enabled or turn.final_conscious_note or has_board_warning:
             self.chat_messages.append(
@@ -1187,6 +1360,9 @@ class ChessKibitzerRuntime:
                 is_hazard=True,
             )
 
+        if human_turn and self.board.is_game_over(claim_draw=True):
+            self.adjudicate_human_game_outcome(human_color=mover_color)
+
         self._maybe_trigger_auto_rem_sleep()
         return self.get_state_snapshot()
 
@@ -1196,6 +1372,7 @@ class ChessKibitzerRuntime:
             if self.move_history_san:
                 self.move_history_san.pop()
         self._current_game_adjudicated = False
+        self._current_human_game_adjudicated = False
         self.last_board_reflex = None
         self.board_posture = evaluate_chess_board_posture(self.board)
         return self.get_state_snapshot()
@@ -1325,7 +1502,11 @@ class ChessKibitzerRuntime:
             except Exception:
                 pass
 
-        snap = self.handle_chess_move(chosen_san, pre_deliberation=pre_delib_pair)
+        snap = self.handle_chess_move(
+            chosen_san,
+            pre_deliberation=pre_delib_pair,
+            is_human_move=False,
+        )
         arbitration_record = {
             "selection_mode": selection_mode,
             "chosen_move_san": chosen_san,
@@ -1357,7 +1538,10 @@ class ChessKibitzerRuntime:
         fen = PRESET_CHESS_POSITIONS[key]["fen"] if key in PRESET_CHESS_POSITIONS else key
         self.board = chess.Board(fen)
         self.move_history_san.clear()
+        self.player_move_accuracies.clear()
+        self.last_player_coaching = None
         self._current_game_adjudicated = False
+        self._current_human_game_adjudicated = False
         self.last_board_reflex = None
         self.board_posture = evaluate_chess_board_posture(self.board)
         return self.get_state_snapshot()
@@ -1852,6 +2036,86 @@ class ChessKibitzerRuntime:
         self._persist_user_state()
         return receipt
 
+    def adjudicate_human_game_outcome(
+        self,
+        *,
+        human_color: chess.Color = chess.WHITE,
+    ) -> dict[str, Any]:
+        """Score a Human vs. LMFT game, update the human player's FIDE Elo (`player_elo`), and record a coaching summary."""
+        if getattr(self, "_current_human_game_adjudicated", False) and self.last_player_elo_receipt is not None:
+            return self.last_player_elo_receipt
+        outcome = self.board.outcome(claim_draw=True)
+        if outcome is not None:
+            if outcome.winner is None:
+                human_score = 0.5
+                result_label = "DRAW"
+            elif outcome.winner == human_color:
+                human_score = 1.0
+                result_label = "WIN"
+            else:
+                human_score = 0.0
+                result_label = "LOSS"
+        else:
+            cp = self.sparring_engine.evaluate_position_centipawns(
+                self.board,
+                perspective=human_color,
+            )
+            if cp >= 250.0:
+                human_score = 1.0
+                result_label = "WIN (Position Evaluation)"
+            elif cp <= -250.0:
+                human_score = 0.0
+                result_label = "LOSS (Position Evaluation)"
+            else:
+                human_score = 0.5
+                result_label = "DRAW (Balanced Position)"
+
+        prev_elo = self.player_elo
+        opp_elo = self.lmft_elo
+        new_elo, delta = compute_fide_elo_update(prev_elo, opp_elo, human_score)
+        self.player_elo = new_elo
+        if human_score > 0.75:
+            self.player_wins += 1
+        elif human_score < 0.25:
+            self.player_losses += 1
+        else:
+            self.player_draws += 1
+        self.player_games_completed += 1
+        mean_acc = (
+            round(sum(self.player_move_accuracies) / len(self.player_move_accuracies), 1)
+            if self.player_move_accuracies
+            else 75.0
+        )
+        est_perf = compute_estimated_game_elo(mean_acc, reference_elo=opp_elo)
+        sign = "+" if delta >= 0 else ""
+        receipt = {
+            "game_number": self.player_games_completed,
+            "result_label": result_label,
+            "human_score": human_score,
+            "previous_player_elo": prev_elo,
+            "lmft_opponent_elo": opp_elo,
+            "new_player_elo": new_elo,
+            "elo_delta": delta,
+            "mean_accuracy_pct": mean_acc,
+            "estimated_performance_elo": est_perf,
+        }
+        self._current_human_game_adjudicated = True
+        self.last_player_elo_receipt = receipt
+        self.chat_messages.append(
+            {
+                "id": f"player-elo-{self.player_games_completed}-{int(time.time() * 1000) % 10000}",
+                "sender": "system",
+                "role_label": f"Player Rating & Coach Arbiter — Game #{self.player_games_completed} ({result_label})",
+                "text": (
+                    f"Player vs. LMFT ({opp_elo:.0f} Elo): {result_label} · "
+                    f"Accuracy {mean_acc:.1f}% (Performance Est. {est_perf:.0f} Elo) -> "
+                    f"Player Elo {prev_elo:.1f} -> {new_elo:.1f} ({sign}{delta:.1f})."
+                ),
+            }
+        )
+        self._persist_user_state()
+        return receipt
+
     def handle_microwave_step(self, *, num_sentences: int = 1) -> dict[str, Any]:
         """Execute one Sparring & Self-Kibitz step (`LMFT` vs. strength-calibrated `ObjectiveCalibratedSparringEngine`)."""
         _ = num_sentences
@@ -1905,7 +2169,7 @@ class ChessKibitzerRuntime:
                 self.board,
                 target_elo=self.opponent_target_elo,
             )
-            snap = self.handle_chess_move(opp["move_san"])
+            snap = self.handle_chess_move(opp["move_san"], is_human_move=False)
             mover_tag = f"SparringEngine({self.opponent_target_elo:.0f})"
 
         if self.board.is_game_over(claim_draw=True) and not getattr(self, "_current_game_adjudicated", False):
@@ -1950,6 +2214,9 @@ class ChessKibitzerRuntime:
             manifest,
             apply_sync=apply_sync,
         )
+        if apply_sync and self.active_lineage != "virgin":
+            merge_info = self.merge_master_seed_rules()
+            self.last_sync_status["merged_rules_count"] = merge_info["merged_rules_count"]
         return self.get_state_snapshot()
 
     def _consolidate_sleep_clusters_locally(
@@ -2172,6 +2439,8 @@ class ChessKibitzerRuntime:
                 ]
                 self.sleep_queue.clear()
                 self._persist_user_state()
+                if self._is_default_live_state_dir():
+                    self.export_master_release_seed()
 
                 prefix_tag = "Auto-REM Sleep Cycle" if auto_triggered else "REM Sleep Cycle"
                 lines = [
@@ -2357,6 +2626,12 @@ def create_chess_http_server(
                     return
                 if self.path == "/api/sleep/run":
                     self._send_json(runtime.handle_run_rem_sleep())
+                    return
+                if self.path == "/api/seed/export":
+                    self._send_json(runtime.export_master_release_seed())
+                    return
+                if self.path == "/api/player/adjudicate":
+                    self._send_json(runtime.adjudicate_human_game_outcome())
                     return
                 if self.path == "/api/lineage":
                     self._send_json(runtime.switch_brain_lineage(str(data.get("lineage", "schooled"))))

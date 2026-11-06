@@ -638,5 +638,98 @@ def test_game_review_referee_and_contrastive_fuzzy_rule_normalization(tmp_path: 
     assert "game_review" in mw_snap["chat_messages"][-1]["telemetry"]
 
 
+def test_master_seed_sync_and_human_player_rating_coaching(tmp_path: Path) -> None:
+    """Verify master seed export/merge across GitHub releases and live human player rating + custom Fuzzy-Tree coaching."""
+    from lmft_architecture.chess_kibitz_bridge import (
+        compute_estimated_game_elo,
+        compute_move_accuracy_percent,
+    )
+    from lmft_architecture.github_auto_sync import is_protected_user_state_path
+    from lmft_architecture.reflection_classifier import FuzzyConceptRule
+
+    assert is_protected_user_state_path("outputs/rem_sleep_consolidated_ruleset.json") is False
+    assert is_protected_user_state_path("outputs/sleep_consolidated_ruleset.json") is False
+    assert is_protected_user_state_path("outputs/chess_kibitzer_state/club_ruleset.json") is True
+
+    assert compute_move_accuracy_percent(0.0) == 100.0
+    assert compute_move_accuracy_percent(200.0) < 30.0
+    assert compute_estimated_game_elo(90.0, reference_elo=1000.0) > 1150.0
+
+    # 1. Owner bakes a new rule in `owner_runtime` and exports it to the shared release seed
+    from lmft_architecture.sleep_consolidation import normalize_contrastive_target_leaves_and_thresholds
+
+    owner_runtime = ChessKibitzerRuntime(
+        state_dir=tmp_path / "owner_state",
+        left_brain=_make_mini_left_brain(),
+        lazy_load_gpu=False,
+    )
+    sample_board = chess.Board("r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 3 3")
+    sample_rev = owner_runtime.sparring_engine.audit_played_move_for_game_review(
+        sample_board,
+        "Bxf7+",
+        perspective=chess.WHITE,
+    )
+    t_leaves, r_low, r_high = normalize_contrastive_target_leaves_and_thresholds(
+        "low_wastelessness_chaos_cluster",
+        sample_rev["played_coordinates"],
+        sample_rev["contrastive_reference_coordinates"],
+    )
+    owner_baked_rule = FuzzyConceptRule(
+        rule_id="rule-owner-oven-1",
+        concept_name="hazard_premature_f7_sacrifice",
+        description="Avoid premature bishop sacrifice on f7 when King is uncastled.",
+        target_leaves=t_leaves,
+        low=r_low,
+        high=r_high,
+    )
+    owner_runtime.rules = (*owner_runtime.rules, owner_baked_rule)
+    seed_root = tmp_path / "shared_release_seed"
+    export_info = owner_runtime.export_master_release_seed(target_training_root=seed_root)
+    assert export_info["exported_rules_count"] == len(owner_runtime.rules)
+    assert (seed_root / "outputs" / "rem_sleep_consolidated_ruleset.json").exists()
+
+    # 2. A downloader with their own local runtime merges the shared release seed non-destructively
+    player_runtime = ChessKibitzerRuntime(
+        state_dir=tmp_path / "player_state",
+        left_brain=_make_mini_left_brain(),
+        lazy_load_gpu=False,
+    )
+    player_custom_rule = FuzzyConceptRule(
+        rule_id="rule-player-local-1",
+        concept_name="coached_patient_king_safety",
+        description="Personal rule saved by the local player.",
+        target_leaves={"philosophical/being/existence": 0.64},
+        low=0.40,
+        high=0.70,
+    )
+    player_runtime.rules = (*player_runtime.rules[:2], player_custom_rule)
+    merge_res = player_runtime.merge_master_seed_rules(seed_training_root=seed_root)
+    assert merge_res["merged_rules_count"] >= 1
+    rule_names = {r.concept_name for r in player_runtime.rules}
+    assert "coached_patient_king_safety" in rule_names
+    assert "hazard_premature_f7_sacrifice" in rule_names
+
+    # 3. Human plays a blunder (`Bxf7+`) against `player_runtime`:
+    #    AI assigns live move accuracy, estimated performance Elo, and custom coaching citing the synced rule!
+    player_runtime.handle_set_fen("r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 3 3")
+    snap_blunder = player_runtime.handle_chess_move("Bxf7+")
+    coaching = snap_blunder["elo"]["last_player_coaching"]
+    assert coaching is not None
+    assert coaching["classification"] == "BLUNDER_??"
+    assert coaching["move_accuracy_pct"] < 35.0
+    assert coaching["estimated_performance_elo"] < 700.0
+    assert coaching["matched_wisdom_rule"] == "hazard_premature_f7_sacrifice"
+    assert "Stronger was" in coaching["coaching_advice"]
+
+    # 4. Human wins a game (Scholar's Mate) and `adjudicate_human_game_outcome()` updates `player_elo`
+    player_runtime.handle_set_fen("r1bqkb1r/pppp1ppp/2n2n2/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 4 4")
+    player_runtime.handle_chess_move("Qxf7#")
+    p_receipt = player_runtime.adjudicate_human_game_outcome()
+    assert p_receipt["result_label"] == "WIN"
+    assert player_runtime.player_elo == 1012.0
+    assert player_runtime.player_wins == 1
+
+
+
 
 

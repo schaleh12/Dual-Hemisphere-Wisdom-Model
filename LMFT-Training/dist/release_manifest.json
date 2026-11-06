@@ -2,8 +2,8 @@
   "schema_version": 1,
   "version": "0.2.0",
   "github_repo": "schaleh12/Dual-Hemisphere-Wisdom-Model",
-  "build_sha256": "86791f7329a9b4c9f15ffc41ede6c1ca974ccfcc05a7a820ecf11dbeeadbec01",
-  "build_short_hash": "86791f7329a9",
+  "build_sha256": "1a05fd4d9c3219af69a49fa9517fbd11dacbcf6503d1105e2f6fb25eca64a90a",
+  "build_short_hash": "1a05fd4d9c32",
   "files": {
     "src/lmft_architecture/__init__.py": {
       "sha256": "a89f56c2195e87129adbffa5065d8769ea096e13ba98783d217c4d120ee92623",
@@ -90,16 +90,16 @@
       "size_bytes": 3267
     },
     "src/lmft_architecture/chess_app.py": {
-      "sha256": "2e6eafd4e159388bd140ffd3fa8efdfbf1179b0a52c4dc1aa3c7e3cd47a9ecb9",
-      "size_bytes": 109808
+      "sha256": "73548003c5c38bc325eae3b4efc98baae14bc22cbda650c2877be7cafa15303d",
+      "size_bytes": 121933
     },
     "src/lmft_architecture/chess_kibitz_bridge.py": {
-      "sha256": "3a90495ee1982dd3cf160d34ebe86f372b23806dae1024944402a7ae26e8fa1f",
-      "size_bytes": 55464
+      "sha256": "03f7c8f2ab70c14b1b52ba3b937144f55179041c935ec827a102b579f2a1903b",
+      "size_bytes": 61193
     },
     "src/lmft_architecture/chess_ui.py": {
-      "sha256": "907ae83054fe389f4cbf6269357929c00bc37dcab7a3c9cf50a94555dbe81b5c",
-      "size_bytes": 29547
+      "sha256": "7698771625b36d67da2da7b9d3ee40d93808d43509ccfba80c5c9a3ce3babcd8",
+      "size_bytes": 30788
     },
     "src/lmft_architecture/chord_memory.py": {
       "sha256": "6714d9c6cd9e0f7ae199e92a44f7371f168f65fb32319260d4b24d0ed1c54a66",
@@ -154,8 +154,8 @@
       "size_bytes": 23012
     },
     "src/lmft_architecture/github_auto_sync.py": {
-      "sha256": "e36134fd245392ccf69e4175cc2952a67f26469ed14dc29a283f00b21e361ef2",
-      "size_bytes": 7756
+      "sha256": "254ea92631c244b83cffa39cba4ff5cf67a91289ec00d3ac311e60e4424bdeb3",
+      "size_bytes": 8080
     },
     "src/lmft_architecture/impish_bloodmoon_adapter.py": {
       "sha256": "a867c5970fb189759e34eb75ece49958314e0e1b719e8f9e9f48d8998e2b56d6",
@@ -302,12 +302,20 @@
       "size_bytes": 3352
     },
     "dist/lmft-sanctuary-club-v0.1.0-win64.zip": {
-      "sha256": "c8de0acaf28feb8fb5e8c9ddbb17ab29ae6f841eae6793d092dbab52033df1f2",
-      "size_bytes": 373174
+      "sha256": "d99cc45fd026cd4750df4cdf1fc6eb794ad3e3a7f76cb707fbc30330431016fa",
+      "size_bytes": 377086
     },
     "dist/impish_bloodmoon_patreon.enc": {
       "sha256": "30ee2d3b94331e70fba3afa30dd3aed006e007167e924b4a27afab9ee7a4c065",
       "size_bytes": 93649374
+    },
+    "outputs/sleep_consolidated_ruleset.json": {
+      "sha256": "176364da2bc60c87acd8602f4ec893dd730a5277c15c43ae0bf456c1a6d2b04a",
+      "size_bytes": 10082
+    },
+    "outputs/continuous_tiered_ruleset.json": {
+      "sha256": "b6769f70249a4c68f599c0a7e5a0f8da7afe1487de1f2f3e8e4be26e776f0d0d",
+      "size_bytes": 6071
     }
   }
 }

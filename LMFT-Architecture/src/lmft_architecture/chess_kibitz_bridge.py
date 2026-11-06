@@ -30,6 +30,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+import math
 import re
 from typing import Any, Mapping
 import chess
@@ -585,9 +586,22 @@ def evaluate_candidate_moves_with_right_brain(
                 (
                     float(activations.get(r.concept_name, 0.0))
                     for r in rule_tuple
-                    if r.rule_id not in ("rule_1", "rule_2")
+                    if r.rule_id not in (
+                        "rule_1",
+                        "rule_2",
+                        "rule_grounded_coordination",
+                        "rule_sanctuary_equilibrium",
+                    )
                     and not r.concept_name.startswith(
-                        ("hazard_", "blunder_", "avoid_", "balanced_", "mutual_")
+                        (
+                            "hazard_",
+                            "blunder_",
+                            "avoid_",
+                            "balanced_",
+                            "mutual_",
+                            "grounded_",
+                            "sanctuary_",
+                        )
                     )
                 ),
                 default=0.0,
@@ -1383,3 +1397,131 @@ class ObjectiveCalibratedSparringEngine:
             "coordinate_delta": coord_delta,
             "annotation_summary": summary,
         }
+
+
+def compute_move_accuracy_percent(cp_drop: float) -> float:
+    """Convert centipawn loss (`cp_drop >= 0`) into a `[0.0, 100.0]` move accuracy percentage."""
+    loss = max(0.0, float(cp_drop))
+    raw_acc = 103.1668 * math.exp(-0.04354 * loss) - 3.1669
+    return round(min(100.0, max(0.0, raw_acc)), 1)
+
+
+def compute_estimated_game_elo(
+    mean_accuracy_pct: float,
+    *,
+    reference_elo: float = 1000.0,
+) -> float:
+    """Estimate single-game performance Elo from running move accuracy (`0..100%`) relative to `reference_elo`."""
+    acc = min(100.0, max(0.0, float(mean_accuracy_pct)))
+    est = float(reference_elo) + (acc - 75.0) * 14.0
+    return round(min(2600.0, max(400.0, est)), 1)
+
+
+def build_human_move_coaching_report(
+    review_audit: Mapping[str, Any],
+    *,
+    rules: Sequence[FuzzyConceptRule] = (),
+    player_elo: float = 1000.0,
+    reference_elo: float = 1000.0,
+    prior_move_accuracies: Sequence[float] = (),
+) -> dict[str, Any]:
+    """Build a custom Fuzzy-Tree coaching card and live rating/accuracy report for a human player's move."""
+    cp_drop = float(review_audit.get("cp_drop", 0.0))
+    move_acc = compute_move_accuracy_percent(cp_drop)
+    all_accs = [*prior_move_accuracies, move_acc]
+    game_acc = round(sum(all_accs) / max(1, len(all_accs)), 1)
+    est_game_elo = compute_estimated_game_elo(game_acc, reference_elo=reference_elo)
+
+    played_san = str(review_audit.get("played_san", "?"))
+    best_san = str(review_audit.get("best_san", played_san))
+    classification = str(review_audit.get("classification", "SOLID"))
+    glyph = str(review_audit.get("glyph", ""))
+    is_hazard = bool(review_audit.get("is_hazard", False))
+    played_coords: Mapping[str, float] = review_audit.get("played_coordinates", {})
+    best_coords: Mapping[str, float] = review_audit.get("best_move_coordinates", {})
+    coord_delta: Mapping[str, float] = review_audit.get("coordinate_delta", {})
+
+    foundational_ids = {
+        "rule_1",
+        "rule_2",
+        "rule_grounded_coordination",
+        "rule_sanctuary_equilibrium",
+    }
+    foundational_prefixes = (
+        "balanced_",
+        "mutual_",
+        "grounded_",
+        "sanctuary_",
+    )
+    matched_wisdom_rule: str | None = None
+    matched_rule_score: float = 0.0
+    for r in rules:
+        if r.rule_id in foundational_ids or r.concept_name.startswith(foundational_prefixes):
+            continue
+        is_rule_haz = r.concept_name.startswith(("hazard_", "blunder_", "avoid_"))
+        if is_hazard and is_rule_haz:
+            sc = float(r.evaluate(played_coords))
+            if sc > matched_rule_score and sc >= 0.35:
+                matched_rule_score = sc
+                matched_wisdom_rule = r.concept_name
+        elif not is_hazard and not is_rule_haz:
+            sc = float(r.evaluate(played_coords))
+            if sc > matched_rule_score and sc >= 0.35:
+                matched_rule_score = sc
+                matched_wisdom_rule = r.concept_name
+
+    if is_hazard and matched_wisdom_rule is None:
+        for r in rules:
+            if r.rule_id in foundational_ids or r.concept_name.startswith(foundational_prefixes):
+                continue
+            if not r.concept_name.startswith(("hazard_", "blunder_", "avoid_")):
+                sc = float(r.evaluate(best_coords))
+                if sc > matched_rule_score and sc >= 0.35:
+                    matched_rule_score = sc
+                    matched_wisdom_rule = r.concept_name
+
+    top_shifts = sorted(coord_delta.items(), key=lambda kv: (-abs(float(kv[1])), kv[0]))[:2]
+    shift_phrases = [
+        f"{k.split('/')[-1]} {('+' if float(d) >= 0 else '')}{float(d):.2f}"
+        for k, d in top_shifts
+    ]
+    shift_str = ", ".join(shift_phrases) if shift_phrases else "balanced tree posture"
+    rule_clause = (
+        f" [Triggered REM Rule: {matched_wisdom_rule} ({matched_rule_score:.2f})]"
+        if matched_wisdom_rule
+        else ""
+    )
+
+    if is_hazard:
+        coaching_advice = (
+            f"{played_san}{glyph} ({move_acc:.0f}% accuracy) lost {cp_drop / 100.0:.2f} pawns "
+            f"and shifted your tree posture ({shift_str}). Stronger was {best_san}, "
+            f"which preserves structure and safety.{rule_clause}"
+        )
+    elif glyph in ("!!", "!"):
+        coaching_advice = (
+            f"{played_san}{glyph} ({move_acc:.0f}% accuracy) was a standout move "
+            f"with strong tree harmony ({shift_str}).{rule_clause}"
+        )
+    else:
+        alt_note = f" (best engine line: {best_san})" if best_san != played_san else " (top engine choice)"
+        coaching_advice = (
+            f"{played_san} ({move_acc:.0f}% accuracy) keeps solid equilibrium{alt_note}.{rule_clause}"
+        )
+
+    return {
+        "played_san": played_san,
+        "best_san": best_san,
+        "classification": classification,
+        "glyph": glyph,
+        "is_hazard": is_hazard,
+        "move_accuracy_pct": move_acc,
+        "game_accuracy_pct": game_acc,
+        "player_elo": round(float(player_elo), 1),
+        "estimated_performance_elo": est_game_elo,
+        "matched_wisdom_rule": matched_wisdom_rule,
+        "matched_rule_score": round(float(matched_rule_score), 3),
+        "coordinate_shift_summary": shift_str,
+        "coaching_advice": coaching_advice,
+    }
+

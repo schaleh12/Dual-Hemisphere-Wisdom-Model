@@ -28,9 +28,16 @@ DEFAULT_REMOTE_MANIFEST_URL = (
     f"https://raw.githubusercontent.com/{GITHUB_REPO_SLUG}/main/dist/release_manifest.json"
 )
 
+SHARED_RELEASE_SEED_PATHS: tuple[str, ...] = (
+    "outputs/rem_sleep_consolidated_ruleset.json",
+    "outputs/sleep_consolidated_ruleset.json",
+    "outputs/continuous_tiered_ruleset.json",
+)
+
 PROTECTED_USER_STATE_PREFIXES: tuple[str, ...] = (
     "outputs/",
     "outputs/club_state",
+    "outputs/club_user_state",
     "outputs/chess_kibitzer_state",
     "outputs/impish_bloodmoon_state",
     "outputs/impish_sparring_trajectories.jsonl",
@@ -46,6 +53,8 @@ def is_protected_user_state_path(rel_path: str | Path) -> bool:
     norm = _normalize_rel_path(rel_path)
     if not norm or ".." in norm.split("/"):
         return True
+    if norm in SHARED_RELEASE_SEED_PATHS:
+        return False
     if norm.endswith("threads.json") or norm.endswith("impish_sparring_trajectories.jsonl"):
         return True
     if (
@@ -97,6 +106,7 @@ def build_release_manifest(
     for rel_extra in (
         "dist/lmft-sanctuary-club-v0.1.0-win64.zip",
         "dist/impish_bloodmoon_patreon.enc",
+        *SHARED_RELEASE_SEED_PATHS,
     ):
         extra = train_root / rel_extra
         if extra.exists():
