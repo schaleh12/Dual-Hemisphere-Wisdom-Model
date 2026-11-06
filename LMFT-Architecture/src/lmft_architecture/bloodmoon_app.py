@@ -2082,6 +2082,41 @@ def launch_bloodmoon_desktop_window(url: str, *, profile_dir: Path | None = None
     return None
 
 
+def _wait_for_local_server_ready(url: str, *, timeout_sec: float = 3.0) -> bool:
+    deadline = time.time() + timeout_sec
+    state_url = f"{url.rstrip('/')}/api/state"
+    while time.time() < deadline:
+        try:
+            with urllib.request.urlopen(state_url, timeout=0.5) as resp:
+                if resp.status == 200:
+                    return True
+        except Exception:
+            time.sleep(0.05)
+    return False
+
+
+def launch_native_pywebview_window(title: str, url: str) -> bool:
+    """Open `url` inside a native Windows desktop window (`pywebview`) with no browser chrome or 127.0.0.1 title."""
+    try:
+        import webview  # type: ignore[import-untyped]
+        from lmft_architecture.workspace_paths import resolve_training_root
+
+        storage_dir = resolve_training_root() / "outputs" / ".bloodmoon_window_profile"
+        storage_dir.mkdir(parents=True, exist_ok=True)
+        webview.create_window(
+            title,
+            url,
+            width=1360,
+            height=860,
+            min_size=(1020, 680),
+            background_color="#0d090c",
+        )
+        webview.start(private_mode=False, storage_path=str(storage_dir))
+        return True
+    except Exception:
+        return False
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Launch the LMFT-Bloodmoon desktop app.")
     parser.add_argument("--host", default="127.0.0.1", help="Bind host (default: 127.0.0.1)")
@@ -2100,24 +2135,31 @@ def main(argv: list[str] | None = None) -> int:
     url = f"http://{args.host}:{actual_port}"
     if sys.stdout is not None:
         print(f"LMFT-Bloodmoon running at {url}")
-    window_proc: subprocess.Popen[Any] | None = None
-    if not args.no_browser:
-        window_proc = launch_bloodmoon_desktop_window(url)
-    if (args.single_window or sys.executable.lower().endswith("pythonw.exe")) and window_proc is not None:
-        server_thread = threading.Thread(target=server.serve_forever, daemon=True)
-        server_thread.start()
-        try:
-            window_proc.wait()
-        finally:
-            server.shutdown()
-            server.server_close()
-        return 0
+
+    server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+    server_thread.start()
+    _wait_for_local_server_ready(url, timeout_sec=3.0)
+
     try:
-        server.serve_forever()
+        if not args.no_browser:
+            if launch_native_pywebview_window(
+                "LMFT-Bloodmoon — 3-Phase Adversarial Entrainment & Script Studio (12B)",
+                url,
+            ):
+                return 0
+            t0 = time.time()
+            window_proc = launch_bloodmoon_desktop_window(url)
+            if (args.single_window or sys.executable.lower().endswith("pythonw.exe")) and window_proc is not None:
+                window_proc.wait()
+                if (time.time() - t0) >= 3.0:
+                    return 0
+        while server_thread.is_alive():
+            time.sleep(0.5)
     except KeyboardInterrupt:
         if sys.stdout is not None:
             print("\nShutting down LMFT-Bloodmoon...")
     finally:
+        server.shutdown()
         server.server_close()
     return 0
 
