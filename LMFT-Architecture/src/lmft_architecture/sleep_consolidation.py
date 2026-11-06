@@ -34,6 +34,7 @@ from .branch_archives import (
 from .contemplation_ledger import ContemplationLedger, save_contemplation_ledger
 from .local_models import strict_json
 from .model_assets import ModelError
+from .philosophical_abstraction_matrix import PHILOSOPHICAL_SHADOW_LEAVES
 from .reflection_classifier import (
     AROUSAL_LEAF,
     FOUNDATIONAL_LEAVES,
@@ -259,13 +260,11 @@ def normalize_contrastive_target_leaves_and_thresholds(
         RETENTION_LEAF,
         NOVELTY_LEAF,
     }
-    shadow_leaf_set = {
+    shadow_leaf_set = {leaf.leaf_id for leaf in PHILOSOPHICAL_SHADOW_LEAVES} | {
         "philosophical/being/tyrannical_volition",
         "philosophical/being/nihilistic_withdrawal",
-        "philosophical/being/psychosis",
         "philosophical/structure/dogmatic_rigidity",
         "philosophical/structure/fragmentation",
-        "philosophical/structure/corruption",
         "philosophical/persistence/stagnation",
         "philosophical/persistence/amnesia",
     }
@@ -301,10 +300,14 @@ def normalize_contrastive_target_leaves_and_thresholds(
             if k == "philosophical/structure/chaos" and v_act > 0.45:
                 continue
         elif explicit_hazard:
-            # A `hazard_` rule must never target high virtue leaves or low needlessness
-            if k in virtue_leaf_set and (v_act >= 0.65 and v_act > v_ref):
+            # A `hazard_` rule must never target high virtue leaves, low needlessness, or low shadow/chaos leaves
+            if k in virtue_leaf_set and (v_act >= 0.58 or v_act >= v_ref):
                 continue
-            if k == "cultural/freedom/needlessness" and v_act <= 0.30:
+            if k in shadow_leaf_set and (v_act < 0.50 or v_act <= v_ref):
+                continue
+            if k == "philosophical/structure/chaos" and (v_act < 0.50 or v_act <= v_ref):
+                continue
+            if k == "cultural/freedom/needlessness" and (v_act <= 0.30 or v_act < v_ref):
                 continue
         abs_diff = abs(v_act - v_ref)
         if abs_diff >= 0.03:

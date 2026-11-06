@@ -284,13 +284,15 @@ def _ensure_foundational_rules(rules: tuple[FuzzyConceptRule, ...]) -> tuple[Fuz
         ):
             continue
         if r.concept_name.startswith("hazard_"):
-            # Strip inverted virtue or low-needlessness leaves that contradict hazard polarity
+            # Strip inverted virtue, low-needlessness, or low-shadow leaves that contradict hazard polarity
+            shadow_ids = {l.leaf_id for l in PHILOSOPHICAL_SHADOW_LEAVES}
             cleaned_haz_leaves = {
                 k: float(v)
                 for k, v in r.target_leaves.items()
                 if not (
                     (k == "cultural/freedom/needlessness" and float(v) <= 0.30)
-                    or (k in ("philosophical/being/existence", "cultural/freedom/self-sufficiency", "philosophical/structure/order") and float(v) >= 0.70)
+                    or (k in shadow_ids and float(v) < 0.50)
+                    or (k in ("philosophical/being/existence", "cultural/freedom/self-sufficiency", "philosophical/structure/order") and float(v) >= 0.58)
                 )
             }
             if len(cleaned_haz_leaves) < 2:

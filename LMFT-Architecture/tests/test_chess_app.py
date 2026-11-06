@@ -818,6 +818,58 @@ def test_master_seed_sync_and_human_player_rating_coaching(tmp_path: Path) -> No
     assert all(r.concept_name != "hazard_high_wastelessness_chaos_cluster" for r in cleaned_rules)
     assert all(r.concept_name != "hazard_high_self_sufficiency_chaos_cluster" for r in cleaned_rules)
 
+    # 11. Regression check: `normalize_contrastive_target_leaves_and_thresholds` and `_ensure_foundational_rules`
+    #     prevent all 6 `PHILOSOPHICAL_SHADOW_LEAVES` from entering `coached_` rules and prevent high virtue leaves
+    #     or low shadow leaves from entering `hazard_` rules.
+    from lmft_architecture.sleep_consolidation import normalize_contrastive_target_leaves_and_thresholds
+
+    coached_targets, _, _ = normalize_contrastive_target_leaves_and_thresholds(
+        {"cultural/efficiency/wastelessness": 0.90},
+        {
+            "cultural/efficiency/wastelessness": 0.92,
+            "philosophical/persistence/mania_greed": 0.85,
+            "philosophical/being/paranoia": 0.78,
+            "philosophical/structure/prejudice": 0.75,
+            "philosophical/persistence/narcissism": 0.80,
+            "philosophical/structure/order": 0.82,
+        },
+        {
+            "cultural/efficiency/wastelessness": 0.25,
+            "philosophical/persistence/mania_greed": 0.20,
+            "philosophical/being/paranoia": 0.20,
+            "philosophical/structure/prejudice": 0.20,
+            "philosophical/persistence/narcissism": 0.20,
+            "philosophical/structure/order": 0.40,
+        },
+    )
+    for shadow_key in (
+        "philosophical/persistence/mania_greed",
+        "philosophical/being/paranoia",
+        "philosophical/structure/prejudice",
+        "philosophical/persistence/narcissism",
+    ):
+        assert shadow_key not in coached_targets
+    assert "philosophical/structure/order" in coached_targets
+
+    hazard_targets, _, _ = normalize_contrastive_target_leaves_and_thresholds(
+        {"cultural/efficiency/wastelessness": 0.25},
+        {
+            "cultural/efficiency/wastelessness": 0.25,
+            "philosophical/being/existence": 0.62,
+            "philosophical/being/psychosis": 0.35,
+            "philosophical/structure/chaos": 0.78,
+        },
+        {
+            "cultural/efficiency/wastelessness": 0.92,
+            "philosophical/being/existence": 0.90,
+            "philosophical/being/psychosis": 0.73,
+            "philosophical/structure/chaos": 0.30,
+        },
+    )
+    assert "philosophical/being/existence" not in hazard_targets
+    assert "philosophical/being/psychosis" not in hazard_targets
+    assert "philosophical/structure/chaos" in hazard_targets
+
 
 def test_bitboard_sensor_psychological_will_execution_bids_and_rem_distillation(tmp_path: Path) -> None:
     """Verify Bitboard `Fact`/`Theory` sensor, `BitboardIntuitionSleeve` `Confidence`, `Execution` Action Bids, and REM Sleep distillation."""
