@@ -1070,11 +1070,18 @@ def test_speaker_attribution_and_clean_slate_reset(tmp_path: Path) -> None:
     hist_pairs = runtime._extract_clean_conversation_history()
     assert len(hist_pairs) == 1
 
-    # 4. Under time trouble (<= 12s left on 5:00 clock), Celestriad switches to `gear_1_time_trouble_instinct`
-    runtime.handle_set_fen("r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 3 3")
-    runtime.white_clock_sec = 8.0
-    runtime.handle_chess_ai_move(in_sparring_mode=True)
-    assert runtime.last_hybrid_move_arbitration["selection_mode"] == "gear_1_time_trouble_instinct"
+    # 4. If Celestriad's 5:00 clock runs out (0:00), no hardcoded instinct bailout saves it;
+    #    it forfeits on time and queues the time-forfeit turn into `sleep_queue` for REM sleep learning
+    sleep_q_before = len(runtime.sleep_queue)
+    runtime.white_clock_sec = 0.0
+    runtime.clock_flagged_loser = chess.WHITE
+    outcome = runtime._adjudicate_and_record_game_outcome()
+    assert outcome is not None
+    assert "Time Forfeit 0:00" in outcome["result_label"]
+    assert len(runtime.sleep_queue) == sleep_q_before + 1
+    flagged_fork = runtime.sleep_queue[-1]
+    assert flagged_fork.external_coordinates["philosophical/persistence/continuity"] < 0.15
+    assert flagged_fork.contrastive_reference_coordinates["psychological/will/execution"] > 0.80
 
     # 5. Clean slate reset restores foundational rules, resets BitboardIntuitionSleeve, clocks, & Elo to 1000.0
     runtime.lmft_elo = 1156.0

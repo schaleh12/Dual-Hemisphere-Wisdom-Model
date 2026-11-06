@@ -1636,21 +1636,7 @@ class ChessKibitzerRuntime:
 
         top_candidates = all_evals[:6]
         eval_by_san: dict[str, CandidateMoveEvaluation] = {c.san: c for c in all_evals}
-
-        # Opening diversity in early plies among nearly-tied sound moves so self-play explores distinct games
-        sound_opening = [
-            c
-            for c in top_candidates[:4]
-            if not c.is_blunder
-            and not c.is_repetition
-            and not c.shadow_warnings
-            and (top_candidates[0].composite_score - c.composite_score) <= 0.35
-        ]
-        if len(self.move_history_san) < 6 and len(sound_opening) > 1:
-            game_idx = int(getattr(self, "games_completed_count", 0))
-            right_brain_choice = sound_opening[game_idx % len(sound_opening)]
-        else:
-            right_brain_choice = top_candidates[0]
+        right_brain_choice = top_candidates[0]
 
         chosen_san = right_brain_choice.san
         selection_mode = "right_brain_equilibrium_choice"
@@ -1683,6 +1669,21 @@ class ChessKibitzerRuntime:
                     pre_prompt,
                     learned_leaves=self.learned_leaves,
                 )
+                clock_ratio = max(
+                    0.0,
+                    min(1.0, rem_clock_start / max(1.0, float(self.match_clock_limit_sec))),
+                )
+                fact_coords = dict(fact_coords)
+                fact_coords["philosophical/persistence/continuity"] = round(
+                    0.50 * float(fact_coords.get("philosophical/persistence/continuity", 0.50))
+                    + 0.50 * clock_ratio,
+                    4,
+                )
+                fact_coords["philosophical/persistence/discreteness"] = round(
+                    0.50 * float(fact_coords.get("philosophical/persistence/discreteness", 0.50))
+                    + 0.50 * (1.0 - clock_ratio),
+                    4,
+                )
                 pre_vibe, _ = compile_right_brain_vibe(
                     self.birth_state,
                     fact_coords,
@@ -1701,6 +1702,8 @@ class ChessKibitzerRuntime:
                     else 1.0
                 )
                 chaos_val = float(fact_coords.get("philosophical/structure/chaos", 0.0))
+                exec_leaf = float(pre_vibe.coordinates.get("psychological/will/execution", 0.50))
+                hes_leaf = float(pre_vibe.coordinates.get("psychological/will/hesitation", 0.35))
                 has_tactical_or_vibe_tension = (
                     self.board.is_check()
                     or bool(self.board_posture.board_shadow_warnings)
@@ -1708,30 +1711,20 @@ class ChessKibitzerRuntime:
                     or bool(pre_vibe.self_registry.dissonance_notes)
                     or float(pre_vibe.clarity) < 0.48
                     or float(pre_vibe.confidence) < 0.45
-                    or (
-                        self.board.fullmove_number >= 3
-                        and (
-                            any(c.is_blunder for c in top_candidates[:3])
-                            or chaos_val >= 0.48
-                            or score_gap <= 0.16
-                        )
-                    )
+                    or hes_leaf > exec_leaf
+                    or any(c.is_blunder for c in top_candidates[:3])
+                    or chaos_val >= 0.45
+                    or (chaos_val >= 0.25 and score_gap <= 0.14)
                 )
-                in_time_trouble = rem_clock_start <= 12.0
                 should_wake_left_brain = (
-                    not in_time_trouble
-                    and len(all_evals) > 1
+                    len(all_evals) > 1
                     and (
                         has_tactical_or_vibe_tension
                         or (not in_sparring_mode and self.spontaneous_kibitz_enabled)
                     )
                 )
                 if not should_wake_left_brain:
-                    selection_mode = (
-                        "gear_1_time_trouble_instinct"
-                        if in_time_trouble
-                        else "gear_1_right_brain_intuition"
-                    )
+                    selection_mode = "gear_1_right_brain_intuition"
                     skip_left_brain_for_gear_1 = True
                 else:
                     pre_chord = SubliminalChordVector.from_right_brain_vibe(
@@ -1768,24 +1761,17 @@ class ChessKibitzerRuntime:
                             raw_c_vibe.self_registry.dissonance_notes,
                         )
 
-                    move_time_budget_sec = min(45.0, max(6.0, rem_clock_start * 0.22))
-                    max_delib_sentences = (
-                        6
-                        if (in_sparring_mode and has_tactical_or_vibe_tension and rem_clock_start >= 45.0)
-                        else (3 if (in_sparring_mode and has_tactical_or_vibe_tension) else 1)
-                    )
+                    max_delib_sentences = 6 if (in_sparring_mode and has_tactical_or_vibe_tension) else 1
 
                     def _should_stop_deliberation(
                         sent_count: int,
                         trace: Any,
                         passage_so_far: str,
                     ) -> bool:
+                        _ = sent_count
                         elapsed_now = time.perf_counter() - t_ai_start
-                        rem_now = rem_clock_start - elapsed_now
-                        if rem_now <= 12.0 or elapsed_now >= move_time_budget_sec:
+                        if (rem_clock_start - elapsed_now) <= 0.0:
                             return True
-                        if in_sparring_mode and has_tactical_or_vibe_tension and sent_count < 2 and rem_now > 20.0:
-                            return False
                         mentioned_now = inspect_chess_moves_in_reply(
                             getattr(trace, "post_gap_continuation", "") or passage_so_far,
                             self.board,
@@ -1815,11 +1801,7 @@ class ChessKibitzerRuntime:
                             stop_condition=_should_stop_deliberation if max_delib_sentences > 1 else None,
                         )
                     delib_sentence_count = int(
-                        getattr(
-                            self._qwen_left_brain,
-                            "last_sentence_count",
-                            2 if (in_sparring_mode and has_tactical_or_vibe_tension) else 1,
-                        )
+                        getattr(self._qwen_left_brain, "last_sentence_count", 1)
                     )
                     pre_delib_pair = (delib_text, delib_trace)
                     post_gap_mentioned = (
@@ -2276,6 +2258,33 @@ class ChessKibitzerRuntime:
             if self.clock_flagged_loser == lmft_color:
                 lmft_score = 0.0
                 result_label = "LOSS (Time Forfeit 0:00)"
+                if self.chat_messages:
+                    last_msg = self.chat_messages[-1]
+                    last_id = last_msg.get("id")
+                    if isinstance(last_id, int):
+                        base_fc = dict((last_msg.get("telemetry") or {}).get("fact_coordinates") or {})
+                        if base_fc:
+                            hz_coords = dict(base_fc)
+                            hz_coords["philosophical/persistence/continuity"] = 0.02
+                            hz_coords["philosophical/persistence/discreteness"] = 0.98
+                            hz_coords["cultural/efficiency/wastelessness"] = 0.20
+                            hz_coords["cultural/freedom/needlessness"] = 0.78
+                            ref_coords = dict(base_fc)
+                            ref_coords["philosophical/persistence/continuity"] = 0.02
+                            ref_coords["philosophical/persistence/discreteness"] = 0.98
+                            ref_coords["cultural/efficiency/wastelessness"] = 0.88
+                            ref_coords["cultural/freedom/needlessness"] = 0.08
+                            ref_coords["psychological/will/execution"] = 0.88
+                            ref_coords["psychological/will/hesitation"] = 0.12
+                            self.flag_turn_for_coaching(
+                                int(last_id),
+                                user_note="LOSS (Time Forfeit 0:00): over-deliberated when clock continuity was exhausted.",
+                                check_auto_sleep=False,
+                                is_hazard=True,
+                                override_coordinates=hz_coords,
+                                contrastive_reference_coordinates=ref_coords,
+                                game_review_annotation="Game Review [?? TIME_FORFEIT_0:00]: Flagged on 5:00 clock.",
+                            )
             else:
                 lmft_score = 1.0
                 result_label = "WIN (Opponent Time Forfeit 0:00)"
