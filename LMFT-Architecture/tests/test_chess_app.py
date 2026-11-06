@@ -749,8 +749,8 @@ def test_master_seed_sync_and_human_player_rating_coaching(tmp_path: Path) -> No
         'id="game-review-tally-box"',
         "playHumanMoveAndAutoReply",
         'isDest ? "legal-dest" : ""',
-        "HousePlant 1.0",
-        "Stockfish (",
+        "Houseplant 1.0",
+        "Stockfish 19 (",
     ):
         assert required_ui_token in CHESS_SINGLE_PAGE_HTML
     assert "LMFT_Grandmaster" not in CHESS_SINGLE_PAGE_HTML

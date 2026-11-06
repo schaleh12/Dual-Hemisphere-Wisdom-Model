@@ -489,11 +489,11 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
       <div class="player-id">
         <div class="avatar-box" id="top-player-avatar">🪴</div>
         <div>
-          <div><span id="top-player-name">HousePlant 1.0</span> <small id="top-player-meta" style="color:var(--text-2);font-weight:600;">(40-Node Tree + Qwen3-4B · ⚫ Playing Black)</small></div>
+          <div><span id="top-player-name">Houseplant 1.0</span> <small id="top-player-meta" style="color:var(--text-2);font-weight:600;">(40-Node Tree + Qwen3-4B · ⚫ Playing Black)</small></div>
           <div style="font-size:10px;color:var(--text-2);" id="posture-summary-span">White to move</div>
         </div>
       </div>
-      <span class="pill" id="elo-status-pill" title="HousePlant 1.0 FIDE Elo vs. Strength-Calibrated Stockfish">HousePlant Elo: 1000.0 (0W-0L-0D)</span>
+      <span class="pill" id="elo-status-pill" title="Houseplant 1.0 FIDE Elo vs. Strength-Calibrated Stockfish 19">Houseplant Elo: 1000.0 (0W-0L-0D)</span>
     </div>
 
     <!-- Eval Bar + 8x8 Chessboard -->
@@ -612,8 +612,8 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
     </div>
     <div id="chat-messages"></div>
     <div style="display:flex;gap:6px;align-items:center;">
-      <input type="text" id="chat-input" placeholder="Talk to HousePlant 1.0: ask why a move was a blunder, ask for a plan, or chat..." style="flex:1;" onkeydown="if(event.key==='Enter')sendChatMessage()" />
-      <select id="chat-sentences-select" title="How many sentences HousePlant 1.0 speaks when replying">
+      <input type="text" id="chat-input" placeholder="Talk to Houseplant 1.0: ask why a move was a blunder, ask for a plan, or chat..." style="flex:1;" onkeydown="if(event.key==='Enter')sendChatMessage()" />
+      <select id="chat-sentences-select" title="How many sentences Houseplant 1.0 speaks when replying">
         <option value="1" selected>Reply: 1 Sentence</option>
         <option value="2">Reply: 2 Sentences</option>
         <option value="3">Reply: 3 Sentences</option>
@@ -708,7 +708,7 @@ function activatePlayVsAiMode() {
   const playBtn = document.getElementById("mode-play-vs-ai-btn");
   if (playBtn) playBtn.classList.add("btn-mode-active");
   const strip = document.getElementById("board-reflex-strip");
-  if (strip) strip.textContent = "Play vs. HousePlant 1.0 Active — Click any piece on the board and HousePlant 1.0 will reply automatically.";
+  if (strip) strip.textContent = "Play vs. Houseplant 1.0 Active — Click any piece on the board and Houseplant 1.0 will reply automatically.";
   pollState();
 }
 
@@ -900,9 +900,9 @@ function renderState(s) {
   const pEloEl = document.getElementById("player-elo-pill");
 
   const eloData = s.elo || {};
-  const hpEloText = `HousePlant Elo: ${Number(eloData.lmft_elo || 1000).toFixed(1)} (${eloData.wins || 0}W-${eloData.losses || 0}L-${eloData.draws || 0}D · ${lmftColor})`;
+  const hpEloText = `Houseplant Elo: ${Number(eloData.lmft_elo || 1000).toFixed(1)} (${eloData.wins || 0}W-${eloData.losses || 0}L-${eloData.draws || 0}D · ${lmftColor})`;
   const oppTarget = Number(eloData.opponent_target_elo || eloData.lmft_elo || 1000).toFixed(1);
-  const sfEloText = `Stockfish Target Elo: ${oppTarget} (${stockfishColor} · Game #${(eloData.games_completed || 0) + 1})`;
+  const sfEloText = `Stockfish 19 Target Elo: ${oppTarget} (${stockfishColor} · Game #${(eloData.games_completed || 0) + 1})`;
   const pBase = Number(eloData.player_elo || 1000).toFixed(1);
   const pAcc = eloData.player_game_accuracy_pct;
   const pEst = Number(eloData.player_estimated_game_elo || eloData.player_elo || 1000).toFixed(0);
@@ -916,30 +916,30 @@ function renderState(s) {
     const botBadge = bottomBoardColor === "White" ? "⚪ Playing White" : "⚫ Playing Black";
     if (housePlantOnBottom) {
       if (topAvatar) topAvatar.textContent = "🐟";
-      if (topName) topName.textContent = `Stockfish (${topBadge})`;
-      if (topMeta) topMeta.textContent = "(Strength-Calibrated Stockfish Sparring Partner)";
+      if (topName) topName.textContent = `Stockfish 19 (${topBadge})`;
+      if (topMeta) topMeta.textContent = "(Strength-Calibrated Stockfish 19 Sparring Partner)";
       if (eloEl) eloEl.textContent = sfEloText;
 
       if (botAvatar) botAvatar.textContent = "🪴";
-      if (botName) botName.textContent = `HousePlant 1.0 (${botBadge})`;
+      if (botName) botName.textContent = `Houseplant 1.0 (${botBadge})`;
       if (botSubtitle) botSubtitle.textContent = "40-Node Fuzzy Tree + Qwen3-4B (Swaps White/Black Each Game)";
       if (pEloEl) pEloEl.textContent = hpEloText;
     } else {
       if (topAvatar) topAvatar.textContent = "🪴";
-      if (topName) topName.textContent = `HousePlant 1.0 (${topBadge})`;
+      if (topName) topName.textContent = `Houseplant 1.0 (${topBadge})`;
       if (topMeta) topMeta.textContent = "(40-Node Fuzzy Tree + Qwen3-4B)";
       if (eloEl) eloEl.textContent = hpEloText;
 
       if (botAvatar) botAvatar.textContent = "🐟";
-      if (botName) botName.textContent = `Stockfish (${botBadge})`;
-      if (botSubtitle) botSubtitle.textContent = "Strength-Calibrated Stockfish Sparring Partner (Swaps White/Black Each Game)";
+      if (botName) botName.textContent = `Stockfish 19 (${botBadge})`;
+      if (botSubtitle) botSubtitle.textContent = "Strength-Calibrated Stockfish 19 Sparring Partner (Swaps White/Black Each Game)";
       if (pEloEl) pEloEl.textContent = sfEloText;
     }
   } else {
     const humanOnBottom = !boardFlipped;
     if (humanOnBottom) {
       if (topAvatar) topAvatar.textContent = "🪴";
-      if (topName) topName.textContent = "HousePlant 1.0";
+      if (topName) topName.textContent = "Houseplant 1.0";
       if (topMeta) topMeta.textContent = "(40-Node Tree + Qwen3-4B · ⚫ Playing Black)";
       if (eloEl) eloEl.textContent = hpEloText;
 
@@ -954,7 +954,7 @@ function renderState(s) {
       if (eloEl) eloEl.textContent = humanEloText;
 
       if (botAvatar) botAvatar.textContent = "🪴";
-      if (botName) botName.textContent = "HousePlant 1.0 (⚫ Playing Black)";
+      if (botName) botName.textContent = "Houseplant 1.0 (⚫ Playing Black)";
       if (botSubtitle) botSubtitle.textContent = "40-Node Fuzzy Tree + Qwen3-4B";
       if (pEloEl) pEloEl.textContent = hpEloText;
     }
@@ -972,8 +972,8 @@ function renderState(s) {
         const whiteToMove = s.board.turn === "w";
         const isHousePlantTurn = (whiteToMove && lmftColor === "White") || (!whiteToMove && lmftColor === "Black");
         turnPill.textContent = isHousePlantTurn
-          ? `🔥 HousePlant 1.0 (${lmftColor}) to Move`
-          : `🔥 Stockfish (${stockfishColor}) to Move`;
+          ? `🔥 Houseplant 1.0 (${lmftColor}) to Move`
+          : `🔥 Stockfish 19 (${stockfishColor}) to Move`;
       } else {
         turnPill.textContent = s.board.turn === "w" ? "White to Move — Click a Piece" : "Black to Move — Click a Piece";
       }
