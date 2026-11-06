@@ -767,6 +767,33 @@ def test_master_seed_sync_and_human_player_rating_coaching(tmp_path: Path) -> No
     mw_shadow = player_runtime.handle_microwave_step()
     assert len(mw_shadow["board"]["move_history_san"]) == 1
 
+    # 9. Regression check: `_ensure_foundational_rules` collapses `_cluster_s<N>` suffixes into their canonical
+    #    cluster rule and entrains `target_leaves` (`0.7 * old + 0.3 * new`) rather than multiplying rule counts
+    from lmft_architecture.chess_app import _ensure_foundational_rules
+
+    dup_s52 = FuzzyConceptRule(
+        rule_id="rule-sleep-s52-hazard_low_wastelessness",
+        concept_name="hazard_low_wastelessness_chaos_cluster_s52",
+        description="First blunder observation.",
+        target_leaves={"cultural/efficiency/wastelessness": 0.25, "philosophical/structure/chaos": 0.60},
+        low=0.60,
+        high=0.80,
+    )
+    dup_s82 = FuzzyConceptRule(
+        rule_id="rule-sleep-s82-hazard_low_wastelessness",
+        concept_name="hazard_low_wastelessness_chaos_cluster_s82",
+        description="Second blunder observation in same cluster.",
+        target_leaves={"cultural/efficiency/wastelessness": 0.20, "philosophical/structure/chaos": 0.70},
+        low=0.70,
+        high=0.90,
+    )
+    collapsed = _ensure_foundational_rules((dup_s52, dup_s82))
+    haz_clusters = [r for r in collapsed if r.concept_name.startswith("hazard_low_wastelessness_chaos_cluster")]
+    assert len(haz_clusters) == 1
+    assert haz_clusters[0].concept_name == "hazard_low_wastelessness_chaos_cluster"
+    assert haz_clusters[0].target_leaves["philosophical/structure/chaos"] == pytest.approx(0.63)
+
+
 
 
 

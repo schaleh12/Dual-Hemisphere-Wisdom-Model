@@ -237,21 +237,76 @@ def _default_fallback_sensors() -> ThreeBridgeSensors:
     )
 
 
+def _canonical_cluster_concept_name(concept_name: str) -> str:
+    """Strip `_s<scene>` suffixes from auto-generated `hazard_*_cluster_sN` / `coached_*_cluster_sN` rules."""
+    if concept_name.startswith(("hazard_", "coached_")) and "_cluster_s" in concept_name:
+        head, tail = concept_name.rsplit("_cluster_s", 1)
+        if tail.isdigit():
+            return f"{head}_cluster"
+    return concept_name
+
+
+def _entrain_existing_cluster_rule(
+    existing: FuzzyConceptRule,
+    incoming: FuzzyConceptRule,
+    canonical_name: str,
+) -> FuzzyConceptRule:
+    """Entrain an existing cluster rule with new REM sleep observations (`0.7 * old + 0.3 * new`)."""
+    blended_leaves: dict[str, float] = {}
+    for k, v in incoming.target_leaves.items():
+        if k in existing.target_leaves:
+            blended_leaves[k] = round(0.7 * float(existing.target_leaves[k]) + 0.3 * float(v), 4)
+        else:
+            blended_leaves[k] = round(float(v), 4)
+    new_low = round(0.7 * float(existing.low) + 0.3 * float(incoming.low), 4)
+    new_high = round(max(new_low + 0.02, 0.7 * float(existing.high) + 0.3 * float(incoming.high)), 4)
+    clean_rule_id = (
+        existing.rule_id
+        if "_cluster_s" not in existing.concept_name
+        else f"rule-sleep-{canonical_name[:32]}"
+    )
+    return FuzzyConceptRule(
+        rule_id=clean_rule_id,
+        concept_name=canonical_name,
+        description=incoming.description,
+        target_leaves=blended_leaves,
+        low=new_low,
+        high=new_high,
+    )
+
+
 def _ensure_foundational_rules(rules: tuple[FuzzyConceptRule, ...]) -> tuple[FuzzyConceptRule, ...]:
     foundational_by_id = {r.rule_id: r for r in VIRGIN_FOUNDATIONAL_RULES}
     foundational_by_name = {r.concept_name: r for r in VIRGIN_FOUNDATIONAL_RULES}
     merged: list[FuzzyConceptRule] = list(VIRGIN_FOUNDATIONAL_RULES)
+    seen_by_canonical_name: dict[str, int] = {}
     seen_learned_sigs: dict[tuple[str, tuple[tuple[str, float], ...]], int] = {}
     for r in rules:
         if r.rule_id in foundational_by_id or r.concept_name in foundational_by_name:
             continue
-        if r.concept_name.startswith(("hazard_", "coached_")):
-            prefix = "hazard" if r.concept_name.startswith("hazard_") else "coached"
+        canonical_name = _canonical_cluster_concept_name(r.concept_name)
+        if canonical_name != r.concept_name:
+            r = FuzzyConceptRule(
+                rule_id=f"rule-sleep-{canonical_name[:32]}",
+                concept_name=canonical_name,
+                description=r.description,
+                target_leaves=dict(r.target_leaves),
+                low=r.low,
+                high=r.high,
+            )
+        if canonical_name in seen_by_canonical_name:
+            idx = seen_by_canonical_name[canonical_name]
+            merged[idx] = _entrain_existing_cluster_rule(merged[idx], r, canonical_name)
+            continue
+        if canonical_name.startswith(("hazard_", "coached_")) and canonical_name.endswith("_cluster"):
+            prefix = "hazard" if canonical_name.startswith("hazard_") else "coached"
             sig = (prefix, tuple(sorted((k, round(float(v), 4)) for k, v in r.target_leaves.items())))
             if sig in seen_learned_sigs:
-                merged[seen_learned_sigs[sig]] = r
+                idx = seen_learned_sigs[sig]
+                merged[idx] = _entrain_existing_cluster_rule(merged[idx], r, merged[idx].concept_name)
                 continue
             seen_learned_sigs[sig] = len(merged)
+        seen_by_canonical_name[canonical_name] = len(merged)
         merged.append(r)
     return tuple(merged)
 
@@ -2340,14 +2395,14 @@ class ChessKibitzerRuntime:
 
             prefix = "hazard" if is_group_hazard else "coached"
             base_name = f"{prefix}_{ckey}"
-            concept_name = base_name if base_name not in existing_names else f"{base_name}_s{rep_scene}"
+            concept_name = base_name
 
             description = (
                 f"Consolidated REM chess wisdom rule for {ckey.replace('_', ' ')}: "
                 f"{(rep.game_review_annotation or rep.scenario_text)[:140]}"
             )
             new_rule = FuzzyConceptRule(
-                rule_id=f"rule-sleep-s{rep_scene}-{concept_name[:28]}",
+                rule_id=f"rule-sleep-{concept_name[:32]}",
                 concept_name=concept_name,
                 description=description,
                 target_leaves=target_leaves,
@@ -2383,21 +2438,23 @@ class ChessKibitzerRuntime:
                 (
                     idx
                     for idx, r in enumerate(active_rules)
-                    if r.concept_name.startswith(f"{prefix}_")
-                    and dict(r.target_leaves) == dict(new_rule.target_leaves)
+                    if _canonical_cluster_concept_name(r.concept_name) == base_name
+                    or (
+                        r.concept_name.startswith(f"{prefix}_")
+                        and _canonical_cluster_concept_name(r.concept_name).endswith("_cluster")
+                        and dict(r.target_leaves) == dict(new_rule.target_leaves)
+                    )
                 ),
                 None,
             )
             if dup_idx is not None:
-                existing_dup = active_rules[dup_idx]
-                active_rules[dup_idx] = FuzzyConceptRule(
-                    rule_id=existing_dup.rule_id,
-                    concept_name=existing_dup.concept_name,
-                    description=new_rule.description,
-                    target_leaves=new_rule.target_leaves,
-                    low=new_rule.low,
-                    high=new_rule.high,
+                entrained_rule = _entrain_existing_cluster_rule(
+                    active_rules[dup_idx],
+                    new_rule,
+                    base_name,
                 )
+                active_rules[dup_idx] = entrained_rule
+                forged_rules.append(entrained_rule)
             else:
                 active_rules.append(new_rule)
                 forged_rules.append(new_rule)

@@ -2,8 +2,8 @@
   "schema_version": 1,
   "version": "0.2.0",
   "github_repo": "schaleh12/Dual-Hemisphere-Wisdom-Model",
-  "build_sha256": "371f1a5b944204d5c16c51bcbd261e527b5da6b03a75c4dc203d1580e831f86e",
-  "build_short_hash": "371f1a5b9442",
+  "build_sha256": "8b5bd377fb04a7a2c802c642ba0b88a4140b09d8c0f5e524c6783ae3a7a44f65",
+  "build_short_hash": "8b5bd377fb04",
   "files": {
     "src/lmft_architecture/__init__.py": {
       "sha256": "a89f56c2195e87129adbffa5065d8769ea096e13ba98783d217c4d120ee92623",
@@ -90,8 +90,8 @@
       "size_bytes": 3267
     },
     "src/lmft_architecture/chess_app.py": {
-      "sha256": "65c3d49e78dda92a52bc4e64b86f331da16cbdabeea76d6c2d9f87451e80f74e",
-      "size_bytes": 129507
+      "sha256": "c4b5e6f256c2cbf8e415fd318e47f9822726883c1a484a850d58499fd80c8484",
+      "size_bytes": 131933
     },
     "src/lmft_architecture/chess_kibitz_bridge.py": {
       "sha256": "96d2ff09e9b7c99dfbf6812c78979ce9f411bad39328c79d7377c8748da4575b",
@@ -302,20 +302,20 @@
       "size_bytes": 3352
     },
     "dist/lmft-sanctuary-club-v0.1.0-win64.zip": {
-      "sha256": "890d3291330d1eeb46501b2bda4c0098e143bd0faea26714f69f0e2ea5d6894f",
-      "size_bytes": 398854
+      "sha256": "274cdc071d85aac74a53bdd5f1dcd3f30f19c5479a6739e38af969b376c5d31a",
+      "size_bytes": 396127
     },
     "dist/impish_bloodmoon_patreon.enc": {
       "sha256": "30ee2d3b94331e70fba3afa30dd3aed006e007167e924b4a27afab9ee7a4c065",
       "size_bytes": 93649374
     },
     "outputs/rem_sleep_consolidated_ruleset.json": {
-      "sha256": "38cd8b80f3d2c6ea0646be24d0a444cc192ab7643e6c3284f85436db5aee3c3b",
-      "size_bytes": 79557
+      "sha256": "fd16a755d09e094e4bfa7a00eb8689df0613ad1c45ff0bfaae7cf175b6245f29",
+      "size_bytes": 17719
     },
     "outputs/sleep_consolidated_ruleset.json": {
-      "sha256": "176364da2bc60c87acd8602f4ec893dd730a5277c15c43ae0bf456c1a6d2b04a",
-      "size_bytes": 10082
+      "sha256": "92d7b51a299ce75f6631bb8aa6201ab04174584bc255bfd176955c7edc58548a",
+      "size_bytes": 84428
     },
     "outputs/continuous_tiered_ruleset.json": {
       "sha256": "b6769f70249a4c68f599c0a7e5a0f8da7afe1487de1f2f3e8e4be26e776f0d0d",
