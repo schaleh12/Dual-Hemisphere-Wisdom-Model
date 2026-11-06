@@ -1698,7 +1698,7 @@ def build_natural_chess_scenario_prompt(
         )
     else:
         base = (
-            f"Chess table — Move {int(board.fullmove_number)} (FEN {board.fen()}): "
+            f"Chess table — Move {int(board.fullmove_number)}: "
             f"{turn_label} to move{check_clause}. {legal_clause}"
         )
 

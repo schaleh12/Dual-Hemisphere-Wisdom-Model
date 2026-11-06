@@ -1165,6 +1165,7 @@ class ChessKibitzerRuntime:
                 num_sentences=int(num_sentences),
                 comma_chord_transform=comma_chord_transform,
                 conversation_history=conv_history,
+                lead_with_gap=(room == "chess" and not clause_1_prefix),
             )
         finally:
             if acquired:
@@ -1780,10 +1781,6 @@ class ChessKibitzerRuntime:
                     latest_comma_vibe_box: dict[str, Any] = {"vibe": pre_vibe}
 
                     def _build_pre_move_comma_chord(comma_prefix: str):
-                        c_coords, c_exp, _, _ = pre_sensors.score_text(
-                            comma_prefix,
-                            learned_leaves=self.learned_leaves,
-                        )
                         rem_now = max(0.0, rem_clock_start - max(0.0, time.perf_counter() - t_ai_start))
                         live_clock_ratio = max(
                             0.0,
@@ -1798,20 +1795,38 @@ class ChessKibitzerRuntime:
                             1.0 - (1.0 - base_disc) * live_clock_ratio,
                             4,
                         )
-                        raw_c_vibe, _ = compile_right_brain_vibe(
-                            self.birth_state,
-                            live_fact_coords,
-                            fact_exp,
-                            self.rules,
-                            pass_index=2,
-                            event_id=f"pre_move_{self.scene_counter + 1}_comma",
-                            prior_memory=self.memory,
-                            learned_leaves=self.learned_leaves,
-                            internal_theory_coords=c_coords,
-                            internal_theory_experiential=c_exp,
-                            queried_child_leaves=queried_1,
-                            skipped_child_leaves=skipped_1,
-                        )
+                        if comma_prefix.strip():
+                            c_coords, c_exp, _, _ = pre_sensors.score_text(
+                                comma_prefix,
+                                learned_leaves=self.learned_leaves,
+                            )
+                            raw_c_vibe, _ = compile_right_brain_vibe(
+                                self.birth_state,
+                                live_fact_coords,
+                                fact_exp,
+                                self.rules,
+                                pass_index=2,
+                                event_id=f"pre_move_{self.scene_counter + 1}_comma",
+                                prior_memory=self.memory,
+                                learned_leaves=self.learned_leaves,
+                                internal_theory_coords=c_coords,
+                                internal_theory_experiential=c_exp,
+                                queried_child_leaves=queried_1,
+                                skipped_child_leaves=skipped_1,
+                            )
+                        else:
+                            raw_c_vibe, _ = compile_right_brain_vibe(
+                                self.birth_state,
+                                live_fact_coords,
+                                fact_exp,
+                                self.rules,
+                                pass_index=1,
+                                event_id=f"pre_move_{self.scene_counter + 1}_gap",
+                                prior_memory=self.memory,
+                                learned_leaves=self.learned_leaves,
+                                queried_child_leaves=queried_1,
+                                skipped_child_leaves=skipped_1,
+                            )
                         latest_comma_vibe_box["vibe"] = raw_c_vibe
                         c_chord = SubliminalChordVector.from_right_brain_vibe(
                             raw_c_vibe,
@@ -1872,6 +1887,7 @@ class ChessKibitzerRuntime:
                             conversation_history=conv_history,
                             chord_builder_at_comma=_build_pre_move_comma_chord,
                             stop_condition=_should_stop_deliberation if max_delib_sentences > 1 else None,
+                            lead_with_gap=True,
                         )
                     delib_sentence_count = int(
                         getattr(self._qwen_left_brain, "last_sentence_count", 1)

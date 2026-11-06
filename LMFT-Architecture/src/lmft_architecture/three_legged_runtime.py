@@ -478,13 +478,7 @@ class SubliminalGapLeftBrain:
             history_block = f"{history_prefix}\n" if history_prefix else ""
             prior_clean = prior_assistant_text.strip()
             prior_suffix = f" {prior_clean}" if prior_clean else ""
-            if _tokenizer_has_single_think_token(self.tokenizer):
-                prompt = (
-                    f"{history_block}User: {scenario_text.strip()}\n"
-                    f"Assistant: <think>\n\n</think>\n{prior_clean}"
-                ).rstrip()
-            else:
-                prompt = f"{history_block}User: {scenario_text.strip()}\nAssistant:{prior_suffix}"
+            prompt = f"{history_block}User: {scenario_text.strip()}\nAssistant:{prior_suffix}"
             prompt_ids = self.tokenizer.encode(prompt, add_special_tokens=True)
             if not prompt_ids:
                 return "Weighing the situation before us,"
@@ -556,8 +550,9 @@ class SubliminalGapLeftBrain:
             SubliminalChordVector | tuple[SubliminalChordVector, str | None, tuple[str, ...]],
         ]
         | None = None,
+        lead_with_gap: bool = False,
     ) -> SplicedThoughtTrace:
-        """Step 2a-2c: Generate Clause 1, assemble (or accept) 52-float `chord` right at the comma, splice into `<|subliminal_gap|>`, and generate Clause 2."""
+        """Step 2a-2c: Generate Clause 1 (or lead directly with `<|subliminal_gap|>`), splice 52-float `chord`, and generate continuation."""
         if chord is None and chord_builder_at_comma is None:
             raise ValueError("Either chord or chord_builder_at_comma must be provided")
         was_model_training = self.model.training
@@ -571,18 +566,21 @@ class SubliminalGapLeftBrain:
             )
             history_block = f"{history_prefix}\n" if history_prefix else ""
             prior_clean = prior_assistant_text.strip()
-            prefix = self.generate_clause_1_prefix(
-                scenario_text,
-                clause_1_override=clause_1_prefix,
-                prior_assistant_text=prior_clean,
-                conversation_history=conversation_history,
-                max_context_chars=max_context_chars,
-            )
+            if lead_with_gap and not (clause_1_prefix is not None and clause_1_prefix.strip()):
+                prefix = ""
+            else:
+                prefix = self.generate_clause_1_prefix(
+                    scenario_text,
+                    clause_1_override=clause_1_prefix,
+                    prior_assistant_text=prior_clean,
+                    conversation_history=conversation_history,
+                    max_context_chars=max_context_chars,
+                )
             comma_vibe_posture: str | None = None
             comma_dissonance_notes: tuple[str, ...] = ()
             comma_scored_live = False
             if chord_builder_at_comma is not None:
-                built = chord_builder_at_comma(prefix)
+                built = chord_builder_at_comma(prefix or prior_clean)
                 comma_scored_live = True
                 if isinstance(built, tuple):
                     active_chord, comma_vibe_posture, comma_dissonance_notes = built
@@ -593,10 +591,16 @@ class SubliminalGapLeftBrain:
                 active_chord = chord
 
             assistant_prefix = f"{prior_clean} {prefix}".strip() if prior_clean else prefix
-            prompt_before_gap = (
-                f"{history_block}User: {scenario_text.strip()}\n"
-                f"Assistant: {assistant_prefix} {SUBLIMINAL_GAP_TOKEN}"
-            )
+            if assistant_prefix:
+                prompt_before_gap = (
+                    f"{history_block}User: {scenario_text.strip()}\n"
+                    f"Assistant: {assistant_prefix} {SUBLIMINAL_GAP_TOKEN}"
+                )
+            else:
+                prompt_before_gap = (
+                    f"{history_block}User: {scenario_text.strip()}\n"
+                    f"Assistant: {SUBLIMINAL_GAP_TOKEN}"
+                )
             assert_zero_stage_directions_in_prompt(prompt_before_gap)
 
             pre_ids_list = self.tokenizer.encode(prompt_before_gap, add_special_tokens=True)
@@ -665,6 +669,8 @@ class SubliminalGapLeftBrain:
 
             raw_post_gap = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
             post_gap_text = clean_post_gap_continuation(raw_post_gap)
+            if not prefix and post_gap_text and post_gap_text[0].islower():
+                post_gap_text = post_gap_text[0].upper() + post_gap_text[1:]
 
             full_thought = f"{prefix} {post_gap_text}".strip()
             trace = SplicedThoughtTrace(
@@ -712,8 +718,9 @@ class SubliminalGapLeftBrain:
         ]
         | None = None,
         stop_condition: Callable[[int, SplicedThoughtTrace, str], bool] | None = None,
+        lead_with_gap: bool = False,
     ) -> tuple[str, SplicedThoughtTrace]:
-        """Generate up to `num_sentences` two-clause `<|subliminal_gap|>` thoughts and return `(full_thought, trace)`."""
+        """Generate up to `num_sentences` `<|subliminal_gap|>` thoughts and return `(full_thought, trace)`."""
         if int(num_sentences) > 1 or stop_condition is not None:
             passage, traces = self.generate_multi_sentence_script(
                 scenario_text,
@@ -725,6 +732,7 @@ class SubliminalGapLeftBrain:
                 max_context_chars=max_context_chars,
                 chord_builder_at_comma=chord_builder_at_comma,
                 stop_condition=stop_condition,
+                lead_with_gap=lead_with_gap,
             )
             self.last_sentence_count = len(traces)
             return passage, traces[-1]
@@ -736,6 +744,7 @@ class SubliminalGapLeftBrain:
             conversation_history=conversation_history,
             max_context_chars=max_context_chars,
             chord_builder_at_comma=chord_builder_at_comma,
+            lead_with_gap=lead_with_gap,
         )
         self.last_sentence_count = 1
         return trace.full_thought, trace
@@ -758,8 +767,9 @@ class SubliminalGapLeftBrain:
         ]
         | None = None,
         stop_condition: Callable[[int, SplicedThoughtTrace, str], bool] | None = None,
+        lead_with_gap: bool = False,
     ) -> tuple[str, tuple[SplicedThoughtTrace, ...]]:
-        """Chain up to `num_sentences` (`1..6`) two-clause `<|subliminal_gap|>` sentences into a continuous passage."""
+        """Chain up to `num_sentences` (`1..6`) `<|subliminal_gap|>` sentences into a continuous passage."""
         count = int(num_sentences)
         if not (1 <= count <= 6):
             raise ValueError(f"num_sentences must be in [1, 6], got {num_sentences!r}")
@@ -781,6 +791,7 @@ class SubliminalGapLeftBrain:
                 conversation_history=conversation_history,
                 max_context_chars=max_context_chars,
                 chord_builder_at_comma=chord_builder_at_comma,
+                lead_with_gap=lead_with_gap,
             )
             completed_sentences.append(trace.full_thought)
             traces.append(trace)
@@ -967,6 +978,7 @@ def run_three_legged_turn(
     comma_chord_transform: Callable[[SubliminalChordVector], SubliminalChordVector] | None = None,
     conversation_history: Sequence[tuple[str, str]] = (),
     max_context_chars: int = DEFAULT_MAX_CONTEXT_CHARS,
+    lead_with_gap: bool = False,
 ) -> ThreeLeggedTurnResult:
     """Execute one 3-Gear Closed-Loop Dual-Hemisphere Runtime Turn.
 
@@ -1165,32 +1177,35 @@ def run_three_legged_turn(
                     _pass_idx: int = p,
                     _base_vibe: RightBrainVibe = current_vibe,
                 ) -> tuple[SubliminalChordVector, str | None, tuple[str, ...]]:
-                    if comma_prefix in cached_comma_scores:
-                        comma_coords, comma_exp = cached_comma_scores[comma_prefix]
+                    if not comma_prefix.strip():
+                        mid_comma_vibe = _base_vibe
                     else:
-                        comma_coords, comma_exp, _q_c, _s_c = sensors.score_text(
-                            comma_prefix,
+                        if comma_prefix in cached_comma_scores:
+                            comma_coords, comma_exp = cached_comma_scores[comma_prefix]
+                        else:
+                            comma_coords, comma_exp, _q_c, _s_c = sensors.score_text(
+                                comma_prefix,
+                                learned_leaves=learned_tuple,
+                                branch_gating=branch_gating,
+                            )
+                            cached_comma_scores[comma_prefix] = (dict(comma_coords), dict(comma_exp))
+                        raw_comma_vibe, _ = compile_right_brain_vibe(
+                            birth_state,
+                            external_coords,
+                            external_exp,
+                            rules,
+                            pass_index=_pass_idx,
+                            event_id=f"scene-{scene_index}-pass-{_pass_idx}-comma",
+                            prior_memory=prior_memory,
                             learned_leaves=learned_tuple,
-                            branch_gating=branch_gating,
+                            internal_theory_coords=comma_coords,
+                            internal_theory_experiential=comma_exp,
+                            queried_child_leaves=queried_1,
+                            skipped_child_leaves=skipped_1,
+                            social_drift=social_drift,
+                            ratified_chords=pass_ratified_chords,
                         )
-                        cached_comma_scores[comma_prefix] = (dict(comma_coords), dict(comma_exp))
-                    raw_comma_vibe, _ = compile_right_brain_vibe(
-                        birth_state,
-                        external_coords,
-                        external_exp,
-                        rules,
-                        pass_index=_pass_idx,
-                        event_id=f"scene-{scene_index}-pass-{_pass_idx}-comma",
-                        prior_memory=prior_memory,
-                        learned_leaves=learned_tuple,
-                        internal_theory_coords=comma_coords,
-                        internal_theory_experiential=comma_exp,
-                        queried_child_leaves=queried_1,
-                        skipped_child_leaves=skipped_1,
-                        social_drift=social_drift,
-                        ratified_chords=pass_ratified_chords,
-                    )
-                    mid_comma_vibe = _compile_mid_sentence_comma_vibe(_base_vibe, raw_comma_vibe)
+                        mid_comma_vibe = _compile_mid_sentence_comma_vibe(_base_vibe, raw_comma_vibe)
                     chord_at_comma = SubliminalChordVector.from_right_brain_vibe(
                         mid_comma_vibe,
                         deliberation=deliberation,
@@ -1222,8 +1237,9 @@ def run_three_legged_turn(
                         conversation_history=conversation_history,
                         max_context_chars=max_context_chars,
                         chord_builder_at_comma=_build_chord_at_comma,
+                        lead_with_gap=lead_with_gap,
                     )
-                    if clause_1_prefix is None and multi_traces:
+                    if clause_1_prefix is None and multi_traces and not lead_with_gap:
                         cached_clause_1_prefix = multi_traces[0].clause_1_prefix
                     spliced_traces.extend(multi_traces)
                     reply_text = validate_plain_english_left_brain_reply(multi_text)
@@ -1235,8 +1251,9 @@ def run_three_legged_turn(
                         conversation_history=conversation_history,
                         max_context_chars=max_context_chars,
                         chord_builder_at_comma=_build_chord_at_comma,
+                        lead_with_gap=lead_with_gap,
                     )
-                    if clause_1_prefix is None:
+                    if clause_1_prefix is None and not lead_with_gap:
                         cached_clause_1_prefix = spliced_trace.clause_1_prefix
                     spliced_traces.append(spliced_trace)
                     reply_text = validate_plain_english_left_brain_reply(spliced_trace.full_thought)

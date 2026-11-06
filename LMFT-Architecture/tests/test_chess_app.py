@@ -1062,8 +1062,10 @@ def test_speaker_attribution_and_clean_slate_reset(tmp_path: Path) -> None:
     msg_delib = s3["chat_messages"][-1]
     assert msg_delib["sender"] == "companion"
     assert "White to move" in msg_delib["clean_pretext_prompt"]
+    assert "FEN" not in msg_delib["clean_pretext_prompt"]
     assert "Position anchored on " not in msg_delib["text"]
     assert "[Right-Brain Intuition Override:" not in msg_delib["text"]
+    assert msg_delib["telemetry"]["spliced_trace"].get("clause_1_prefix") == ""
     assert msg_delib["telemetry"]["spliced_trace"].get("sentence_count", 0) >= 2
     assert msg_delib["telemetry"]["spliced_trace"].get("comma_scored_live") is True
     assert s3["board"]["white_clock_sec"] <= 300.0
