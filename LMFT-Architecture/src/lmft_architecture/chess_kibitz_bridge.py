@@ -260,7 +260,7 @@ def evaluate_chess_board_posture(
     continuity = _clamp01(
         0.24
         + 0.055 * min(8, connected_pawns)
-        + 0.08 * min(4, center_pawns)
+        + 0.12 * min(4, center_pawns)
         + 0.02 * min(8, len(our_pawns))
     )
 
@@ -334,24 +334,6 @@ def evaluate_chess_board_posture(
     )
 
 
-_CORE_CENTER_SQUARES = frozenset({chess.D4, chess.E4, chess.D5, chess.E5})
-_EXTENDED_CENTER_SQUARES = frozenset(
-    {
-        chess.C4,
-        chess.F4,
-        chess.C5,
-        chess.F5,
-        chess.C3,
-        chess.F3,
-        chess.C6,
-        chess.F6,
-        chess.D3,
-        chess.E3,
-        chess.D6,
-        chess.E6,
-    }
-)
-
 _SAN_TOKEN_REGEX = re.compile(
     r"(?<![A-Za-z0-9_-])"
     r"("
@@ -362,47 +344,6 @@ _SAN_TOKEN_REGEX = re.compile(
     r")"
     r"(?=$|[\s,.;:!?)\]])(?![-A-Za-z0-9_])"
 )
-
-
-def rank_principled_legal_moves_san(board: chess.Board, *, limit: int = 6) -> list[str]:
-    """Return up to `limit` legal moves in SAN ordered by natural chess principles (checks, captures, center, development)."""
-    legal = list(board.legal_moves)
-    if not legal:
-        return []
-
-    them = not board.turn
-    scored: list[tuple[float, str]] = []
-    for move in legal:
-        san = board.san(move)
-        score = 0.0
-        piece_type = board.piece_type_at(move.from_square)
-        is_cap = board.is_capture(move)
-        is_chk = board.gives_check(move)
-        dest_attacked = board.is_attacked_by(them, move.to_square)
-
-        if is_chk:
-            if is_cap or board.fullmove_number > 4 or not dest_attacked:
-                score += 0.6 if (board.fullmove_number <= 4 and not is_cap) else 3.0
-        if is_cap:
-            score += 2.5
-        if board.is_castling(move):
-            score += 2.2
-        if move.to_square in _CORE_CENTER_SQUARES:
-            score += 1.8
-        elif move.to_square in _EXTENDED_CENTER_SQUARES:
-            score += 1.2
-        if piece_type in (chess.KNIGHT, chess.BISHOP):
-            score += 1.05
-        elif piece_type == chess.PAWN and chess.square_file(move.to_square) in (2, 3, 4):
-            score += 0.90
-        elif piece_type == chess.KING and not board.is_castling(move) and not board.is_check():
-            score -= 1.5
-        if not dest_attacked:
-            score += 0.45
-        scored.append((score, san))
-
-    scored.sort(key=lambda item: (-item[0], item[1]))
-    return [san for _score, san in scored[: max(1, int(limit))]]
 
 
 _PIECE_VALUES: dict[int, float] = {
@@ -515,7 +456,9 @@ def compute_candidate_move_fuzzy_coordinates(
     for w in post_posture.board_shadow_warnings:
         if w.shadow_leaf_id:
             coords[w.shadow_leaf_id] = float(w.severity)
-    coords["cultural/efficiency/wastelessness"] = 0.25 if is_blunder else 0.72
+    coords["cultural/efficiency/wastelessness"] = (
+        0.25 if is_blunder else round(min(0.95, 0.72 + 0.06 * captured_val), 4)
+    )
     coords["cultural/freedom/self-sufficiency"] = float(
         post_posture.philosophical_coordinates.get("philosophical/being/existence", 0.55)
     )
@@ -638,24 +581,6 @@ def evaluate_candidate_moves_with_right_brain(
         else:
             clarity, confidence, matched, settled, learned_bonus = 0.60, 0.60, None, True, 0.0
 
-        tactical_score = 0.0
-        if is_cap:
-            tactical_score += 0.55 * captured_val
-        if board.is_castling(move):
-            tactical_score += 1.40
-        if move.to_square in _CORE_CENTER_SQUARES:
-            tactical_score += 0.95
-        elif move.to_square in _EXTENDED_CENTER_SQUARES:
-            tactical_score += 0.55
-        if piece_type in (chess.KNIGHT, chess.BISHOP) and board.fullmove_number <= 10:
-            tactical_score += 0.65
-        elif piece_type == chess.PAWN and chess.square_file(move.to_square) in (2, 3, 4):
-            tactical_score += 0.65
-        elif piece_type == chess.KING and not board.is_castling(move) and not board.is_check():
-            tactical_score -= 1.10
-        if not dest_attacked_by_them:
-            tactical_score += 0.45
-
         if is_hazard_match:
             right_brain_score = (
                 -0.45 * float(clarity)
@@ -672,9 +597,18 @@ def evaluate_candidate_moves_with_right_brain(
                 + (0.35 if settled else -0.25)
                 - 0.45 * len(shadow_names)
             )
+        leaf_posture_score = (
+            float(coords.get("cultural/efficiency/wastelessness", 0.50))
+            + 0.85 * float(coords.get("philosophical/being/existence", 0.50))
+            + 0.75 * float(coords.get("philosophical/structure/order", 0.50))
+            + 0.65 * float(coords.get("philosophical/persistence/continuity", 0.50))
+            + 0.55 * float(coords.get("philosophical/persistence/discreteness", 0.50))
+            + 0.45 * float(coords.get("philosophical/being/agency", 0.50))
+            - 0.35 * float(coords.get("philosophical/structure/chaos", 0.50))
+        )
         composite = (
-            tactical_score
-            + right_brain_score
+            right_brain_score
+            + leaf_posture_score
             - 1.35 * blunder_penalty
             - (1.80 if is_rep else 0.0)
         )
@@ -728,7 +662,7 @@ def build_natural_chess_scenario_prompt(
     turn_label = "White" if board.turn == chess.WHITE else "Black"
     check_clause = " (King is in check)" if board.is_check() else ""
     history_str = format_move_history_pgn_snippet(move_history_san)
-    legal_candidates = rank_principled_legal_moves_san(board, limit=6)
+    legal_candidates = [c.san for c in evaluate_candidate_moves_with_right_brain(board, limit=6)]
     legal_clause = (
         f"Legal replies include {', '.join(legal_candidates)}."
         if legal_candidates
@@ -888,7 +822,7 @@ def verify_or_ground_chess_moves_in_reply(
     ):
         return reply_text
 
-    top_legal = rank_principled_legal_moves_san(board, limit=6)
+    top_legal = [c.san for c in evaluate_candidate_moves_with_right_brain(board, limit=6)]
     turn_label = "White" if board.turn == chess.WHITE else "Black"
 
     grounded = reply_text.strip()
@@ -1090,7 +1024,7 @@ def _static_centipawns_for_color(board: chess.Board, color: chess.Color) -> floa
         if val <= 0.0:
             continue
         cp += 100.0 * val * (len(board.pieces(pt, color)) - len(board.pieces(pt, not color)))
-    for sq in _CORE_CENTER_SQUARES:
+    for sq in (chess.D4, chess.E4, chess.D5, chess.E5):
         p = board.piece_at(sq)
         if p is not None:
             cp += 18.0 if p.color == color else -18.0

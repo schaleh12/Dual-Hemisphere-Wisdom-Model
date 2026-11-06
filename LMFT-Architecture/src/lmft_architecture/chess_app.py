@@ -83,7 +83,6 @@ from .chess_kibitz_bridge import (
     format_move_history_pgn_snippet,
     inspect_chess_moves_in_reply,
     merge_board_fact_with_chat_sensors,
-    rank_principled_legal_moves_san,
     verify_or_ground_chess_moves_in_reply,
 )
 from .chess_ui import CHESS_SINGLE_PAGE_HTML
@@ -92,13 +91,6 @@ from .contemplation_ledger import (
     ContemplationLedger,
     load_contemplation_ledger,
     save_contemplation_ledger,
-)
-from .dilemma_crucible import (
-    CHESS_VS_HYPNOSIS_MANIFESTO,
-    CONTEXT_BRACE_MODES,
-    CRUCIBLE_STAGES,
-    MEN_OF_CULTURE_SHELF,
-    CruciblePairedBridgeSensors,
 )
 from .github_auto_sync import (
     APP_RELEASE_VERSION,
@@ -402,8 +394,6 @@ class ChessKibitzerRuntime:
         self.active_room: str = "chess"
         self.active_workspace_view: str = "chess_arena"
         self.sanctuary_mode: str = "tilt_reset"
-        self.active_crucible_stage: str = "poetry_story"
-        self.active_context_brace: str | None = None
         self.scene_counter: int = 0
         self.spontaneous_kibitz_enabled: bool = True
 
@@ -423,7 +413,6 @@ class ChessKibitzerRuntime:
         self.auto_sleep_threshold: int = 3
         self.microwave_step_counter: int = 0
         self.last_microwave_status: dict[str, Any] | None = None
-        self.script_canvas_text: str = ""
         self.active_thread_id: str = "thread-1"
         self.threads: dict[str, dict[str, Any]] = {}
         self._load_threads_for_active_lineage()
@@ -641,7 +630,6 @@ class ChessKibitzerRuntime:
             }
             self.threads[self.active_thread_id] = cur
         cur["chat_messages"] = list(self.chat_messages)
-        cur["script_canvas_text"] = str(self.script_canvas_text)
         cur["memory_state"] = self._serialize_memory_state(self.memory)
         if persist and self.active_lineage != "virgin":
             self.state_dir.mkdir(parents=True, exist_ok=True)
@@ -669,7 +657,6 @@ class ChessKibitzerRuntime:
                                 "title": str(item.get("title", tid)),
                                 "created_at": float(item.get("created_at", time.time())),
                                 "chat_messages": list(item.get("chat_messages", [])),
-                                "script_canvas_text": str(item.get("script_canvas_text", "")),
                                 "memory_state": item.get("memory_state"),
                             }
                     active_tid = str(raw.get("active_thread_id", "")).strip()
@@ -684,7 +671,6 @@ class ChessKibitzerRuntime:
                 "title": "Chess Study & Kibitz 1",
                 "created_at": time.time(),
                 "chat_messages": [],
-                "script_canvas_text": "",
                 "memory_state": None,
             }
         elif self.active_thread_id not in self.threads:
@@ -692,7 +678,6 @@ class ChessKibitzerRuntime:
 
         active_rec = self.threads[self.active_thread_id]
         self.chat_messages = list(active_rec.get("chat_messages", []))
-        self.script_canvas_text = str(active_rec.get("script_canvas_text", ""))
         self.memory = self._deserialize_memory_state(active_rec.get("memory_state"))
 
     def create_chat_thread(self, title: str = "") -> dict[str, Any]:
@@ -705,12 +690,10 @@ class ChessKibitzerRuntime:
             "title": clean_title,
             "created_at": time.time(),
             "chat_messages": [],
-            "script_canvas_text": "",
             "memory_state": None,
         }
         self.active_thread_id = new_tid
         self.chat_messages = []
-        self.script_canvas_text = ""
         self.memory = None
         self._sync_active_thread_record(persist=True)
         return self.get_state_snapshot()
@@ -723,7 +706,6 @@ class ChessKibitzerRuntime:
         self.active_thread_id = tid
         rec = self.threads[tid]
         self.chat_messages = list(rec.get("chat_messages", []))
-        self.script_canvas_text = str(rec.get("script_canvas_text", ""))
         self.memory = self._deserialize_memory_state(rec.get("memory_state"))
         self._sync_active_thread_record(persist=True)
         return self.get_state_snapshot()
@@ -745,7 +727,6 @@ class ChessKibitzerRuntime:
             raise ValueError(f"Unknown thread_id: {thread_id!r}")
         if len(self.threads) <= 1:
             self.chat_messages = []
-            self.script_canvas_text = ""
             self.memory = None
             self._sync_active_thread_record(persist=True)
             return self.get_state_snapshot()
@@ -754,18 +735,7 @@ class ChessKibitzerRuntime:
             self.active_thread_id = next(iter(self.threads))
             rec = self.threads[self.active_thread_id]
             self.chat_messages = list(rec.get("chat_messages", []))
-            self.script_canvas_text = str(rec.get("script_canvas_text", ""))
             self.memory = self._deserialize_memory_state(rec.get("memory_state"))
-        self._sync_active_thread_record(persist=True)
-        return self.get_state_snapshot()
-
-    def update_script_canvas(self, script_text: str, *, append: bool = False) -> dict[str, Any]:
-        if append:
-            existing = self.script_canvas_text.strip()
-            addition = script_text.strip()
-            self.script_canvas_text = f"{existing}\n\n{addition}".strip() if existing else addition
-        else:
-            self.script_canvas_text = script_text
         self._sync_active_thread_record(persist=True)
         return self.get_state_snapshot()
 
@@ -1199,14 +1169,7 @@ class ChessKibitzerRuntime:
                 }
                 for t in self.threads.values()
             ],
-            "script_canvas_text": self.script_canvas_text,
             "sanctuary_mode": self.sanctuary_mode,
-            "active_crucible_stage": self.active_crucible_stage,
-            "active_context_brace": self.active_context_brace,
-            "crucible_stages": CRUCIBLE_STAGES,
-            "men_of_culture_shelf": MEN_OF_CULTURE_SHELF,
-            "context_brace_modes": CONTEXT_BRACE_MODES,
-            "manifesto_text": CHESS_VS_HYPNOSIS_MANIFESTO,
             "sleep_cycle_index": self.sleep_cycle_index,
             "active_checkpoint_label": self.active_checkpoint_label,
             "left_brain_status": (
@@ -1746,223 +1709,6 @@ class ChessKibitzerRuntime:
             )
         self._sync_active_thread_record(persist=True)
         self._maybe_trigger_auto_rem_sleep()
-        return self.get_state_snapshot()
-
-    def handle_guest_kibitzer(
-        self,
-        guest_text: str = "",
-        *,
-        guest_name: str = "Gemini Guest",
-        auto_query_gemini: bool = False,
-    ) -> dict[str, Any]:
-        resolved_text = guest_text.strip()
-        if auto_query_gemini and not resolved_text:
-            resolved_text = self._query_gemini_guest_api()
-        if not resolved_text:
-            raise ValueError("Provide guest_text or set GEMINI_API_KEY to query Gemini automatically.")
-
-        g_coords, g_exp, _, _ = self.sensors.score_text(
-            resolved_text,
-            learned_leaves=self.learned_leaves,
-        )
-        g_balances = compute_philosophical_color_harmony(g_coords)
-        g_shadows = detect_shadow_pathologies(
-            g_coords,
-            fact=self.board_posture.philosophical_coordinates.get("philosophical/being/existence", 0.50),
-            arousal=float(g_exp.get("experiential/phase/arousal", 0.50)),
-            resonance=float(g_exp.get("experiential/synchronization/resonance", 0.50)),
-        )
-        self.chat_messages.append(
-            {
-                "id": f"guest-{self.scene_counter + 1}",
-                "sender": "guest",
-                "role_label": guest_name,
-                "text": resolved_text,
-                "guest_analysis": {
-                    "sibling_color_balances": [b.to_dict() for b in g_balances],
-                    "shadow_pathology_warnings": [w.to_dict() for w in g_shadows],
-                },
-            }
-        )
-        turn, _elapsed_ms, telemetry = self._execute_turn(
-            resolved_text,
-            room="chess",
-            force_spoken_reply=True,
-            include_conversation_history=True,
-        )
-        reply_text = turn.final_conscious_note or self._synthesize_gear_1_note(
-            turn,
-            room="chess",
-            board_posture=self.board_posture,
-        )
-        self.chat_messages.append(
-            {
-                "id": telemetry["scene_index"],
-                "sender": "companion",
-                "role_label": "LMFT Companion (replying to Guest)",
-                "text": reply_text,
-                "clean_reply": reply_text,
-                "clean_pretext_prompt": resolved_text,
-                "telemetry": telemetry,
-                "coached": False,
-                "savored": False,
-            }
-        )
-        self._sync_active_thread_record(persist=True)
-        self._maybe_trigger_auto_rem_sleep()
-        return self.get_state_snapshot()
-
-    def _query_gemini_guest_api(self) -> str:
-        api_key = os.environ.get("GEMINI_API_KEY", "").strip()
-        if not api_key:
-            raise ValueError("GEMINI_API_KEY environment variable is not set.")
-        prompt = (
-            f"You are a sharp, concise chess club kibitzer. Current board FEN: {self.board.fen()} "
-            f"({self.board_posture.board_summary}). Give a 1-sentence tactical or positional observation."
-        )
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
-        payload = json.dumps({"contents": [{"parts": [{"text": prompt}]}]}).encode("utf-8")
-        req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"}, method="POST")
-        try:
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-                return str(data["candidates"][0]["content"]["parts"][0]["text"]).strip()
-        except urllib.error.URLError as exc:
-            raise ValueError(f"Gemini API request failed: {exc}") from exc
-
-    def handle_context_brace(self, brace_key: str) -> dict[str, Any]:
-        key = brace_key.strip().lower()
-        if key not in CONTEXT_BRACE_MODES:
-            raise ValueError(f"Unknown context brace mode: {brace_key!r}")
-        info = CONTEXT_BRACE_MODES[key]
-        self.active_room = "sanctuary"
-        self.active_crucible_stage = str(info["stage_id"])
-        self.active_context_brace = key
-        self.chat_messages.append(
-            {
-                "id": f"brace-{int(time.time() * 1000)}",
-                "sender": "system",
-                "role_label": f"Context Brace {info['button_label']}",
-                "text": (
-                    f"{info['icebreaker_note']} "
-                    f"[Department: {info['department_braced']} | Braced Leaves: {', '.join(info['braced_leaves'])}]"
-                ),
-            }
-        )
-        self._sync_active_thread_record(persist=True)
-        return self.get_state_snapshot()
-
-    def handle_crucible_dilemma(
-        self,
-        stage_id: str,
-        wave_text: str,
-        structure_text: str,
-        *,
-        art_rgb: tuple[float, float, float] | list[float] | None = None,
-        harvest_for_sleep: bool = True,
-        auto_sleep: bool = False,
-    ) -> dict[str, Any]:
-        st_key = stage_id.strip().lower()
-        if st_key not in CRUCIBLE_STAGES:
-            raise ValueError(f"Unknown crucible stage_id: {stage_id!r}")
-        w_clean = wave_text.strip()
-        s_clean = structure_text.strip()
-        if not w_clean or not s_clean:
-            raise ValueError("Both the Wave slot and the Structure slot must be non-empty.")
-
-        stage_info = CRUCIBLE_STAGES[st_key]
-        self.active_room = "sanctuary"
-        self.active_crucible_stage = st_key
-        self.active_context_brace = str(stage_info["brace_key"])
-
-        rgb_tuple: tuple[float, float, float] | None = None
-        if art_rgb is not None and len(art_rgb) == 3:
-            rgb_tuple = (float(art_rgb[0]), float(art_rgb[1]), float(art_rgb[2]))
-
-        paired_sensors = CruciblePairedBridgeSensors(
-            stage_id=st_key,
-            wave_text=w_clean,
-            structure_text=s_clean,
-            base_sensors=self.sensors,
-            art_rgb=rgb_tuple,
-        )
-        fact_coords, fact_exp, _, _ = paired_sensors.score_text(s_clean, learned_leaves=self.learned_leaves)
-        wave_coords, wave_exp, _, _ = paired_sensors.score_text(w_clean, learned_leaves=self.learned_leaves)
-        crucible_vibe, _ = compile_right_brain_vibe(
-            self.birth_state,
-            fact_coords,
-            fact_exp,
-            self.rules,
-            pass_index=1,
-            event_id=f"crucible_{st_key}_{self.scene_counter + 1}",
-            prior_memory=self.memory,
-            learned_leaves=self.learned_leaves,
-            internal_theory_coords=wave_coords,
-            internal_theory_experiential=wave_exp,
-        )
-        first_clause = w_clean.split(",")[0].split(".")[0].strip()
-        if len(first_clause) > 90:
-            first_clause = first_clause[:90].rsplit(" ", 1)[0]
-        wave_clause_1 = f"{first_clause},"
-
-        self.chat_messages.append(
-            {
-                "id": f"crucible-user-{self.scene_counter + 1}",
-                "sender": "user",
-                "role_label": f"Dilemma Crucible ({stage_info['title']})",
-                "text": f"[WAVE — {stage_info['wave_label']}]: {w_clean}\n[STRUCTURE — {stage_info['structure_label']}]: {s_clean}",
-            }
-        )
-        turn, _elapsed_ms, telemetry = self._execute_turn(
-            s_clean,
-            room="sanctuary",
-            force_spoken_reply=True,
-            clause_1_prefix=wave_clause_1,
-            custom_sensors=paired_sensors,
-        )
-        merged_dissonance = list(telemetry.get("dissonance_notes", []))
-        for note in crucible_vibe.self_registry.dissonance_notes:
-            if note not in merged_dissonance:
-                merged_dissonance.append(note)
-        telemetry["dissonance_notes"] = merged_dissonance
-        telemetry["crucible_stage"] = st_key
-        telemetry["crucible_wave_vs_structure"] = {
-            "stage_title": stage_info["title"],
-            "wave_theory_coordinates": {k: round(float(v), 4) for k, v in wave_coords.items()},
-            "structure_fact_coordinates": {k: round(float(v), 4) for k, v in fact_coords.items()},
-            "crucible_clarity": round(float(crucible_vibe.clarity), 4),
-            "crucible_confidence": round(float(crucible_vibe.confidence), 4),
-            "crucible_dissonance_notes": list(crucible_vibe.self_registry.dissonance_notes),
-        }
-        scene_idx = int(telemetry["scene_index"])
-        dilemma_triggered = bool(
-            harvest_for_sleep or merged_dissonance or not turn.settled or crucible_vibe.clarity < 0.62
-        )
-        reply_text = turn.final_conscious_note or (
-            f"Crucible [{stage_info['title']}]: Reconciling Wave (Theory={crucible_vibe.theory:.2f}) "
-            f"against Structure (Fact={crucible_vibe.fact:.2f}, Clarity={crucible_vibe.clarity:.2f})."
-        )
-        self.chat_messages.append(
-            {
-                "id": scene_idx,
-                "sender": "companion",
-                "role_label": f"LMFT Crucible Synthesis ({stage_info['roman']})",
-                "text": reply_text,
-                "clean_reply": reply_text,
-                "telemetry": telemetry,
-                "coached": dilemma_triggered,
-                "savored": False,
-            }
-        )
-        if dilemma_triggered:
-            self.flag_turn_for_coaching(
-                scene_idx,
-                user_note=f"Crucible {stage_info['title']} — Wave: {w_clean[:80]} | Structure: {s_clean[:80]}",
-                check_auto_sleep=False,
-            )
-        self._sync_active_thread_record(persist=True)
-        if auto_sleep:
-            self._maybe_trigger_auto_rem_sleep()
         return self.get_state_snapshot()
 
     def flag_turn_for_coaching(
@@ -2778,14 +2524,6 @@ def create_chess_http_server(
                 if self.path == "/api/threads/delete":
                     self._send_json(runtime.delete_chat_thread(str(data.get("thread_id", ""))))
                     return
-                if self.path == "/api/canvas/update":
-                    self._send_json(
-                        runtime.update_script_canvas(
-                            str(data.get("script_text", "")),
-                            append=bool(data.get("append", False)),
-                        )
-                    )
-                    return
                 if self.path == "/api/sleep/auto":
                     self._send_json(
                         runtime.set_auto_rem_sleep(
@@ -2831,15 +2569,6 @@ def create_chess_http_server(
                         )
                     )
                     return
-                if self.path == "/api/guest":
-                    self._send_json(
-                        runtime.handle_guest_kibitzer(
-                            str(data.get("text", "")),
-                            guest_name=str(data.get("guest_name", "Gemini Guest")),
-                            auto_query_gemini=bool(data.get("auto_query_gemini", False)),
-                        )
-                    )
-                    return
                 if self.path == "/api/turn/coach":
                     self._send_json(
                         runtime.flag_turn_for_coaching(
@@ -2862,20 +2591,6 @@ def create_chess_http_server(
                     return
                 if self.path == "/api/lineage":
                     self._send_json(runtime.switch_brain_lineage(str(data.get("lineage", "schooled"))))
-                    return
-                if self.path == "/api/crucible/brace":
-                    self._send_json(runtime.handle_context_brace(str(data.get("brace_key", "story_telling"))))
-                    return
-                if self.path == "/api/crucible/run":
-                    self._send_json(
-                        runtime.handle_crucible_dilemma(
-                            str(data.get("stage_id", "poetry_story")),
-                            str(data.get("wave_text", "")),
-                            str(data.get("structure_text", "")),
-                            art_rgb=data.get("art_rgb"),
-                            harvest_for_sleep=bool(data.get("harvest_for_sleep", True)),
-                        )
-                    )
                     return
                 self._send_json({"error": f"Unknown endpoint {self.path}"}, HTTPStatus.NOT_FOUND)
             except Exception as exc:
