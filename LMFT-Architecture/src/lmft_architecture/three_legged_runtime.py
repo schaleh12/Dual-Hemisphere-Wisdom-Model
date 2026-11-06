@@ -669,8 +669,10 @@ class SubliminalGapLeftBrain:
 
             raw_post_gap = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
             post_gap_text = clean_post_gap_continuation(raw_post_gap)
-            if not prefix and post_gap_text and post_gap_text[0].islower():
-                post_gap_text = post_gap_text[0].upper() + post_gap_text[1:]
+            if not prefix and post_gap_text:
+                post_gap_text = post_gap_text.lstrip(",;:-–— ").strip()
+                if post_gap_text and post_gap_text[0].islower():
+                    post_gap_text = post_gap_text[0].upper() + post_gap_text[1:]
 
             full_thought = f"{prefix} {post_gap_text}".strip()
             trace = SplicedThoughtTrace(

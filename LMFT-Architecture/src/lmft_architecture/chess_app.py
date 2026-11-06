@@ -1520,6 +1520,7 @@ class ChessKibitzerRuntime:
                         move_desc,
                         spliced_chord,
                         conversation_history=conv_history,
+                        lead_with_gap=True,
                     )
                 raw_reply = spontaneous_text
                 if not telemetry.get("spliced_trace"):
@@ -1860,6 +1861,8 @@ class ChessKibitzerRuntime:
                             for r in self.rules
                         ):
                             return True
+                        if sent_count < 2:
+                            return False
                         mentioned_now = inspect_chess_moves_in_reply(
                             getattr(trace, "post_gap_continuation", "") or passage_so_far,
                             self.board,
