@@ -81,11 +81,11 @@ class _TinyTokenizer:
         for raw_tok in text.replace("\n", " \n ").split(" "):
             if not raw_tok:
                 continue
-            if raw_tok not in self._vocab:
-                idx = len(self._vocab)
-                self._vocab[raw_tok] = idx
-                self._id_to_tok[idx] = raw_tok
-            ids.append(self._vocab[raw_tok])
+            if raw_tok in self._vocab:
+                ids.append(self._vocab[raw_tok])
+            else:
+                idx = 6 + (sum(ord(ch) * (i + 1) for i, ch in enumerate(raw_tok)) % 88)
+                ids.append(idx)
         return ids
 
     def decode(self, token_ids: list[int], skip_special_tokens: bool = True) -> str:
@@ -1042,6 +1042,9 @@ def test_speaker_attribution_and_clean_slate_reset(tmp_path: Path) -> None:
     assert "White to move" in msg_cel["clean_pretext_prompt"]
     assert "spliced_trace" in msg_cel["telemetry"]
     assert msg_cel["telemetry"]["spliced_trace"].get("sentence_count") == 1
+    assert msg_cel["telemetry"]["spliced_trace"].get("comma_scored_live") is True
+    assert "[Right-Brain Intuition Override:" not in msg_cel.get("clean_reply", "")
+    assert msg_cel["telemetry"]["fact_coordinates"]["cultural/efficiency/power"] >= 0.35
 
     # 2. Step 2 (Stockfish as Black): sender is `sparring_opponent`, text clearly states Stockfish played its move,
     #    and Stockfish's Gear-1 sensor note does NOT pollute `_extract_clean_conversation_history()`
@@ -1050,7 +1053,9 @@ def test_speaker_attribution_and_clean_slate_reset(tmp_path: Path) -> None:
     assert msg_sf["sender"] == "sparring_opponent"
     assert "Stockfish 19 (" in msg_sf["role_label"]
     assert msg_sf["text"].startswith("Stockfish 19 (")
-    assert len(runtime._extract_clean_conversation_history()) == 1
+    hist_pairs = runtime._extract_clean_conversation_history()
+    assert len(hist_pairs) == 1
+    assert "[Right-Brain Intuition Override:" not in hist_pairs[0][1]
 
     # 3. Clean slate reset restores foundational rules, resets BitboardIntuitionSleeve & Elo to 1000.0
     runtime.lmft_elo = 1156.0

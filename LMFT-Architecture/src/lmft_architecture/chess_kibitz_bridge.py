@@ -125,9 +125,9 @@ def evaluate_chess_board_posture(
 
     us = board.turn if perspective is None else perspective
     them = not us
-    turn_label = "White" if us == chess.WHITE else "Black"
+    turn_label = "White" if board.turn == chess.WHITE else "Black"
 
-    legal_moves = list(board.legal_moves) if board.turn == us else []
+    legal_moves = list(board.legal_moves)
     if board.turn != us:
         temp_b = board.copy()
         temp_b.turn = us
@@ -1885,9 +1885,12 @@ class BoardAnchoredBridgeSensors:
         self,
         base_sensors: ThreeBridgeSensors,
         board_posture: ChessBoardPosture,
+        *,
+        ground_cultural_on_board: bool = False,
     ) -> None:
         self.base_sensors = base_sensors
         self.board_posture = board_posture
+        self.ground_cultural_on_board = bool(ground_cultural_on_board)
         self.call_count = 0
 
     def score_text(
@@ -1916,7 +1919,7 @@ class BoardAnchoredBridgeSensors:
             # When scoring an automatic board state prompt (no user story text), ground
             # the 6 Cultural coordinates in the board's structural state instead of MiniLM's
             # near-zero (~0.04) reading of the dry "Chess table — Move N..." header.
-            if clean_for_minilm.startswith("Chess table —"):
+            if self.ground_cultural_on_board or clean_for_minilm.startswith("Chess table —"):
                 phil = self.board_posture.philosophical_coordinates
                 anchored["cultural/efficiency/power"] = _clamp01(
                     0.55 * float(phil.get("philosophical/being/agency", 0.50))
@@ -1939,9 +1942,15 @@ class BoardAnchoredBridgeSensors:
 def merge_board_fact_with_chat_sensors(
     board_posture: ChessBoardPosture,
     sensors: ThreeBridgeSensors,
+    *,
+    ground_cultural_on_board: bool = False,
 ) -> BoardAnchoredBridgeSensors:
     """Wrap `ThreeBridgeSensors` so Pass-1 `Fact` is anchored to `board_posture` while `Theory` is scored from text."""
-    return BoardAnchoredBridgeSensors(sensors, board_posture)
+    return BoardAnchoredBridgeSensors(
+        sensors,
+        board_posture,
+        ground_cultural_on_board=ground_cultural_on_board,
+    )
 
 
 def apply_coregulation_lead_to_chord(

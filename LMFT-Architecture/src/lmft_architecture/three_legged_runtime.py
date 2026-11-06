@@ -705,6 +705,11 @@ class SubliminalGapLeftBrain:
         clause_1_prefix: str | None = None,
         conversation_history: Sequence[tuple[str, str]] = (),
         max_context_chars: int = DEFAULT_MAX_CONTEXT_CHARS,
+        chord_builder_at_comma: Callable[
+            [str],
+            SubliminalChordVector | tuple[SubliminalChordVector, str | None, tuple[str, ...]],
+        ]
+        | None = None,
     ) -> tuple[str, SplicedThoughtTrace]:
         """Generate a two-clause `<|subliminal_gap|>` thought and return `(full_thought, trace)`."""
         trace = self.generate_two_clause_thought(
@@ -714,6 +719,7 @@ class SubliminalGapLeftBrain:
             clause_1_prefix=clause_1_prefix,
             conversation_history=conversation_history,
             max_context_chars=max_context_chars,
+            chord_builder_at_comma=chord_builder_at_comma,
         )
         return trace.full_thought, trace
 

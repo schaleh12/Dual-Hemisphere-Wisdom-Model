@@ -818,10 +818,14 @@ class ChessKibitzerRuntime:
                 if msg.get("is_gear_1_fallback") and self._qwen_left_brain is not None:
                     continue
                 c_txt = str(msg.get("clean_reply") or msg.get("text", "")).strip()
-                if " [Board Fact-Check:" in c_txt:
-                    c_txt = c_txt.split(" [Board Fact-Check:", 1)[0].strip()
-                if "\n[Board Fact-Check:" in c_txt:
-                    c_txt = c_txt.split("\n[Board Fact-Check:", 1)[0].strip()
+                for marker in (
+                    " [Board Fact-Check:",
+                    "\n[Board Fact-Check:",
+                    " [Right-Brain Intuition Override:",
+                    "\n[Right-Brain Intuition Override:",
+                ):
+                    if marker in c_txt:
+                        c_txt = c_txt.split(marker, 1)[0].strip()
                 if pending_user and c_txt:
                     pairs.append((pending_user, c_txt))
                     pending_user = None
@@ -1322,6 +1326,7 @@ class ChessKibitzerRuntime:
         *,
         pre_deliberation: tuple[str, Any] | None = None,
         pre_delib_prompt: str | None = None,
+        intuition_override_note: str | None = None,
         is_human_move: bool | None = None,
         skip_spontaneous_left_brain: bool = False,
         is_sparring_opponent_move: bool = False,
@@ -1382,10 +1387,16 @@ class ChessKibitzerRuntime:
             or self.board.is_check()
         )
         conv_history = self._extract_clean_conversation_history()
+        mover_sensors = merge_board_fact_with_chat_sensors(
+            mover_posture,
+            self.sensors,
+            ground_cultural_on_board=True,
+        )
         turn, elapsed_ms, telemetry = self._execute_turn(
             move_desc,
             room="chess",
             force_spoken_reply=has_board_warning and pre_deliberation is None and not skip_spontaneous_left_brain,
+            custom_sensors=mover_sensors,
             include_conversation_history=True,
             skip_left_brain=(pre_deliberation is not None) or skip_spontaneous_left_brain,
         )
@@ -1475,6 +1486,8 @@ class ChessKibitzerRuntime:
             grounding_board,
             move_history_san=grounding_history,
         )
+        if intuition_override_note and intuition_override_note.strip():
+            reply_text = f"{reply_text.strip()} {intuition_override_note.strip()}"
         if is_sparring_opponent_move:
             reply_text = (
                 f"Stockfish 19 ({self.opponent_target_elo:.0f} Elo) played {san_str}. "
@@ -1593,6 +1606,7 @@ class ChessKibitzerRuntime:
         safe_choice_coords: dict[str, float] | None = None
         pre_delib_pair: tuple[str, Any] | None = None
         pre_prompt_used: str | None = None
+        override_note: str | None = None
         top_san_set = {c.san for c in top_candidates[:4]}
 
         # Pre-move `<|subliminal_gap|>` deliberation when the 4B Left Brain is active
@@ -1605,8 +1619,13 @@ class ChessKibitzerRuntime:
                     user_note=f"Choose the soundest move from ({cand_list_str}) and state why.",
                 )
                 pre_prompt_used = pre_prompt
-                pre_sensors = merge_board_fact_with_chat_sensors(self.board_posture, self.sensors)
-                fact_coords, fact_exp, _, _ = pre_sensors.score_text(
+                self.board_posture = evaluate_chess_board_posture(self.board, perspective=self.board.turn)
+                pre_sensors = merge_board_fact_with_chat_sensors(
+                    self.board_posture,
+                    self.sensors,
+                    ground_cultural_on_board=True,
+                )
+                fact_coords, fact_exp, queried_1, skipped_1 = pre_sensors.score_text(
                     pre_prompt,
                     learned_leaves=self.learned_leaves,
                 )
@@ -1619,20 +1638,62 @@ class ChessKibitzerRuntime:
                     event_id=f"pre_move_{self.scene_counter + 1}",
                     prior_memory=self.memory,
                     learned_leaves=self.learned_leaves,
+                    queried_child_leaves=queried_1,
+                    skipped_child_leaves=skipped_1,
                 )
                 pre_chord = SubliminalChordVector.from_right_brain_vibe(
                     pre_vibe,
                     learned_leaves=self.learned_leaves,
                 )
+
+                def _build_pre_move_comma_chord(comma_prefix: str):
+                    c_coords, c_exp, _, _ = pre_sensors.score_text(
+                        comma_prefix,
+                        learned_leaves=self.learned_leaves,
+                    )
+                    raw_c_vibe, _ = compile_right_brain_vibe(
+                        self.birth_state,
+                        fact_coords,
+                        fact_exp,
+                        self.rules,
+                        pass_index=2,
+                        event_id=f"pre_move_{self.scene_counter + 1}_comma",
+                        prior_memory=self.memory,
+                        learned_leaves=self.learned_leaves,
+                        internal_theory_coords=c_coords,
+                        internal_theory_experiential=c_exp,
+                        queried_child_leaves=queried_1,
+                        skipped_child_leaves=skipped_1,
+                    )
+                    c_chord = SubliminalChordVector.from_right_brain_vibe(
+                        raw_c_vibe,
+                        learned_leaves=self.learned_leaves,
+                    )
+                    return (
+                        c_chord,
+                        raw_c_vibe.posture,
+                        raw_c_vibe.self_registry.dissonance_notes,
+                    )
+
                 conv_history = self._extract_clean_conversation_history()
                 with self.gpu_lock:
                     delib_text, delib_trace = self._qwen_left_brain.generate_with_subliminal_splice(
                         pre_prompt,
                         pre_chord,
                         conversation_history=conv_history,
+                        chord_builder_at_comma=_build_pre_move_comma_chord,
                     )
                 pre_delib_pair = (delib_text, delib_trace)
-                mentioned = inspect_chess_moves_in_reply(
+                post_gap_mentioned = (
+                    inspect_chess_moves_in_reply(
+                        delib_trace.post_gap_continuation,
+                        self.board,
+                        move_history_san=self.move_history_san,
+                    )["legal_moves_mentioned"]
+                    if delib_trace is not None and delib_trace.post_gap_continuation
+                    else []
+                )
+                mentioned = post_gap_mentioned or inspect_chess_moves_in_reply(
                     delib_text,
                     self.board,
                     move_history_san=self.move_history_san,
@@ -1641,58 +1702,76 @@ class ChessKibitzerRuntime:
                     left_brain_proposed_san = str(mentioned[0])
                     cand_eval = eval_by_san.get(left_brain_proposed_san)
                     if cand_eval is not None:
-                        is_suboptimal = (
-                            left_brain_proposed_san not in top_san_set
-                            or (right_brain_choice.composite_score - cand_eval.composite_score) > 0.40
-                        )
-                        if (
-                            cand_eval.is_blunder
-                            or cand_eval.is_repetition
-                            or cand_eval.shadow_warnings
-                            or is_suboptimal
-                        ):
-                            selection_mode = "right_brain_blunder_veto_queued_for_sleep"
-                            veto_reason = (
-                                f"Left-Brain proposed {left_brain_proposed_san} "
-                                f"(blunder={cand_eval.is_blunder}, repetition={cand_eval.is_repetition}, "
-                                f"shadows={list(cand_eval.shadow_warnings)}, score={cand_eval.composite_score:.2f}); "
-                                f"Right-Brain played {right_brain_choice.san} (score={right_brain_choice.composite_score:.2f})."
-                            )
-                            if left_brain_proposed_san != right_brain_choice.san:
-                                pre_delib_pair = (
-                                    f"{delib_text.strip()} [Right-Brain Intuition Override: played {right_brain_choice.san} instead of {left_brain_proposed_san}.]",
-                                    delib_trace,
-                                )
-                            try:
-                                us_color = self.board.turn
-                                vetoed_coords, _, _, _, _ = compute_candidate_move_fuzzy_coordinates(
-                                    self.board,
-                                    self.board.parse_san(left_brain_proposed_san),
-                                    perspective=us_color,
-                                    learned_leaves=self.learned_leaves,
-                                    bitboard_sleeve=self.bitboard_sleeve,
-                                )
-                                vetoed_coords["psychological/truth/theory"] = float(cand_eval.theory)
-                                vetoed_coords["psychological/contemplation/confidence"] = float(cand_eval.confidence)
-                                if cand_eval.is_blunder:
-                                    vetoed_coords["cultural/efficiency/wastelessness"] = 0.25
-                                safe_choice_coords, _, _, _, _ = compute_candidate_move_fuzzy_coordinates(
-                                    self.board,
-                                    self.board.parse_san(right_brain_choice.san),
-                                    perspective=us_color,
-                                    learned_leaves=self.learned_leaves,
-                                    bitboard_sleeve=self.bitboard_sleeve,
-                                )
-                                safe_choice_coords["psychological/truth/theory"] = float(right_brain_choice.theory)
-                                safe_choice_coords["psychological/contemplation/confidence"] = float(
-                                    right_brain_choice.confidence
-                                )
-                            except Exception:
-                                vetoed_coords = None
-                                safe_choice_coords = None
-                        else:
+                        if left_brain_proposed_san == right_brain_choice.san:
                             chosen_san = left_brain_proposed_san
                             selection_mode = "left_brain_kibitz_commit"
+                        else:
+                            is_suboptimal = (
+                                left_brain_proposed_san not in top_san_set
+                                or (right_brain_choice.composite_score - cand_eval.composite_score) > 0.40
+                            )
+                            has_new_shadow = bool(
+                                cand_eval.shadow_warnings and not right_brain_choice.shadow_warnings
+                            )
+                            if (
+                                cand_eval.is_blunder
+                                or cand_eval.is_repetition
+                                or has_new_shadow
+                                or is_suboptimal
+                            ):
+                                selection_mode = "right_brain_blunder_veto_queued_for_sleep"
+                                veto_reason = (
+                                    f"Left-Brain proposed {left_brain_proposed_san} "
+                                    f"(blunder={cand_eval.is_blunder}, repetition={cand_eval.is_repetition}, "
+                                    f"shadows={list(cand_eval.shadow_warnings)}, score={cand_eval.composite_score:.2f}); "
+                                    f"Right-Brain played {right_brain_choice.san} (score={right_brain_choice.composite_score:.2f})."
+                                )
+                                override_note = (
+                                    f"[Right-Brain Intuition Override: played {right_brain_choice.san} "
+                                    f"instead of {left_brain_proposed_san}.]"
+                                )
+                                try:
+                                    us_color = self.board.turn
+                                    vetoed_coords, _, _, _, _ = compute_candidate_move_fuzzy_coordinates(
+                                        self.board,
+                                        self.board.parse_san(left_brain_proposed_san),
+                                        perspective=us_color,
+                                        learned_leaves=self.learned_leaves,
+                                        bitboard_sleeve=self.bitboard_sleeve,
+                                    )
+                                    vetoed_coords["psychological/truth/theory"] = float(cand_eval.theory)
+                                    vetoed_coords["psychological/contemplation/confidence"] = float(
+                                        cand_eval.confidence
+                                    )
+                                    vetoed_coords["psychological/contemplation/clarity"] = float(cand_eval.clarity)
+                                    vetoed_coords["psychological/will/execution"] = float(
+                                        cand_eval.execution_bid or cand_eval.composite_score
+                                    )
+                                    if cand_eval.is_blunder:
+                                        vetoed_coords["cultural/efficiency/wastelessness"] = 0.25
+                                    safe_choice_coords, _, _, _, _ = compute_candidate_move_fuzzy_coordinates(
+                                        self.board,
+                                        self.board.parse_san(right_brain_choice.san),
+                                        perspective=us_color,
+                                        learned_leaves=self.learned_leaves,
+                                        bitboard_sleeve=self.bitboard_sleeve,
+                                    )
+                                    safe_choice_coords["psychological/truth/theory"] = float(right_brain_choice.theory)
+                                    safe_choice_coords["psychological/contemplation/confidence"] = float(
+                                        right_brain_choice.confidence
+                                    )
+                                    safe_choice_coords["psychological/contemplation/clarity"] = float(
+                                        right_brain_choice.clarity
+                                    )
+                                    safe_choice_coords["psychological/will/execution"] = float(
+                                        right_brain_choice.execution_bid or right_brain_choice.composite_score
+                                    )
+                                except Exception:
+                                    vetoed_coords = None
+                                    safe_choice_coords = None
+                            else:
+                                chosen_san = left_brain_proposed_san
+                                selection_mode = "left_brain_kibitz_commit"
             except Exception:
                 pass
 
@@ -1701,7 +1780,14 @@ class ChessKibitzerRuntime:
             chosen_san,
             pre_deliberation=pre_delib_pair,
             pre_delib_prompt=pre_prompt_used,
+            intuition_override_note=override_note,
             is_human_move=False,
+        )
+        veto_queued = bool(
+            veto_reason
+            and self.chat_messages
+            and vetoed_coords is not None
+            and float(vetoed_coords.get("cultural/efficiency/wastelessness", 0.72)) <= 0.35
         )
         arbitration_record = {
             "selection_mode": selection_mode,
@@ -1709,23 +1795,17 @@ class ChessKibitzerRuntime:
             "right_brain_top_san": right_brain_choice.san,
             "left_brain_proposed_san": left_brain_proposed_san,
             "veto_reason": veto_reason,
+            "veto_queued_for_sleep": veto_queued,
             "top_candidates": [c.to_dict() for c in top_candidates[:5]],
         }
         self.last_hybrid_move_arbitration = arbitration_record
         if self.last_board_reflex is not None:
             self.last_board_reflex["hybrid_arbitration"] = arbitration_record
-        if (
-            veto_reason
-            and self.chat_messages
-            and (
-                vetoed_coords is not None
-                and float(vetoed_coords.get("cultural/efficiency/wastelessness", 0.72)) <= 0.35
-            )
-        ):
+        if veto_queued:
             last_scene_id = int(self.chat_messages[-1].get("id", self.scene_counter))
             self.flag_turn_for_coaching(
                 last_scene_id,
-                user_note=veto_reason,
+                user_note=veto_reason or "",
                 check_auto_sleep=True,
                 is_hazard=True,
                 override_coordinates=vetoed_coords,
@@ -1836,7 +1916,7 @@ class ChessKibitzerRuntime:
             {
                 "id": telemetry["scene_index"],
                 "sender": "companion",
-                "role_label": "Chess Kibitzer",
+                "role_label": "Celestriad 1.0",
                 "text": reply_text,
                 "clean_reply": raw_reply,
                 "telemetry": telemetry,
@@ -1997,6 +2077,12 @@ class ChessKibitzerRuntime:
         self.move_history_san.clear()
         self.player_move_accuracies.clear()
         self.last_player_coaching = None
+        self.player_elo = 1000.0
+        self.player_wins = 0
+        self.player_losses = 0
+        self.player_draws = 0
+        self.player_games_completed = 0
+        self.last_player_elo_receipt = None
         self._current_game_adjudicated = False
         self._current_human_game_adjudicated = False
         self.last_board_reflex = None
@@ -2226,13 +2312,13 @@ class ChessKibitzerRuntime:
             )
             if self.chat_messages:
                 self.chat_messages[-1].setdefault("telemetry", {})["game_review"] = review
-            already_vetoed = bool(
+            veto_queued = bool(
                 getattr(self, "last_hybrid_move_arbitration", None)
-                and self.last_hybrid_move_arbitration.get("veto_reason")
+                and self.last_hybrid_move_arbitration.get("veto_queued_for_sleep")
             )
             if self.chat_messages:
                 last_scene_id = int(self.chat_messages[-1].get("id", self.scene_counter))
-                if review["should_queue_for_sleep"] and (not already_vetoed or review["is_hazard"]):
+                if review["should_queue_for_sleep"]:
                     self.flag_turn_for_coaching(
                         last_scene_id,
                         user_note=review["annotation_summary"],
@@ -2242,9 +2328,10 @@ class ChessKibitzerRuntime:
                         contrastive_reference_coordinates=review["contrastive_reference_coordinates"],
                         game_review_annotation=review["annotation_summary"],
                     )
-                elif not already_vetoed and not review["should_queue_for_sleep"]:
+                elif not veto_queued:
                     self._hazard_scene_indices.discard(last_scene_id)
                     self.sleep_queue = [s for s in self.sleep_queue if s.scene_index != last_scene_id]
+                self._sync_active_thread_record(persist=True)
             snap = self.get_state_snapshot()
             mover_tag = "LMFT"
         else:
@@ -2667,6 +2754,7 @@ class ChessKibitzerRuntime:
                     for s in queued_snapshot
                 ]
                 self.sleep_queue.clear()
+                self._hazard_scene_indices.clear()
                 self._persist_user_state()
                 if self._is_default_live_state_dir():
                     self.export_master_release_seed()
