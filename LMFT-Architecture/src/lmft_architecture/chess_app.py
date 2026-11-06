@@ -1546,11 +1546,11 @@ class ChessKibitzerRuntime:
         # Opening diversity in early plies among nearly-tied sound moves so self-play explores distinct games
         sound_opening = [
             c
-            for c in top_candidates[:4]
+            for c in top_candidates[:3]
             if not c.is_blunder
             and not c.is_repetition
             and not c.shadow_warnings
-            and (top_candidates[0].composite_score - c.composite_score) <= 0.45
+            and (top_candidates[0].composite_score - c.composite_score) <= 0.06
         ]
         if len(self.move_history_san) < 6 and len(sound_opening) > 1:
             game_idx = int(getattr(self, "games_completed_count", 0))
@@ -1565,7 +1565,7 @@ class ChessKibitzerRuntime:
         vetoed_coords: dict[str, float] | None = None
         safe_choice_coords: dict[str, float] | None = None
         pre_delib_pair: tuple[str, Any] | None = None
-        top_san_set = {c.san for c in top_candidates[:5]}
+        top_san_set = {c.san for c in top_candidates[:3]}
 
         # Pre-move `<|subliminal_gap|>` deliberation when the 4B Left Brain is active
         if self._qwen_left_brain is not None and not self.rem_sleep_in_progress:
@@ -1614,7 +1614,7 @@ class ChessKibitzerRuntime:
                     if cand_eval is not None:
                         is_suboptimal = (
                             left_brain_proposed_san not in top_san_set
-                            or (right_brain_choice.composite_score - cand_eval.composite_score) > 0.65
+                            or (right_brain_choice.composite_score - cand_eval.composite_score) > 0.08
                         )
                         if (
                             cand_eval.is_blunder

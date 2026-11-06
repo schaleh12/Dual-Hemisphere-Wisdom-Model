@@ -151,7 +151,7 @@ def evaluate_chess_board_posture(
     early_queen_out = bool(
         our_queens
         and queen_home_sq not in our_queens
-        and board.fullmove_number <= 7
+        and board.fullmove_number <= 8
         and (developed_bishops + developed_knights) < 3
     )
     queen_moves = [m for m in our_moves if board.piece_type_at(m.from_square) == chess.QUEEN]
@@ -159,17 +159,20 @@ def evaluate_chess_board_posture(
     checking_moves = [m for m in our_moves if check_board.gives_check(m)]
     enemy_half_ranks = range(4, 8) if us == chess.WHITE else range(0, 4)
     forward_attacks = [
-        m for m in our_moves if chess.square_rank(m.to_square) in enemy_half_ranks
+        m
+        for m in our_moves
+        if chess.square_rank(m.to_square) in enemy_half_ranks
+        and not (early_queen_out and board.piece_type_at(m.from_square) == chess.QUEEN)
     ]
     queen_presence = 0.32 if our_queens else 0.08
-    queen_mob_scale = (0.008 + 0.025 * minor_dev_ratio) if board.fullmove_number <= 8 else 0.035
+    queen_mob_scale = 0.0 if early_queen_out else ((0.008 + 0.025 * minor_dev_ratio) if board.fullmove_number <= 8 else 0.035)
     agency = _clamp01(
         queen_presence
         + queen_mob_scale * min(12, len(queen_moves))
         + 0.06 * min(5, len(capture_moves))
         + 0.12 * min(3, len(checking_moves))
         + 0.015 * min(12, len(forward_attacks))
-        - (0.12 if early_queen_out else 0.0)
+        - (0.18 if early_queen_out else 0.0)
     )
 
     # 2. King -> philosophical/being/existence (Cyan / Water: Wellspring of Being & King Shelter)
@@ -243,6 +246,17 @@ def evaluate_chess_board_posture(
             and any(m.from_square == sq and board.is_capture(m) for m in our_moves)
         )
     )
+    blocked_knight_dev = 0
+    if us == chess.WHITE:
+        if chess.G1 in our_knights and board.piece_at(chess.F3) is not None and board.piece_at(chess.F3).color == us and board.piece_type_at(chess.F3) != chess.KNIGHT:
+            blocked_knight_dev += 1
+        if chess.B1 in our_knights and board.piece_at(chess.C3) is not None and board.piece_at(chess.C3).color == us and board.piece_type_at(chess.C3) != chess.KNIGHT:
+            blocked_knight_dev += 1
+    else:
+        if chess.G8 in our_knights and board.piece_at(chess.F6) is not None and board.piece_at(chess.F6).color == us and board.piece_type_at(chess.F6) != chess.KNIGHT:
+            blocked_knight_dev += 1
+        if chess.B8 in our_knights and board.piece_at(chess.C6) is not None and board.piece_at(chess.C6).color == us and board.piece_type_at(chess.C6) != chess.KNIGHT:
+            blocked_knight_dev += 1
     coord_ratio = defended_count / max(1, len(our_non_king_sqs))
     order = _clamp01(
         0.28
@@ -250,7 +264,8 @@ def evaluate_chess_board_posture(
         + 0.06 * min(2, developed_bishops)
         + 0.07 * min(2, active_knights)
         - 0.08 * min(2, rim_knights)
-        - (0.10 if early_queen_out else 0.0)
+        - (0.18 if early_queen_out else 0.0)
+        - 0.12 * blocked_knight_dev
         + 0.03 * min(10, len(bishop_moves))
         + 0.35 * coord_ratio
         - 0.14 * min(3, hanging_count)
@@ -271,8 +286,11 @@ def evaluate_chess_board_posture(
 
     # 5. Pawn -> philosophical/persistence/continuity (Blue / Fire: Connected Phalanx & Flow)
     our_pawns = list(board.pieces(chess.PAWN, us))
+    their_pawns = list(board.pieces(chess.PAWN, them))
     pawn_set = set(our_pawns)
     connected_pawns = 0
+    passed_pawns = 0
+    advanced_passed = 0
     for sq in our_pawns:
         f = chess.square_file(sq)
         r = chess.square_rank(sq)
@@ -284,12 +302,24 @@ def evaluate_chess_board_posture(
         ]
         if any(nsq in pawn_set for nsq in neighbors):
             connected_pawns += 1
+        ahead_ranks = range(r + 1, 8) if us == chess.WHITE else range(0, r)
+        is_passed = not any(
+            abs(chess.square_file(ep) - f) <= 1 and chess.square_rank(ep) in ahead_ranks
+            for ep in their_pawns
+        )
+        if is_passed:
+            passed_pawns += 1
+            rel_r = r if us == chess.WHITE else (7 - r)
+            if rel_r >= 4:
+                advanced_passed += (rel_r - 3)
     center_four = {chess.D4, chess.E4, chess.D5, chess.E5}
     center_pawns = sum(1 for sq in our_pawns if sq in center_four)
     continuity = _clamp01(
         0.24
         + 0.055 * min(8, connected_pawns)
         + 0.12 * min(4, center_pawns)
+        + 0.06 * min(3, passed_pawns)
+        + 0.08 * min(4, advanced_passed)
         + 0.02 * min(8, len(our_pawns))
     )
 
@@ -422,10 +452,15 @@ def extract_bitboard_features(
     if next_board is None:
         nb.push(move)
 
+    promo_bonus = (
+        max(0.0, _PIECE_VALUES.get(move.promotion, 9.0) - 1.0 - float(recapture_loss))
+        if move.promotion
+        else 0.0
+    )
     eff_capture_gain = (
         float(net_capture_gain)
         if net_capture_gain is not None
-        else max(0.0, float(captured_val) - float(recapture_loss) - float(blunder_penalty))
+        else max(0.0, float(captured_val) + promo_bonus - float(recapture_loss) - float(blunder_penalty))
     )
 
     our_mat = sum(
@@ -438,14 +473,22 @@ def extract_bitboard_features(
         for pt, val in _PIECE_VALUES.items()
         if val > 0.0
     )
-    effective_mat_diff = (our_mat - their_mat) - float(recapture_loss)
+    effective_mat_diff = (our_mat - their_mat) - float(recapture_loss) - max(0.0, float(blunder_penalty) - float(recapture_loss))
     material_balance_norm = max(-1.0, min(1.0, effective_mat_diff / 12.0))
+
+    home_rank_bb = chess.BB_RANK_1 if us == chess.WHITE else chess.BB_RANK_8
+    our_minors_bb = nb.pieces_mask(chess.KNIGHT, us) | nb.pieces_mask(chess.BISHOP, us)
+    total_minors = max(1, chess.popcount(our_minors_bb))
+    developed_minors = chess.popcount(our_minors_bb & ~home_rank_bb)
+    piece_type = board.piece_type_at(move.from_square) or chess.PAWN
 
     our_attacks_bb = _union_attacks_bb(nb, us)
     their_attacks_bb = _union_attacks_bb(nb, them)
     our_att_cnt = chess.popcount(our_attacks_bb)
     their_att_cnt = chess.popcount(their_attacks_bb)
     attack_control_share = our_att_cnt / max(1, our_att_cnt + their_att_cnt)
+    if piece_type == chess.QUEEN and board.fullmove_number <= 8 and developed_minors < 3 and eff_capture_gain < 0.8:
+        attack_control_share = max(0.0, attack_control_share - 0.12)
 
     our_center_occ = chess.popcount(nb.occupied_co[us] & chess.BB_CENTER)
     their_center_occ = chess.popcount(nb.occupied_co[them] & chess.BB_CENTER)
@@ -475,30 +518,52 @@ def extract_bitboard_features(
     defended_cnt = chess.popcount(our_non_king_bb & our_attacks_bb)
     piece_coordination_ratio = _clamp01(defended_cnt / non_king_cnt)
 
-    home_rank_bb = chess.BB_RANK_1 if us == chess.WHITE else chess.BB_RANK_8
-    our_minors_bb = nb.pieces_mask(chess.KNIGHT, us) | nb.pieces_mask(chess.BISHOP, us)
-    total_minors = max(1, chess.popcount(our_minors_bb))
-    developed_minors = chess.popcount(our_minors_bb & ~home_rank_bb)
     castled_bonus = 0.25 if (king_sq is not None and chess.square_file(king_sq) in (2, 6)) else 0.0
     development_progress = _clamp01(0.75 * (developed_minors / total_minors) + castled_bonus)
 
     move_net_safety = max(-1.0, min(1.0, 0.45 + 0.28 * eff_capture_gain - 0.48 * blunder_penalty))
 
-    piece_type = board.piece_type_at(move.from_square) or chess.PAWN
     to_bb = chess.BB_SQUARES[move.to_square]
     from_bb = chess.BB_SQUARES[move.from_square]
     to_file = chess.square_file(move.to_square)
+    to_rank = chess.square_rank(move.to_square)
+    rel_rank = to_rank if us == chess.WHITE else (7 - to_rank)
     pos_gain = 0.0
     if board.is_castling(move):
         pos_gain += 0.65
+    if move.promotion:
+        if move.promotion == chess.QUEEN:
+            pos_gain += 0.90
+        elif move.promotion != chess.KNIGHT:
+            pos_gain -= 0.45
     if piece_type == chess.PAWN and (to_bb & chess.BB_CENTER):
         pos_gain += 0.55
     elif piece_type in (chess.KNIGHT, chess.BISHOP) and (from_bb & home_rank_bb) and not (to_bb & home_rank_bb):
         pos_gain += 0.45
+    if piece_type == chess.PAWN and blunder_penalty < 0.5 and not move.promotion:
+        ahead_ranks = range(to_rank + 1, 8) if us == chess.WHITE else range(0, to_rank)
+        their_pawns = list(nb.pieces(chess.PAWN, them))
+        is_passed_push = not any(
+            abs(chess.square_file(ep) - to_file) <= 1 and chess.square_rank(ep) in ahead_ranks
+            for ep in their_pawns
+        )
+        if is_passed_push and rel_rank >= 4:
+            pos_gain += 0.25 * (rel_rank - 3)
     if piece_type == chess.KNIGHT and to_file in (0, 7) and eff_capture_gain < 0.8:
         pos_gain -= 0.40
-    if piece_type == chess.QUEEN and board.fullmove_number <= 7 and developed_minors < 3 and eff_capture_gain < 0.8:
-        pos_gain -= 0.38
+    if piece_type == chess.QUEEN and board.fullmove_number <= 8 and developed_minors < 3 and eff_capture_gain < 0.8:
+        pos_gain -= 0.72
+    if piece_type != chess.KNIGHT and board.fullmove_number <= 10:
+        if us == chess.WHITE and (
+            (move.to_square == chess.F3 and board.piece_at(chess.G1) == chess.Piece(chess.KNIGHT, chess.WHITE))
+            or (move.to_square == chess.C3 and board.piece_at(chess.B1) == chess.Piece(chess.KNIGHT, chess.WHITE))
+        ):
+            pos_gain -= 0.40
+        elif us == chess.BLACK and (
+            (move.to_square == chess.F6 and board.piece_at(chess.G8) == chess.Piece(chess.KNIGHT, chess.BLACK))
+            or (move.to_square == chess.C6 and board.piece_at(chess.B8) == chess.Piece(chess.KNIGHT, chess.BLACK))
+        ):
+            pos_gain -= 0.40
     if piece_type == chess.BISHOP and captured_val > 0.0 and eff_capture_gain <= 0.05 and board.fullmove_number <= 10:
         pos_gain -= 0.28
     if to_bb & _BB_EXTENDED_CENTER:
@@ -844,7 +909,8 @@ def compute_candidate_move_fuzzy_coordinates(
             elif captured_val > 0.0 and placed_val >= captured_val - 0.2:
                 recapture_loss = min(placed_val, captured_val)
 
-    net_capture_gain = max(0.0, captured_val - recapture_loss - blunder_penalty)
+    promo_gain = max(0.0, placed_val - 1.0 - recapture_loss) if move.promotion else 0.0
+    net_capture_gain = max(0.0, captured_val + promo_gain - recapture_loss - blunder_penalty)
 
     for sq, pc in next_board.piece_map().items():
         if pc.color != us or pc.piece_type == chess.KING or sq == move.to_square:
@@ -881,16 +947,54 @@ def compute_candidate_move_fuzzy_coordinates(
                     is_blunder = True
                     blunder_penalty = max(blunder_penalty, sq_loss)
 
-    # Detect immediate 1-ply mate threats on `next_board` (`Qxf2#`, `Nxf2#`, `Qg2#`, `Rd8#`)
+    # Detect immediate 1-ply mate threats, 2-ply forced check-mates (`Rxd1+ Re1 Rxe1#`, `Bd4+ Kh1 Rxf1#`), and royal forks (`Nc2+`)
     for reply in next_board.legal_moves:
         if next_board.gives_check(reply):
             next_board.push(reply)
-            is_mate_reply = next_board.is_checkmate()
-            next_board.pop()
-            if is_mate_reply:
+            if next_board.is_checkmate():
+                next_board.pop()
                 is_blunder = True
                 blunder_penalty = max(blunder_penalty, 9.5)
                 break
+            evasions = list(next_board.legal_moves)
+            if 1 <= len(evasions) <= 3:
+                all_evasions_mated = True
+                for ev in evasions:
+                    next_board.push(ev)
+                    mated_on_ev = False
+                    for m2 in next_board.legal_moves:
+                        if next_board.gives_check(m2):
+                            next_board.push(m2)
+                            if next_board.is_checkmate():
+                                mated_on_ev = True
+                            next_board.pop()
+                            if mated_on_ev:
+                                break
+                    next_board.pop()
+                    if not mated_on_ev:
+                        all_evasions_mated = False
+                        break
+                if all_evasions_mated:
+                    next_board.pop()
+                    is_blunder = True
+                    blunder_penalty = max(blunder_penalty, 9.0)
+                    break
+            # Check if checking piece forks an undefended or higher-value piece while cannot be safely captured
+            can_capture_checker = any(ev.to_square == reply.to_square for ev in evasions)
+            if not can_capture_checker:
+                chk_val = _PIECE_VALUES.get(next_board.piece_type_at(reply.to_square) or chess.PAWN, 1.0)
+                for f_sq in next_board.attacks(reply.to_square):
+                    f_pc = next_board.piece_at(f_sq)
+                    if f_pc is not None and f_pc.color == us and f_pc.piece_type != chess.KING:
+                        f_val = _PIECE_VALUES.get(f_pc.piece_type, 1.0)
+                        if f_val >= 3.0 and (not next_board.is_attacked_by(us, f_sq) or f_val > chk_val + 0.5):
+                            is_blunder = True
+                            blunder_penalty = max(blunder_penalty, max(1.5, f_val - net_capture_gain))
+            next_board.pop()
+        elif placed_val >= 3.0 and not is_blunder and next_board.piece_type_at(reply.from_square) == chess.PAWN and not next_board.is_capture(reply):
+            if move.to_square in chess.SquareSet(chess.BB_PAWN_ATTACKS[them][reply.to_square]):
+                if len(next_board.attackers(them, reply.to_square)) >= len(next_board.attackers(us, reply.to_square)):
+                    blunder_penalty = max(blunder_penalty, 0.75)
 
     post_posture = evaluate_chess_board_posture(next_board, perspective=us)
 
@@ -1009,6 +1113,19 @@ def evaluate_candidate_moves_with_right_brain(
         return []
 
     us = board.turn
+    them = not us
+    our_mat_before = sum(
+        val * chess.popcount(board.pieces_mask(pt, us))
+        for pt, val in _PIECE_VALUES.items()
+        if val > 0.0
+    )
+    their_mat_before = sum(
+        val * chess.popcount(board.pieces_mask(pt, them))
+        for pt, val in _PIECE_VALUES.items()
+        if val > 0.0
+    )
+    mat_lead = our_mat_before - their_mat_before
+    prev_our_move = board.move_stack[-2] if len(board.move_stack) >= 2 else None
     rule_tuple = tuple(rules)
     learned_tuple = tuple(learned_leaves)
     sleeve = bitboard_sleeve if bitboard_sleeve is not None else _DEFAULT_BITBOARD_SLEEVE
@@ -1045,6 +1162,18 @@ def evaluate_candidate_moves_with_right_brain(
             continue
 
         is_rep = next_board.is_repetition(2)
+        is_draw_state = (
+            next_board.is_stalemate()
+            or next_board.is_insufficient_material()
+            or next_board.is_repetition(3)
+        )
+        is_self_reversal = bool(
+            prev_our_move is not None
+            and move.from_square == prev_our_move.to_square
+            and move.to_square == prev_our_move.from_square
+            and not board.is_check()
+            and not board.is_capture(move)
+        )
         coords, is_blunder, blunder_penalty, post_posture, shadow_names = (
             compute_candidate_move_fuzzy_coordinates(
                 board,
@@ -1158,12 +1287,42 @@ def evaluate_candidate_moves_with_right_brain(
             + 0.25 * float(coords.get("philosophical/being/agency", 0.50))
             - 0.25 * float(coords.get("philosophical/structure/chaos", 0.50))
         )
+        conversion_drive = 0.0
+        if not is_blunder:
+            if move.promotion == chess.QUEEN:
+                conversion_drive += 1.25
+            elif move.promotion is not None and move.promotion != chess.KNIGHT:
+                conversion_drive -= 0.65
+            elif board.piece_type_at(move.from_square) == chess.PAWN:
+                to_r = chess.square_rank(move.to_square)
+                rel_r = to_r if us == chess.WHITE else (7 - to_r)
+                if rel_r == 6:
+                    conversion_drive += 0.65
+                elif rel_r == 5 and their_mat_before <= 14.0:
+                    conversion_drive += 0.35
+            if mat_lead >= 2.5 and their_mat_before <= 8.0:
+                enemy_ksq = next_board.king(them)
+                if enemy_ksq is not None:
+                    ek_f = chess.square_file(enemy_ksq)
+                    ek_r = chess.square_rank(enemy_ksq)
+                    edge_dist = min(ek_f, 7 - ek_f) + min(ek_r, 7 - ek_r)
+                    conversion_drive += 0.06 * max(0, 6 - edge_dist)
+                if next_board.is_check() and not is_rep:
+                    conversion_drive += 0.18
+
+        draw_pen = 6.0 if (is_draw_state and mat_lead >= 1.5) else 0.0
+        rep_pen = (3.20 if mat_lead >= 1.5 else 1.80) if is_rep else 0.0
+        reversal_pen = 0.55 if is_self_reversal else 0.0
+
         execution_bid = (
             will_execution_drive
             + contemplation_drive
             + leaf_posture_score
+            + conversion_drive
             - 1.35 * blunder_penalty
-            - (1.80 if is_rep else 0.0)
+            - rep_pen
+            - draw_pen
+            - reversal_pen
         )
         evaluations.append(
             CandidateMoveEvaluation(
@@ -1672,20 +1831,32 @@ class ObjectiveCalibratedSparringEngine:
                         )
                         depth_lim = max(2, min(10, int((clamped_elo - 900.0) / 160.0)))
                         res = eng.play(board, self._chess_engine_mod.Limit(depth=depth_lim, time=0.06))
+                        chosen_move = res.move
                     else:
-                        skill = max(0, min(6, int((clamped_elo - 600.0) / 120.0)))
-                        eng.configure({"Skill Level": skill})
-                        nodes_lim = max(40, int((clamped_elo - 500.0) * 2.0))
-                        depth_lim = max(1, min(4, int((clamped_elo - 500.0) / 220.0)))
-                        res = eng.play(
+                        # Stockfish UCI_Elo minimum is 1320; calibrate <1320 Elo via shallow MultiPV candidate pool
+                        multipv_k = 2 if clamped_elo >= 1150.0 else (4 if clamped_elo >= 950.0 else 6)
+                        infos = eng.analyse(
                             board,
-                            self._chess_engine_mod.Limit(nodes=nodes_lim, depth=depth_lim, time=0.04),
+                            self._chess_engine_mod.Limit(depth=1, time=0.02),
+                            multipv=min(multipv_k, len(legal)),
                         )
-                    if res.move is not None and res.move in board.legal_moves:
-                        san = board.san(res.move)
+                        if isinstance(infos, dict):
+                            infos = [infos]
+                        pv_moves = [
+                            inf["pv"][0]
+                            for inf in infos
+                            if inf.get("pv") and inf["pv"][0] in board.legal_moves
+                        ]
+                        if pv_moves:
+                            pick_idx = (len(board.move_stack) // 2 + board.fullmove_number) % len(pv_moves)
+                            chosen_move = pv_moves[pick_idx]
+                        else:
+                            chosen_move = None
+                    if chosen_move is not None and chosen_move in board.legal_moves:
+                        san = board.san(chosen_move)
                         return {
                             "move_san": san,
-                            "move_uci": res.move.uci(),
+                            "move_uci": chosen_move.uci(),
                             "target_elo": round(clamped_elo, 1),
                             "engine_backend": "stockfish_uci",
                         }
