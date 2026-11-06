@@ -241,9 +241,17 @@ def _ensure_foundational_rules(rules: tuple[FuzzyConceptRule, ...]) -> tuple[Fuz
     foundational_by_id = {r.rule_id: r for r in VIRGIN_FOUNDATIONAL_RULES}
     foundational_by_name = {r.concept_name: r for r in VIRGIN_FOUNDATIONAL_RULES}
     merged: list[FuzzyConceptRule] = list(VIRGIN_FOUNDATIONAL_RULES)
+    seen_learned_sigs: dict[tuple[str, tuple[tuple[str, float], ...]], int] = {}
     for r in rules:
         if r.rule_id in foundational_by_id or r.concept_name in foundational_by_name:
             continue
+        if r.concept_name.startswith(("hazard_", "coached_")):
+            prefix = "hazard" if r.concept_name.startswith("hazard_") else "coached"
+            sig = (prefix, tuple(sorted((k, round(float(v), 4)) for k, v in r.target_leaves.items())))
+            if sig in seen_learned_sigs:
+                merged[seen_learned_sigs[sig]] = r
+                continue
+            seen_learned_sigs[sig] = len(merged)
         merged.append(r)
     return tuple(merged)
 
@@ -262,7 +270,7 @@ def _merge_rulesets(
         base.append(r)
         seen_ids.add(r.rule_id)
         seen_names.add(r.concept_name)
-    return tuple(base)
+    return _ensure_foundational_rules(tuple(base))
 
 
 class ChessKibitzerRuntime:
@@ -377,15 +385,21 @@ class ChessKibitzerRuntime:
 
     def _load_default_rules(self) -> tuple[FuzzyConceptRule, ...]:
         user_ruleset = self.state_dir / "club_ruleset.json"
-        seed_candidates = [
-            self.training_root / rel
-            for rel in (
+        is_live = self._is_default_live_state_dir()
+        seed_rels = (
+            (
                 "outputs/club_user_state/club_ruleset.json",
                 "outputs/rem_sleep_consolidated_ruleset.json",
                 "outputs/sleep_consolidated_ruleset.json",
                 "outputs/continuous_tiered_ruleset.json",
             )
-        ]
+            if is_live
+            else (
+                "outputs/club_user_state/club_ruleset.json",
+                "outputs/continuous_tiered_ruleset.json",
+            )
+        )
+        seed_candidates = [self.training_root / rel for rel in seed_rels]
         user_loaded: tuple[FuzzyConceptRule, ...] = ()
         if user_ruleset.exists():
             try:
@@ -393,7 +407,7 @@ class ChessKibitzerRuntime:
             except Exception:
                 user_loaded = ()
         if user_loaded:
-            if self._is_default_live_state_dir():
+            if is_live:
                 for seed_p in seed_candidates[1:3]:
                     if seed_p.exists():
                         try:
@@ -762,8 +776,9 @@ class ChessKibitzerRuntime:
         rem_seed_path = out_dir / "rem_sleep_consolidated_ruleset.json"
         sleep_seed_path = out_dir / "sleep_consolidated_ruleset.json"
         save_ruleset(rem_seed_path, tuple(self.rules), tuple(self.learned_leaves))
-        save_ruleset(sleep_seed_path, tuple(self.rules), tuple(self.learned_leaves))
-        self.archives.save_all(out_dir / "branch_archives")
+        if target_training_root is not None:
+            save_ruleset(sleep_seed_path, tuple(self.rules), tuple(self.learned_leaves))
+            self.archives.save_all(out_dir / "branch_archives")
         if target_root.resolve() == self.training_root.resolve():
             self.release_manifest = build_release_manifest(self.repo_root, write_to_disk=True)
         return {
@@ -2266,7 +2281,7 @@ class ChessKibitzerRuntime:
                 and s.contrastive_reference_coordinates is None
                 and not s.game_review_annotation
             )
-            if is_uncoached_collision and self._evaluate_sleep_scene_snapshot(s, tuple(active_rules))["settled"]:
+            if is_uncoached_collision:
                 cur_ledger = cur_ledger.record_settled(
                     scene_index=s.scene_index,
                     takeaway_source=f"Resolved rule collision ({s.active_concept_collision}) via sleep threshold refinement.",
@@ -2364,9 +2379,29 @@ class ChessKibitzerRuntime:
                         low=rule_low,
                         high=rule_high,
                     )
-            active_rules.append(new_rule)
-            forged_rules.append(new_rule)
-            existing_names.add(concept_name)
+            dup_idx = next(
+                (
+                    idx
+                    for idx, r in enumerate(active_rules)
+                    if r.concept_name.startswith(f"{prefix}_")
+                    and dict(r.target_leaves) == dict(new_rule.target_leaves)
+                ),
+                None,
+            )
+            if dup_idx is not None:
+                existing_dup = active_rules[dup_idx]
+                active_rules[dup_idx] = FuzzyConceptRule(
+                    rule_id=existing_dup.rule_id,
+                    concept_name=existing_dup.concept_name,
+                    description=new_rule.description,
+                    target_leaves=new_rule.target_leaves,
+                    low=new_rule.low,
+                    high=new_rule.high,
+                )
+            else:
+                active_rules.append(new_rule)
+                forged_rules.append(new_rule)
+                existing_names.add(concept_name)
 
             cult_sig = {k: v for k, v in avg_coords.items() if k.startswith("cultural/")}
             phil_sig = {k: v for k, v in avg_coords.items() if k.startswith("philosophical/")}
