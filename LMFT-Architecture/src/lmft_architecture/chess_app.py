@@ -689,7 +689,7 @@ class ChessKibitzerRuntime:
         self._sync_active_thread_record(persist=True)
         return self.get_state_snapshot()
 
-    def _extract_clean_conversation_history(self) -> tuple[tuple[str, str], ...]:
+    def _extract_clean_conversation_history(self, *, max_turns: int = 8) -> tuple[tuple[str, str], ...]:
         """Extract continuous `(pretext_prompt, clean_reply)` pairs across both user dialogue and self-kibitzing."""
         pairs: list[tuple[str, str]] = []
         pending_user: str | None = None
@@ -710,6 +710,8 @@ class ChessKibitzerRuntime:
                     pending_user = None
                 elif c_txt and msg.get("clean_pretext_prompt"):
                     pairs.append((str(msg["clean_pretext_prompt"]).strip(), c_txt))
+        if max_turns > 0 and len(pairs) > max_turns:
+            return tuple(pairs[-max_turns:])
         return tuple(pairs)
 
     def _persist_user_state(self) -> None:
@@ -1184,6 +1186,7 @@ class ChessKibitzerRuntime:
         *,
         pre_deliberation: tuple[str, Any] | None = None,
         is_human_move: bool | None = None,
+        skip_spontaneous_left_brain: bool = False,
     ) -> dict[str, Any]:
         """Make a move on the chessboard and spontaneously append to the continuous Pretext -> Subtext -> Context stream."""
         raw = move_uci_or_san.strip()
@@ -1241,9 +1244,9 @@ class ChessKibitzerRuntime:
         turn, elapsed_ms, telemetry = self._execute_turn(
             move_desc,
             room="chess",
-            force_spoken_reply=has_board_warning and pre_deliberation is None,
+            force_spoken_reply=has_board_warning and pre_deliberation is None and not skip_spontaneous_left_brain,
             include_conversation_history=True,
-            skip_left_brain=pre_deliberation is not None,
+            skip_left_brain=(pre_deliberation is not None) or skip_spontaneous_left_brain,
         )
 
         self.last_board_reflex = {
@@ -1279,7 +1282,12 @@ class ChessKibitzerRuntime:
                     "spliced_thinker_vector": [round(float(x), 4) for x in delib_trace.spliced_chord.thinker_vector[:8]],
                     "spliced_feeler_vector": [round(float(x), 4) for x in delib_trace.spliced_chord.feeler_vector[:8]],
                 }
-        elif not raw_reply and self._qwen_left_brain is not None and not self.rem_sleep_in_progress:
+        elif (
+            not raw_reply
+            and not skip_spontaneous_left_brain
+            and self._qwen_left_brain is not None
+            and not self.rem_sleep_in_progress
+        ):
             try:
                 with self.gpu_lock:
                     spontaneous_text, spontaneous_trace = self._qwen_left_brain.generate_with_subliminal_splice(
@@ -2179,7 +2187,11 @@ class ChessKibitzerRuntime:
                 self.board,
                 target_elo=self.opponent_target_elo,
             )
-            snap = self.handle_chess_move(opp["move_san"], is_human_move=False)
+            snap = self.handle_chess_move(
+                opp["move_san"],
+                is_human_move=False,
+                skip_spontaneous_left_brain=True,
+            )
             mover_tag = f"SparringEngine({self.opponent_target_elo:.0f})"
 
         if self.board.is_game_over(claim_draw=True) and not getattr(self, "_current_game_adjudicated", False):
@@ -2244,24 +2256,70 @@ class ChessKibitzerRuntime:
         forged_rules: list[FuzzyConceptRule] = []
         harvested_clause_ids: list[str] = []
 
+        cur_archives = self.archives
+        cur_ledger = self.ledger
+
         clusters: dict[tuple[str, bool], list[UnresolvedSleepScene]] = {}
         for s in queued_scenes:
+            is_uncoached_collision = (
+                s.active_concept_collision is not None
+                and s.contrastive_reference_coordinates is None
+                and not s.game_review_annotation
+            )
+            if is_uncoached_collision and self._evaluate_sleep_scene_snapshot(s, tuple(active_rules))["settled"]:
+                cur_ledger = cur_ledger.record_settled(
+                    scene_index=s.scene_index,
+                    takeaway_source=f"Resolved rule collision ({s.active_concept_collision}) via sleep threshold refinement.",
+                    felt_chord=compile_felt_chord(
+                        s.external_coordinates,
+                        salience=s.salience,
+                        valence=s.valence,
+                        arousal=s.arousal,
+                        resonance=0.65,
+                        learned_leaves=tuple(self.learned_leaves),
+                    ),
+                    clarity=0.85,
+                    confidence=0.90,
+                    resolved_uncertainty_scenes=(s.scene_index,),
+                )
+                continue
             ckey = _cluster_key_for_unresolved(s)
             if ckey is not None:
                 is_s_haz = bool(s.is_hazard or s.scene_index in self._hazard_scene_indices)
                 clusters.setdefault((ckey, is_s_haz), []).append(s)
 
-        cur_archives = self.archives
-        cur_ledger = self.ledger
+        calm_book_coords: dict[str, float] = {k: 0.50 for k in FOUNDATIONAL_LEAVES}
+        calm_book_coords.update(
+            {
+                "philosophical/being/existence": 0.83,
+                "philosophical/structure/order": 0.87,
+                "philosophical/being/agency": 0.51,
+                "philosophical/structure/chaos": 0.22,
+                "philosophical/persistence/continuity": 0.86,
+                "philosophical/persistence/discreteness": 0.44,
+                "cultural/efficiency/wastelessness": 0.68,
+                "cultural/freedom/needlessness": 0.09,
+            }
+        )
 
         for (ckey, is_group_hazard), group in clusters.items():
             avg_coords = _average_cluster_coordinates(group)
             avg_ref_coords = _average_contrastive_reference_coordinates(group)
+            if is_group_hazard:
+                avg_coords["cultural/efficiency/wastelessness"] = min(
+                    0.25,
+                    float(avg_coords.get("cultural/efficiency/wastelessness", 0.25)),
+                )
             target_leaves, rule_low, rule_high = normalize_contrastive_target_leaves_and_thresholds(
                 ckey,
                 avg_coords,
                 avg_ref_coords,
             )
+            if is_group_hazard:
+                target_leaves["cultural/efficiency/wastelessness"] = min(
+                    0.25,
+                    float(target_leaves.get("cultural/efficiency/wastelessness", 0.25)),
+                )
             rep = group[0]
             rep_scene = rep.scene_index
 
@@ -2281,6 +2339,31 @@ class ChessKibitzerRuntime:
                 low=rule_low,
                 high=rule_high,
             )
+            if new_rule.tier == 1:
+                probe_coords = dict(calm_book_coords)
+                for req_leaf in new_rule.target_leaves:
+                    probe_coords.setdefault(req_leaf, 0.0)
+                if new_rule.evaluate(probe_coords) >= 0.35:
+                    adjusted_leaves = dict(target_leaves)
+                    if is_group_hazard:
+                        adjusted_leaves["cultural/efficiency/wastelessness"] = 0.20
+                        rule_low = max(rule_low, 0.68)
+                        rule_high = max(rule_high, 0.84)
+                    else:
+                        adjusted_leaves["philosophical/structure/chaos"] = round(
+                            max(0.55, float(avg_coords.get("philosophical/structure/chaos", 0.55))),
+                            2,
+                        )
+                        rule_low = max(rule_low, 0.72)
+                        rule_high = max(rule_high, 0.86)
+                    new_rule = FuzzyConceptRule(
+                        rule_id=new_rule.rule_id,
+                        concept_name=new_rule.concept_name,
+                        description=new_rule.description,
+                        target_leaves=adjusted_leaves,
+                        low=rule_low,
+                        high=rule_high,
+                    )
             active_rules.append(new_rule)
             forged_rules.append(new_rule)
             existing_names.add(concept_name)

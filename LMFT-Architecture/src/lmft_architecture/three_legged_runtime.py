@@ -418,6 +418,41 @@ class SubliminalGapLeftBrain:
                     suppressed.append(int(ids[0]))
         return suppressed
 
+    def _forward_step_with_optional_kv_cache(
+        self,
+        *,
+        cur_embeds: Tensor,
+        step_embeds: Tensor,
+        cur_mask: Tensor,
+        past_key_values: Any = None,
+    ) -> tuple[Tensor, Any]:
+        """Run one autoregressive step using KV-cache + `logits_to_keep=1` when supported, with fallback for stub models."""
+        if past_key_values is not None:
+            try:
+                out = self.model(
+                    inputs_embeds=step_embeds,
+                    attention_mask=cur_mask,
+                    past_key_values=past_key_values,
+                    use_cache=True,
+                )
+                return out.logits[0, -1, :].clone(), getattr(out, "past_key_values", None)
+            except TypeError:
+                pass
+        try:
+            out = self.model(
+                inputs_embeds=cur_embeds,
+                attention_mask=cur_mask,
+                use_cache=True,
+                logits_to_keep=1,
+            )
+        except TypeError:
+            out = self.model(
+                inputs_embeds=cur_embeds,
+                attention_mask=cur_mask,
+                use_cache=True,
+            )
+        return out.logits[0, -1, :].clone(), getattr(out, "past_key_values", None)
+
     @torch.no_grad()
     def generate_clause_1_prefix(
         self,
@@ -434,6 +469,7 @@ class SubliminalGapLeftBrain:
 
         was_training = self.model.training
         self.model.eval()
+        past_kv: Any = None
         try:
             history_prefix = format_sliding_conversation_history(
                 conversation_history,
@@ -462,14 +498,15 @@ class SubliminalGapLeftBrain:
             eos_id = getattr(self.tokenizer, "eos_token_id", None)
             suppressed_ids = self._suppressed_token_ids()
             generated_ids: list[int] = []
+            step_embeds = cur_embeds
 
             for step_idx in range(self.max_clause_1_tokens):
-                out = self.model(
-                    inputs_embeds=cur_embeds,
-                    attention_mask=cur_mask,
-                    use_cache=False,
+                next_logits, past_kv = self._forward_step_with_optional_kv_cache(
+                    cur_embeds=cur_embeds,
+                    step_embeds=step_embeds,
+                    cur_mask=cur_mask,
+                    past_key_values=past_kv,
                 )
-                next_logits = out.logits[0, -1, :].clone()
                 for bad_id in suppressed_ids:
                     if 0 <= bad_id < next_logits.size(0):
                         next_logits[bad_id] = -1e9
@@ -488,7 +525,9 @@ class SubliminalGapLeftBrain:
 
                 next_tok_tensor = torch.tensor([[next_id]], dtype=torch.long, device=self.device)
                 next_embed = embed_layer(next_tok_tensor).to(dtype=embed_dtype)
-                cur_embeds = torch.cat([cur_embeds, next_embed], dim=1)
+                step_embeds = next_embed
+                if past_kv is None:
+                    cur_embeds = torch.cat([cur_embeds, next_embed], dim=1)
                 cur_mask = torch.cat(
                     [cur_mask, torch.ones((1, 1), dtype=torch.long, device=self.device)],
                     dim=1,
@@ -497,6 +536,7 @@ class SubliminalGapLeftBrain:
             raw_clause_1 = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
             return normalize_clause_1_prefix(raw_clause_1)
         finally:
+            past_kv = None
             if was_training:
                 self.model.train()
 
@@ -584,14 +624,16 @@ class SubliminalGapLeftBrain:
             eos_id = getattr(self.tokenizer, "eos_token_id", None)
             suppressed_ids = self._suppressed_token_ids()
             generated_ids: list[int] = []
+            step_embeds = cur_embeds
+            past_kv: Any = None
 
             for step_idx in range(self.max_post_gap_tokens):
-                out = self.model(
-                    inputs_embeds=cur_embeds,
-                    attention_mask=cur_mask,
-                    use_cache=False,
+                next_logits, past_kv = self._forward_step_with_optional_kv_cache(
+                    cur_embeds=cur_embeds,
+                    step_embeds=step_embeds,
+                    cur_mask=cur_mask,
+                    past_key_values=past_kv,
                 )
-                next_logits = out.logits[0, -1, :].clone()
                 for bad_id in suppressed_ids:
                     if 0 <= bad_id < next_logits.size(0):
                         next_logits[bad_id] = -1e9
@@ -613,7 +655,9 @@ class SubliminalGapLeftBrain:
 
                 next_tok_tensor = torch.tensor([[next_id]], dtype=torch.long, device=self.device)
                 next_embed = embed_layer(next_tok_tensor).to(dtype=embed_dtype)
-                cur_embeds = torch.cat([cur_embeds, next_embed], dim=1)
+                step_embeds = next_embed
+                if past_kv is None:
+                    cur_embeds = torch.cat([cur_embeds, next_embed], dim=1)
                 cur_mask = torch.cat(
                     [cur_mask, torch.ones((1, 1), dtype=torch.long, device=self.device)],
                     dim=1,
@@ -635,8 +679,17 @@ class SubliminalGapLeftBrain:
                 comma_scored_live=comma_scored_live,
             )
             self.last_traces.append(trace)
+            if len(self.last_traces) > 50:
+                del self.last_traces[:-50]
             return trace
         finally:
+            past_kv = None
+            if self.device.type == "cuda" and torch.cuda.is_available():
+                try:
+                    if torch.cuda.memory_reserved(self.device) > 11 * (1024**3):
+                        torch.cuda.empty_cache()
+                except Exception:
+                    pass
             if was_model_training:
                 self.model.train()
             if was_proj_training:

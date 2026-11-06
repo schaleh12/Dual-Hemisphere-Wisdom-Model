@@ -481,9 +481,28 @@ def compute_candidate_move_fuzzy_coordinates(
         if not dest_defended_by_us and moving_val > captured_val + 0.5:
             is_blunder = True
             blunder_penalty = moving_val - captured_val
-        elif moving_val - captured_val >= 2.5:
-            is_blunder = True
-            blunder_penalty = 0.65 * (moving_val - captured_val)
+        elif dest_defended_by_us:
+            min_att_val = min(
+                (
+                    _PIECE_VALUES.get(next_board.piece_type_at(a_sq) or chess.PAWN, 1.0)
+                    for a_sq in next_board.attackers(them, move.to_square)
+                    if next_board.piece_type_at(a_sq) != chess.KING
+                ),
+                default=99.0,
+            )
+            if (moving_val - captured_val) - min_att_val >= 1.5:
+                is_blunder = True
+                blunder_penalty = 0.65 * ((moving_val - captured_val) - min_att_val)
+
+    for sq, pc in next_board.piece_map().items():
+        if pc.color != us or pc.piece_type == chess.KING or sq == move.to_square:
+            continue
+        p_val = _PIECE_VALUES.get(pc.piece_type, 1.0)
+        if p_val >= 3.0 and next_board.is_attacked_by(them, sq) and not next_board.is_attacked_by(us, sq):
+            net_unprotected = p_val - captured_val
+            if net_unprotected >= 1.5 and net_unprotected > blunder_penalty:
+                is_blunder = True
+                blunder_penalty = net_unprotected
 
     post_posture = evaluate_chess_board_posture(next_board, perspective=us)
     shadow_names = tuple(w.pathology_name for w in post_posture.board_shadow_warnings)
@@ -1369,6 +1388,14 @@ class ObjectiveCalibratedSparringEngine:
             glyph = ""
             is_hazard = False
             should_queue = False
+            ref_coords = best_coords
+
+        if is_hazard:
+            played_coords["cultural/efficiency/wastelessness"] = 0.25
+            best_coords["cultural/efficiency/wastelessness"] = max(
+                0.72,
+                float(best_coords.get("cultural/efficiency/wastelessness", 0.72)),
+            )
             ref_coords = best_coords
 
         coord_delta: dict[str, float] = {}
