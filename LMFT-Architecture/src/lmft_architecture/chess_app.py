@@ -2031,7 +2031,7 @@ class ChessKibitzerRuntime:
             snap = self.handle_chess_ai_move()
             last_san = self.move_history_san[-1] if self.move_history_san else "?"
             if self.chat_messages:
-                self.chat_messages[-1]["role_label"] = f"Houseplant 1.0 ({lmft_color_name} · after {last_san})"
+                self.chat_messages[-1]["role_label"] = f"Celestriad 1.0 ({lmft_color_name} · after {last_san})"
             review = self.sparring_engine.audit_played_move_for_game_review(
                 board_before,
                 last_san,

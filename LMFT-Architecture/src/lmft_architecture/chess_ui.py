@@ -487,13 +487,13 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
     <!-- Opponent (AI) Top Banner -->
     <div class="player-banner">
       <div class="player-id">
-        <div class="avatar-box" id="top-player-avatar">🪴</div>
+        <div class="avatar-box" id="top-player-avatar">✨</div>
         <div>
-          <div><span id="top-player-name">Houseplant 1.0</span> <small id="top-player-meta" style="color:var(--text-2);font-weight:600;">(40-Node Tree + Qwen3-4B · ⚫ Playing Black)</small></div>
+          <div><span id="top-player-name">Celestriad 1.0</span> <small id="top-player-meta" style="color:var(--text-2);font-weight:600;">(40-Node Tree + Qwen3-4B · ⚫ Playing Black)</small></div>
           <div style="font-size:10px;color:var(--text-2);" id="posture-summary-span">White to move</div>
         </div>
       </div>
-      <span class="pill" id="elo-status-pill" title="Houseplant 1.0 FIDE Elo vs. Strength-Calibrated Stockfish 19">Houseplant Elo: 1000.0 (0W-0L-0D)</span>
+      <span class="pill" id="elo-status-pill" title="Celestriad 1.0 FIDE Elo vs. Strength-Calibrated Stockfish 19">Celestriad Elo: 1000.0 (0W-0L-0D)</span>
     </div>
 
     <!-- Eval Bar + 8x8 Chessboard -->
@@ -900,7 +900,7 @@ function renderState(s) {
   const pEloEl = document.getElementById("player-elo-pill");
 
   const eloData = s.elo || {};
-  const hpEloText = `Houseplant Elo: ${Number(eloData.lmft_elo || 1000).toFixed(1)} (${eloData.wins || 0}W-${eloData.losses || 0}L-${eloData.draws || 0}D · ${lmftColor})`;
+  const hpEloText = `Celestriad Elo: ${Number(eloData.lmft_elo || 1000).toFixed(1)} (${eloData.wins || 0}W-${eloData.losses || 0}L-${eloData.draws || 0}D · ${lmftColor})`;
   const oppTarget = Number(eloData.opponent_target_elo || eloData.lmft_elo || 1000).toFixed(1);
   const sfEloText = `Stockfish 19 Target Elo: ${oppTarget} (${stockfishColor} · Game #${(eloData.games_completed || 0) + 1})`;
   const pBase = Number(eloData.player_elo || 1000).toFixed(1);
@@ -911,22 +911,22 @@ function renderState(s) {
     : `Your Elo: ${pBase} (${eloData.player_wins || 0}W-${eloData.player_losses || 0}L-${eloData.player_draws || 0}D)`;
 
   if (isSelfTrain) {
-    const housePlantOnBottom = (lmftColor === bottomBoardColor);
+    const celestriadOnBottom = (lmftColor === bottomBoardColor);
     const topBadge = topBoardColor === "White" ? "⚪ Playing White" : "⚫ Playing Black";
     const botBadge = bottomBoardColor === "White" ? "⚪ Playing White" : "⚫ Playing Black";
-    if (housePlantOnBottom) {
+    if (celestriadOnBottom) {
       if (topAvatar) topAvatar.textContent = "🐟";
       if (topName) topName.textContent = `Stockfish 19 (${topBadge})`;
       if (topMeta) topMeta.textContent = "(Strength-Calibrated Stockfish 19 Sparring Partner)";
       if (eloEl) eloEl.textContent = sfEloText;
 
-      if (botAvatar) botAvatar.textContent = "🪴";
-      if (botName) botName.textContent = `Houseplant 1.0 (${botBadge})`;
+      if (botAvatar) botAvatar.textContent = "✨";
+      if (botName) botName.textContent = `Celestriad 1.0 (${botBadge})`;
       if (botSubtitle) botSubtitle.textContent = "40-Node Fuzzy Tree + Qwen3-4B (Swaps White/Black Each Game)";
       if (pEloEl) pEloEl.textContent = hpEloText;
     } else {
-      if (topAvatar) topAvatar.textContent = "🪴";
-      if (topName) topName.textContent = `Houseplant 1.0 (${topBadge})`;
+      if (topAvatar) topAvatar.textContent = "✨";
+      if (topName) topName.textContent = `Celestriad 1.0 (${topBadge})`;
       if (topMeta) topMeta.textContent = "(40-Node Fuzzy Tree + Qwen3-4B)";
       if (eloEl) eloEl.textContent = hpEloText;
 
@@ -938,8 +938,8 @@ function renderState(s) {
   } else {
     const humanOnBottom = !boardFlipped;
     if (humanOnBottom) {
-      if (topAvatar) topAvatar.textContent = "🪴";
-      if (topName) topName.textContent = "Houseplant 1.0";
+      if (topAvatar) topAvatar.textContent = "✨";
+      if (topName) topName.textContent = "Celestriad 1.0";
       if (topMeta) topMeta.textContent = "(40-Node Tree + Qwen3-4B · ⚫ Playing Black)";
       if (eloEl) eloEl.textContent = hpEloText;
 
@@ -953,8 +953,8 @@ function renderState(s) {
       if (topMeta) topMeta.textContent = "(Auto-Coached on Every Move)";
       if (eloEl) eloEl.textContent = humanEloText;
 
-      if (botAvatar) botAvatar.textContent = "🪴";
-      if (botName) botName.textContent = "Houseplant 1.0 (⚫ Playing Black)";
+      if (botAvatar) botAvatar.textContent = "✨";
+      if (botName) botName.textContent = "Celestriad 1.0 (⚫ Playing Black)";
       if (botSubtitle) botSubtitle.textContent = "40-Node Fuzzy Tree + Qwen3-4B";
       if (pEloEl) pEloEl.textContent = hpEloText;
     }

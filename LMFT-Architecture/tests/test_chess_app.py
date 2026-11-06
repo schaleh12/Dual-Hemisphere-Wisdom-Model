@@ -749,7 +749,7 @@ def test_master_seed_sync_and_human_player_rating_coaching(tmp_path: Path) -> No
         'id="game-review-tally-box"',
         "playHumanMoveAndAutoReply",
         'isDest ? "legal-dest" : ""',
-        "Houseplant 1.0",
+        "Celestriad 1.0",
         "Stockfish 19 (",
     ):
         assert required_ui_token in CHESS_SINGLE_PAGE_HTML
