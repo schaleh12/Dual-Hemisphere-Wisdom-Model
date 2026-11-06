@@ -1777,14 +1777,30 @@ class ChessKibitzerRuntime:
                         learned_leaves=self.learned_leaves,
                     )
 
+                    latest_comma_vibe_box: dict[str, Any] = {"vibe": pre_vibe}
+
                     def _build_pre_move_comma_chord(comma_prefix: str):
                         c_coords, c_exp, _, _ = pre_sensors.score_text(
                             comma_prefix,
                             learned_leaves=self.learned_leaves,
                         )
+                        rem_now = max(0.0, rem_clock_start - max(0.0, time.perf_counter() - t_ai_start))
+                        live_clock_ratio = max(
+                            0.0,
+                            min(1.0, rem_now / max(1.0, float(self.match_clock_limit_sec))),
+                        )
+                        live_fact_coords = dict(fact_coords)
+                        live_fact_coords["philosophical/persistence/continuity"] = round(
+                            base_cont * live_clock_ratio,
+                            4,
+                        )
+                        live_fact_coords["philosophical/persistence/discreteness"] = round(
+                            1.0 - (1.0 - base_disc) * live_clock_ratio,
+                            4,
+                        )
                         raw_c_vibe, _ = compile_right_brain_vibe(
                             self.birth_state,
-                            fact_coords,
+                            live_fact_coords,
                             fact_exp,
                             self.rules,
                             pass_index=2,
@@ -1796,6 +1812,7 @@ class ChessKibitzerRuntime:
                             queried_child_leaves=queried_1,
                             skipped_child_leaves=skipped_1,
                         )
+                        latest_comma_vibe_box["vibe"] = raw_c_vibe
                         c_chord = SubliminalChordVector.from_right_brain_vibe(
                             raw_c_vibe,
                             learned_leaves=self.learned_leaves,
@@ -1816,6 +1833,17 @@ class ChessKibitzerRuntime:
                         _ = sent_count
                         elapsed_now = time.perf_counter() - t_ai_start
                         if (rem_clock_start - elapsed_now) <= 0.0:
+                            return True
+                        cur_vibe = latest_comma_vibe_box.get("vibe") or pre_vibe
+                        if any(
+                            float(cur_vibe.rule_activations.get(r.concept_name, 0.0)) >= 0.35
+                            and r.concept_name.startswith(("hazard_", "blunder_", "avoid_"))
+                            and (
+                                "philosophical/persistence/continuity" in r.target_leaves
+                                or "philosophical/persistence/discreteness" in r.target_leaves
+                            )
+                            for r in self.rules
+                        ):
                             return True
                         mentioned_now = inspect_chess_moves_in_reply(
                             getattr(trace, "post_gap_continuation", "") or passage_so_far,
