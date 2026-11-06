@@ -612,8 +612,8 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
     </div>
     <div id="chat-messages"></div>
     <div style="display:flex;gap:6px;align-items:center;">
-      <input type="text" id="chat-input" placeholder="Talk to Houseplant 1.0: ask why a move was a blunder, ask for a plan, or chat..." style="flex:1;" onkeydown="if(event.key==='Enter')sendChatMessage()" />
-      <select id="chat-sentences-select" title="How many sentences Houseplant 1.0 speaks when replying">
+      <input type="text" id="chat-input" placeholder="Talk to Celestriad 1.0: ask why a move was a blunder, ask for a plan, or chat..." style="flex:1;" onkeydown="if(event.key==='Enter')sendChatMessage()" />
+      <select id="chat-sentences-select" title="How many sentences Celestriad 1.0 speaks when replying">
         <option value="1" selected>Reply: 1 Sentence</option>
         <option value="2">Reply: 2 Sentences</option>
         <option value="3">Reply: 3 Sentences</option>
@@ -681,7 +681,7 @@ const LEAF_TO_PIECE = {
 };
 let lastRenderedChatSig = "";
 let lastRenderedBoardSig = "";
-let lastRenderedMoveCount = -1;
+let lastRenderedMoveSig = "__init__";
 let selectedSquare = null;
 let currentLegalMovesUci = [];
 let autoSelfPlayTimer = null;
@@ -970,9 +970,9 @@ function renderState(s) {
         turnPill.textContent = "Game Over — Click New Game";
       } else if (isSelfTrain) {
         const whiteToMove = s.board.turn === "w";
-        const isHousePlantTurn = (whiteToMove && lmftColor === "White") || (!whiteToMove && lmftColor === "Black");
-        turnPill.textContent = isHousePlantTurn
-          ? `🔥 Houseplant 1.0 (${lmftColor}) to Move`
+        const isCelestriadTurn = (whiteToMove && lmftColor === "White") || (!whiteToMove && lmftColor === "Black");
+        turnPill.textContent = isCelestriadTurn
+          ? `🔥 Celestriad 1.0 (${lmftColor}) to Move`
           : `🔥 Stockfish 19 (${stockfishColor}) to Move`;
       } else {
         turnPill.textContent = s.board.turn === "w" ? "White to Move — Click a Piece" : "Black to Move — Click a Piece";
@@ -991,8 +991,9 @@ function renderState(s) {
         `Last Move: ${ref.move_san} (${gearBadge}, Clarity=${ref.clarity}, Confidence=${ref.confidence}, ${ref.elapsed_ms} ms)`;
     }
     const sanList = s.board.move_history_san || [];
-    if (sanList.length !== lastRenderedMoveCount) {
-      lastRenderedMoveCount = sanList.length;
+    const moveSig = sanList.join(" ");
+    if (moveSig !== lastRenderedMoveSig) {
+      lastRenderedMoveSig = moveSig;
       let rowsHtml = "";
       for (let i = 0; i < sanList.length; i += 2) {
         const mNum = (i / 2) + 1;

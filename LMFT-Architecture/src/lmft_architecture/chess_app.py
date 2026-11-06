@@ -1431,7 +1431,7 @@ class ChessKibitzerRuntime:
                 {
                     "id": telemetry["scene_index"],
                     "sender": "companion",
-                    "role_label": f"LMFT Kibitzer (after {san_str})",
+                    "role_label": f"Celestriad 1.0 (after {san_str})",
                     "text": reply_text,
                     "clean_reply": raw_reply,
                     "clean_pretext_prompt": move_desc,
