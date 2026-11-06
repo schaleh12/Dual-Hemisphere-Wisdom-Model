@@ -487,13 +487,13 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
     <!-- Opponent (AI) Top Banner -->
     <div class="player-banner">
       <div class="player-id">
-        <div class="avatar-box">🤖</div>
+        <div class="avatar-box" id="top-player-avatar">🪴</div>
         <div>
-          <div>LMFT_Grandmaster <small style="color:var(--text-2);font-weight:600;">(40-Node Tree + Qwen3-4B)</small></div>
+          <div><span id="top-player-name">HousePlant 1.0</span> <small id="top-player-meta" style="color:var(--text-2);font-weight:600;">(40-Node Tree + Qwen3-4B · ⚫ Playing Black)</small></div>
           <div style="font-size:10px;color:var(--text-2);" id="posture-summary-span">White to move</div>
         </div>
       </div>
-      <span class="pill" id="elo-status-pill" title="Objective FIDE Elo vs. Strength-Calibrated Sparring Engine">Elo: 1000.0 (0W-0L-0D)</span>
+      <span class="pill" id="elo-status-pill" title="HousePlant 1.0 FIDE Elo vs. Strength-Calibrated Stockfish">HousePlant Elo: 1000.0 (0W-0L-0D)</span>
     </div>
 
     <!-- Eval Bar + 8x8 Chessboard -->
@@ -505,16 +505,16 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
       <div class="board-frame" id="chessboard-grid"></div>
     </div>
 
-    <!-- Human Player Bottom Banner -->
+    <!-- Human Player / Stockfish Sparring Partner Bottom Banner -->
     <div class="player-banner">
       <div class="player-id">
-        <div class="avatar-box">👤</div>
+        <div class="avatar-box" id="bottom-player-avatar">👤</div>
         <div>
-          <div>You <small style="color:var(--chess-green);font-weight:700;" id="turn-indicator-pill">Your Turn — Click a Piece to Play</small></div>
-          <div style="font-size:10px;color:var(--text-2);">Auto-Coached on Every Move (!! / ! / ? / ??)</div>
+          <div><span id="bottom-player-name">You (⚪ Playing White)</span> <small style="color:var(--chess-green);font-weight:700;" id="turn-indicator-pill">Your Turn — Click a Piece to Play</small></div>
+          <div style="font-size:10px;color:var(--text-2);" id="bottom-player-subtitle">Auto-Coached on Every Move (!! / ! / ? / ??)</div>
         </div>
       </div>
-      <span class="pill" id="player-elo-pill" style="border-color:var(--chess-green);color:#d9f99d;" title="Your Assigned Player Elo &amp; Live Move Accuracy">Your Elo: 1000.0</span>
+      <span class="pill" id="player-elo-pill" style="border-color:var(--chess-green);color:#d9f99d;" title="Assigned Player Elo or Stockfish Target Elo">Your Elo: 1000.0</span>
     </div>
 
     <div id="board-reflex-strip">Ready — Click any piece on the board to play against LMFT, or click [Self-Train (AFK Oven)].</div>
@@ -707,7 +707,8 @@ function activatePlayVsAiMode() {
   const playBtn = document.getElementById("mode-play-vs-ai-btn");
   if (playBtn) playBtn.classList.add("btn-mode-active");
   const strip = document.getElementById("board-reflex-strip");
-  if (strip) strip.textContent = "Play vs. AI Mode Active — Click any piece on the board and LMFT will reply automatically.";
+  if (strip) strip.textContent = "Play vs. HousePlant 1.0 Active — Click any piece on the board and HousePlant 1.0 will reply automatically.";
+  pollState();
 }
 
 function flipChessBoard() {
@@ -882,19 +883,59 @@ function renderColorBars(posture) {
 function renderState(s) {
   if (!s) return;
   document.getElementById("model-status-pill").textContent = s.left_brain_status || "Qwen3-4B";
+  const isSelfTrain = !!autoSelfPlayTimer;
+  const lmftColor = (s.elo && s.elo.lmft_color) || "White";
+  const stockfishColor = lmftColor === "White" ? "Black" : "White";
+  const lmftColorBadge = lmftColor === "White" ? "⚪ Playing White" : "⚫ Playing Black";
+  const stockfishColorBadge = stockfishColor === "White" ? "⚪ Playing White" : "⚫ Playing Black";
+
+  const topAvatar = document.getElementById("top-player-avatar");
+  const topName = document.getElementById("top-player-name");
+  const topMeta = document.getElementById("top-player-meta");
+  const botAvatar = document.getElementById("bottom-player-avatar");
+  const botName = document.getElementById("bottom-player-name");
+  const botSubtitle = document.getElementById("bottom-player-subtitle");
+
+  if (topAvatar) topAvatar.textContent = "🪴";
+  if (topName) topName.textContent = "HousePlant 1.0";
+  if (topMeta) {
+    topMeta.textContent = isSelfTrain
+      ? `(${lmftColorBadge} · 40-Node Tree + Qwen3-4B)`
+      : `(40-Node Tree + Qwen3-4B · ${boardFlipped ? "⚪ Playing White" : "⚫ Playing Black"})`;
+  }
+
+  if (isSelfTrain) {
+    if (botAvatar) botAvatar.textContent = "🐟";
+    if (botName) botName.textContent = `Stockfish (${stockfishColorBadge})`;
+    if (botSubtitle) {
+      botSubtitle.textContent = "Strength-Calibrated Stockfish Sparring Partner (Alternates White/Black Each Game)";
+    }
+  } else {
+    if (botAvatar) botAvatar.textContent = "👤";
+    if (botName) botName.textContent = `You (${boardFlipped ? "⚫ Playing Black" : "⚪ Playing White"})`;
+    if (botSubtitle) {
+      botSubtitle.textContent = "Auto-Coached on Every Move (!! / ! / ? / ??)";
+    }
+  }
+
   if (s.elo) {
     const eloEl = document.getElementById("elo-status-pill");
     if (eloEl) {
-      eloEl.textContent = `Elo: ${Number(s.elo.lmft_elo || 1000).toFixed(1)} (${s.elo.wins || 0}W-${s.elo.losses || 0}L-${s.elo.draws || 0}D · ${s.elo.lmft_color || "White"})`;
+      eloEl.textContent = `HousePlant Elo: ${Number(s.elo.lmft_elo || 1000).toFixed(1)} (${s.elo.wins || 0}W-${s.elo.losses || 0}L-${s.elo.draws || 0}D · ${lmftColor})`;
     }
     const pEloEl = document.getElementById("player-elo-pill");
     if (pEloEl) {
-      const pBase = Number(s.elo.player_elo || 1000).toFixed(1);
-      const pAcc = s.elo.player_game_accuracy_pct;
-      const pEst = Number(s.elo.player_estimated_game_elo || s.elo.player_elo || 1000).toFixed(0);
-      pEloEl.textContent = pAcc != null
-        ? `Your Elo: ${pBase} · Acc: ${Number(pAcc).toFixed(0)}% (Est. ${pEst})`
-        : `Your Elo: ${pBase} (${s.elo.player_wins || 0}W-${s.elo.player_losses || 0}L-${s.elo.player_draws || 0}D)`;
+      if (isSelfTrain) {
+        const oppTarget = Number(s.elo.opponent_target_elo || s.elo.lmft_elo || 1000).toFixed(1);
+        pEloEl.textContent = `Stockfish Target Elo: ${oppTarget} (${stockfishColor} · Game #${(s.elo.games_completed || 0) + 1})`;
+      } else {
+        const pBase = Number(s.elo.player_elo || 1000).toFixed(1);
+        const pAcc = s.elo.player_game_accuracy_pct;
+        const pEst = Number(s.elo.player_estimated_game_elo || s.elo.player_elo || 1000).toFixed(0);
+        pEloEl.textContent = pAcc != null
+          ? `Your Elo: ${pBase} · Acc: ${Number(pAcc).toFixed(0)}% (Est. ${pEst})`
+          : `Your Elo: ${pBase} (${s.elo.player_wins || 0}W-${s.elo.player_losses || 0}L-${s.elo.player_draws || 0}D)`;
+      }
     }
   }
   document.getElementById("rules-count-pill").textContent = "Rules: " + (s.rules_count || 0);
@@ -906,8 +947,12 @@ function renderState(s) {
     if (turnPill && turnPill.textContent !== "LMFT Thinking & Kibitzing...") {
       if (s.board.is_game_over) {
         turnPill.textContent = "Game Over — Click New Game";
-      } else if (autoSelfPlayTimer) {
-        turnPill.textContent = "Self-Train Oven Active";
+      } else if (isSelfTrain) {
+        const whiteToMove = s.board.turn === "w";
+        const isHousePlantTurn = (whiteToMove && lmftColor === "White") || (!whiteToMove && lmftColor === "Black");
+        turnPill.textContent = isHousePlantTurn
+          ? `🔥 HousePlant 1.0 (${lmftColor}) to Move`
+          : `🔥 Stockfish (${stockfishColor}) to Move`;
       } else {
         turnPill.textContent = s.board.turn === "w" ? "White to Move — Click a Piece" : "Black to Move — Click a Piece";
       }
@@ -1049,11 +1094,13 @@ function toggleAutoSelfPlay() {
     btn.classList.remove("btn-oven-active");
     btn.innerHTML = `<span>🔥 2. Self-Train</span><small>AFK Spar &amp; REM Sleep</small>`;
     if (playBtn) playBtn.classList.add("btn-mode-active");
+    pollState();
     return;
   }
   if (playBtn) playBtn.classList.remove("btn-mode-active");
   btn.classList.add("btn-oven-active");
   btn.innerHTML = `<span>⏹ Stop Self-Train</span><small>Oven Running...</small>`;
+  pollState();
   stepSelfPlayOnce();
   autoSelfPlayTimer = setInterval(stepSelfPlayOnce, 2200);
 }

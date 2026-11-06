@@ -2219,10 +2219,15 @@ class ChessKibitzerRuntime:
         lmft_color = chess.WHITE if self.lmft_playing_white else chess.BLACK
         is_lmft_turn = self.board.turn == lmft_color
 
+        lmft_color_name = "White" if self.lmft_playing_white else "Black"
+        stockfish_color_name = "Black" if self.lmft_playing_white else "White"
+
         if is_lmft_turn:
             board_before = self.board.copy()
             snap = self.handle_chess_ai_move()
             last_san = self.move_history_san[-1] if self.move_history_san else "?"
+            if self.chat_messages:
+                self.chat_messages[-1]["role_label"] = f"HousePlant 1.0 ({lmft_color_name} · after {last_san})"
             review = self.sparring_engine.audit_played_move_for_game_review(
                 board_before,
                 last_san,
@@ -2250,7 +2255,7 @@ class ChessKibitzerRuntime:
                     contrastive_reference_coordinates=review["contrastive_reference_coordinates"],
                     game_review_annotation=review["annotation_summary"],
                 )
-                snap = self.get_state_snapshot()
+            snap = self.get_state_snapshot()
             mover_tag = "LMFT"
         else:
             opp = self.sparring_engine.select_sparring_opponent_move(
@@ -2262,6 +2267,9 @@ class ChessKibitzerRuntime:
                 is_human_move=False,
                 skip_spontaneous_left_brain=True,
             )
+            if self.chat_messages:
+                self.chat_messages[-1]["role_label"] = f"Stockfish ({stockfish_color_name} · after {opp['move_san']})"
+            snap = self.get_state_snapshot()
             mover_tag = f"SparringEngine({self.opponent_target_elo:.0f})"
 
         if self.board.is_game_over(claim_draw=True) and not getattr(self, "_current_game_adjudicated", False):

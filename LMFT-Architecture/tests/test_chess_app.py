@@ -749,8 +749,11 @@ def test_master_seed_sync_and_human_player_rating_coaching(tmp_path: Path) -> No
         'id="game-review-tally-box"',
         "playHumanMoveAndAutoReply",
         'isDest ? "legal-dest" : ""',
+        "HousePlant 1.0",
+        "Stockfish (",
     ):
         assert required_ui_token in CHESS_SINGLE_PAGE_HTML
+    assert "LMFT_Grandmaster" not in CHESS_SINGLE_PAGE_HTML
 
     # 7. When LMFT delivers checkmate on its AI turn (`Qh4#` in Fool's Mate), `handle_chess_ai_move`
     #    automatically adjudicates the human's loss and updates `player_elo` and `player_losses`
