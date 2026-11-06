@@ -562,7 +562,7 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
     </div>
 
     <!-- PGN Move List Table -->
-    <div style="flex:1;min-height:110px;max-height:185px;overflow-y:auto;background:var(--bg-0);border:1px solid var(--border);border-radius:6px;padding:6px;font-size:12px;">
+    <div id="pgn-move-table-scroll" style="flex:1;min-height:220px;overflow-y:auto;background:var(--bg-0);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:12.5px;">
       <table style="width:100%;border-collapse:collapse;">
         <tbody id="pgn-move-table-body"></tbody>
       </table>
@@ -597,7 +597,7 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
         <strong>Game &amp; Study Threads</strong>
         <button class="btn" style="padding:2px 7px;font-size:10px;" onclick="createNewThread()">+ New</button>
       </div>
-      <div id="thread-list-container" style="display:flex;flex-direction:column;gap:4px;"></div>
+      <div id="thread-list-container" style="display:flex;flex-direction:column;gap:4px;max-height:72px;overflow-y:auto;"></div>
     </div>
   </section>
 
@@ -681,6 +681,7 @@ const LEAF_TO_PIECE = {
 };
 let lastRenderedChatSig = "";
 let lastRenderedBoardSig = "";
+let lastRenderedMoveCount = -1;
 let selectedSquare = null;
 let currentLegalMovesUci = [];
 let autoSelfPlayTimer = null;
@@ -990,12 +991,27 @@ function renderState(s) {
         `Last Move: ${ref.move_san} (${gearBadge}, Clarity=${ref.clarity}, Confidence=${ref.confidence}, ${ref.elapsed_ms} ms)`;
     }
     const sanList = s.board.move_history_san || [];
-    let rowsHtml = "";
-    for (let i = 0; i < sanList.length; i += 2) {
-      const mNum = (i / 2) + 1;
-      rowsHtml += `<tr><td style="color:var(--text-2);width:34px;padding:2px 4px;">${mNum}.</td><td style="padding:2px 4px;font-weight:700;">${escapeHtml(sanList[i])}</td><td style="padding:2px 4px;font-weight:700;">${escapeHtml(sanList[i+1] || "")}</td></tr>`;
+    if (sanList.length !== lastRenderedMoveCount) {
+      lastRenderedMoveCount = sanList.length;
+      let rowsHtml = "";
+      for (let i = 0; i < sanList.length; i += 2) {
+        const mNum = (i / 2) + 1;
+        const wLatest = (i === sanList.length - 1);
+        const bLatest = (i + 1 === sanList.length - 1);
+        const wStyle = wLatest
+          ? "padding:3px 6px;font-weight:800;background:rgba(129,182,76,0.25);border-radius:4px;color:#fff;"
+          : "padding:3px 6px;font-weight:700;";
+        const bStyle = bLatest
+          ? "padding:3px 6px;font-weight:800;background:rgba(129,182,76,0.25);border-radius:4px;color:#fff;"
+          : "padding:3px 6px;font-weight:700;";
+        rowsHtml += `<tr><td style="color:var(--text-2);width:36px;padding:3px 4px;">${mNum}.</td><td style="${wStyle}">${escapeHtml(sanList[i])}</td><td style="${bStyle}">${escapeHtml(sanList[i+1] || "")}</td></tr>`;
+      }
+      document.getElementById("pgn-move-table-body").innerHTML = rowsHtml;
+      const pgnScrollBox = document.getElementById("pgn-move-table-scroll");
+      if (pgnScrollBox) {
+        pgnScrollBox.scrollTop = pgnScrollBox.scrollHeight;
+      }
     }
-    document.getElementById("pgn-move-table-body").innerHTML = rowsHtml;
   }
 
   const threadBox = document.getElementById("thread-list-container");
