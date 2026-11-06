@@ -136,3 +136,40 @@ def test_architecture_folder_isolation_and_read_only_boundary(tmp_path: Path) ->
     assert runtime._maybe_trigger_auto_rem_sleep() is False
     after_manifest = verify_virgin_baseline_snapshot()
     assert after_manifest == before_manifest
+
+
+def test_zero_hallucinated_leaf_paths_across_codebase() -> None:
+    """Scan all `src/lmft_architecture/*.py` files to prevent hallucinated leaf IDs (e.g. `hesitation`, `faith`, `time/continuity`)."""
+    import re
+    from lmft_architecture.birth import create_birth_state
+    from lmft_architecture.neural_bridge_classifiers import DEFAULT_COMPLEX_FEELING_LEAVES
+    from lmft_architecture.philosophical_abstraction_matrix import PHILOSOPHICAL_SHADOW_LEAVES
+    from lmft_architecture.reflection_classifier import is_valid_leaf_id
+    from lmft_architecture.workspace_paths import resolve_arch_root
+
+    birth = load_virgin_baseline_state().birth_state
+    founding_leaves = {n.id for n in birth.nodes if n.id.count("/") == 2}
+    assert len(founding_leaves) == 24
+
+    allowed_leaves = (
+        founding_leaves
+        | {l.leaf_id for l in PHILOSOPHICAL_SHADOW_LEAVES}
+        | {l.leaf_id for l in DEFAULT_COMPLEX_FEELING_LEAVES}
+        | {l.leaf_id for l in VIRGIN_STRUCTURAL_LEAVES}
+    )
+    leaf_literal_re = re.compile(
+        r"[\"']((?:cultural|philosophical|experiential|psychological)/[a-z0-9_-]+/[a-z0-9_-]+)[\"']"
+    )
+    src_dir = resolve_arch_root() / "src" / "lmft_architecture"
+    invalid_literals: list[tuple[str, str]] = []
+    for py_file in sorted(src_dir.glob("*.py")):
+        if py_file.name == "migration.py":
+            continue
+        text = py_file.read_text(encoding="utf-8")
+        for m in leaf_literal_re.finditer(text):
+            cand = m.group(1)
+            if cand not in allowed_leaves:
+                invalid_literals.append((py_file.name, cand))
+
+    assert invalid_literals == [], f"Hallucinated or invalid leaf paths found in src: {invalid_literals}"
+
