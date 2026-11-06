@@ -1211,7 +1211,7 @@ class ObjectiveCalibratedSparringEngine:
     def audit_played_move_for_game_review(
         self,
         board_before: chess.Board,
-        played_move_san: str,
+        played_move_san: str | chess.Move,
         *,
         perspective: chess.Color | None = None,
         learned_leaves: Sequence[LearnedLeaf] = (),
@@ -1232,11 +1232,22 @@ class ObjectiveCalibratedSparringEngine:
         if not legal:
             raise ValueError("No legal moves on board_before for post-move review.")
 
-        try:
-            played_move = board_before.parse_san(played_move_san)
-        except Exception:
-            played_move = legal[0]
+        if isinstance(played_move_san, chess.Move):
+            played_move = played_move_san if played_move_san in legal else legal[0]
             played_move_san = board_before.san(played_move)
+        else:
+            raw_mv = str(played_move_san).strip()
+            try:
+                played_move = board_before.parse_san(raw_mv)
+                played_move_san = board_before.san(played_move)
+            except Exception:
+                try:
+                    cand_mv = chess.Move.from_uci(raw_mv)
+                    played_move = cand_mv if cand_mv in legal else legal[0]
+                    played_move_san = board_before.san(played_move)
+                except Exception:
+                    played_move = legal[0]
+                    played_move_san = board_before.san(played_move)
 
         learned_tuple = tuple(learned_leaves)
         played_coords, played_is_blunder, played_b_pen, _p_post, _p_shad = (

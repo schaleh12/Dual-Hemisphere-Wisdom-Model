@@ -1212,7 +1212,7 @@ class ChessKibitzerRuntime:
         if human_turn:
             human_review = self.sparring_engine.audit_played_move_for_game_review(
                 board_before,
-                move,
+                san_str,
                 perspective=mover_color,
                 learned_leaves=self.learned_leaves,
             )
@@ -1502,6 +1502,7 @@ class ChessKibitzerRuntime:
             except Exception:
                 pass
 
+        ai_mover_color = self.board.turn
         snap = self.handle_chess_move(
             chosen_san,
             pre_deliberation=pre_delib_pair,
@@ -1529,6 +1530,13 @@ class ChessKibitzerRuntime:
                 contrastive_reference_coordinates=safe_choice_coords,
                 game_review_annotation=veto_reason,
             )
+            snap = self.get_state_snapshot()
+        if (
+            self.player_move_accuracies
+            and self.board.is_game_over(claim_draw=True)
+            and not getattr(self, "_current_human_game_adjudicated", False)
+        ):
+            self.adjudicate_human_game_outcome(human_color=not ai_mover_color)
             snap = self.get_state_snapshot()
         snap["last_hybrid_move_arbitration"] = arbitration_record
         return snap

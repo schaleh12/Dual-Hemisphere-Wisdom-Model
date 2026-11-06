@@ -729,6 +729,21 @@ def test_master_seed_sync_and_human_player_rating_coaching(tmp_path: Path) -> No
     assert player_runtime.player_elo == 1012.0
     assert player_runtime.player_wins == 1
 
+    # 5. Human plays a non-first legal move (`e4`, whereas `legal[0]` is `Nh3`) and coaching grades `e4`
+    player_runtime.handle_set_fen("start")
+    snap_e4 = player_runtime.handle_chess_move("e4")
+    assert snap_e4["elo"]["last_player_coaching"]["played_san"] == "e4"
+
+    # 6. When LMFT delivers checkmate on its AI turn (`Qh4#` in Fool's Mate), `handle_chess_ai_move`
+    #    automatically adjudicates the human's loss and updates `player_elo` and `player_losses`
+    player_runtime.handle_set_fen("rnbqkbnr/pppp1ppp/8/4p3/8/5P2/PPPPP1PP/RNBQKBNR w KQkq - 0 2")
+    player_runtime.handle_chess_move("g4")
+    player_runtime.handle_chess_ai_move()
+    assert player_runtime.board.is_checkmate() is True
+    assert player_runtime.player_losses == 1
+    assert player_runtime.player_elo < 1012.0
+
+
 
 
 
