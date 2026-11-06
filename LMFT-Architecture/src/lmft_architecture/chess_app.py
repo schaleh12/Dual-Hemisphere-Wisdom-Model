@@ -2530,15 +2530,19 @@ def create_chess_http_server(
             body = json.dumps(payload).encode("utf-8")
             self.send_response(int(status))
             self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+            self.send_header("Pragma", "no-cache")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
 
         def do_GET(self) -> None:  # noqa: N802
-            if self.path in ("/", "/index.html"):
+            if self.path in ("/", "/index.html") or self.path.startswith("/?") or self.path.startswith("/index.html?"):
                 body = CHESS_SINGLE_PAGE_HTML.encode("utf-8")
                 self.send_response(int(HTTPStatus.OK))
                 self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+                self.send_header("Pragma", "no-cache")
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
                 self.wfile.write(body)
@@ -2745,13 +2749,14 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         if not args.no_browser:
+            window_url = f"{url}/?v={int(time.time())}"
             if launch_native_pywebview_window(
                 "LMFT-Chess — Simultaneous Integration & Self-Kibitzer Arena (Qwen3-4B)",
-                url,
+                window_url,
             ):
                 return 0
             t0 = time.time()
-            window_proc = launch_chess_desktop_window(url)
+            window_proc = launch_chess_desktop_window(window_url)
             if (args.single_window or sys.executable.lower().endswith("pythonw.exe")) and window_proc is not None:
                 window_proc.wait()
                 # If Edge handed off to an existing background broker process in < 3s, keep server alive
