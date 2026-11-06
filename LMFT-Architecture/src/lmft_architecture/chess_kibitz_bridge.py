@@ -1311,7 +1311,8 @@ class ObjectiveCalibratedSparringEngine:
         )
 
         # Find the second-best move (for `!`/`!!` edge detection) AND an inferior move (for REM Sleep coordinate contrast)
-        second_best_cp = best_cp
+        static_played_cp = _static_centipawns_for_color(board_after_played, us) - (100.0 * played_b_pen)
+        second_best_cp = static_played_cp
         for est_cp, mv, _san, _is_b in scored_alternatives:
             if mv != played_move:
                 second_best_cp = est_cp
@@ -1329,7 +1330,6 @@ class ObjectiveCalibratedSparringEngine:
             learned_leaves=learned_tuple,
         )
 
-        static_played_cp = _static_centipawns_for_color(board_after_played, us) - (100.0 * played_b_pen)
         cp_drop = round(max(0.0, cp_before - cp_after, best_cp - cp_after), 1)
         cp_gain = round(cp_after - cp_before, 1)
         cp_edge_over_alt = round(static_played_cp - second_best_cp, 1)

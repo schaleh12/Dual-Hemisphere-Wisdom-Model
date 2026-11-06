@@ -748,6 +748,7 @@ def test_master_seed_sync_and_human_player_rating_coaching(tmp_path: Path) -> No
         'id="tutorial-modal-overlay"',
         'id="game-review-tally-box"',
         "playHumanMoveAndAutoReply",
+        'isDest ? "legal-dest" : ""',
     ):
         assert required_ui_token in CHESS_SINGLE_PAGE_HTML
 

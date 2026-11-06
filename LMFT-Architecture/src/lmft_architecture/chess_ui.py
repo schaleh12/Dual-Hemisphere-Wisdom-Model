@@ -816,7 +816,7 @@ function renderBoard(boardState) {
         isLight ? "light" : "dark",
         isSel ? "selected" : "",
         isLast ? "last-move" : "",
-        isDest ? "legal-dest"
+        isDest ? "legal-dest" : ""
       ].filter(Boolean).join(" ");
       const rankLabel = dc === 0 ? `<span class="coord-rank">${rankNum}</span>` : "";
       const fileLabel = dr === 7 ? `<span class="coord-file">${files[c]}</span>` : "";
@@ -902,6 +902,16 @@ function renderState(s) {
 
   if (s.board) {
     renderBoard(s.board);
+    const turnPill = document.getElementById("turn-indicator-pill");
+    if (turnPill && turnPill.textContent !== "LMFT Thinking & Kibitzing...") {
+      if (s.board.is_game_over) {
+        turnPill.textContent = "Game Over — Click New Game";
+      } else if (autoSelfPlayTimer) {
+        turnPill.textContent = "Self-Train Oven Active";
+      } else {
+        turnPill.textContent = s.board.turn === "w" ? "White to Move — Click a Piece" : "Black to Move — Click a Piece";
+      }
+    }
     if (s.board.posture) {
       document.getElementById("posture-summary-span").textContent = s.board.posture.board_summary || "";
       renderColorBars(s.board.posture);
