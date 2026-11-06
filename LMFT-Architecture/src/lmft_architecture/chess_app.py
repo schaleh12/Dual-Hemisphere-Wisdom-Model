@@ -1464,13 +1464,14 @@ class ChessKibitzerRuntime:
             except Exception:
                 raw_reply = None
 
+        gear_1_posture_note = self._synthesize_gear_1_note(
+            turn,
+            room="chess",
+            board_posture=mover_posture,
+        )
         if not raw_reply:
             is_gear_1_fallback = True
-            raw_reply = self._synthesize_gear_1_note(
-                turn,
-                room="chess",
-                board_posture=mover_posture,
-            )
+            raw_reply = gear_1_posture_note
 
         grounding_board = board_before if pre_deliberation is not None else self.board
         grounding_history = history_before if pre_deliberation is not None else self.move_history_san
@@ -1489,10 +1490,9 @@ class ChessKibitzerRuntime:
         if intuition_override_note and intuition_override_note.strip():
             reply_text = f"{reply_text.strip()} {intuition_override_note.strip()}"
         if is_sparring_opponent_move:
-            reply_text = (
-                f"Stockfish 19 ({self.opponent_target_elo:.0f} Elo) played {san_str}. "
-                f"[Celestriad Right-Brain sensor: {reply_text}]"
-            )
+            reply_text = f"Stockfish 19 ({self.opponent_target_elo:.0f} Elo) played {san_str}."
+        elif gear_1_posture_note and gear_1_posture_note not in reply_text:
+            reply_text = f"{gear_1_posture_note.strip()} {reply_text.strip()}".strip()
         telemetry["pretext_subtext_context"] = {
             "pretext_turns": len(conv_history),
             "pretext_prompt": effective_pretext_prompt,
@@ -1612,11 +1612,9 @@ class ChessKibitzerRuntime:
         # Pre-move `<|subliminal_gap|>` deliberation when the 4B Left Brain is active
         if self._qwen_left_brain is not None and not self.rem_sleep_in_progress:
             try:
-                cand_list_str = ", ".join(c.san for c in top_candidates[:5])
                 pre_prompt = build_natural_chess_scenario_prompt(
                     self.board,
                     self.move_history_san,
-                    user_note=f"Choose the soundest move from ({cand_list_str}) and state why.",
                 )
                 pre_prompt_used = pre_prompt
                 self.board_posture = evaluate_chess_board_posture(self.board, perspective=self.board.turn)
@@ -2312,6 +2310,7 @@ class ChessKibitzerRuntime:
             )
             if self.chat_messages:
                 self.chat_messages[-1].setdefault("telemetry", {})["game_review"] = review
+            self._last_sparring_referee_review = review
             veto_queued = bool(
                 getattr(self, "last_hybrid_move_arbitration", None)
                 and self.last_hybrid_move_arbitration.get("veto_queued_for_sleep")
@@ -2335,6 +2334,11 @@ class ChessKibitzerRuntime:
             snap = self.get_state_snapshot()
             mover_tag = "LMFT"
         else:
+            pending_referee_review = getattr(self, "_last_sparring_referee_review", None)
+            if pending_referee_review is None and self.chat_messages:
+                prev_msg = self.chat_messages[-1]
+                if prev_msg.get("sender") == "companion":
+                    pending_referee_review = (prev_msg.get("telemetry") or {}).get("game_review")
             opp = self.sparring_engine.select_sparring_opponent_move(
                 self.board,
                 target_elo=self.opponent_target_elo,
@@ -2347,6 +2351,10 @@ class ChessKibitzerRuntime:
             )
             if self.chat_messages:
                 self.chat_messages[-1]["role_label"] = f"🐟 Stockfish 19 ({stockfish_color_name} · played {opp['move_san']})"
+                if pending_referee_review is not None:
+                    self.chat_messages[-1].setdefault("telemetry", {})["sparring_referee_review"] = pending_referee_review
+                self._last_sparring_referee_review = None
+                self._sync_active_thread_record(persist=True)
             snap = self.get_state_snapshot()
             mover_tag = f"SparringEngine({self.opponent_target_elo:.0f})"
 

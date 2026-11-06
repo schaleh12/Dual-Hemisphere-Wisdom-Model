@@ -1049,7 +1049,7 @@ function renderState(s) {
   if (elMistake) elMistake.textContent = String(cMistake);
   if (elBlund) elBlund.textContent = String(cBlund);
 
-  const sig = JSON.stringify(msgs.map(m => [m.id, m.role_label, m.text, m.coached, m.savored, !!(m.telemetry && m.telemetry.game_review)]));
+  const sig = JSON.stringify(msgs.map(m => [m.id, m.role_label, m.text, m.coached, m.savored, !!(m.telemetry && (m.telemetry.game_review || m.telemetry.sparring_referee_review))]));
   if (sig !== lastRenderedChatSig) {
     lastRenderedChatSig = sig;
     const box = document.getElementById("chat-messages");
@@ -1058,12 +1058,12 @@ function renderState(s) {
       const gearLabel = t.gear_used === "GEAR_3_UNRESOLVED_QUEUED_FOR_SLEEP"
         ? "GEAR 3 · QUEUED FOR SLEEP"
         : (t.gear_used || "");
-      const sub = t.pretext_subtext_context;
+      const sub = m.sender === "sparring_opponent" ? null : t.pretext_subtext_context;
       const subHtml = sub
         ? `<div class="subtext-strip"><span>Pretext turns: ${sub.pretext_turns || 0}</span><span>Subtext Dominant: ${escapeHtml(sub.dominant_piece || "")} (${escapeHtml(sub.dominant_color || "")})</span><span>${escapeHtml(gearLabel)}</span></div>`
         : "";
       const pc = t.player_coaching;
-      const gr = t.game_review;
+      const gr = m.sender === "sparring_opponent" ? (t.sparring_referee_review || t.game_review) : null;
       const bannerCls = (pc && pc.is_hazard) || (gr && gr.is_hazard)
         ? "coach-banner haz"
         : ((pc && pc.glyph) || (gr && gr.glyph) ? "coach-banner brill" : "coach-banner");
