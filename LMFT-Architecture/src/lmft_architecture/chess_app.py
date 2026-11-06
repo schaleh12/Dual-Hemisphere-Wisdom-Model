@@ -448,6 +448,7 @@ class ChessKibitzerRuntime:
         self.white_clock_sec: float = 300.0
         self.black_clock_sec: float = 300.0
         self.clock_flagged_loser: chess.Color | None = None
+        self._active_move_started_at: float | None = None
         self.last_board_reflex: dict[str, Any] | None = None
         self.board_posture: ChessBoardPosture = evaluate_chess_board_posture(self.board)
         self.active_room: str = "chess"
@@ -1312,8 +1313,40 @@ class ChessKibitzerRuntime:
                 "in_check": self.board.is_check(),
                 "is_game_over": self.board.is_game_over() or (self.clock_flagged_loser is not None),
                 "match_clock_limit_sec": round(float(self.match_clock_limit_sec), 1),
-                "white_clock_sec": round(float(self.white_clock_sec), 1),
-                "black_clock_sec": round(float(self.black_clock_sec), 1),
+                "white_clock_sec": round(
+                    max(
+                        0.0,
+                        float(self.white_clock_sec)
+                        - (
+                            max(0.0, time.perf_counter() - self._active_move_started_at)
+                            if (
+                                self._active_move_started_at is not None
+                                and self.board.turn == chess.WHITE
+                                and not self.board.is_game_over()
+                                and self.clock_flagged_loser is None
+                            )
+                            else 0.0
+                        ),
+                    ),
+                    1,
+                ),
+                "black_clock_sec": round(
+                    max(
+                        0.0,
+                        float(self.black_clock_sec)
+                        - (
+                            max(0.0, time.perf_counter() - self._active_move_started_at)
+                            if (
+                                self._active_move_started_at is not None
+                                and self.board.turn == chess.BLACK
+                                and not self.board.is_game_over()
+                                and self.clock_flagged_loser is None
+                            )
+                            else 0.0
+                        ),
+                    ),
+                    1,
+                ),
                 "clock_flagged_loser": (
                     "w"
                     if self.clock_flagged_loser == chess.WHITE
@@ -1336,8 +1369,10 @@ class ChessKibitzerRuntime:
         self.white_clock_sec = float(self.match_clock_limit_sec)
         self.black_clock_sec = float(self.match_clock_limit_sec)
         self.clock_flagged_loser = None
+        self._active_move_started_at = None
 
     def _deduct_move_clock(self, mover_color: chess.Color, elapsed_sec: float) -> float:
+        self._active_move_started_at = None
         dt = max(0.0, float(elapsed_sec))
         if mover_color == chess.WHITE:
             self.white_clock_sec = max(0.0, float(self.white_clock_sec) - dt)
@@ -1620,6 +1655,7 @@ class ChessKibitzerRuntime:
         if self.board.is_game_over() or self.clock_flagged_loser is not None:
             raise ValueError("The game is already over.")
         t_ai_start = time.perf_counter()
+        self._active_move_started_at = t_ai_start
         ai_mover_color = self.board.turn
         rem_clock_start = (
             float(self.white_clock_sec) if ai_mover_color == chess.WHITE else float(self.black_clock_sec)
@@ -1674,14 +1710,14 @@ class ChessKibitzerRuntime:
                     min(1.0, rem_clock_start / max(1.0, float(self.match_clock_limit_sec))),
                 )
                 fact_coords = dict(fact_coords)
+                base_cont = float(fact_coords.get("philosophical/persistence/continuity", 0.50))
+                base_disc = float(fact_coords.get("philosophical/persistence/discreteness", 0.50))
                 fact_coords["philosophical/persistence/continuity"] = round(
-                    0.50 * float(fact_coords.get("philosophical/persistence/continuity", 0.50))
-                    + 0.50 * clock_ratio,
+                    base_cont * clock_ratio,
                     4,
                 )
                 fact_coords["philosophical/persistence/discreteness"] = round(
-                    0.50 * float(fact_coords.get("philosophical/persistence/discreteness", 0.50))
-                    + 0.50 * (1.0 - clock_ratio),
+                    1.0 - (1.0 - base_disc) * clock_ratio,
                     4,
                 )
                 pre_vibe, _ = compile_right_brain_vibe(
@@ -1702,8 +1738,15 @@ class ChessKibitzerRuntime:
                     else 1.0
                 )
                 chaos_val = float(fact_coords.get("philosophical/structure/chaos", 0.0))
-                exec_leaf = float(pre_vibe.coordinates.get("psychological/will/execution", 0.50))
-                hes_leaf = float(pre_vibe.coordinates.get("psychological/will/hesitation", 0.35))
+                learned_time_hazard_active = any(
+                    float(pre_vibe.rule_activations.get(r.concept_name, 0.0)) >= 0.35
+                    and r.concept_name.startswith(("hazard_", "blunder_", "avoid_"))
+                    and (
+                        "philosophical/persistence/continuity" in r.target_leaves
+                        or "philosophical/persistence/discreteness" in r.target_leaves
+                    )
+                    for r in self.rules
+                )
                 has_tactical_or_vibe_tension = (
                     self.board.is_check()
                     or bool(self.board_posture.board_shadow_warnings)
@@ -1711,11 +1754,13 @@ class ChessKibitzerRuntime:
                     or bool(pre_vibe.self_registry.dissonance_notes)
                     or float(pre_vibe.clarity) < 0.48
                     or float(pre_vibe.confidence) < 0.45
-                    or hes_leaf > exec_leaf
+                    or float(right_brain_choice.clarity) < 0.48
                     or any(c.is_blunder for c in top_candidates[:3])
                     or chaos_val >= 0.45
                     or (chaos_val >= 0.25 and score_gap <= 0.14)
                 )
+                if learned_time_hazard_active and not self.board.is_check() and not right_brain_choice.is_blunder:
+                    has_tactical_or_vibe_tension = False
                 should_wake_left_brain = (
                     len(all_evals) > 1
                     and (
@@ -1930,7 +1975,9 @@ class ChessKibitzerRuntime:
             self.flag_turn_for_coaching(
                 last_scene_id,
                 user_note=veto_reason or "",
-                check_auto_sleep=True,
+                check_auto_sleep=(
+                    self.clock_flagged_loser is None and not self.board.is_game_over(claim_draw=True)
+                ),
                 is_hazard=True,
                 override_coordinates=vetoed_coords,
                 contrastive_reference_coordinates=safe_choice_coords,
@@ -2259,23 +2306,32 @@ class ChessKibitzerRuntime:
                 lmft_score = 0.0
                 result_label = "LOSS (Time Forfeit 0:00)"
                 if self.chat_messages:
-                    last_msg = self.chat_messages[-1]
-                    last_id = last_msg.get("id")
-                    if isinstance(last_id, int):
-                        base_fc = dict((last_msg.get("telemetry") or {}).get("fact_coordinates") or {})
+                    target_msg = next(
+                        (
+                            m
+                            for m in reversed(self.chat_messages)
+                            if isinstance(m.get("id"), int) and m.get("sender") == "companion"
+                        ),
+                        next((m for m in reversed(self.chat_messages) if isinstance(m.get("id"), int)), None),
+                    )
+                    last_id = target_msg.get("id") if target_msg is not None else None
+                    if isinstance(last_id, int) and target_msg is not None:
+                        base_fc = dict((target_msg.get("telemetry") or {}).get("fact_coordinates") or {})
                         if base_fc:
                             hz_coords = dict(base_fc)
                             hz_coords["philosophical/persistence/continuity"] = 0.02
                             hz_coords["philosophical/persistence/discreteness"] = 0.98
                             hz_coords["cultural/efficiency/wastelessness"] = 0.20
                             hz_coords["cultural/freedom/needlessness"] = 0.78
+                            hz_coords["psychological/will/intention"] = 0.85
+                            hz_coords["psychological/will/execution"] = 0.12
                             ref_coords = dict(base_fc)
-                            ref_coords["philosophical/persistence/continuity"] = 0.02
-                            ref_coords["philosophical/persistence/discreteness"] = 0.98
+                            ref_coords["philosophical/persistence/continuity"] = 0.65
+                            ref_coords["philosophical/persistence/discreteness"] = 0.35
                             ref_coords["cultural/efficiency/wastelessness"] = 0.88
                             ref_coords["cultural/freedom/needlessness"] = 0.08
+                            ref_coords["psychological/will/intention"] = 0.45
                             ref_coords["psychological/will/execution"] = 0.88
-                            ref_coords["psychological/will/hesitation"] = 0.12
                             self.flag_turn_for_coaching(
                                 int(last_id),
                                 user_note="LOSS (Time Forfeit 0:00): over-deliberated when clock continuity was exhausted.",
@@ -2494,7 +2550,9 @@ class ChessKibitzerRuntime:
                     self.flag_turn_for_coaching(
                         last_scene_id,
                         user_note=review["annotation_summary"],
-                        check_auto_sleep=True,
+                        check_auto_sleep=(
+                            self.clock_flagged_loser is None and not self.board.is_game_over(claim_draw=True)
+                        ),
                         is_hazard=bool(review["is_hazard"]),
                         override_coordinates=review["played_coordinates"],
                         contrastive_reference_coordinates=review["contrastive_reference_coordinates"],
@@ -2680,7 +2738,24 @@ class ChessKibitzerRuntime:
                 avg_coords,
                 avg_ref_coords,
             )
-            if is_group_hazard:
+            is_time_forfeit_hazard = is_group_hazard and (
+                any("[?? TIME_FORFEIT" in (s.game_review_annotation or "") for s in group)
+                or float(avg_coords.get("philosophical/persistence/continuity", 0.50)) <= 0.10
+            )
+            if is_time_forfeit_hazard:
+                target_leaves = {
+                    "philosophical/persistence/continuity": round(
+                        min(0.15, max(0.05, float(avg_coords.get("philosophical/persistence/continuity", 0.05)))),
+                        2,
+                    ),
+                    "philosophical/persistence/discreteness": round(
+                        max(0.85, min(0.95, float(avg_coords.get("philosophical/persistence/discreteness", 0.95)))),
+                        2,
+                    ),
+                }
+                rule_low = 0.65
+                rule_high = 0.82
+            elif is_group_hazard:
                 target_leaves["cultural/efficiency/wastelessness"] = min(
                     0.25,
                     float(target_leaves.get("cultural/efficiency/wastelessness", 0.25)),

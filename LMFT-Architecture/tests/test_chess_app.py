@@ -1071,7 +1071,8 @@ def test_speaker_attribution_and_clean_slate_reset(tmp_path: Path) -> None:
     assert len(hist_pairs) == 1
 
     # 4. If Celestriad's 5:00 clock runs out (0:00), no hardcoded instinct bailout saves it;
-    #    it forfeits on time and queues the time-forfeit turn into `sleep_queue` for REM sleep learning
+    #    it forfeits on time, queues the time-forfeit turn into `sleep_queue`, and consolidates
+    #    a permanent clock-persistence hazard rule during REM sleep
     sleep_q_before = len(runtime.sleep_queue)
     runtime.white_clock_sec = 0.0
     runtime.clock_flagged_loser = chess.WHITE
@@ -1081,7 +1082,18 @@ def test_speaker_attribution_and_clean_slate_reset(tmp_path: Path) -> None:
     assert len(runtime.sleep_queue) == sleep_q_before + 1
     flagged_fork = runtime.sleep_queue[-1]
     assert flagged_fork.external_coordinates["philosophical/persistence/continuity"] < 0.15
+    assert flagged_fork.contrastive_reference_coordinates["philosophical/persistence/continuity"] >= 0.50
     assert flagged_fork.contrastive_reference_coordinates["psychological/will/execution"] > 0.80
+    assert "psychological/will/hesitation" not in flagged_fork.external_coordinates
+    assert "psychological/will/hesitation" not in flagged_fork.contrastive_reference_coordinates
+
+    runtime.handle_run_rem_sleep()
+    assert any(
+        r.concept_name.startswith("hazard_")
+        and "philosophical/persistence/continuity" in r.target_leaves
+        and "philosophical/persistence/discreteness" in r.target_leaves
+        for r in runtime.rules
+    )
 
     # 5. Clean slate reset restores foundational rules, resets BitboardIntuitionSleeve, clocks, & Elo to 1000.0
     runtime.lmft_elo = 1156.0

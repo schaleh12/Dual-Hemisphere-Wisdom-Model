@@ -272,7 +272,6 @@ def normalize_contrastive_target_leaves_and_thresholds(
         "philosophical/being/existence",
         "philosophical/structure/order",
         "philosophical/persistence/continuity",
-        "philosophical/persistence/discreteness",
         "cultural/efficiency/wastelessness",
         "cultural/freedom/self-sufficiency",
     }

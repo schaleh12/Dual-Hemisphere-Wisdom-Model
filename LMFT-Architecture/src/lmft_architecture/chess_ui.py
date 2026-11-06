@@ -686,7 +686,7 @@ let currentLegalMovesUci = [];
 let autoSelfPlayTimer = null;
 let autoSelfPlayBusy = false;
 let playVsAiAutoReply = true;
-let boardFlipped = false;
+let boardFlipped = false; let lastBoardClockSnap = { w: 300, b: 300, turn: "w", isGameOver: false, hasMoves: false, snapAtMs: performance.now() }; function fmtClockSec(sec) { const v = Math.max(0, Number(sec ?? 300)); const m = Math.floor(v / 60); const r = Math.floor(v % 60); return `⏱️ ${String(m).padStart(2, "0")}:${String(r).padStart(2, "0")}`; } function refreshClockPills() { const topBoardColor = boardFlipped ? "White" : "Black"; const bottomBoardColor = boardFlipped ? "Black" : "White"; let wSec = lastBoardClockSnap.w; let bSec = lastBoardClockSnap.b; if (!lastBoardClockSnap.isGameOver && (autoSelfPlayBusy || autoSelfPlayTimer || lastBoardClockSnap.hasMoves)) { const dt = Math.max(0, (performance.now() - lastBoardClockSnap.snapAtMs) / 1000.0); if (lastBoardClockSnap.turn === "w") wSec = Math.max(0, wSec - dt); else bSec = Math.max(0, bSec - dt); } const topClockEl = document.getElementById("top-clock-pill"); const botClockEl = document.getElementById("bottom-clock-pill"); if (topClockEl) topClockEl.textContent = fmtClockSec(topBoardColor === "White" ? wSec : bSec); if (botClockEl) botClockEl.textContent = fmtClockSec(bottomBoardColor === "White" ? wSec : bSec); } setInterval(refreshClockPills, 1000);
 
 function openTutorialModal() {
   const el = document.getElementById("tutorial-modal-overlay");
@@ -962,7 +962,7 @@ function renderState(s) {
   document.getElementById("sleep-queue-pill").textContent = "Sleep Queue: " + (s.sleep_queue_count || 0);
 
   if (s.board) {
-    renderBoard(s.board); const fmtClock = (sec) => { const v = Math.max(0, Number(sec ?? 300)); const m = Math.floor(v / 60); const r = Math.floor(v % 60); return `⏱️ ${String(m).padStart(2, "0")}:${String(r).padStart(2, "0")}`; }; const topClockEl = document.getElementById("top-clock-pill"); const botClockEl = document.getElementById("bottom-clock-pill"); if (topClockEl) topClockEl.textContent = fmtClock(topBoardColor === "White" ? s.board.white_clock_sec : s.board.black_clock_sec); if (botClockEl) botClockEl.textContent = fmtClock(bottomBoardColor === "White" ? s.board.white_clock_sec : s.board.black_clock_sec);
+    renderBoard(s.board); lastBoardClockSnap = { w: Number(s.board.white_clock_sec ?? 300), b: Number(s.board.black_clock_sec ?? 300), turn: s.board.turn || "w", isGameOver: !!s.board.is_game_over, hasMoves: (s.board.move_history_san || []).length > 0, snapAtMs: performance.now() }; refreshClockPills();
     const turnPill = document.getElementById("turn-indicator-pill");
     if (turnPill && turnPill.textContent !== "LMFT Thinking & Kibitzing...") {
       if (s.board.is_game_over) {
