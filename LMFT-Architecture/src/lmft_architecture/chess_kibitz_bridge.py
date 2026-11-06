@@ -945,7 +945,14 @@ def compute_candidate_move_fuzzy_coordinates(
         + 0.15 * continuity
         + 0.10 * agency
     )
-    # 3. `psychological/contemplation/confidence`: Bitboard Intuition Sleeve certainty
+    # 3. `psychological/truth/faith`: Long-horizon structural resilience beyond the 3-ply rollout
+    faith_coord = _clamp01(
+        0.35 * existence
+        + 0.35 * order
+        + 0.30 * continuity
+        - 0.25 * min(2.0, blunder_penalty)
+    )
+    # 4. `psychological/contemplation/confidence`: Bitboard Intuition Sleeve certainty
     sleeve_conf = float(sleeve_out["sleeve_confidence"])
 
     move_shadows = detect_shadow_pathologies(
@@ -965,8 +972,17 @@ def compute_candidate_move_fuzzy_coordinates(
             coords[w.shadow_leaf_id] = float(w.severity)
     shadow_names = tuple(w.shadow_pathology for w in all_warnings)
 
+    # 5. `psychological/contemplation/clarity`: Signal-to-noise alignment between `fact` and `theory` & low chaos/shadow noise
+    clarity_coord = _clamp01(
+        0.45 * (1.0 - abs(fact_coord - theory_coord))
+        + 0.35 * (order * (1.0 - 0.4 * chaos))
+        + 0.20 * (1.0 if (not is_blunder and not shadow_names) else 0.25)
+    )
+
     coords["psychological/truth/fact"] = fact_coord
     coords["psychological/truth/theory"] = theory_coord
+    coords["psychological/truth/faith"] = faith_coord
+    coords["psychological/contemplation/clarity"] = clarity_coord
     coords["psychological/contemplation/confidence"] = sleeve_conf
     coords["cultural/efficiency/power"] = _clamp01(0.50 * agency + 0.50 * discreteness)
     coords["cultural/freedom/needlessness"] = _clamp01(
@@ -1162,8 +1178,8 @@ def _rollout_intention_into_theory_and_confidence(
     rule_tuple: tuple[FuzzyConceptRule, ...],
     sleeve: BitboardIntuitionSleeve,
     base_coords: dict[str, float],
-) -> tuple[float, float, float]:
-    """Project a candidate `intention` through the opponent's best replies (`Ply 2`) and our best response (`Ply 3`) to ground `theory` and `confidence`."""
+) -> tuple[float, float, float, float]:
+    """Project a candidate `intention` through the opponent's best replies (`Ply 2`) and our best response (`Ply 3`) to ground `theory`, `confidence`, and `clarity`."""
     us = perspective
     them = not us
     reply_candidates = _select_rollout_branch_moves(next_board, max_quiet=6)
@@ -1171,6 +1187,7 @@ def _rollout_intention_into_theory_and_confidence(
         return (
             float(base_coords.get("psychological/truth/theory", 0.55)),
             float(base_coords.get("psychological/contemplation/confidence", 0.60)),
+            float(base_coords.get("psychological/contemplation/clarity", 0.60)),
             0.0,
         )
 
@@ -1190,6 +1207,7 @@ def _rollout_intention_into_theory_and_confidence(
         return (
             float(base_coords.get("psychological/truth/theory", 0.55)),
             float(base_coords.get("psychological/contemplation/confidence", 0.60)),
+            float(base_coords.get("psychological/contemplation/clarity", 0.60)),
             0.0,
         )
 
@@ -1206,11 +1224,13 @@ def _rollout_intention_into_theory_and_confidence(
     worst_branch_utility = 999.0
     rollout_theory = float(base_coords.get("psychological/truth/theory", 0.55))
     rollout_conf = float(base_coords.get("psychological/contemplation/confidence", 0.60))
+    rollout_clarity = float(base_coords.get("psychological/contemplation/clarity", 0.60))
     rollout_loss = 0.0
+    fact_1ply = float(base_coords.get("psychological/truth/fact", 0.55))
 
     for _r2_score, _r2, board_2 in top_opponent_replies:
         if board_2.is_checkmate():
-            return 0.02, 0.05, 9.5
+            return 0.02, 0.05, 0.10, 9.5
 
         our_responses = _select_rollout_branch_moves(board_2, max_quiet=6)
         if not our_responses:
@@ -1218,15 +1238,18 @@ def _rollout_intention_into_theory_and_confidence(
             loss_2 = max(0.0, mat_before - mat_2)
             branch_th = 0.35 if loss_2 < 0.8 else 0.12
             branch_cf = 0.45 if loss_2 < 0.8 else 0.18
+            branch_cl = 0.45 if loss_2 < 0.8 else 0.15
             util = branch_th - 0.25 * loss_2
             if util < worst_branch_utility:
                 worst_branch_utility = util
                 rollout_theory = branch_th
                 rollout_conf = branch_cf
+                rollout_clarity = branch_cl
                 rollout_loss = max(rollout_loss, loss_2)
             continue
 
         best_m3_utility = -999.0
+        second_m3_utility = -999.0
         best_board_3 = board_2
         best_sleeve_3: dict[str, Any] = {"value_prior": 0.50, "policy_prior": 0.50, "sleeve_confidence": 0.55}
         best_eff_mat_3 = _material_balance_for_side(board_2, us)
@@ -1246,10 +1269,13 @@ def _rollout_intention_into_theory_and_confidence(
                 eff_mat_3 = mat_3 - (9.0 if allows_mate_4 else 0.85 * pending_loss_3)
                 m3_util = eff_mat_3 + 0.80 * m3_score
             if m3_util > best_m3_utility:
+                second_m3_utility = best_m3_utility
                 best_m3_utility = m3_util
                 best_board_3 = board_3
                 best_sleeve_3 = sleeve_3
                 best_eff_mat_3 = eff_mat_3
+            elif m3_util > second_m3_utility:
+                second_m3_utility = m3_util
 
         net_mat_delta = best_eff_mat_3 - mat_before
         branch_loss = max(0.0, -net_mat_delta) if net_mat_delta <= -0.8 else 0.0
@@ -1260,6 +1286,7 @@ def _rollout_intention_into_theory_and_confidence(
         cont_3 = float(phil_3.get("philosophical/persistence/continuity", 0.50))
         agency_3 = float(phil_3.get("philosophical/being/agency", 0.50))
         exist_3 = float(phil_3.get("philosophical/being/existence", 0.50))
+        chaos_3 = float(phil_3.get("philosophical/structure/chaos", 0.50))
 
         branch_theory = _clamp01(
             0.35 * float(best_sleeve_3["policy_prior"])
@@ -1269,6 +1296,11 @@ def _rollout_intention_into_theory_and_confidence(
             + 0.08 * agency_3
             + 0.06 * min(4.0, max(0.0, net_mat_delta))
             - 0.18 * min(4.0, branch_loss)
+        )
+        structural_clarity_3 = _clamp01(
+            0.55 * (1.0 - abs(fact_1ply - branch_theory))
+            + 0.45 * (order_3 * (1.0 - 0.4 * chaos_3))
+            - 0.20 * min(3.0, branch_loss)
         )
         sleeve_conf_3 = float(best_sleeve_3["sleeve_confidence"])
         if rule_tuple:
@@ -1281,9 +1313,11 @@ def _rollout_intention_into_theory_and_confidence(
                 - 0.20 * min(3.0, branch_loss)
             )
             coords_3["psychological/truth/theory"] = branch_theory
+            coords_3["psychological/contemplation/clarity"] = structural_clarity_3
             coords_3["psychological/contemplation/confidence"] = sleeve_conf_3
             acts_3 = _evaluate_rules_with_inhibition(rule_tuple, coords_3)
-            _cl_3, rule_conf_3, matched_3, _conf_3, _rsn_3 = compute_contemplation(acts_3)
+            rule_cl_3, rule_conf_3, matched_3, _conf_3, _rsn_3 = compute_contemplation(acts_3)
+            branch_clarity = _clamp01(0.50 * float(rule_cl_3) + 0.50 * structural_clarity_3)
             if matched_3 and matched_3.startswith(("hazard_", "blunder_", "avoid_")):
                 branch_conf = _clamp01(0.35 * sleeve_conf_3 - 0.25 * float(rule_conf_3) - 0.15 * min(4.0, branch_loss))
             else:
@@ -1293,16 +1327,18 @@ def _rollout_intention_into_theory_and_confidence(
                     - 0.15 * min(4.0, branch_loss)
                 )
         else:
+            branch_clarity = structural_clarity_3
             branch_conf = _clamp01(sleeve_conf_3 - 0.15 * min(4.0, branch_loss))
 
-        branch_util = branch_theory + 0.50 * branch_conf - 0.30 * branch_loss
+        branch_util = branch_theory + 0.50 * branch_conf + 0.20 * branch_clarity - 0.30 * branch_loss
         if branch_util < worst_branch_utility:
             worst_branch_utility = branch_util
             rollout_theory = branch_theory
             rollout_conf = branch_conf
+            rollout_clarity = branch_clarity
             rollout_loss = max(rollout_loss, branch_loss)
 
-    return rollout_theory, rollout_conf, rollout_loss
+    return rollout_theory, rollout_conf, rollout_clarity, rollout_loss
 
 
 def _enrich_move_coords_with_theory_rollout(
@@ -1316,12 +1352,12 @@ def _enrich_move_coords_with_theory_rollout(
     sleeve: BitboardIntuitionSleeve,
     rule_tuple: tuple[FuzzyConceptRule, ...] = (),
 ) -> tuple[dict[str, float], bool, float]:
-    """Enrich 1-ply candidate coordinates with the `Ply 2-3` `Theory` and `Confidence` rollout."""
+    """Enrich 1-ply candidate coordinates with the `Ply 2-3` `Theory`, `Confidence`, and `Clarity` rollout."""
     nb = board_before.copy()
     nb.push(move)
     if nb.is_checkmate():
         return coords, False, 0.0
-    r_theory, r_conf, r_loss = _rollout_intention_into_theory_and_confidence(
+    r_theory, r_conf, r_clarity, r_loss = _rollout_intention_into_theory_and_confidence(
         board_before,
         nb,
         perspective=perspective,
@@ -1334,6 +1370,9 @@ def _enrich_move_coords_with_theory_rollout(
     )
     coords["psychological/contemplation/confidence"] = _clamp01(
         0.40 * float(coords.get("psychological/contemplation/confidence", 0.60)) + 0.60 * r_conf
+    )
+    coords["psychological/contemplation/clarity"] = _clamp01(
+        0.40 * float(coords.get("psychological/contemplation/clarity", 0.60)) + 0.60 * r_clarity
     )
     if r_loss >= 0.8:
         is_blunder = True
@@ -1439,7 +1478,7 @@ def evaluate_candidate_moves_with_right_brain(
         if cand["rolled_out"]:
             return
         cand["rolled_out"] = True
-        r_theory, r_conf, r_loss = _rollout_intention_into_theory_and_confidence(
+        r_theory, r_conf, r_clarity, r_loss = _rollout_intention_into_theory_and_confidence(
             board,
             cand["next_board"],
             perspective=us,
@@ -1454,6 +1493,9 @@ def evaluate_candidate_moves_with_right_brain(
         c_dict["psychological/contemplation/confidence"] = _clamp01(
             0.40 * float(c_dict.get("psychological/contemplation/confidence", 0.60)) + 0.60 * r_conf
         )
+        c_dict["psychological/contemplation/clarity"] = _clamp01(
+            0.40 * float(c_dict.get("psychological/contemplation/clarity", 0.60)) + 0.60 * r_clarity
+        )
         if r_loss >= 0.8:
             cand["is_blunder"] = True
             cand["blunder_penalty"] = max(float(cand["blunder_penalty"]), r_loss)
@@ -1465,6 +1507,10 @@ def evaluate_candidate_moves_with_right_brain(
     rollout_k = max(10, int(limit))
     for cand in pending_candidates[:rollout_k]:
         _apply_rollout_to_candidate(cand)
+    # Also roll out any candidate with low 1-ply `clarity` (< 0.55) so murky positions are always tested by `theory`
+    for cand in pending_candidates[rollout_k:]:
+        if float(cand["coords"].get("psychological/contemplation/clarity", 0.60)) < 0.55:
+            _apply_rollout_to_candidate(cand)
 
     if pending_candidates and all(bool(c["is_blunder"]) for c in pending_candidates[:rollout_k]):
         for cand in pending_candidates[rollout_k:]:
@@ -1481,11 +1527,13 @@ def evaluate_candidate_moves_with_right_brain(
         shadow_names = cand["shadow_names"]
 
         sleeve_conf = float(coords.get("psychological/contemplation/confidence", 0.60))
+        sensor_clarity = float(coords.get("psychological/contemplation/clarity", 0.60))
         is_hazard_match = False
         if rule_tuple:
             activations = _evaluate_rules_with_inhibition(rule_tuple, coords)
-            clarity, rule_confidence, matched, is_confused, _reason = compute_contemplation(activations)
+            rule_clarity, rule_confidence, matched, is_confused, _reason = compute_contemplation(activations)
             settled = not is_confused
+            clarity = _clamp01(0.75 * float(rule_clarity) + 0.25 * sensor_clarity)
             hazard_peak = max(
                 (
                     float(activations.get(r.concept_name, 0.0))
@@ -1530,7 +1578,7 @@ def evaluate_candidate_moves_with_right_brain(
             confidence = _clamp01(0.55 * float(rule_confidence) + 0.45 * sleeve_conf)
         else:
             clarity, confidence, matched, settled, learned_bonus = (
-                0.60,
+                sensor_clarity,
                 sleeve_conf,
                 None,
                 True,
@@ -1538,12 +1586,21 @@ def evaluate_candidate_moves_with_right_brain(
             )
             coached_peak, hazard_peak = 0.0, 0.0
 
+        coords["psychological/contemplation/clarity"] = float(clarity)
+        coords["psychological/contemplation/confidence"] = float(confidence)
+
         fact_val = float(coords.get("psychological/truth/fact", 0.50))
         theory_val = _clamp01(
             float(coords.get("psychological/truth/theory", 0.50))
             + 0.18 * coached_peak
             - 0.22 * hazard_peak
         )
+        faith_val = _clamp01(
+            float(coords.get("psychological/truth/faith", 0.50))
+            + 0.18 * coached_peak
+            - 0.22 * hazard_peak
+        )
+        coords["psychological/truth/faith"] = faith_val
         intention_val = float(coords.get("psychological/will/intention", 0.50))
         needlessness_val = float(coords.get("cultural/freedom/needlessness", 0.10))
 
@@ -1552,6 +1609,7 @@ def evaluate_candidate_moves_with_right_brain(
             1.0 * intention_val
             + 1.0 * fact_val
             + 0.7 * theory_val
+            + 0.35 * faith_val
             + 0.5 * float(confidence)
             - 0.8 * needlessness_val
         )

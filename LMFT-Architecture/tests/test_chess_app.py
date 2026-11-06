@@ -985,6 +985,7 @@ def test_intention_to_theory_and_confidence_rollout_pipeline() -> None:
     assert evals_mate["h3"].is_blunder is False
     assert evals_mate["h3"].theory > evals_mate["a4"].theory
     assert evals_mate["h3"].confidence > evals_mate["a4"].confidence
+    assert evals_mate["h3"].clarity > evals_mate["a4"].clarity
     assert evals_mate["h3"].execution_bid > evals_mate["a4"].execution_bid
 
     # 2. 2-ply Knight royal fork (`a4?? -> Nc2+! Kd2 Nxa1`): `Rd1` parries it, while `a4` fails the Theory rollout
@@ -1000,6 +1001,7 @@ def test_intention_to_theory_and_confidence_rollout_pipeline() -> None:
     assert evals_fork["Rd1"].is_blunder is False
     assert evals_fork["Rd1"].theory > evals_fork["a4"].theory
     assert evals_fork["Rd1"].confidence > evals_fork["a4"].confidence
+    assert evals_fork["Rd1"].clarity > evals_fork["a4"].clarity
     assert evals_fork["Rd1"].execution_bid > evals_fork["a4"].execution_bid
 
     # 3. Post-move Game Review (`audit_played_move_for_game_review`) also enriches `played_coordinates`
