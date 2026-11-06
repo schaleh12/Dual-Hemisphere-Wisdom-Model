@@ -1027,29 +1027,25 @@ def test_intention_to_theory_and_confidence_rollout_pipeline() -> None:
 
 
 def test_speaker_attribution_and_clean_slate_reset(tmp_path: Path) -> None:
-    """Verify Celestriad deliberates on its own turn (`board_before`), Stockfish bubbles never impersonate Celestriad, and `reset_learned_chess_state` wipes tainted rules."""
+    """Verify routine opening moves stay in quiet Gear 1, tactical crossroads wake Gear 2/3 with 2-sentence deliberation, Stockfish bubbles carry referee reviews, and `reset_learned_chess_state` wipes tainted rules."""
     left_brain = _make_mini_left_brain()
     runtime = ChessKibitzerRuntime(
         state_dir=tmp_path / "speaker_clean_slate",
         left_brain=left_brain,
         lazy_load_gpu=False,
     )
-    # 1. Step 1 (Celestriad as White): prompt must be for White to move (`board_before`), NOT Black to move
+    # 1. Step 1 (Celestriad as White on calm Move 1): settles quietly in Gear 1 without forced Left-Brain banter
     s1 = runtime.handle_microwave_step()
     msg_cel = s1["chat_messages"][-1]
     assert msg_cel["sender"] == "companion"
     assert "Celestriad 1.0 (White" in msg_cel["role_label"]
-    assert "White to move" in msg_cel["clean_pretext_prompt"]
-    assert "Position anchored on " in msg_cel["text"]
-    assert "Position anchored on " not in msg_cel.get("clean_reply", "")
-    assert "spliced_trace" in msg_cel["telemetry"]
-    assert msg_cel["telemetry"]["spliced_trace"].get("sentence_count") == 1
-    assert msg_cel["telemetry"]["spliced_trace"].get("comma_scored_live") is True
-    assert "[Right-Brain Intuition Override:" not in msg_cel.get("clean_reply", "")
+    assert runtime.last_hybrid_move_arbitration["selection_mode"] == "gear_1_right_brain_intuition"
+    assert "Gear 1 Right-Brain intuition" in msg_cel["text"]
+    assert msg_cel["is_gear_1_fallback"] is True
     assert msg_cel["telemetry"]["fact_coordinates"]["cultural/efficiency/power"] >= 0.35
 
     # 2. Step 2 (Stockfish as Black): sender is `sparring_opponent`, text clearly states Stockfish played its move,
-    #    Stockfish's bubble never contains Celestriad's "Position anchored on" quote, and carries `sparring_referee_review`
+    #    Stockfish's bubble never contains Celestriad quotes, and carries `sparring_referee_review`
     s2 = runtime.handle_microwave_step()
     msg_sf = s2["chat_messages"][-1]
     assert msg_sf["sender"] == "sparring_opponent"
@@ -1057,10 +1053,20 @@ def test_speaker_attribution_and_clean_slate_reset(tmp_path: Path) -> None:
     assert msg_sf["text"].startswith("Stockfish 19 (")
     assert "Position anchored on " not in msg_sf["text"]
     assert "sparring_referee_review" in msg_sf["telemetry"]
+    assert runtime._extract_clean_conversation_history() == ()
+
+    # 3. On a Move 3+ contested tactical crossroads, Gear 2/3 wakes the Left Brain with 2 spliced sentences (`sentence_count == 2`)
+    runtime.handle_set_fen("r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 3 3")
+    s3 = runtime.handle_microwave_step()
+    msg_delib = s3["chat_messages"][-1]
+    assert msg_delib["sender"] == "companion"
+    assert "White to move" in msg_delib["clean_pretext_prompt"]
+    assert "Position anchored on " not in msg_delib["text"]
+    assert "[Right-Brain Intuition Override:" not in msg_delib["text"]
+    assert msg_delib["telemetry"]["spliced_trace"].get("sentence_count") == 2
+    assert msg_delib["telemetry"]["spliced_trace"].get("comma_scored_live") is True
     hist_pairs = runtime._extract_clean_conversation_history()
     assert len(hist_pairs) == 1
-    assert "[Right-Brain Intuition Override:" not in hist_pairs[0][1]
-    assert "Position anchored on " not in hist_pairs[0][1]
 
     # 3. Clean slate reset restores foundational rules, resets BitboardIntuitionSleeve & Elo to 1000.0
     runtime.lmft_elo = 1156.0

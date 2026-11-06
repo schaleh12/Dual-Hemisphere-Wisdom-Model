@@ -1326,6 +1326,7 @@ class ChessKibitzerRuntime:
         *,
         pre_deliberation: tuple[str, Any] | None = None,
         pre_delib_prompt: str | None = None,
+        pre_delib_sentence_count: int = 1,
         intuition_override_note: str | None = None,
         is_human_move: bool | None = None,
         skip_spontaneous_left_brain: bool = False,
@@ -1425,7 +1426,7 @@ class ChessKibitzerRuntime:
             raw_reply = delib_text
             if delib_trace is not None and not telemetry.get("spliced_trace"):
                 telemetry["spliced_trace"] = {
-                    "sentence_count": 1,
+                    "sentence_count": int(pre_delib_sentence_count),
                     "clause_1_prefix": delib_trace.clause_1_prefix,
                     "post_gap_continuation": delib_trace.post_gap_continuation,
                     "comma_scored_live": delib_trace.comma_scored_live,
@@ -1438,6 +1439,7 @@ class ChessKibitzerRuntime:
         elif (
             not raw_reply
             and not skip_spontaneous_left_brain
+            and self.spontaneous_kibitz_enabled
             and self._qwen_left_brain is not None
             and not self.rem_sleep_in_progress
         ):
@@ -1464,14 +1466,13 @@ class ChessKibitzerRuntime:
             except Exception:
                 raw_reply = None
 
-        gear_1_posture_note = self._synthesize_gear_1_note(
-            turn,
-            room="chess",
-            board_posture=mover_posture,
-        )
         if not raw_reply:
             is_gear_1_fallback = True
-            raw_reply = gear_1_posture_note
+            raw_reply = (
+                f"Played {san_str} — Gear 1 Right-Brain intuition "
+                f"({mover_posture.dominant_piece} · {mover_posture.dominant_color}, "
+                f"clarity {turn.final_vibe.clarity:.2f})."
+            )
 
         grounding_board = board_before if pre_deliberation is not None else self.board
         grounding_history = history_before if pre_deliberation is not None else self.move_history_san
@@ -1482,17 +1483,19 @@ class ChessKibitzerRuntime:
             grounding_board,
             move_history_san=grounding_history,
         )
-        reply_text = verify_or_ground_chess_moves_in_reply(
-            raw_reply,
-            grounding_board,
-            move_history_san=grounding_history,
+        reply_text = (
+            raw_reply
+            if is_gear_1_fallback
+            else verify_or_ground_chess_moves_in_reply(
+                raw_reply,
+                grounding_board,
+                move_history_san=grounding_history,
+            )
         )
         if intuition_override_note and intuition_override_note.strip():
-            reply_text = f"{reply_text.strip()} {intuition_override_note.strip()}"
+            telemetry["intuition_override_note"] = intuition_override_note.strip()
         if is_sparring_opponent_move:
             reply_text = f"Stockfish 19 ({self.opponent_target_elo:.0f} Elo) played {san_str}."
-        elif gear_1_posture_note and gear_1_posture_note not in reply_text:
-            reply_text = f"{gear_1_posture_note.strip()} {reply_text.strip()}".strip()
         telemetry["pretext_subtext_context"] = {
             "pretext_turns": len(conv_history),
             "pretext_prompt": effective_pretext_prompt,
@@ -1566,7 +1569,7 @@ class ChessKibitzerRuntime:
         self.board_posture = evaluate_chess_board_posture(self.board)
         return self.get_state_snapshot()
 
-    def handle_chess_ai_move(self) -> dict[str, Any]:
+    def handle_chess_ai_move(self, *, in_sparring_mode: bool = False) -> dict[str, Any]:
         """Dual-Hemisphere Move-Selection / Kibitzing Hybrid: Right-Brain 40-node scan + Left-Brain `<|subliminal_gap|>` commit."""
         if self.board.is_game_over():
             raise ValueError("The game is already over.")
@@ -1606,7 +1609,9 @@ class ChessKibitzerRuntime:
         safe_choice_coords: dict[str, float] | None = None
         pre_delib_pair: tuple[str, Any] | None = None
         pre_prompt_used: str | None = None
+        delib_sentence_count = 1
         override_note: str | None = None
+        skip_left_brain_for_gear_1 = False
         top_san_set = {c.san for c in top_candidates[:4]}
 
         # Pre-move `<|subliminal_gap|>` deliberation when the 4B Left Brain is active
@@ -1639,49 +1644,84 @@ class ChessKibitzerRuntime:
                     queried_child_leaves=queried_1,
                     skipped_child_leaves=skipped_1,
                 )
-                pre_chord = SubliminalChordVector.from_right_brain_vibe(
-                    pre_vibe,
-                    learned_leaves=self.learned_leaves,
+                score_gap = (
+                    float(top_candidates[0].composite_score - top_candidates[1].composite_score)
+                    if len(top_candidates) > 1
+                    else 1.0
                 )
+                chaos_val = float(fact_coords.get("philosophical/structure/chaos", 0.0))
+                has_tactical_or_vibe_tension = (
+                    self.board.is_check()
+                    or bool(self.board_posture.board_shadow_warnings)
+                    or bool(right_brain_choice.shadow_warnings)
+                    or bool(pre_vibe.self_registry.dissonance_notes)
+                    or float(pre_vibe.clarity) < 0.48
+                    or float(pre_vibe.confidence) < 0.45
+                    or (
+                        self.board.fullmove_number >= 3
+                        and (
+                            any(c.is_blunder for c in top_candidates[:3])
+                            or chaos_val >= 0.48
+                            or score_gap <= 0.16
+                        )
+                    )
+                )
+                should_wake_left_brain = (
+                    len(all_evals) > 1
+                    and (
+                        has_tactical_or_vibe_tension
+                        or (not in_sparring_mode and self.spontaneous_kibitz_enabled)
+                    )
+                )
+                if not should_wake_left_brain:
+                    selection_mode = "gear_1_right_brain_intuition"
+                    skip_left_brain_for_gear_1 = True
+                else:
+                    pre_chord = SubliminalChordVector.from_right_brain_vibe(
+                        pre_vibe,
+                        learned_leaves=self.learned_leaves,
+                    )
 
-                def _build_pre_move_comma_chord(comma_prefix: str):
-                    c_coords, c_exp, _, _ = pre_sensors.score_text(
-                        comma_prefix,
-                        learned_leaves=self.learned_leaves,
-                    )
-                    raw_c_vibe, _ = compile_right_brain_vibe(
-                        self.birth_state,
-                        fact_coords,
-                        fact_exp,
-                        self.rules,
-                        pass_index=2,
-                        event_id=f"pre_move_{self.scene_counter + 1}_comma",
-                        prior_memory=self.memory,
-                        learned_leaves=self.learned_leaves,
-                        internal_theory_coords=c_coords,
-                        internal_theory_experiential=c_exp,
-                        queried_child_leaves=queried_1,
-                        skipped_child_leaves=skipped_1,
-                    )
-                    c_chord = SubliminalChordVector.from_right_brain_vibe(
-                        raw_c_vibe,
-                        learned_leaves=self.learned_leaves,
-                    )
-                    return (
-                        c_chord,
-                        raw_c_vibe.posture,
-                        raw_c_vibe.self_registry.dissonance_notes,
-                    )
+                    def _build_pre_move_comma_chord(comma_prefix: str):
+                        c_coords, c_exp, _, _ = pre_sensors.score_text(
+                            comma_prefix,
+                            learned_leaves=self.learned_leaves,
+                        )
+                        raw_c_vibe, _ = compile_right_brain_vibe(
+                            self.birth_state,
+                            fact_coords,
+                            fact_exp,
+                            self.rules,
+                            pass_index=2,
+                            event_id=f"pre_move_{self.scene_counter + 1}_comma",
+                            prior_memory=self.memory,
+                            learned_leaves=self.learned_leaves,
+                            internal_theory_coords=c_coords,
+                            internal_theory_experiential=c_exp,
+                            queried_child_leaves=queried_1,
+                            skipped_child_leaves=skipped_1,
+                        )
+                        c_chord = SubliminalChordVector.from_right_brain_vibe(
+                            raw_c_vibe,
+                            learned_leaves=self.learned_leaves,
+                        )
+                        return (
+                            c_chord,
+                            raw_c_vibe.posture,
+                            raw_c_vibe.self_registry.dissonance_notes,
+                        )
 
-                conv_history = self._extract_clean_conversation_history()
-                with self.gpu_lock:
-                    delib_text, delib_trace = self._qwen_left_brain.generate_with_subliminal_splice(
-                        pre_prompt,
-                        pre_chord,
-                        conversation_history=conv_history,
-                        chord_builder_at_comma=_build_pre_move_comma_chord,
-                    )
-                pre_delib_pair = (delib_text, delib_trace)
+                    delib_sentence_count = 2 if (in_sparring_mode and has_tactical_or_vibe_tension) else 1
+                    conv_history = self._extract_clean_conversation_history()
+                    with self.gpu_lock:
+                        delib_text, delib_trace = self._qwen_left_brain.generate_with_subliminal_splice(
+                            pre_prompt,
+                            pre_chord,
+                            num_sentences=delib_sentence_count,
+                            conversation_history=conv_history,
+                            chord_builder_at_comma=_build_pre_move_comma_chord,
+                        )
+                    pre_delib_pair = (delib_text, delib_trace)
                 post_gap_mentioned = (
                     inspect_chess_moves_in_reply(
                         delib_trace.post_gap_continuation,
@@ -1778,8 +1818,10 @@ class ChessKibitzerRuntime:
             chosen_san,
             pre_deliberation=pre_delib_pair,
             pre_delib_prompt=pre_prompt_used,
+            pre_delib_sentence_count=delib_sentence_count,
             intuition_override_note=override_note,
             is_human_move=False,
+            skip_spontaneous_left_brain=skip_left_brain_for_gear_1,
         )
         veto_queued = bool(
             veto_reason
@@ -2297,7 +2339,7 @@ class ChessKibitzerRuntime:
 
         if is_lmft_turn:
             board_before = self.board.copy()
-            snap = self.handle_chess_ai_move()
+            snap = self.handle_chess_ai_move(in_sparring_mode=True)
             last_san = self.move_history_san[-1] if self.move_history_san else "?"
             if self.chat_messages:
                 self.chat_messages[-1]["role_label"] = f"Celestriad 1.0 ({lmft_color_name} · after {last_san})"

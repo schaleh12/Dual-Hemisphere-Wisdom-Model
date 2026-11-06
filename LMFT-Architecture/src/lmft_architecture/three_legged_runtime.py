@@ -701,6 +701,7 @@ class SubliminalGapLeftBrain:
         scenario_text: str,
         chord: SubliminalChordVector | None = None,
         *,
+        num_sentences: int = 1,
         pass_index: int = 2,
         clause_1_prefix: str | None = None,
         conversation_history: Sequence[tuple[str, str]] = (),
@@ -711,7 +712,19 @@ class SubliminalGapLeftBrain:
         ]
         | None = None,
     ) -> tuple[str, SplicedThoughtTrace]:
-        """Generate a two-clause `<|subliminal_gap|>` thought and return `(full_thought, trace)`."""
+        """Generate `num_sentences` two-clause `<|subliminal_gap|>` thoughts and return `(full_thought, trace)`."""
+        if int(num_sentences) > 1:
+            passage, traces = self.generate_multi_sentence_script(
+                scenario_text,
+                chord=chord,
+                num_sentences=int(num_sentences),
+                pass_index=pass_index,
+                clause_1_prefix=clause_1_prefix,
+                conversation_history=conversation_history,
+                max_context_chars=max_context_chars,
+                chord_builder_at_comma=chord_builder_at_comma,
+            )
+            return passage, traces[-1]
         trace = self.generate_two_clause_thought(
             scenario_text,
             chord=chord,
