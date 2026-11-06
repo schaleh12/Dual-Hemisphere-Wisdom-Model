@@ -877,6 +877,12 @@ class ChessKibitzerRuntime:
                     for lk, sv in seed_sleeve.leaf_weights.items():
                         cur_v = float(self.bitboard_sleeve.leaf_weights.get(lk, sv))
                         self.bitboard_sleeve.leaf_weights[lk] = round(0.5 * cur_v + 0.5 * float(sv), 4)
+                    for vk, sv in seed_sleeve.value_weights.items():
+                        cur_v = float(self.bitboard_sleeve.value_weights.get(vk, sv))
+                        self.bitboard_sleeve.value_weights[vk] = round(0.5 * cur_v + 0.5 * float(sv), 4)
+                    for pk, sv in seed_sleeve.policy_weights.items():
+                        cur_v = float(self.bitboard_sleeve.policy_weights.get(pk, sv))
+                        self.bitboard_sleeve.policy_weights[pk] = round(0.5 * cur_v + 0.5 * float(sv), 4)
                     self.bitboard_sleeve.steps_distilled = max(
                         self.bitboard_sleeve.steps_distilled,
                         seed_sleeve.steps_distilled,
@@ -1294,6 +1300,7 @@ class ChessKibitzerRuntime:
                 san_str,
                 perspective=mover_color,
                 learned_leaves=self.learned_leaves,
+                bitboard_sleeve=self.bitboard_sleeve,
             )
             human_coaching = build_human_move_coaching_report(
                 human_review,
@@ -2030,6 +2037,7 @@ class ChessKibitzerRuntime:
                 last_san,
                 perspective=lmft_color,
                 learned_leaves=self.learned_leaves,
+                bitboard_sleeve=self.bitboard_sleeve,
             )
             if self.chat_messages:
                 self.chat_messages[-1].setdefault("telemetry", {})["game_review"] = review

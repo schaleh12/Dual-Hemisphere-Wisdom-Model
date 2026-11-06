@@ -1600,6 +1600,7 @@ class ObjectiveCalibratedSparringEngine:
         *,
         perspective: chess.Color | None = None,
         learned_leaves: Sequence[LearnedLeaf] = (),
+        bitboard_sleeve: BitboardIntuitionSleeve | None = None,
     ) -> dict[str, Any]:
         """Post-move Game Review referee (`??` Blunder, `?` Mistake, `!!` Brilliancy, `!` Great Move).
 
@@ -1641,6 +1642,7 @@ class ObjectiveCalibratedSparringEngine:
                 played_move,
                 perspective=us,
                 learned_leaves=learned_tuple,
+                bitboard_sleeve=bitboard_sleeve,
             )
         )
 
@@ -1657,6 +1659,7 @@ class ObjectiveCalibratedSparringEngine:
                 mv,
                 perspective=us,
                 learned_leaves=learned_tuple,
+                bitboard_sleeve=bitboard_sleeve,
             )
             nb = board_before.copy()
             nb.push(mv)
@@ -1692,6 +1695,7 @@ class ObjectiveCalibratedSparringEngine:
                 best_move,
                 perspective=us,
                 learned_leaves=learned_tuple,
+                bitboard_sleeve=bitboard_sleeve,
             )
         )
 
@@ -1713,6 +1717,7 @@ class ObjectiveCalibratedSparringEngine:
             alt_move,
             perspective=us,
             learned_leaves=learned_tuple,
+            bitboard_sleeve=bitboard_sleeve,
         )
 
         cp_drop = 0.0 if played_move == best_move else round(max(0.0, best_cp - cp_after), 1)
