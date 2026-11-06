@@ -1001,6 +1001,310 @@ def compute_candidate_move_fuzzy_coordinates(
     return coords, is_blunder, blunder_penalty, post_posture, shadow_names
 
 
+def _material_balance_for_side(board: chess.Board, side: chess.Color) -> float:
+    """Return concrete non-king material advantage (`side` minus `not side`)."""
+    opp = not side
+    our_m = sum(
+        val * chess.popcount(board.pieces_mask(pt, side))
+        for pt, val in _PIECE_VALUES.items()
+        if val > 0.0
+    )
+    opp_m = sum(
+        val * chess.popcount(board.pieces_mask(pt, opp))
+        for pt, val in _PIECE_VALUES.items()
+        if val > 0.0
+    )
+    return float(our_m - opp_m)
+
+
+def _select_rollout_branch_moves(
+    board: chess.Board,
+    *,
+    max_quiet: int = 6,
+) -> list[chess.Move]:
+    """Select candidate moves at a rollout ply (all evasions if in check, else tacticals + top central/developing moves)."""
+    legal = list(board.legal_moves)
+    if len(legal) <= max_quiet + 4 or board.is_check():
+        return legal
+    tactical: list[chess.Move] = []
+    quiet: list[chess.Move] = []
+    for mv in legal:
+        if board.is_capture(mv) or mv.promotion or board.gives_check(mv):
+            tactical.append(mv)
+        else:
+            quiet.append(mv)
+    quiet.sort(
+        key=lambda mv: (
+            -int(bool(chess.BB_SQUARES[mv.to_square] & _BB_EXTENDED_CENTER)),
+            -int((board.piece_type_at(mv.from_square) or chess.PAWN) in (chess.KNIGHT, chess.BISHOP, chess.QUEEN, chess.ROOK)),
+        )
+    )
+    return tactical + quiet[:max_quiet]
+
+
+def _score_rollout_ply_impulse(
+    board: chess.Board,
+    move: chess.Move,
+    *,
+    perspective: chess.Color,
+    sleeve: BitboardIntuitionSleeve,
+) -> tuple[float, chess.Board, dict[str, Any], float, bool]:
+    """Evaluate a single ply inside the `Intention -> Theory -> Confidence` rollout using the Bitboard Sleeve."""
+    us = perspective
+    them = not us
+    nb = board.copy()
+    moving_pt = board.piece_type_at(move.from_square) or chess.PAWN
+    moving_val = _PIECE_VALUES.get(moving_pt, 1.0)
+    placed_val = _PIECE_VALUES.get(move.promotion, moving_val) if move.promotion else moving_val
+    captured_val = 0.0
+    if board.is_capture(move):
+        if board.is_en_passant(move):
+            captured_val = 1.0
+        else:
+            cap_pc = board.piece_at(move.to_square)
+            if cap_pc is not None:
+                captured_val = _PIECE_VALUES.get(cap_pc.piece_type, 1.0)
+
+    nb.push(move)
+    if nb.is_checkmate():
+        return (
+            100.0,
+            nb,
+            {"value_prior": 1.0, "policy_prior": 1.0, "sleeve_confidence": 0.95},
+            0.0,
+            False,
+        )
+
+    enemy_atts = list(nb.attackers(them, move.to_square))
+    our_defs = list(nb.attackers(us, move.to_square))
+    recapture_loss = 0.0
+    blunder_penalty = 0.0
+    if enemy_atts:
+        min_att_val = min(
+            (
+                _PIECE_VALUES.get(nb.piece_type_at(a_sq) or chess.PAWN, 1.0)
+                for a_sq in enemy_atts
+                if nb.piece_type_at(a_sq) != chess.KING
+            ),
+            default=placed_val,
+        )
+        if not our_defs:
+            recapture_loss = placed_val
+            if moving_val > captured_val + 0.5:
+                blunder_penalty = moving_val - captured_val
+        elif len(enemy_atts) > len(our_defs):
+            recapture_loss = placed_val
+            if moving_val - captured_val >= 0.8:
+                blunder_penalty = moving_val - captured_val
+        elif placed_val > min_att_val:
+            recapture_loss = placed_val - min_att_val
+            if (moving_val - captured_val) - min_att_val >= 0.8:
+                blunder_penalty = (moving_val - captured_val) - min_att_val
+        elif captured_val > 0.0 and placed_val >= captured_val - 0.2:
+            recapture_loss = min(placed_val, captured_val)
+
+    promo_gain = max(0.0, placed_val - 1.0 - recapture_loss) if move.promotion else 0.0
+    net_gain = max(0.0, captured_val + promo_gain - recapture_loss - blunder_penalty)
+
+    allows_mate = False
+    for rep in nb.legal_moves:
+        if nb.gives_check(rep):
+            nb.push(rep)
+            is_m = nb.is_checkmate()
+            nb.pop()
+            if is_m:
+                allows_mate = True
+                blunder_penalty = max(blunder_penalty, 9.5)
+                break
+
+    pending_piece_loss = 0.0
+    if not allows_mate:
+        for cap_mv in nb.generate_legal_captures():
+            vic_pt = nb.piece_type_at(cap_mv.to_square)
+            if vic_pt is None or vic_pt == chess.KING:
+                continue
+            vic_val = _PIECE_VALUES.get(vic_pt, 1.0)
+            if vic_val < 3.0:
+                continue
+            att_pt = nb.piece_type_at(cap_mv.from_square) or chess.PAWN
+            att_val = _PIECE_VALUES.get(att_pt, 1.0)
+            if not nb.is_attacked_by(us, cap_mv.to_square):
+                pending_piece_loss = max(pending_piece_loss, vic_val)
+            elif vic_val - att_val >= 1.0:
+                pending_piece_loss = max(pending_piece_loss, vic_val - att_val)
+
+    sleeve_out = sleeve.evaluate_move(
+        board,
+        move,
+        perspective=us,
+        next_board=nb,
+        blunder_penalty=blunder_penalty,
+        captured_val=captured_val,
+        recapture_loss=recapture_loss,
+        net_capture_gain=net_gain,
+    )
+    impulse_score = (
+        float(sleeve_out["value_prior"])
+        + 0.75 * float(sleeve_out["policy_prior"])
+        + 0.35 * net_gain
+        - 0.55 * blunder_penalty
+        - 0.45 * pending_piece_loss
+        + (0.22 if board.gives_check(move) and blunder_penalty < 0.8 else 0.0)
+    )
+    return impulse_score, nb, sleeve_out, pending_piece_loss, allows_mate
+
+
+def _rollout_intention_into_theory_and_confidence(
+    board: chess.Board,
+    next_board: chess.Board,
+    *,
+    perspective: chess.Color,
+    rule_tuple: tuple[FuzzyConceptRule, ...],
+    sleeve: BitboardIntuitionSleeve,
+    base_coords: dict[str, float],
+) -> tuple[float, float, float]:
+    """Project a candidate `intention` through the opponent's best replies (`Ply 2`) and our best response (`Ply 3`) to ground `theory` and `confidence`."""
+    us = perspective
+    them = not us
+    reply_candidates = _select_rollout_branch_moves(next_board, max_quiet=6)
+    if not reply_candidates:
+        return (
+            float(base_coords.get("psychological/truth/theory", 0.55)),
+            float(base_coords.get("psychological/contemplation/confidence", 0.60)),
+            0.0,
+        )
+
+    mat_before = _material_balance_for_side(board, us)
+    scored_replies: list[tuple[float, chess.Move, chess.Board]] = []
+    for r2 in reply_candidates:
+        r2_score, board_2, _, _, r2_allows_mate = _score_rollout_ply_impulse(
+            next_board,
+            r2,
+            perspective=them,
+            sleeve=sleeve,
+        )
+        if not r2_allows_mate or len(reply_candidates) == 1:
+            scored_replies.append((r2_score, r2, board_2))
+
+    if not scored_replies:
+        return (
+            float(base_coords.get("psychological/truth/theory", 0.55)),
+            float(base_coords.get("psychological/contemplation/confidence", 0.60)),
+            0.0,
+        )
+
+    scored_replies.sort(key=lambda item: -item[0])
+    top_opponent_replies = list(scored_replies[:2])
+    seen_r2 = {item[1] for item in top_opponent_replies}
+    for item in scored_replies[2:]:
+        if next_board.gives_check(item[1]) and item[1] not in seen_r2:
+            top_opponent_replies.append(item)
+            seen_r2.add(item[1])
+            if len(top_opponent_replies) >= 4:
+                break
+
+    worst_branch_utility = 999.0
+    rollout_theory = float(base_coords.get("psychological/truth/theory", 0.55))
+    rollout_conf = float(base_coords.get("psychological/contemplation/confidence", 0.60))
+    rollout_loss = 0.0
+
+    for _r2_score, _r2, board_2 in top_opponent_replies:
+        if board_2.is_checkmate():
+            return 0.02, 0.05, 9.5
+
+        our_responses = _select_rollout_branch_moves(board_2, max_quiet=6)
+        if not our_responses:
+            mat_2 = _material_balance_for_side(board_2, us)
+            loss_2 = max(0.0, mat_before - mat_2)
+            branch_th = 0.35 if loss_2 < 0.8 else 0.12
+            branch_cf = 0.45 if loss_2 < 0.8 else 0.18
+            util = branch_th - 0.25 * loss_2
+            if util < worst_branch_utility:
+                worst_branch_utility = util
+                rollout_theory = branch_th
+                rollout_conf = branch_cf
+                rollout_loss = max(rollout_loss, loss_2)
+            continue
+
+        best_m3_utility = -999.0
+        best_board_3 = board_2
+        best_sleeve_3: dict[str, Any] = {"value_prior": 0.50, "policy_prior": 0.50, "sleeve_confidence": 0.55}
+        best_eff_mat_3 = _material_balance_for_side(board_2, us)
+
+        for m3 in our_responses:
+            m3_score, board_3, sleeve_3, pending_loss_3, allows_mate_4 = _score_rollout_ply_impulse(
+                board_2,
+                m3,
+                perspective=us,
+                sleeve=sleeve,
+            )
+            if board_3.is_checkmate():
+                eff_mat_3 = mat_before + 9.0
+                m3_util = 100.0
+            else:
+                mat_3 = _material_balance_for_side(board_3, us)
+                eff_mat_3 = mat_3 - (9.0 if allows_mate_4 else 0.85 * pending_loss_3)
+                m3_util = eff_mat_3 + 0.80 * m3_score
+            if m3_util > best_m3_utility:
+                best_m3_utility = m3_util
+                best_board_3 = board_3
+                best_sleeve_3 = sleeve_3
+                best_eff_mat_3 = eff_mat_3
+
+        net_mat_delta = best_eff_mat_3 - mat_before
+        branch_loss = max(0.0, -net_mat_delta) if net_mat_delta <= -0.8 else 0.0
+
+        posture_3 = evaluate_chess_board_posture(best_board_3, perspective=us)
+        phil_3 = posture_3.philosophical_coordinates
+        order_3 = float(phil_3.get("philosophical/structure/order", 0.50))
+        cont_3 = float(phil_3.get("philosophical/persistence/continuity", 0.50))
+        agency_3 = float(phil_3.get("philosophical/being/agency", 0.50))
+        exist_3 = float(phil_3.get("philosophical/being/existence", 0.50))
+
+        branch_theory = _clamp01(
+            0.35 * float(best_sleeve_3["policy_prior"])
+            + 0.25 * float(best_sleeve_3["value_prior"])
+            + 0.20 * order_3
+            + 0.12 * cont_3
+            + 0.08 * agency_3
+            + 0.06 * min(4.0, max(0.0, net_mat_delta))
+            - 0.18 * min(4.0, branch_loss)
+        )
+        sleeve_conf_3 = float(best_sleeve_3["sleeve_confidence"])
+        if rule_tuple:
+            coords_3 = dict(base_coords)
+            for k, v in phil_3.items():
+                coords_3[k] = float(v)
+            coords_3["psychological/truth/fact"] = _clamp01(
+                0.55 * float(best_sleeve_3["value_prior"])
+                + 0.45 * exist_3
+                - 0.20 * min(3.0, branch_loss)
+            )
+            coords_3["psychological/truth/theory"] = branch_theory
+            coords_3["psychological/contemplation/confidence"] = sleeve_conf_3
+            acts_3 = _evaluate_rules_with_inhibition(rule_tuple, coords_3)
+            _cl_3, rule_conf_3, matched_3, _conf_3, _rsn_3 = compute_contemplation(acts_3)
+            if matched_3 and matched_3.startswith(("hazard_", "blunder_", "avoid_")):
+                branch_conf = _clamp01(0.35 * sleeve_conf_3 - 0.25 * float(rule_conf_3) - 0.15 * min(4.0, branch_loss))
+            else:
+                branch_conf = _clamp01(
+                    0.50 * float(rule_conf_3)
+                    + 0.50 * sleeve_conf_3
+                    - 0.15 * min(4.0, branch_loss)
+                )
+        else:
+            branch_conf = _clamp01(sleeve_conf_3 - 0.15 * min(4.0, branch_loss))
+
+        branch_util = branch_theory + 0.50 * branch_conf - 0.30 * branch_loss
+        if branch_util < worst_branch_utility:
+            worst_branch_utility = branch_util
+            rollout_theory = branch_theory
+            rollout_conf = branch_conf
+            rollout_loss = max(rollout_loss, branch_loss)
+
+    return rollout_theory, rollout_conf, rollout_loss
+
+
 def evaluate_candidate_moves_with_right_brain(
     board: chess.Board,
     rules: Sequence[FuzzyConceptRule] = (),
@@ -1009,7 +1313,7 @@ def evaluate_candidate_moves_with_right_brain(
     limit: int = 6,
     bitboard_sleeve: BitboardIntuitionSleeve | None = None,
 ) -> list[CandidateMoveEvaluation]:
-    """Rank legal moves as competing Action Bids on `psychological/will/execution` (`RIGHT_BRAIN_WILL_EDGES`)."""
+    """Rank legal moves via `Intention (Ply 1) -> Theory (Ply 2-3 Rollout) -> Confidence -> Execution` (`RIGHT_BRAIN_WILL_EDGES`)."""
     legal = list(board.legal_moves)
     if not legal:
         return []
@@ -1019,6 +1323,7 @@ def evaluate_candidate_moves_with_right_brain(
     learned_tuple = tuple(learned_leaves)
     sleeve = bitboard_sleeve if bitboard_sleeve is not None else _DEFAULT_BITBOARD_SLEEVE
     evaluations: list[CandidateMoveEvaluation] = []
+    pending_candidates: list[dict[str, Any]] = []
 
     for move in legal:
         san = board.san(move)
@@ -1063,6 +1368,77 @@ def evaluate_candidate_moves_with_right_brain(
         for r in rule_tuple:
             for req_leaf in r.target_leaves:
                 coords.setdefault(req_leaf, 0.0)
+
+        intention_rank = (
+            1.0 * float(coords.get("psychological/will/intention", 0.50))
+            + 1.0 * float(coords.get("psychological/truth/fact", 0.50))
+            + 0.5 * float(coords.get("psychological/truth/theory", 0.50))
+            - 1.2 * blunder_penalty
+            - (1.5 if is_rep else 0.0)
+        )
+        pending_candidates.append(
+            {
+                "move": move,
+                "san": san,
+                "uci": uci,
+                "next_board": next_board,
+                "is_rep": is_rep,
+                "coords": coords,
+                "is_blunder": is_blunder,
+                "blunder_penalty": blunder_penalty,
+                "post_posture": post_posture,
+                "shadow_names": shadow_names,
+                "intention_rank": intention_rank,
+                "rolled_out": False,
+            }
+        )
+
+    pending_candidates.sort(key=lambda item: (-float(item["intention_rank"]), str(item["san"])))
+
+    def _apply_rollout_to_candidate(cand: dict[str, Any]) -> None:
+        if cand["rolled_out"]:
+            return
+        cand["rolled_out"] = True
+        r_theory, r_conf, r_loss = _rollout_intention_into_theory_and_confidence(
+            board,
+            cand["next_board"],
+            perspective=us,
+            rule_tuple=rule_tuple,
+            sleeve=sleeve,
+            base_coords=cand["coords"],
+        )
+        c_dict = cand["coords"]
+        c_dict["psychological/truth/theory"] = _clamp01(
+            0.35 * float(c_dict.get("psychological/truth/theory", 0.50)) + 0.65 * r_theory
+        )
+        c_dict["psychological/contemplation/confidence"] = _clamp01(
+            0.40 * float(c_dict.get("psychological/contemplation/confidence", 0.60)) + 0.60 * r_conf
+        )
+        if r_loss >= 0.8:
+            cand["is_blunder"] = True
+            cand["blunder_penalty"] = max(float(cand["blunder_penalty"]), r_loss)
+            c_dict["cultural/efficiency/wastelessness"] = 0.25
+            c_dict["cultural/freedom/needlessness"] = _clamp01(
+                max(float(c_dict.get("cultural/freedom/needlessness", 0.10)), 0.53)
+            )
+
+    rollout_k = max(10, int(limit))
+    for cand in pending_candidates[:rollout_k]:
+        _apply_rollout_to_candidate(cand)
+
+    if pending_candidates and all(bool(c["is_blunder"]) for c in pending_candidates[:rollout_k]):
+        for cand in pending_candidates[rollout_k:]:
+            _apply_rollout_to_candidate(cand)
+
+    for cand in pending_candidates:
+        san = cand["san"]
+        uci = cand["uci"]
+        is_rep = cand["is_rep"]
+        coords = cand["coords"]
+        is_blunder = cand["is_blunder"]
+        blunder_penalty = float(cand["blunder_penalty"])
+        post_posture = cand["post_posture"]
+        shadow_names = cand["shadow_names"]
 
         sleeve_conf = float(coords.get("psychological/contemplation/confidence", 0.60))
         is_hazard_match = False

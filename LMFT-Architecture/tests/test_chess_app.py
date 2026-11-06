@@ -970,6 +970,40 @@ def test_bitboard_sensor_psychological_will_execution_bids_and_rem_distillation(
     assert post_sleep_evals["O-O"].execution_bid > pre_sleep_evals["O-O"].execution_bid
 
 
+def test_intention_to_theory_and_confidence_rollout_pipeline() -> None:
+    """Verify `Intention (Ply 1) -> Theory (Ply 2-3 Rollout) -> Confidence -> Execution` refutes 2-ply mate/fork traps."""
+    # 1. 2-ply back-rank forced mate (`a4?? -> Rf1+! Rxf1 Rxf1#`): `h3` creates luft and parries it, while `a4` fails the Theory rollout
+    two_ply_mate_board = chess.Board("5r1k/5rpp/8/8/8/P7/1P4PP/4R2K w - - 0 50")
+    evals_mate = {
+        e.san: e
+        for e in evaluate_candidate_moves_with_right_brain(
+            two_ply_mate_board,
+            limit=25,
+        )
+    }
+    assert evals_mate["a4"].is_blunder is True
+    assert evals_mate["h3"].is_blunder is False
+    assert evals_mate["h3"].theory > evals_mate["a4"].theory
+    assert evals_mate["h3"].confidence > evals_mate["a4"].confidence
+    assert evals_mate["h3"].execution_bid > evals_mate["a4"].execution_bid
+
+    # 2. 2-ply Knight royal fork (`a4?? -> Nc2+! Kd2 Nxa1`): `Rd1` parries it, while `a4` fails the Theory rollout
+    royal_fork_board = chess.Board("4k3/8/8/8/3n4/P6P/1P4P1/R3K3 w - - 0 30")
+    evals_fork = {
+        e.san: e
+        for e in evaluate_candidate_moves_with_right_brain(
+            royal_fork_board,
+            limit=25,
+        )
+    }
+    assert evals_fork["a4"].is_blunder is True
+    assert evals_fork["Rd1"].is_blunder is False
+    assert evals_fork["Rd1"].theory > evals_fork["a4"].theory
+    assert evals_fork["Rd1"].confidence > evals_fork["a4"].confidence
+    assert evals_fork["Rd1"].execution_bid > evals_fork["a4"].execution_bid
+
+
+
 
 
 
