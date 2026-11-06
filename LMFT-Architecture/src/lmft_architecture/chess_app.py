@@ -1638,12 +1638,20 @@ class ChessKibitzerRuntime:
                                     learned_leaves=self.learned_leaves,
                                     bitboard_sleeve=self.bitboard_sleeve,
                                 )
+                                vetoed_coords["psychological/truth/theory"] = float(cand_eval.theory)
+                                vetoed_coords["psychological/contemplation/confidence"] = float(cand_eval.confidence)
+                                if cand_eval.is_blunder:
+                                    vetoed_coords["cultural/efficiency/wastelessness"] = 0.25
                                 safe_choice_coords, _, _, _, _ = compute_candidate_move_fuzzy_coordinates(
                                     self.board,
                                     self.board.parse_san(right_brain_choice.san),
                                     perspective=us_color,
                                     learned_leaves=self.learned_leaves,
                                     bitboard_sleeve=self.bitboard_sleeve,
+                                )
+                                safe_choice_coords["psychological/truth/theory"] = float(right_brain_choice.theory)
+                                safe_choice_coords["psychological/contemplation/confidence"] = float(
+                                    right_brain_choice.confidence
                                 )
                             except Exception:
                                 vetoed_coords = None

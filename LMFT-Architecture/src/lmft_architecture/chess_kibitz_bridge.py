@@ -1305,6 +1305,46 @@ def _rollout_intention_into_theory_and_confidence(
     return rollout_theory, rollout_conf, rollout_loss
 
 
+def _enrich_move_coords_with_theory_rollout(
+    board_before: chess.Board,
+    move: chess.Move,
+    coords: dict[str, float],
+    is_blunder: bool,
+    blunder_penalty: float,
+    *,
+    perspective: chess.Color,
+    sleeve: BitboardIntuitionSleeve,
+    rule_tuple: tuple[FuzzyConceptRule, ...] = (),
+) -> tuple[dict[str, float], bool, float]:
+    """Enrich 1-ply candidate coordinates with the `Ply 2-3` `Theory` and `Confidence` rollout."""
+    nb = board_before.copy()
+    nb.push(move)
+    if nb.is_checkmate():
+        return coords, False, 0.0
+    r_theory, r_conf, r_loss = _rollout_intention_into_theory_and_confidence(
+        board_before,
+        nb,
+        perspective=perspective,
+        rule_tuple=rule_tuple,
+        sleeve=sleeve,
+        base_coords=coords,
+    )
+    coords["psychological/truth/theory"] = _clamp01(
+        0.35 * float(coords.get("psychological/truth/theory", 0.50)) + 0.65 * r_theory
+    )
+    coords["psychological/contemplation/confidence"] = _clamp01(
+        0.40 * float(coords.get("psychological/contemplation/confidence", 0.60)) + 0.60 * r_conf
+    )
+    if r_loss >= 0.8:
+        is_blunder = True
+        blunder_penalty = max(float(blunder_penalty), r_loss)
+        coords["cultural/efficiency/wastelessness"] = 0.25
+        coords["cultural/freedom/needlessness"] = _clamp01(
+            max(float(coords.get("cultural/freedom/needlessness", 0.10)), 0.53)
+        )
+    return coords, is_blunder, blunder_penalty
+
+
 def evaluate_candidate_moves_with_right_brain(
     board: chess.Board,
     rules: Sequence[FuzzyConceptRule] = (),
@@ -2154,14 +2194,24 @@ class ObjectiveCalibratedSparringEngine:
                     played_move_san = board_before.san(played_move)
 
         learned_tuple = tuple(learned_leaves)
+        sleeve = bitboard_sleeve if bitboard_sleeve is not None else _DEFAULT_BITBOARD_SLEEVE
         played_coords, played_is_blunder, played_b_pen, _p_post, _p_shad = (
             compute_candidate_move_fuzzy_coordinates(
                 board_before,
                 played_move,
                 perspective=us,
                 learned_leaves=learned_tuple,
-                bitboard_sleeve=bitboard_sleeve,
+                bitboard_sleeve=sleeve,
             )
+        )
+        played_coords, played_is_blunder, played_b_pen = _enrich_move_coords_with_theory_rollout(
+            board_before,
+            played_move,
+            played_coords,
+            played_is_blunder,
+            played_b_pen,
+            perspective=us,
+            sleeve=sleeve,
         )
 
         cp_before = _static_centipawns_for_color(board_before, us)
@@ -2177,7 +2227,7 @@ class ObjectiveCalibratedSparringEngine:
                 mv,
                 perspective=us,
                 learned_leaves=learned_tuple,
-                bitboard_sleeve=bitboard_sleeve,
+                bitboard_sleeve=sleeve,
             )
             nb = board_before.copy()
             nb.push(mv)
@@ -2213,8 +2263,17 @@ class ObjectiveCalibratedSparringEngine:
                 best_move,
                 perspective=us,
                 learned_leaves=learned_tuple,
-                bitboard_sleeve=bitboard_sleeve,
+                bitboard_sleeve=sleeve,
             )
+        )
+        best_coords, best_is_blunder, _best_pen = _enrich_move_coords_with_theory_rollout(
+            board_before,
+            best_move,
+            best_coords,
+            best_is_blunder,
+            _best_pen,
+            perspective=us,
+            sleeve=sleeve,
         )
 
         # Find the second-best move (for `!`/`!!` edge detection) AND an inferior move (for REM Sleep coordinate contrast)
@@ -2235,7 +2294,16 @@ class ObjectiveCalibratedSparringEngine:
             alt_move,
             perspective=us,
             learned_leaves=learned_tuple,
-            bitboard_sleeve=bitboard_sleeve,
+            bitboard_sleeve=sleeve,
+        )
+        alt_coords, _alt_b, _alt_pen = _enrich_move_coords_with_theory_rollout(
+            board_before,
+            alt_move,
+            alt_coords,
+            _alt_b,
+            _alt_pen,
+            perspective=us,
+            sleeve=sleeve,
         )
 
         cp_drop = 0.0 if played_move == best_move else round(max(0.0, best_cp - cp_after), 1)

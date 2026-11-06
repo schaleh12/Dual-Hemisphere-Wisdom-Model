@@ -1002,6 +1002,27 @@ def test_intention_to_theory_and_confidence_rollout_pipeline() -> None:
     assert evals_fork["Rd1"].confidence > evals_fork["a4"].confidence
     assert evals_fork["Rd1"].execution_bid > evals_fork["a4"].execution_bid
 
+    # 3. Post-move Game Review (`audit_played_move_for_game_review`) also enriches `played_coordinates`
+    #    and `best_move_coordinates` with the rolled-out `theory` and `confidence` coordinates for REM Sleep
+    from lmft_architecture.chess_kibitz_bridge import ObjectiveCalibratedSparringEngine
+
+    referee = ObjectiveCalibratedSparringEngine(use_stockfish_uci=False)
+    rev_fork = referee.audit_played_move_for_game_review(
+        royal_fork_board,
+        "a4",
+        perspective=chess.WHITE,
+    )
+    assert rev_fork["classification"] == "BLUNDER_??"
+    assert rev_fork["is_hazard"] is True
+    assert (
+        rev_fork["best_move_coordinates"]["psychological/truth/theory"]
+        > rev_fork["played_coordinates"]["psychological/truth/theory"]
+    )
+    assert (
+        rev_fork["best_move_coordinates"]["psychological/contemplation/confidence"]
+        > rev_fork["played_coordinates"]["psychological/contemplation/confidence"]
+    )
+
 
 
 
