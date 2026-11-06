@@ -260,14 +260,7 @@ def normalize_contrastive_target_leaves_and_thresholds(
         RETENTION_LEAF,
         NOVELTY_LEAF,
     }
-    shadow_leaf_set = {leaf.leaf_id for leaf in PHILOSOPHICAL_SHADOW_LEAVES} | {
-        "philosophical/being/tyrannical_volition",
-        "philosophical/being/nihilistic_withdrawal",
-        "philosophical/structure/dogmatic_rigidity",
-        "philosophical/structure/fragmentation",
-        "philosophical/persistence/stagnation",
-        "philosophical/persistence/amnesia",
-    }
+    shadow_leaf_set = {leaf.leaf_id for leaf in PHILOSOPHICAL_SHADOW_LEAVES}
     virtue_leaf_set = {
         "philosophical/being/existence",
         "philosophical/structure/order",

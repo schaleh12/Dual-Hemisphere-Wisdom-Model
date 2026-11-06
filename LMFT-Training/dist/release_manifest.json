@@ -2,8 +2,8 @@
   "schema_version": 1,
   "version": "0.2.0",
   "github_repo": "schaleh12/Dual-Hemisphere-Wisdom-Model",
-  "build_sha256": "dfdfd5cead5901c3a12c24ffd601f2d8aba2bdfffba990b2d536340cd4eb7de8",
-  "build_short_hash": "dfdfd5cead59",
+  "build_sha256": "7c29fd61fc9ae9842176e0bf9f2adf855217fb4f22451be562382aa2c0dd245c",
+  "build_short_hash": "7c29fd61fc9a",
   "files": {
     "src/lmft_architecture/__init__.py": {
       "sha256": "a89f56c2195e87129adbffa5065d8769ea096e13ba98783d217c4d120ee92623",
@@ -258,8 +258,8 @@
       "size_bytes": 2752
     },
     "src/lmft_architecture/sleep_consolidation.py": {
-      "sha256": "ff094d153f12a916ef18d484fdb26d8b1a6cf3e3b399422483ebfcbdff45ab04",
-      "size_bytes": 32762
+      "sha256": "744219d619851552d0b8acd822e9ce625326415b8d3e9d25e0ec12ed52fa3dae",
+      "size_bytes": 32453
     },
     "src/lmft_architecture/subliminal_gap_splice.py": {
       "sha256": "1ef7a8a54a452ae8b0a4525691ec40ad9f581b68a6cf081d1d88c4c68e50ba01",

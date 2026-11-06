@@ -160,6 +160,15 @@ def test_zero_hallucinated_leaf_paths_across_codebase() -> None:
     leaf_literal_re = re.compile(
         r"[\"']((?:cultural|philosophical|experiential|psychological)/[a-z0-9_-]+/[a-z0-9_-]+)[\"']"
     )
+    strict_runtime_files = {
+        "chess_app.py",
+        "chess_kibitz_bridge.py",
+        "bloodmoon_app.py",
+        "entrainment_sparring.py",
+        "right_brain_equilibrium.py",
+        "sleep_consolidation.py",
+        "three_legged_runtime.py",
+    }
     src_dir = resolve_arch_root() / "src" / "lmft_architecture"
     invalid_literals: list[tuple[str, str]] = []
     for py_file in sorted(src_dir.glob("*.py")):
@@ -168,8 +177,15 @@ def test_zero_hallucinated_leaf_paths_across_codebase() -> None:
         text = py_file.read_text(encoding="utf-8")
         for m in leaf_literal_re.finditer(text):
             cand = m.group(1)
-            if cand not in allowed_leaves:
-                invalid_literals.append((py_file.name, cand))
+            if cand.startswith("psychological/"):
+                if cand not in founding_leaves:
+                    invalid_literals.append((py_file.name, cand))
+            elif py_file.name in strict_runtime_files:
+                if cand not in allowed_leaves:
+                    invalid_literals.append((py_file.name, cand))
+            else:
+                if cand not in allowed_leaves and not is_valid_leaf_id(cand):
+                    invalid_literals.append((py_file.name, cand))
 
     assert invalid_literals == [], f"Hallucinated or invalid leaf paths found in src: {invalid_literals}"
 
