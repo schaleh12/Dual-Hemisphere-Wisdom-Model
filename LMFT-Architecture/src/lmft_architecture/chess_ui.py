@@ -612,11 +612,11 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
     </div>
     <div id="chat-messages"></div>
     <div style="display:flex;gap:6px;align-items:center;">
-      <input type="text" id="chat-input" placeholder="Talk to LMFT: ask why a move was a blunder, ask for a plan, or chat..." style="flex:1;" onkeydown="if(event.key==='Enter')sendChatMessage()" />
-      <select id="chat-sentences-select">
-        <option value="1" selected>1 Sent</option>
-        <option value="2">2 Sent</option>
-        <option value="3">3 Sent</option>
+      <input type="text" id="chat-input" placeholder="Talk to HousePlant 1.0: ask why a move was a blunder, ask for a plan, or chat..." style="flex:1;" onkeydown="if(event.key==='Enter')sendChatMessage()" />
+      <select id="chat-sentences-select" title="How many sentences HousePlant 1.0 speaks when replying">
+        <option value="1" selected>Reply: 1 Sentence</option>
+        <option value="2">Reply: 2 Sentences</option>
+        <option value="3">Reply: 3 Sentences</option>
       </select>
       <button class="btn btn-chess-green" onclick="sendChatMessage()">Send</button>
     </div>

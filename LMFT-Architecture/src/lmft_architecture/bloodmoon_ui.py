@@ -345,10 +345,10 @@ BLOODMOON_SINGLE_PAGE_HTML = """<!DOCTYPE html>
     <div id="chat-messages"></div>
     <div class="chat-bar">
       <input type="text" id="chat-input" placeholder="Direct Sanctuary prompt or custom script note..." onkeydown="if(event.key==='Enter')sendChatMessage()" />
-      <select id="chat-sentences-select">
-        <option value="1">1 Sent</option>
-        <option value="2">2 Sent</option>
-        <option value="3" selected>3 Sent</option>
+      <select id="chat-sentences-select" title="How many sentences the AI generates in its reply">
+        <option value="1">Reply: 1 Sentence</option>
+        <option value="2">Reply: 2 Sentences</option>
+        <option value="3" selected>Reply: 3 Sentences</option>
       </select>
       <button class="btn btn-primary" onclick="sendChatMessage()">Send</button>
     </div>
