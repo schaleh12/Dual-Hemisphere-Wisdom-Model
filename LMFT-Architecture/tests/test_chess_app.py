@@ -1055,20 +1055,28 @@ def test_speaker_attribution_and_clean_slate_reset(tmp_path: Path) -> None:
     assert "sparring_referee_review" in msg_sf["telemetry"]
     assert runtime._extract_clean_conversation_history() == ()
 
-    # 3. On a Move 3+ contested tactical crossroads, Gear 2/3 wakes the Left Brain with 2 spliced sentences (`sentence_count == 2`)
+    # 3. On a Move 3+ contested tactical crossroads, Gear 2/3 wakes the Left Brain and keeps thinking while stumped
     runtime.handle_set_fen("r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 3 3")
+    assert runtime.white_clock_sec == 300.0 and runtime.black_clock_sec == 300.0
     s3 = runtime.handle_microwave_step()
     msg_delib = s3["chat_messages"][-1]
     assert msg_delib["sender"] == "companion"
     assert "White to move" in msg_delib["clean_pretext_prompt"]
     assert "Position anchored on " not in msg_delib["text"]
     assert "[Right-Brain Intuition Override:" not in msg_delib["text"]
-    assert msg_delib["telemetry"]["spliced_trace"].get("sentence_count") == 2
+    assert msg_delib["telemetry"]["spliced_trace"].get("sentence_count", 0) >= 2
     assert msg_delib["telemetry"]["spliced_trace"].get("comma_scored_live") is True
+    assert s3["board"]["white_clock_sec"] <= 300.0
     hist_pairs = runtime._extract_clean_conversation_history()
     assert len(hist_pairs) == 1
 
-    # 3. Clean slate reset restores foundational rules, resets BitboardIntuitionSleeve & Elo to 1000.0
+    # 4. Under time trouble (<= 12s left on 5:00 clock), Celestriad switches to `gear_1_time_trouble_instinct`
+    runtime.handle_set_fen("r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 3 3")
+    runtime.white_clock_sec = 8.0
+    runtime.handle_chess_ai_move(in_sparring_mode=True)
+    assert runtime.last_hybrid_move_arbitration["selection_mode"] == "gear_1_time_trouble_instinct"
+
+    # 5. Clean slate reset restores foundational rules, resets BitboardIntuitionSleeve, clocks, & Elo to 1000.0
     runtime.lmft_elo = 1156.0
     runtime.bitboard_sleeve.steps_distilled = 15
     runtime.rules = (

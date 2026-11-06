@@ -492,7 +492,7 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
           <span id="posture-summary-span" style="display:none;">White to move</span>
         </div>
       </div>
-      <span class="pill" id="elo-status-pill" title="Celestriad 1.0 FIDE Elo vs. Strength-Calibrated Stockfish 19">Celestriad Elo: 1000.0 (0W-0L-0D)</span>
+      <div style="display:flex;gap:6px;align-items:center;"><span class="pill" id="top-clock-pill" style="font-family:monospace;font-weight:800;">⏱️ 05:00</span><span class="pill" id="elo-status-pill" title="Celestriad 1.0 FIDE Elo vs. Strength-Calibrated Stockfish 19">Celestriad Elo: 1000.0 (0W-0L-0D)</span></div>
     </div>
 
     <!-- Eval Bar + 8x8 Chessboard -->
@@ -513,7 +513,7 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
           <span style="display:none;" id="bottom-player-subtitle">Auto-Coached on Every Move (!! / ! / ? / ??)</span>
         </div>
       </div>
-      <span class="pill" id="player-elo-pill" style="border-color:var(--chess-green);color:#d9f99d;" title="Assigned Player Elo or Stockfish Target Elo">Your Elo: 1000.0</span>
+      <div style="display:flex;gap:6px;align-items:center;"><span class="pill" id="bottom-clock-pill" style="font-family:monospace;font-weight:800;">⏱️ 05:00</span><span class="pill" id="player-elo-pill" style="border-color:var(--chess-green);color:#d9f99d;" title="Assigned Player Elo or Stockfish Target Elo">Your Elo: 1000.0</span></div>
     </div>
 
     <div id="board-reflex-strip">Ready — Click any piece on the board to play against LMFT, or click [Self-Train (AFK Oven)].</div>
@@ -962,7 +962,7 @@ function renderState(s) {
   document.getElementById("sleep-queue-pill").textContent = "Sleep Queue: " + (s.sleep_queue_count || 0);
 
   if (s.board) {
-    renderBoard(s.board);
+    renderBoard(s.board); const fmtClock = (sec) => { const v = Math.max(0, Number(sec ?? 300)); const m = Math.floor(v / 60); const r = Math.floor(v % 60); return `⏱️ ${String(m).padStart(2, "0")}:${String(r).padStart(2, "0")}`; }; const topClockEl = document.getElementById("top-clock-pill"); const botClockEl = document.getElementById("bottom-clock-pill"); if (topClockEl) topClockEl.textContent = fmtClock(topBoardColor === "White" ? s.board.white_clock_sec : s.board.black_clock_sec); if (botClockEl) botClockEl.textContent = fmtClock(bottomBoardColor === "White" ? s.board.white_clock_sec : s.board.black_clock_sec);
     const turnPill = document.getElementById("turn-indicator-pill");
     if (turnPill && turnPill.textContent !== "LMFT Thinking & Kibitzing...") {
       if (s.board.is_game_over) {

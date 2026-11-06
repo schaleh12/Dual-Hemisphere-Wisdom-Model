@@ -444,6 +444,10 @@ class ChessKibitzerRuntime:
 
         self.board = chess.Board()
         self.move_history_san: list[str] = []
+        self.match_clock_limit_sec: float = 300.0
+        self.white_clock_sec: float = 300.0
+        self.black_clock_sec: float = 300.0
+        self.clock_flagged_loser: chess.Color | None = None
         self.last_board_reflex: dict[str, Any] | None = None
         self.board_posture: ChessBoardPosture = evaluate_chess_board_posture(self.board)
         self.active_room: str = "chess"
@@ -1306,7 +1310,15 @@ class ChessKibitzerRuntime:
                 "fen": self.board.fen(),
                 "turn": "w" if self.board.turn == chess.WHITE else "b",
                 "in_check": self.board.is_check(),
-                "is_game_over": self.board.is_game_over(),
+                "is_game_over": self.board.is_game_over() or (self.clock_flagged_loser is not None),
+                "match_clock_limit_sec": round(float(self.match_clock_limit_sec), 1),
+                "white_clock_sec": round(float(self.white_clock_sec), 1),
+                "black_clock_sec": round(float(self.black_clock_sec), 1),
+                "clock_flagged_loser": (
+                    "w"
+                    if self.clock_flagged_loser == chess.WHITE
+                    else ("b" if self.clock_flagged_loser == chess.BLACK else None)
+                ),
                 "eval_white_cp": _static_centipawns_for_color(self.board, chess.WHITE),
                 "move_history_san": list(self.move_history_san),
                 "pgn_snippet": pgn_snippet,
@@ -1320,6 +1332,23 @@ class ChessKibitzerRuntime:
             "gemini_api_configured": bool(os.environ.get("GEMINI_API_KEY", "").strip()),
         }
 
+    def _reset_match_clocks(self) -> None:
+        self.white_clock_sec = float(self.match_clock_limit_sec)
+        self.black_clock_sec = float(self.match_clock_limit_sec)
+        self.clock_flagged_loser = None
+
+    def _deduct_move_clock(self, mover_color: chess.Color, elapsed_sec: float) -> float:
+        dt = max(0.0, float(elapsed_sec))
+        if mover_color == chess.WHITE:
+            self.white_clock_sec = max(0.0, float(self.white_clock_sec) - dt)
+            rem = self.white_clock_sec
+        else:
+            self.black_clock_sec = max(0.0, float(self.black_clock_sec) - dt)
+            rem = self.black_clock_sec
+        if rem <= 0.0 and self.clock_flagged_loser is None:
+            self.clock_flagged_loser = mover_color
+        return round(float(rem), 2)
+
     def handle_chess_move(
         self,
         move_uci_or_san: str,
@@ -1331,8 +1360,10 @@ class ChessKibitzerRuntime:
         is_human_move: bool | None = None,
         skip_spontaneous_left_brain: bool = False,
         is_sparring_opponent_move: bool = False,
+        move_started_at: float | None = None,
     ) -> dict[str, Any]:
         """Make a move on the chessboard and spontaneously append to the continuous Pretext -> Subtext -> Context stream."""
+        t_move_start = float(move_started_at) if move_started_at is not None else time.perf_counter()
         raw = move_uci_or_san.strip()
         move: chess.Move | None = None
         try:
@@ -1517,6 +1548,14 @@ class ChessKibitzerRuntime:
             if self.last_board_reflex is not None:
                 self.last_board_reflex["player_coaching"] = human_coaching
 
+        move_wall_sec = max(0.0, time.perf_counter() - t_move_start)
+        rem_clock_sec = self._deduct_move_clock(mover_color, move_wall_sec)
+        telemetry["move_elapsed_sec"] = round(move_wall_sec, 2)
+        telemetry["clock_remaining_sec"] = rem_clock_sec
+        if self.last_board_reflex is not None:
+            self.last_board_reflex["move_elapsed_sec"] = round(move_wall_sec, 2)
+            self.last_board_reflex["clock_remaining_sec"] = rem_clock_sec
+
         if self.spontaneous_kibitz_enabled or turn.final_conscious_note or has_board_warning:
             self.chat_messages.append(
                 {
@@ -1556,7 +1595,10 @@ class ChessKibitzerRuntime:
                 game_review_annotation=human_review.get("annotation_summary"),
             )
 
-        if human_turn and self.board.is_game_over(claim_draw=True):
+        if (
+            human_turn
+            and (self.board.is_game_over(claim_draw=True) or self.clock_flagged_loser is not None)
+        ):
             self.adjudicate_human_game_outcome(human_color=mover_color)
 
         self._maybe_trigger_auto_rem_sleep()
@@ -1575,8 +1617,13 @@ class ChessKibitzerRuntime:
 
     def handle_chess_ai_move(self, *, in_sparring_mode: bool = False) -> dict[str, Any]:
         """Dual-Hemisphere Move-Selection / Kibitzing Hybrid: Right-Brain 40-node scan + Left-Brain `<|subliminal_gap|>` commit."""
-        if self.board.is_game_over():
+        if self.board.is_game_over() or self.clock_flagged_loser is not None:
             raise ValueError("The game is already over.")
+        t_ai_start = time.perf_counter()
+        ai_mover_color = self.board.turn
+        rem_clock_start = (
+            float(self.white_clock_sec) if ai_mover_color == chess.WHITE else float(self.black_clock_sec)
+        )
         all_evals = evaluate_candidate_moves_with_right_brain(
             self.board,
             self.rules,
@@ -1670,15 +1717,21 @@ class ChessKibitzerRuntime:
                         )
                     )
                 )
+                in_time_trouble = rem_clock_start <= 12.0
                 should_wake_left_brain = (
-                    len(all_evals) > 1
+                    not in_time_trouble
+                    and len(all_evals) > 1
                     and (
                         has_tactical_or_vibe_tension
                         or (not in_sparring_mode and self.spontaneous_kibitz_enabled)
                     )
                 )
                 if not should_wake_left_brain:
-                    selection_mode = "gear_1_right_brain_intuition"
+                    selection_mode = (
+                        "gear_1_time_trouble_instinct"
+                        if in_time_trouble
+                        else "gear_1_right_brain_intuition"
+                    )
                     skip_left_brain_for_gear_1 = True
                 else:
                     pre_chord = SubliminalChordVector.from_right_brain_vibe(
@@ -1715,16 +1768,59 @@ class ChessKibitzerRuntime:
                             raw_c_vibe.self_registry.dissonance_notes,
                         )
 
-                    delib_sentence_count = 2 if (in_sparring_mode and has_tactical_or_vibe_tension) else 1
+                    move_time_budget_sec = min(45.0, max(6.0, rem_clock_start * 0.22))
+                    max_delib_sentences = (
+                        6
+                        if (in_sparring_mode and has_tactical_or_vibe_tension and rem_clock_start >= 45.0)
+                        else (3 if (in_sparring_mode and has_tactical_or_vibe_tension) else 1)
+                    )
+
+                    def _should_stop_deliberation(
+                        sent_count: int,
+                        trace: Any,
+                        passage_so_far: str,
+                    ) -> bool:
+                        elapsed_now = time.perf_counter() - t_ai_start
+                        rem_now = rem_clock_start - elapsed_now
+                        if rem_now <= 12.0 or elapsed_now >= move_time_budget_sec:
+                            return True
+                        if in_sparring_mode and has_tactical_or_vibe_tension and sent_count < 2 and rem_now > 20.0:
+                            return False
+                        mentioned_now = inspect_chess_moves_in_reply(
+                            getattr(trace, "post_gap_continuation", "") or passage_so_far,
+                            self.board,
+                            move_history_san=self.move_history_san,
+                        )["legal_moves_mentioned"]
+                        if mentioned_now:
+                            cand_now = eval_by_san.get(str(mentioned_now[0]))
+                            if (
+                                cand_now is not None
+                                and not cand_now.is_blunder
+                                and not cand_now.is_repetition
+                                and not cand_now.shadow_warnings
+                                and (right_brain_choice.composite_score - cand_now.composite_score) <= 0.35
+                                and not getattr(trace, "comma_dissonance_notes", ())
+                            ):
+                                return True
+                        return False
+
                     conv_history = self._extract_clean_conversation_history()
                     with self.gpu_lock:
                         delib_text, delib_trace = self._qwen_left_brain.generate_with_subliminal_splice(
                             pre_prompt,
                             pre_chord,
-                            num_sentences=delib_sentence_count,
+                            num_sentences=max_delib_sentences,
                             conversation_history=conv_history,
                             chord_builder_at_comma=_build_pre_move_comma_chord,
+                            stop_condition=_should_stop_deliberation if max_delib_sentences > 1 else None,
                         )
+                    delib_sentence_count = int(
+                        getattr(
+                            self._qwen_left_brain,
+                            "last_sentence_count",
+                            2 if (in_sparring_mode and has_tactical_or_vibe_tension) else 1,
+                        )
+                    )
                     pre_delib_pair = (delib_text, delib_trace)
                     post_gap_mentioned = (
                         inspect_chess_moves_in_reply(
@@ -1819,7 +1915,6 @@ class ChessKibitzerRuntime:
             except Exception:
                 pass
 
-        ai_mover_color = self.board.turn
         snap = self.handle_chess_move(
             chosen_san,
             pre_deliberation=pre_delib_pair,
@@ -1828,6 +1923,7 @@ class ChessKibitzerRuntime:
             intuition_override_note=override_note,
             is_human_move=False,
             skip_spontaneous_left_brain=skip_left_brain_for_gear_1,
+            move_started_at=t_ai_start,
         )
         veto_queued = bool(
             veto_reason
@@ -1861,7 +1957,7 @@ class ChessKibitzerRuntime:
             snap = self.get_state_snapshot()
         if (
             self.player_move_accuracies
-            and self.board.is_game_over(claim_draw=True)
+            and (self.board.is_game_over(claim_draw=True) or self.clock_flagged_loser is not None)
             and not getattr(self, "_current_human_game_adjudicated", False)
         ):
             self.adjudicate_human_game_outcome(human_color=not ai_mover_color)
@@ -1874,6 +1970,7 @@ class ChessKibitzerRuntime:
         fen = PRESET_CHESS_POSITIONS[key]["fen"] if key in PRESET_CHESS_POSITIONS else key
         self.board = chess.Board(fen)
         self.move_history_san.clear()
+        self._reset_match_clocks()
         self.player_move_accuracies.clear()
         self.last_player_coaching = None
         self._current_game_adjudicated = False
@@ -2121,6 +2218,7 @@ class ChessKibitzerRuntime:
         self.last_microwave_status = None
         self.board = chess.Board()
         self.move_history_san.clear()
+        self._reset_match_clocks()
         self.player_move_accuracies.clear()
         self.last_player_coaching = None
         self.player_elo = 1000.0
@@ -2174,7 +2272,14 @@ class ChessKibitzerRuntime:
         """Score a finished sparring game objectively, update FIDE Elo, match opponent target Elo, and rotate colors."""
         lmft_color = chess.WHITE if self.lmft_playing_white else chess.BLACK
         outcome = self.board.outcome(claim_draw=True)
-        if outcome is not None:
+        if self.clock_flagged_loser is not None and outcome is None:
+            if self.clock_flagged_loser == lmft_color:
+                lmft_score = 0.0
+                result_label = "LOSS (Time Forfeit 0:00)"
+            else:
+                lmft_score = 1.0
+                result_label = "WIN (Opponent Time Forfeit 0:00)"
+        elif outcome is not None:
             if outcome.winner is None:
                 lmft_score = 0.5
                 result_label = "DRAW"
@@ -2254,7 +2359,14 @@ class ChessKibitzerRuntime:
         if getattr(self, "_current_human_game_adjudicated", False) and self.last_player_elo_receipt is not None:
             return self.last_player_elo_receipt
         outcome = self.board.outcome(claim_draw=True)
-        if outcome is not None:
+        if self.clock_flagged_loser is not None and outcome is None:
+            if self.clock_flagged_loser == human_color:
+                human_score = 0.0
+                result_label = "LOSS (Time Forfeit 0:00)"
+            else:
+                human_score = 1.0
+                result_label = "WIN (Opponent Time Forfeit 0:00)"
+        elif outcome is not None:
             if outcome.winner is None:
                 human_score = 0.5
                 result_label = "DRAW"
@@ -2330,7 +2442,11 @@ class ChessKibitzerRuntime:
         _ = num_sentences
         self.microwave_step_counter += 1
         step_idx = self.microwave_step_counter
-        if self.board.is_game_over(claim_draw=True) or len(self.move_history_san) >= 160:
+        if (
+            self.board.is_game_over(claim_draw=True)
+            or self.clock_flagged_loser is not None
+            or len(self.move_history_san) >= 160
+        ):
             if not getattr(self, "_current_game_adjudicated", False):
                 self._adjudicate_and_record_game_outcome()
                 if self.sleep_queue and self.active_lineage != "virgin":
@@ -2387,6 +2503,7 @@ class ChessKibitzerRuntime:
                 prev_msg = self.chat_messages[-1]
                 if prev_msg.get("sender") == "companion":
                     pending_referee_review = (prev_msg.get("telemetry") or {}).get("game_review")
+            t_opp_start = time.perf_counter()
             opp = self.sparring_engine.select_sparring_opponent_move(
                 self.board,
                 target_elo=self.opponent_target_elo,
@@ -2396,6 +2513,7 @@ class ChessKibitzerRuntime:
                 is_human_move=False,
                 skip_spontaneous_left_brain=True,
                 is_sparring_opponent_move=True,
+                move_started_at=t_opp_start,
             )
             if self.chat_messages:
                 self.chat_messages[-1]["role_label"] = f"🐟 Stockfish 19 ({stockfish_color_name} · played {opp['move_san']})"
@@ -2406,7 +2524,9 @@ class ChessKibitzerRuntime:
             snap = self.get_state_snapshot()
             mover_tag = f"SparringEngine({self.opponent_target_elo:.0f})"
 
-        if self.board.is_game_over(claim_draw=True) and not getattr(self, "_current_game_adjudicated", False):
+        if (
+            self.board.is_game_over(claim_draw=True) or self.clock_flagged_loser is not None
+        ) and not getattr(self, "_current_game_adjudicated", False):
             self._adjudicate_and_record_game_outcome()
             if self.sleep_queue and self.active_lineage != "virgin":
                 snap = self.handle_run_rem_sleep(auto_triggered=True)

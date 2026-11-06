@@ -711,19 +711,22 @@ class SubliminalGapLeftBrain:
             SubliminalChordVector | tuple[SubliminalChordVector, str | None, tuple[str, ...]],
         ]
         | None = None,
+        stop_condition: Callable[[int, SplicedThoughtTrace, str], bool] | None = None,
     ) -> tuple[str, SplicedThoughtTrace]:
-        """Generate `num_sentences` two-clause `<|subliminal_gap|>` thoughts and return `(full_thought, trace)`."""
-        if int(num_sentences) > 1:
+        """Generate up to `num_sentences` two-clause `<|subliminal_gap|>` thoughts and return `(full_thought, trace)`."""
+        if int(num_sentences) > 1 or stop_condition is not None:
             passage, traces = self.generate_multi_sentence_script(
                 scenario_text,
                 chord=chord,
-                num_sentences=int(num_sentences),
+                num_sentences=max(1, int(num_sentences)),
                 pass_index=pass_index,
                 clause_1_prefix=clause_1_prefix,
                 conversation_history=conversation_history,
                 max_context_chars=max_context_chars,
                 chord_builder_at_comma=chord_builder_at_comma,
+                stop_condition=stop_condition,
             )
+            self.last_sentence_count = len(traces)
             return passage, traces[-1]
         trace = self.generate_two_clause_thought(
             scenario_text,
@@ -734,6 +737,7 @@ class SubliminalGapLeftBrain:
             max_context_chars=max_context_chars,
             chord_builder_at_comma=chord_builder_at_comma,
         )
+        self.last_sentence_count = 1
         return trace.full_thought, trace
 
     @torch.no_grad()
@@ -753,8 +757,9 @@ class SubliminalGapLeftBrain:
             SubliminalChordVector | tuple[SubliminalChordVector, str | None, tuple[str, ...]],
         ]
         | None = None,
+        stop_condition: Callable[[int, SplicedThoughtTrace, str], bool] | None = None,
     ) -> tuple[str, tuple[SplicedThoughtTrace, ...]]:
-        """Chain `num_sentences` (`1..6`) two-clause `<|subliminal_gap|>` sentences into a continuous passage."""
+        """Chain up to `num_sentences` (`1..6`) two-clause `<|subliminal_gap|>` sentences into a continuous passage."""
         count = int(num_sentences)
         if not (1 <= count <= 6):
             raise ValueError(f"num_sentences must be in [1, 6], got {num_sentences!r}")
@@ -779,6 +784,8 @@ class SubliminalGapLeftBrain:
             )
             completed_sentences.append(trace.full_thought)
             traces.append(trace)
+            if stop_condition is not None and stop_condition(len(traces), trace, " ".join(completed_sentences).strip()):
+                break
         return " ".join(completed_sentences).strip(), tuple(traces)
 
 
