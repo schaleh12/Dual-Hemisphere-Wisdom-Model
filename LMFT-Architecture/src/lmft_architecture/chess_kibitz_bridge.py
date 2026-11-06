@@ -1348,18 +1348,18 @@ class ObjectiveCalibratedSparringEngine:
             learned_leaves=learned_tuple,
         )
 
-        cp_drop = round(max(0.0, cp_before - cp_after, best_cp - cp_after), 1)
+        cp_drop = 0.0 if played_move == best_move else round(max(0.0, best_cp - cp_after), 1)
         cp_gain = round(cp_after - cp_before, 1)
         cp_edge_over_alt = round(static_played_cp - second_best_cp, 1)
         chaos_val = float(played_coords.get("philosophical/structure/chaos", 0.0))
 
-        if cp_drop >= 150.0 or (played_is_blunder and not best_is_blunder):
+        if played_move != best_move and (cp_drop >= 150.0 or (played_is_blunder and not best_is_blunder)):
             classification = "BLUNDER_??"
             glyph = "??"
             is_hazard = True
             should_queue = True
             ref_coords = best_coords
-        elif cp_drop >= 90.0:
+        elif played_move != best_move and cp_drop >= 90.0:
             classification = "MISTAKE_?"
             glyph = "?"
             is_hazard = True

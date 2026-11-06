@@ -290,6 +290,11 @@ def _ensure_foundational_rules(rules: tuple[FuzzyConceptRule, ...]) -> tuple[Fuz
             or "[! GREAT_MOVE" in r.description
         ):
             continue
+        if "Played " in r.description and " instead of best move " in r.description:
+            after_played = r.description.split("Played ", 1)[1].split(" ", 1)[0].strip()
+            after_best = r.description.split(" instead of best move ", 1)[1].split(" ", 1)[0].rstrip(".").strip()
+            if after_played and after_played == after_best:
+                continue
         canonical_name = _canonical_cluster_concept_name(r.concept_name)
         if canonical_name != r.concept_name:
             r = FuzzyConceptRule(
@@ -1438,7 +1443,12 @@ class ChessKibitzerRuntime:
             self._sync_active_thread_record(persist=True)
 
         # End-of-Game REM Sleep Surprise Logging: if board reality collides with Theory or triggers a shadow warning
-        if has_board_warning and turn.shadow_pathology_warnings:
+        if (
+            has_board_warning
+            and turn.shadow_pathology_warnings
+            and not skip_spontaneous_left_brain
+            and (human_review is None or bool(human_review.get("is_hazard", False)))
+        ):
             self.flag_turn_for_coaching(
                 int(telemetry["scene_index"]),
                 user_note=f"Board vs. Theory surprise after {san_str} ({mover_posture.board_summary})",
@@ -2248,21 +2258,21 @@ class ChessKibitzerRuntime:
                 getattr(self, "last_hybrid_move_arbitration", None)
                 and self.last_hybrid_move_arbitration.get("veto_reason")
             )
-            if (
-                review["should_queue_for_sleep"]
-                and self.chat_messages
-                and (not already_vetoed or review["is_hazard"])
-            ):
+            if self.chat_messages:
                 last_scene_id = int(self.chat_messages[-1].get("id", self.scene_counter))
-                self.flag_turn_for_coaching(
-                    last_scene_id,
-                    user_note=review["annotation_summary"],
-                    check_auto_sleep=True,
-                    is_hazard=bool(review["is_hazard"]),
-                    override_coordinates=review["played_coordinates"],
-                    contrastive_reference_coordinates=review["contrastive_reference_coordinates"],
-                    game_review_annotation=review["annotation_summary"],
-                )
+                if review["should_queue_for_sleep"] and (not already_vetoed or review["is_hazard"]):
+                    self.flag_turn_for_coaching(
+                        last_scene_id,
+                        user_note=review["annotation_summary"],
+                        check_auto_sleep=True,
+                        is_hazard=bool(review["is_hazard"]),
+                        override_coordinates=review["played_coordinates"],
+                        contrastive_reference_coordinates=review["contrastive_reference_coordinates"],
+                        game_review_annotation=review["annotation_summary"],
+                    )
+                elif not already_vetoed and not review["should_queue_for_sleep"]:
+                    self._hazard_scene_indices.discard(last_scene_id)
+                    self.sleep_queue = [s for s in self.sleep_queue if s.scene_index != last_scene_id]
             snap = self.get_state_snapshot()
             mover_tag = "LMFT"
         else:
@@ -2348,7 +2358,13 @@ class ChessKibitzerRuntime:
         clusters: dict[tuple[str, bool], list[UnresolvedSleepScene]] = {}
         for s in queued_scenes:
             is_uncoached_collision = (
-                s.active_concept_collision is not None
+                (
+                    s.active_concept_collision is not None
+                    or (
+                        s.scenario_text.startswith("Chess table —")
+                        and "[Coach note:" not in s.scenario_text
+                    )
+                )
                 and s.contrastive_reference_coordinates is None
                 and not s.game_review_annotation
             )
