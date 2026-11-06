@@ -945,14 +945,7 @@ def compute_candidate_move_fuzzy_coordinates(
         + 0.15 * continuity
         + 0.10 * agency
     )
-    # 3. `psychological/truth/faith`: Long-horizon structural resilience beyond the 3-ply rollout
-    faith_coord = _clamp01(
-        0.35 * existence
-        + 0.35 * order
-        + 0.30 * continuity
-        - 0.25 * min(2.0, blunder_penalty)
-    )
-    # 4. `psychological/contemplation/confidence`: Bitboard Intuition Sleeve certainty
+    # 3. `psychological/contemplation/confidence`: Bitboard Intuition Sleeve certainty
     sleeve_conf = float(sleeve_out["sleeve_confidence"])
 
     move_shadows = detect_shadow_pathologies(
@@ -972,7 +965,7 @@ def compute_candidate_move_fuzzy_coordinates(
             coords[w.shadow_leaf_id] = float(w.severity)
     shadow_names = tuple(w.shadow_pathology for w in all_warnings)
 
-    # 5. `psychological/contemplation/clarity`: Signal-to-noise alignment between `fact` and `theory` & low chaos/shadow noise
+    # 4. `psychological/contemplation/clarity`: Signal-to-noise alignment between `fact` and `theory` & low chaos/shadow noise
     clarity_coord = _clamp01(
         0.45 * (1.0 - abs(fact_coord - theory_coord))
         + 0.35 * (order * (1.0 - 0.4 * chaos))
@@ -981,7 +974,6 @@ def compute_candidate_move_fuzzy_coordinates(
 
     coords["psychological/truth/fact"] = fact_coord
     coords["psychological/truth/theory"] = theory_coord
-    coords["psychological/truth/faith"] = faith_coord
     coords["psychological/contemplation/clarity"] = clarity_coord
     coords["psychological/contemplation/confidence"] = sleeve_conf
     coords["cultural/efficiency/power"] = _clamp01(0.50 * agency + 0.50 * discreteness)
@@ -1595,12 +1587,6 @@ def evaluate_candidate_moves_with_right_brain(
             + 0.18 * coached_peak
             - 0.22 * hazard_peak
         )
-        faith_val = _clamp01(
-            float(coords.get("psychological/truth/faith", 0.50))
-            + 0.18 * coached_peak
-            - 0.22 * hazard_peak
-        )
-        coords["psychological/truth/faith"] = faith_val
         intention_val = float(coords.get("psychological/will/intention", 0.50))
         needlessness_val = float(coords.get("cultural/freedom/needlessness", 0.10))
 
@@ -1609,7 +1595,6 @@ def evaluate_candidate_moves_with_right_brain(
             1.0 * intention_val
             + 1.0 * fact_val
             + 0.7 * theory_val
-            + 0.35 * faith_val
             + 0.5 * float(confidence)
             - 0.8 * needlessness_val
         )
