@@ -641,8 +641,6 @@ def evaluate_candidate_moves_with_right_brain(
         tactical_score = 0.0
         if is_cap:
             tactical_score += 0.55 * captured_val
-        if board.gives_check(move) and not is_blunder:
-            tactical_score += 0.45 if board.fullmove_number <= 4 else 1.15
         if board.is_castling(move):
             tactical_score += 1.40
         if move.to_square in _CORE_CENTER_SQUARES:

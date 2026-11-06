@@ -284,6 +284,12 @@ def _ensure_foundational_rules(rules: tuple[FuzzyConceptRule, ...]) -> tuple[Fuz
     for r in rules:
         if r.rule_id in foundational_by_id or r.concept_name in foundational_by_name:
             continue
+        if r.concept_name.startswith("hazard_") and (
+            r.concept_name.startswith("hazard_high_wastelessness_")
+            or "[!! BRILLIANCY" in r.description
+            or "[! GREAT_MOVE" in r.description
+        ):
+            continue
         canonical_name = _canonical_cluster_concept_name(r.concept_name)
         if canonical_name != r.concept_name:
             r = FuzzyConceptRule(
@@ -1974,6 +1980,8 @@ class ChessKibitzerRuntime:
                     float(scene_coords.get("cultural/efficiency/wastelessness", 0.20)),
                     0.20,
                 )
+        else:
+            self._hazard_scene_indices.discard(int(scene_index))
         sleep_scene = UnresolvedSleepScene(
             scene_index=int(scene_index),
             scenario_text=f"{rec['scenario_text']}{note_suffix}",
@@ -2361,9 +2369,19 @@ class ChessKibitzerRuntime:
                     resolved_uncertainty_scenes=(s.scene_index,),
                 )
                 continue
+            is_s_haz = bool(s.is_hazard or s.scene_index in self._hazard_scene_indices)
+            if is_s_haz and s.game_review_annotation and (
+                "[!! BRILLIANCY" in s.game_review_annotation
+                or "[! GREAT_MOVE" in s.game_review_annotation
+            ):
+                is_s_haz = False
+            if is_s_haz:
+                s.external_coordinates["cultural/efficiency/wastelessness"] = min(
+                    0.25,
+                    float(s.external_coordinates.get("cultural/efficiency/wastelessness", 0.25)),
+                )
             ckey = _cluster_key_for_unresolved(s)
             if ckey is not None:
-                is_s_haz = bool(s.is_hazard or s.scene_index in self._hazard_scene_indices)
                 clusters.setdefault((ckey, is_s_haz), []).append(s)
 
         calm_book_coords: dict[str, float] = {k: 0.50 for k in FOUNDATIONAL_LEAVES}

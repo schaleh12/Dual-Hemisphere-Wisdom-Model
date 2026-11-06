@@ -796,6 +796,19 @@ def test_master_seed_sync_and_human_player_rating_coaching(tmp_path: Path) -> No
     assert haz_clusters[0].concept_name == "hazard_low_wastelessness_chaos_cluster"
     assert haz_clusters[0].target_leaves["philosophical/structure/chaos"] == pytest.approx(0.63)
 
+    # 10. Regression check: poisoned `hazard_high_wastelessness_*` / Brilliancy-labeled hazard rules are stripped
+    poisoned_brill = FuzzyConceptRule(
+        rule_id="rule-sleep-hazard_high_wastelessness_chaos_",
+        concept_name="hazard_high_wastelessness_chaos_cluster",
+        description="Game Review [!! BRILLIANCY_!!]: Found Rd1 (+2.53 pawns vs. alternatives).",
+        target_leaves={"cultural/efficiency/wastelessness": 0.25, "philosophical/structure/order": 0.71},
+        low=0.835,
+        high=0.9642,
+    )
+    cleaned_rules = _ensure_foundational_rules((dup_s52, poisoned_brill))
+    assert all(r.concept_name != "hazard_high_wastelessness_chaos_cluster" for r in cleaned_rules)
+
+
 
 
 
