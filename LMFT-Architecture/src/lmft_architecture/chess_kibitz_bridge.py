@@ -1913,6 +1913,22 @@ class BoardAnchoredBridgeSensors:
             anchored = dict(coords)
             for leaf_id, board_val in self.board_posture.philosophical_coordinates.items():
                 anchored[leaf_id] = float(board_val)
+            # When scoring an automatic board state prompt (no user story text), ground
+            # the 6 Cultural coordinates in the board's structural state instead of MiniLM's
+            # near-zero (~0.04) reading of the dry "Chess table — Move N..." header.
+            if clean_for_minilm.startswith("Chess table —"):
+                phil = self.board_posture.philosophical_coordinates
+                anchored["cultural/efficiency/power"] = _clamp01(
+                    0.55 * float(phil.get("philosophical/being/agency", 0.50))
+                    + 0.45 * float(phil.get("philosophical/persistence/discreteness", 0.50))
+                )
+                anchored["cultural/efficiency/wastelessness"] = 0.68
+                anchored["cultural/justice/honor"] = 0.52
+                anchored["cultural/justice/fairness"] = 0.52
+                anchored["cultural/freedom/self-sufficiency"] = _clamp01(
+                    float(phil.get("philosophical/being/existence", 0.75))
+                )
+                anchored["cultural/freedom/needlessness"] = 0.08
             return anchored, dict(exp_raw), queried, skipped
 
         # Subsequent calls (Clause 1 at comma and full-sentence Pass 2+ Theory) score

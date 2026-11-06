@@ -2,8 +2,8 @@
   "schema_version": 1,
   "version": "0.2.0",
   "github_repo": "schaleh12/Dual-Hemisphere-Wisdom-Model",
-  "build_sha256": "32d2ce497b04188db511726f466aa1494e16d4b25a1058ebedd48d9f9287afec",
-  "build_short_hash": "32d2ce497b04",
+  "build_sha256": "2ab533cbd76fd14b7a22c1bd5a2e0b85a414a4233474eb0083f0fb5c1de68099",
+  "build_short_hash": "2ab533cbd76f",
   "files": {
     "src/lmft_architecture/__init__.py": {
       "sha256": "a89f56c2195e87129adbffa5065d8769ea096e13ba98783d217c4d120ee92623",
@@ -90,16 +90,16 @@
       "size_bytes": 3267
     },
     "src/lmft_architecture/chess_app.py": {
-      "sha256": "92905417dbee84aa53ac5fdd2a5b8b27d167f9bdcced547488636f2230e3172d",
-      "size_bytes": 129419
+      "sha256": "52b8ec68179d539ff33cde780dde77cb316065780cdba7da6eae6e9396cd6c5f",
+      "size_bytes": 135282
     },
     "src/lmft_architecture/chess_kibitz_bridge.py": {
-      "sha256": "8a278fe5695cd8a747ca887d6ba218c3bc4430803c730daf280c2099f6dfb4cf",
-      "size_bytes": 105731
+      "sha256": "4b618a02a18cdddabc7fd45149771809da2c0c531edd08cbf632e8694c7aae2b",
+      "size_bytes": 106806
     },
     "src/lmft_architecture/chess_ui.py": {
-      "sha256": "ca0168edca41c167c65e420d42de7f7dbbedf783615848b808476f333b9f62bc",
-      "size_bytes": 70151
+      "sha256": "bfe62e2245a718b9ccf943a9368950bfdc14b298dac773d6d1b181bebf8e32ea",
+      "size_bytes": 70455
     },
     "src/lmft_architecture/chord_memory.py": {
       "sha256": "6714d9c6cd9e0f7ae199e92a44f7371f168f65fb32319260d4b24d0ed1c54a66",
@@ -286,8 +286,8 @@
       "size_bytes": 2802
     },
     "src/lmft_architecture/three_legged_runtime.py": {
-      "sha256": "01575012f9f7a2d127b0232d044be18b907cce5f189eb8119a5d9d3be1736cd4",
-      "size_bytes": 59399
+      "sha256": "6749a08b52bc08455c159654473c31ff83bd7ae0f50652db9cc7241a10375535",
+      "size_bytes": 60242
     },
     "src/lmft_architecture/train_left_brain_lora.py": {
       "sha256": "2769e1ef0007d184a9331874285cc0cb6689a5445a9093a3fadf3c19d7c53622",
@@ -310,8 +310,8 @@
       "size_bytes": 93649374
     },
     "outputs/rem_sleep_consolidated_ruleset.json": {
-      "sha256": "a9040274493516a527b863eab631c419da4f32ef12f8fdc067e66dbed2bc1708",
-      "size_bytes": 19658
+      "sha256": "9cc84ab1183bb399a5dbbe8d586a0d080fbc3d8e84acbe7272d8e493f2b4a52d",
+      "size_bytes": 10379
     },
     "outputs/sleep_consolidated_ruleset.json": {
       "sha256": "9cc84ab1183bb399a5dbbe8d586a0d080fbc3d8e84acbe7272d8e493f2b4a52d",

@@ -577,7 +577,7 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
     </div>
 
     <button class="btn btn-chess-green" style="width:100%;padding:9px;font-size:12.5px;" onclick="runRemSleepNow()">
-      🌙 Run REM Sleep &amp; Consolidate Rules
+      🌙 Run REM Sleep &amp; Consolidate Rules</button><button class="btn" style="width:100%;padding:6px;font-size:11.5px;" onclick="resetCleanSlateRules()">🧹 Clean Slate (Reset Chess Rules &amp; Elo)
     </button>
     <label style="font-size:11px;display:flex;align-items:center;gap:6px;color:var(--text-1);">
       <input type="checkbox" id="auto-sleep-toggle" checked onchange="toggleAutoSleep(this.checked)" />
@@ -1069,7 +1069,7 @@ function renderState(s) {
         : ((pc && pc.glyph) || (gr && gr.glyph) ? "coach-banner brill" : "coach-banner");
       const coachStripHtml = pc
         ? `<div class="${bannerCls}"><strong>Custom Coach (${escapeHtml(pc.classification || "SOLID")} · ${Number(pc.move_accuracy_pct || 0).toFixed(0)}% Acc · Est. ${Number(pc.estimated_performance_elo || 1000).toFixed(0)} Elo):</strong> ${escapeHtml(pc.coaching_advice || "")}</div>`
-        : (gr ? `<div class="${bannerCls}">${escapeHtml(gr.annotation_summary || "")}</div>` : "");
+        : (gr ? `<div class="${bannerCls}"><strong>🐟 Stockfish 19 Post-Move Referee:</strong> ${escapeHtml(gr.annotation_summary || "")}</div>` : "");
       const actionsHtml = (m.sender === "companion" && typeof m.id === "number")
         ? `<div style="margin-top:6px;display:flex;gap:6px;">
              <button class="btn" style="padding:3px 8px;font-size:10px;" onclick="coachTurn(${m.id})">${m.coached ? "Queued for Sleep" : "Coach / Queue for Sleep"}</button>
@@ -1158,6 +1158,7 @@ async function createNewThread() { await apiPost("/api/threads/create", {}); }
 async function switchThread(tid) { await apiPost("/api/threads/switch", { thread_id: tid }); }
 async function switchLineage(lin) { await apiPost("/api/lineage", { lineage: lin }); }
 async function runRemSleepNow() { await apiPost("/api/sleep/run", {}); }
+async function resetCleanSlateRules() { await apiPost("/api/rules/reset_clean_slate", {}); }
 async function toggleAutoSleep(enabled) { await apiPost("/api/sleep/auto", { enabled: !!enabled }); }
 
 async function pollState() {

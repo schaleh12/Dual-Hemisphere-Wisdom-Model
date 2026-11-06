@@ -7,7 +7,7 @@
     "king_shield_safety": 0.95,
     "piece_coordination_ratio": 0.7,
     "development_progress": 0.45,
-    "move_net_safety": 1.644,
+    "move_net_safety": 1.55,
     "move_positional_gain": 0.4
   },
   "policy_weights": {
@@ -17,20 +17,20 @@
     "king_shield_safety": 0.65,
     "piece_coordination_ratio": 0.8,
     "development_progress": 0.95,
-    "move_net_safety": 1.244,
-    "move_positional_gain": 2.43
+    "move_net_safety": 1.15,
+    "move_positional_gain": 1.45
   },
   "leaf_weights": {
-    "philosophical/being/existence": 0.7372,
-    "philosophical/structure/order": 0.9382,
-    "philosophical/persistence/continuity": 0.628,
-    "philosophical/persistence/discreteness": 0.564,
-    "philosophical/being/agency": 0.4191,
-    "philosophical/structure/chaos": -0.604,
-    "cultural/efficiency/wastelessness": 2.5,
-    "cultural/freedom/self-sufficiency": 0.5372
+    "philosophical/being/existence": 0.65,
+    "philosophical/structure/order": 0.6,
+    "philosophical/persistence/continuity": 0.55,
+    "philosophical/persistence/discreteness": 0.45,
+    "philosophical/being/agency": 0.35,
+    "philosophical/structure/chaos": -0.35,
+    "cultural/efficiency/wastelessness": 0.8,
+    "cultural/freedom/self-sufficiency": 0.45
   },
   "value_bias": -0.55,
   "policy_bias": -0.45,
-  "steps_distilled": 270
+  "steps_distilled": 0
 }

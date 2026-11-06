@@ -696,6 +696,28 @@ class SubliminalGapLeftBrain:
                 self.projector.train()
 
     @torch.no_grad()
+    def generate_with_subliminal_splice(
+        self,
+        scenario_text: str,
+        chord: SubliminalChordVector | None = None,
+        *,
+        pass_index: int = 2,
+        clause_1_prefix: str | None = None,
+        conversation_history: Sequence[tuple[str, str]] = (),
+        max_context_chars: int = DEFAULT_MAX_CONTEXT_CHARS,
+    ) -> tuple[str, SplicedThoughtTrace]:
+        """Generate a two-clause `<|subliminal_gap|>` thought and return `(full_thought, trace)`."""
+        trace = self.generate_two_clause_thought(
+            scenario_text,
+            chord=chord,
+            pass_index=pass_index,
+            clause_1_prefix=clause_1_prefix,
+            conversation_history=conversation_history,
+            max_context_chars=max_context_chars,
+        )
+        return trace.full_thought, trace
+
+    @torch.no_grad()
     def generate_multi_sentence_script(
         self,
         scenario_text: str,

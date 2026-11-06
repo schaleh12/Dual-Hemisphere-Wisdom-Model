@@ -1026,6 +1026,51 @@ def test_intention_to_theory_and_confidence_rollout_pipeline() -> None:
     )
 
 
+def test_speaker_attribution_and_clean_slate_reset(tmp_path: Path) -> None:
+    """Verify Celestriad deliberates on its own turn (`board_before`), Stockfish bubbles never impersonate Celestriad, and `reset_learned_chess_state` wipes tainted rules."""
+    left_brain = _make_mini_left_brain()
+    runtime = ChessKibitzerRuntime(
+        state_dir=tmp_path / "speaker_clean_slate",
+        left_brain=left_brain,
+        lazy_load_gpu=False,
+    )
+    # 1. Step 1 (Celestriad as White): prompt must be for White to move (`board_before`), NOT Black to move
+    s1 = runtime.handle_microwave_step()
+    msg_cel = s1["chat_messages"][-1]
+    assert msg_cel["sender"] == "companion"
+    assert "Celestriad 1.0 (White" in msg_cel["role_label"]
+    assert "White to move" in msg_cel["clean_pretext_prompt"]
+    assert "spliced_trace" in msg_cel["telemetry"]
+    assert msg_cel["telemetry"]["spliced_trace"].get("sentence_count") == 1
+
+    # 2. Step 2 (Stockfish as Black): sender is `sparring_opponent`, text clearly states Stockfish played its move,
+    #    and Stockfish's Gear-1 sensor note does NOT pollute `_extract_clean_conversation_history()`
+    s2 = runtime.handle_microwave_step()
+    msg_sf = s2["chat_messages"][-1]
+    assert msg_sf["sender"] == "sparring_opponent"
+    assert "Stockfish 19 (" in msg_sf["role_label"]
+    assert msg_sf["text"].startswith("Stockfish 19 (")
+    assert len(runtime._extract_clean_conversation_history()) == 1
+
+    # 3. Clean slate reset restores foundational rules, resets BitboardIntuitionSleeve & Elo to 1000.0
+    runtime.lmft_elo = 1156.0
+    runtime.bitboard_sleeve.steps_distilled = 15
+    runtime.rules = (
+        *runtime.rules,
+        FuzzyConceptRule(
+            rule_id="rule-tainted-1",
+            concept_name="hazard_tainted_test_cluster",
+            description="Tainted rule to wipe.",
+            target_leaves={"cultural/efficiency/wastelessness": 0.20, "philosophical/structure/chaos": 0.70},
+        ),
+    )
+    snap_reset = runtime.reset_learned_chess_state()
+    assert snap_reset["elo"]["lmft_elo"] == 1000.0
+    assert runtime.bitboard_sleeve.steps_distilled == 0
+    assert all(not r.concept_name.startswith(("hazard_", "coached_")) for r in runtime.rules)
+
+
+
 
 
 

@@ -281,6 +281,7 @@ def _ensure_foundational_rules(rules: tuple[FuzzyConceptRule, ...]) -> tuple[Fuz
             r.concept_name.startswith("hazard_high_wastelessness_")
             or "[!! BRILLIANCY" in r.description
             or "[! GREAT_MOVE" in r.description
+            or "Board vs. Theory surprise after " in r.description
         ):
             continue
         if r.concept_name.startswith("hazard_"):
@@ -814,6 +815,8 @@ class ChessKibitzerRuntime:
                 if u_txt and not u_txt.startswith("[WAVE —"):
                     pending_user = u_txt
             elif sender == "companion":
+                if msg.get("is_gear_1_fallback") and self._qwen_left_brain is not None:
+                    continue
                 c_txt = str(msg.get("clean_reply") or msg.get("text", "")).strip()
                 if " [Board Fact-Check:" in c_txt:
                     c_txt = c_txt.split(" [Board Fact-Check:", 1)[0].strip()
@@ -1318,8 +1321,10 @@ class ChessKibitzerRuntime:
         move_uci_or_san: str,
         *,
         pre_deliberation: tuple[str, Any] | None = None,
+        pre_delib_prompt: str | None = None,
         is_human_move: bool | None = None,
         skip_spontaneous_left_brain: bool = False,
+        is_sparring_opponent_move: bool = False,
     ) -> dict[str, Any]:
         """Make a move on the chessboard and spontaneously append to the continuous Pretext -> Subtext -> Context stream."""
         raw = move_uci_or_san.strip()
@@ -1338,7 +1343,9 @@ class ChessKibitzerRuntime:
 
         human_turn = (pre_deliberation is None) if is_human_move is None else bool(is_human_move)
         board_before = self.board.copy()
+        history_before = tuple(self.move_history_san)
         mover_color = self.board.turn
+        mover_color_name = "White" if mover_color == chess.WHITE else "Black"
         san_str = self.board.san(move)
         self.board.push(move)
         self.move_history_san.append(san_str)
@@ -1397,6 +1404,7 @@ class ChessKibitzerRuntime:
         }
 
         raw_reply = turn.final_conscious_note
+        is_gear_1_fallback = False
         spliced_chord = SubliminalChordVector.from_right_brain_vibe(
             turn.final_vibe,
             learned_leaves=self.learned_leaves,
@@ -1446,25 +1454,35 @@ class ChessKibitzerRuntime:
                 raw_reply = None
 
         if not raw_reply:
+            is_gear_1_fallback = True
             raw_reply = self._synthesize_gear_1_note(
                 turn,
                 room="chess",
                 board_posture=mover_posture,
             )
 
+        grounding_board = board_before if pre_deliberation is not None else self.board
+        grounding_history = history_before if pre_deliberation is not None else self.move_history_san
+        effective_pretext_prompt = pre_delib_prompt if (pre_deliberation is not None and pre_delib_prompt) else move_desc
+
         telemetry["chess_move_grounding"] = inspect_chess_moves_in_reply(
             raw_reply,
-            self.board,
-            move_history_san=self.move_history_san,
+            grounding_board,
+            move_history_san=grounding_history,
         )
         reply_text = verify_or_ground_chess_moves_in_reply(
             raw_reply,
-            self.board,
-            move_history_san=self.move_history_san,
+            grounding_board,
+            move_history_san=grounding_history,
         )
+        if is_sparring_opponent_move:
+            reply_text = (
+                f"Stockfish 19 ({self.opponent_target_elo:.0f} Elo) played {san_str}. "
+                f"[Celestriad Right-Brain sensor: {reply_text}]"
+            )
         telemetry["pretext_subtext_context"] = {
             "pretext_turns": len(conv_history),
-            "pretext_prompt": move_desc,
+            "pretext_prompt": effective_pretext_prompt,
             "dominant_piece": mover_posture.dominant_piece,
             "dominant_color": mover_posture.dominant_color,
             "dominant_element": mover_posture.dominant_element,
@@ -1483,11 +1501,16 @@ class ChessKibitzerRuntime:
             self.chat_messages.append(
                 {
                     "id": telemetry["scene_index"],
-                    "sender": "companion",
-                    "role_label": f"Celestriad 1.0 (after {san_str})",
+                    "sender": "sparring_opponent" if is_sparring_opponent_move else "companion",
+                    "role_label": (
+                        f"🐟 Stockfish 19 ({mover_color_name} · played {san_str})"
+                        if is_sparring_opponent_move
+                        else f"Celestriad 1.0 (after {san_str})"
+                    ),
                     "text": reply_text,
                     "clean_reply": raw_reply,
-                    "clean_pretext_prompt": move_desc,
+                    "clean_pretext_prompt": effective_pretext_prompt,
+                    "is_gear_1_fallback": bool(is_gear_1_fallback or is_sparring_opponent_move),
                     "telemetry": telemetry,
                     "coached": False,
                     "savored": False,
@@ -1495,18 +1518,22 @@ class ChessKibitzerRuntime:
             )
             self._sync_active_thread_record(persist=True)
 
-        # End-of-Game REM Sleep Surprise Logging: if board reality collides with Theory or triggers a shadow warning
+        # End-of-Game REM Sleep Surprise Logging for verified human move hazards
         if (
             has_board_warning
             and turn.shadow_pathology_warnings
             and not skip_spontaneous_left_brain
-            and (human_review is None or bool(human_review.get("is_hazard", False)))
+            and human_review is not None
+            and bool(human_review.get("is_hazard", False))
         ):
             self.flag_turn_for_coaching(
                 int(telemetry["scene_index"]),
-                user_note=f"Board vs. Theory surprise after {san_str} ({mover_posture.board_summary})",
+                user_note=human_review.get("annotation_summary") or f"Board vs. Theory surprise after {san_str}",
                 check_auto_sleep=False,
                 is_hazard=True,
+                override_coordinates=human_review.get("played_coordinates"),
+                contrastive_reference_coordinates=human_review.get("contrastive_reference_coordinates"),
+                game_review_annotation=human_review.get("annotation_summary"),
             )
 
         if human_turn and self.board.is_game_over(claim_draw=True):
@@ -1565,6 +1592,7 @@ class ChessKibitzerRuntime:
         vetoed_coords: dict[str, float] | None = None
         safe_choice_coords: dict[str, float] | None = None
         pre_delib_pair: tuple[str, Any] | None = None
+        pre_prompt_used: str | None = None
         top_san_set = {c.san for c in top_candidates[:4]}
 
         # Pre-move `<|subliminal_gap|>` deliberation when the 4B Left Brain is active
@@ -1576,6 +1604,7 @@ class ChessKibitzerRuntime:
                     self.move_history_san,
                     user_note=f"Choose the soundest move from ({cand_list_str}) and state why.",
                 )
+                pre_prompt_used = pre_prompt
                 pre_sensors = merge_board_fact_with_chat_sensors(self.board_posture, self.sensors)
                 fact_coords, fact_exp, _, _ = pre_sensors.score_text(
                     pre_prompt,
@@ -1629,6 +1658,11 @@ class ChessKibitzerRuntime:
                                 f"shadows={list(cand_eval.shadow_warnings)}, score={cand_eval.composite_score:.2f}); "
                                 f"Right-Brain played {right_brain_choice.san} (score={right_brain_choice.composite_score:.2f})."
                             )
+                            if left_brain_proposed_san != right_brain_choice.san:
+                                pre_delib_pair = (
+                                    f"{delib_text.strip()} [Right-Brain Intuition Override: played {right_brain_choice.san} instead of {left_brain_proposed_san}.]",
+                                    delib_trace,
+                                )
                             try:
                                 us_color = self.board.turn
                                 vetoed_coords, _, _, _, _ = compute_candidate_move_fuzzy_coordinates(
@@ -1666,6 +1700,7 @@ class ChessKibitzerRuntime:
         snap = self.handle_chess_move(
             chosen_san,
             pre_deliberation=pre_delib_pair,
+            pre_delib_prompt=pre_prompt_used,
             is_human_move=False,
         )
         arbitration_record = {
@@ -1921,6 +1956,88 @@ class ChessKibitzerRuntime:
             return True
         return False
 
+    def reset_learned_chess_state(self) -> dict[str, Any]:
+        """Reset chess-specific REM rules, BitboardIntuitionSleeve, Elo, and chat history to a clean foundational slate."""
+        base_seed = self.training_root / "outputs" / "sleep_consolidated_ruleset.json"
+        if base_seed.exists():
+            try:
+                clean_rules = tuple(
+                    r
+                    for r in load_ruleset(base_seed)
+                    if not r.concept_name.startswith(("hazard_", "coached_"))
+                )
+            except Exception:
+                clean_rules = VIRGIN_FOUNDATIONAL_RULES
+        else:
+            clean_rules = VIRGIN_FOUNDATIONAL_RULES
+        self.rules = _ensure_foundational_rules(clean_rules)
+        self.bitboard_sleeve = BitboardIntuitionSleeve()
+        self.archives = ThreeBranchArchives()
+        self.ledger = ContemplationLedger()
+        self.diary = SettledDiary()
+        self.chord_memory = ChordMemoryBank()
+        self.memory = None
+        self.sleep_queue.clear()
+        self._hazard_scene_indices.clear()
+        self.savored_turn_ids.clear()
+        self._turn_records_by_id.clear()
+        self.scene_counter = 0
+        self.lmft_elo = 1000.0
+        self.opponent_target_elo = 1000.0
+        self.elo_wins = 0
+        self.elo_losses = 0
+        self.elo_draws = 0
+        self.games_completed_count = 0
+        self.lmft_playing_white = True
+        self.last_elo_receipt = None
+        self.last_rem_sleep_receipt = None
+        self.microwave_step_counter = 0
+        self.last_microwave_status = None
+        self.board = chess.Board()
+        self.move_history_san.clear()
+        self.player_move_accuracies.clear()
+        self.last_player_coaching = None
+        self._current_game_adjudicated = False
+        self._current_human_game_adjudicated = False
+        self.last_board_reflex = None
+        self.board_posture = evaluate_chess_board_posture(self.board)
+        self.chat_messages = [
+            {
+                "id": "clean-slate-0",
+                "sender": "system",
+                "role_label": "Clean Slate Reset",
+                "text": (
+                    f"Reset complete: restored {len(self.rules)} foundational Stage 1–5 rules, "
+                    "cleared tainted chess REM rules & BitboardIntuitionSleeve weights, and reset Elo to 1000.0."
+                ),
+            }
+        ]
+        self.threads = {
+            "thread-1": {
+                "thread_id": "thread-1",
+                "title": "Chess Arena & Sparring #1",
+                "chat_messages": list(self.chat_messages),
+                "memory_state": None,
+            }
+        }
+        self.active_thread_id = "thread-1"
+        if self._is_default_live_state_dir():
+            for seed_rel in ("outputs/rem_sleep_consolidated_ruleset.json", "outputs/club_user_state/club_ruleset.json"):
+                sp = self.training_root / seed_rel
+                if sp.exists():
+                    try:
+                        save_ruleset(sp, tuple(self.rules), tuple(self.learned_leaves))
+                    except Exception:
+                        pass
+            seed_sleeve = self.training_root / "outputs" / "bitboard_sleeve_weights.json"
+            if seed_sleeve.exists():
+                try:
+                    self.bitboard_sleeve.save(seed_sleeve)
+                except Exception:
+                    pass
+        self._persist_user_state()
+        return self.get_state_snapshot()
+
     def _adjudicate_and_record_game_outcome(self) -> dict[str, Any]:
         """Score a finished sparring game objectively, update FIDE Elo, match opponent target Elo, and rotate colors."""
         lmft_color = chess.WHITE if self.lmft_playing_white else chess.BLACK
@@ -2139,9 +2256,10 @@ class ChessKibitzerRuntime:
                 opp["move_san"],
                 is_human_move=False,
                 skip_spontaneous_left_brain=True,
+                is_sparring_opponent_move=True,
             )
             if self.chat_messages:
-                self.chat_messages[-1]["role_label"] = f"Stockfish 19 ({stockfish_color_name} · after {opp['move_san']})"
+                self.chat_messages[-1]["role_label"] = f"🐟 Stockfish 19 ({stockfish_color_name} · played {opp['move_san']})"
             snap = self.get_state_snapshot()
             mover_tag = f"SparringEngine({self.opponent_target_elo:.0f})"
 
@@ -2724,6 +2842,9 @@ def create_chess_http_server(
                     return
                 if self.path == "/api/sleep/run":
                     self._send_json(runtime.handle_run_rem_sleep())
+                    return
+                if self.path == "/api/rules/reset_clean_slate":
+                    self._send_json(runtime.reset_learned_chess_state())
                     return
                 if self.path == "/api/seed/export":
                     self._send_json(runtime.export_master_release_seed())
