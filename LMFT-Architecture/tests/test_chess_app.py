@@ -761,6 +761,13 @@ def test_master_seed_sync_and_human_player_rating_coaching(tmp_path: Path) -> No
     assert player_runtime.player_losses == 1
     assert player_runtime.player_elo < 1012.0
 
+    # 8. Regression check: positions where candidate moves trigger `ShadowPathologyWarning` (`w.shadow_pathology`, `w.severity`)
+    #    must evaluate cleanly without AttributeError during `handle_microwave_step()`
+    player_runtime.handle_set_fen("r1b1k2r/1p3ppp/p7/2qpN3/5B2/4B3/PPP1PPPP/R2QKB1R w KQkq - 0 11")
+    mw_shadow = player_runtime.handle_microwave_step()
+    assert len(mw_shadow["board"]["move_history_san"]) == 1
+
+
 
 
 

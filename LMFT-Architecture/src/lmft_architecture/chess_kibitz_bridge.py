@@ -505,7 +505,7 @@ def compute_candidate_move_fuzzy_coordinates(
                 blunder_penalty = net_unprotected
 
     post_posture = evaluate_chess_board_posture(next_board, perspective=us)
-    shadow_names = tuple(w.pathology_name for w in post_posture.board_shadow_warnings)
+    shadow_names = tuple(w.shadow_pathology for w in post_posture.board_shadow_warnings)
 
     coords: dict[str, float] = {k: 0.52 for k in FOUNDATIONAL_LEAVES}
     for leaf in learned_leaves:
@@ -513,7 +513,8 @@ def compute_candidate_move_fuzzy_coordinates(
     for leaf_id, val in post_posture.philosophical_coordinates.items():
         coords[leaf_id] = float(val)
     for w in post_posture.board_shadow_warnings:
-        coords[w.leaf_id] = float(w.activation)
+        if w.shadow_leaf_id:
+            coords[w.shadow_leaf_id] = float(w.severity)
     coords["cultural/efficiency/wastelessness"] = 0.25 if is_blunder else 0.72
     coords["cultural/freedom/self-sufficiency"] = float(
         post_posture.philosophical_coordinates.get("philosophical/being/existence", 0.55)
