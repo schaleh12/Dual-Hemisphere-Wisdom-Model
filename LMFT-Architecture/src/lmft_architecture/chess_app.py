@@ -1424,6 +1424,10 @@ class ChessKibitzerRuntime:
         if pre_deliberation is not None:
             delib_text, delib_trace = pre_deliberation
             raw_reply = delib_text
+            if telemetry.get("gear_used") == "GEAR_1_FAST_RIGHT_BRAIN":
+                telemetry["gear_used"] = "GEAR_2_SUBLIMINAL_SPLICE"
+                if self.last_board_reflex is not None:
+                    self.last_board_reflex["gear_used"] = "GEAR_2_SUBLIMINAL_SPLICE"
             if delib_trace is not None and not telemetry.get("spliced_trace"):
                 telemetry["spliced_trace"] = {
                     "sentence_count": int(pre_delib_sentence_count),
@@ -1722,94 +1726,96 @@ class ChessKibitzerRuntime:
                             chord_builder_at_comma=_build_pre_move_comma_chord,
                         )
                     pre_delib_pair = (delib_text, delib_trace)
-                post_gap_mentioned = (
-                    inspect_chess_moves_in_reply(
-                        delib_trace.post_gap_continuation,
+                    post_gap_mentioned = (
+                        inspect_chess_moves_in_reply(
+                            delib_trace.post_gap_continuation,
+                            self.board,
+                            move_history_san=self.move_history_san,
+                        )["legal_moves_mentioned"]
+                        if delib_trace is not None and delib_trace.post_gap_continuation
+                        else []
+                    )
+                    mentioned = post_gap_mentioned or inspect_chess_moves_in_reply(
+                        delib_text,
                         self.board,
                         move_history_san=self.move_history_san,
                     )["legal_moves_mentioned"]
-                    if delib_trace is not None and delib_trace.post_gap_continuation
-                    else []
-                )
-                mentioned = post_gap_mentioned or inspect_chess_moves_in_reply(
-                    delib_text,
-                    self.board,
-                    move_history_san=self.move_history_san,
-                )["legal_moves_mentioned"]
-                if mentioned:
-                    left_brain_proposed_san = str(mentioned[0])
-                    cand_eval = eval_by_san.get(left_brain_proposed_san)
-                    if cand_eval is not None:
-                        if left_brain_proposed_san == right_brain_choice.san:
-                            chosen_san = left_brain_proposed_san
-                            selection_mode = "left_brain_kibitz_commit"
-                        else:
-                            is_suboptimal = (
-                                left_brain_proposed_san not in top_san_set
-                                or (right_brain_choice.composite_score - cand_eval.composite_score) > 0.40
-                            )
-                            has_new_shadow = bool(
-                                cand_eval.shadow_warnings and not right_brain_choice.shadow_warnings
-                            )
-                            if (
-                                cand_eval.is_blunder
-                                or cand_eval.is_repetition
-                                or has_new_shadow
-                                or is_suboptimal
-                            ):
-                                selection_mode = "right_brain_blunder_veto_queued_for_sleep"
-                                veto_reason = (
-                                    f"Left-Brain proposed {left_brain_proposed_san} "
-                                    f"(blunder={cand_eval.is_blunder}, repetition={cand_eval.is_repetition}, "
-                                    f"shadows={list(cand_eval.shadow_warnings)}, score={cand_eval.composite_score:.2f}); "
-                                    f"Right-Brain played {right_brain_choice.san} (score={right_brain_choice.composite_score:.2f})."
-                                )
-                                override_note = (
-                                    f"[Right-Brain Intuition Override: played {right_brain_choice.san} "
-                                    f"instead of {left_brain_proposed_san}.]"
-                                )
-                                try:
-                                    us_color = self.board.turn
-                                    vetoed_coords, _, _, _, _ = compute_candidate_move_fuzzy_coordinates(
-                                        self.board,
-                                        self.board.parse_san(left_brain_proposed_san),
-                                        perspective=us_color,
-                                        learned_leaves=self.learned_leaves,
-                                        bitboard_sleeve=self.bitboard_sleeve,
-                                    )
-                                    vetoed_coords["psychological/truth/theory"] = float(cand_eval.theory)
-                                    vetoed_coords["psychological/contemplation/confidence"] = float(
-                                        cand_eval.confidence
-                                    )
-                                    vetoed_coords["psychological/contemplation/clarity"] = float(cand_eval.clarity)
-                                    vetoed_coords["psychological/will/execution"] = float(
-                                        cand_eval.execution_bid or cand_eval.composite_score
-                                    )
-                                    if cand_eval.is_blunder:
-                                        vetoed_coords["cultural/efficiency/wastelessness"] = 0.25
-                                    safe_choice_coords, _, _, _, _ = compute_candidate_move_fuzzy_coordinates(
-                                        self.board,
-                                        self.board.parse_san(right_brain_choice.san),
-                                        perspective=us_color,
-                                        learned_leaves=self.learned_leaves,
-                                        bitboard_sleeve=self.bitboard_sleeve,
-                                    )
-                                    safe_choice_coords["psychological/truth/theory"] = float(right_brain_choice.theory)
-                                    safe_choice_coords["psychological/contemplation/confidence"] = float(
-                                        right_brain_choice.confidence
-                                    )
-                                    safe_choice_coords["psychological/contemplation/clarity"] = float(
-                                        right_brain_choice.clarity
-                                    )
-                                    safe_choice_coords["psychological/will/execution"] = float(
-                                        right_brain_choice.execution_bid or right_brain_choice.composite_score
-                                    )
-                                except Exception:
-                                    vetoed_coords = None
-                                    safe_choice_coords = None
-                            else:
+                    if mentioned:
+                        left_brain_proposed_san = str(mentioned[0])
+                        cand_eval = eval_by_san.get(left_brain_proposed_san)
+                        if cand_eval is not None:
+                            if left_brain_proposed_san == right_brain_choice.san:
                                 chosen_san = left_brain_proposed_san
                                 selection_mode = "left_brain_kibitz_commit"
+                            else:
+                                is_suboptimal = (
+                                    left_brain_proposed_san not in top_san_set
+                                    or (right_brain_choice.composite_score - cand_eval.composite_score) > 0.40
+                                )
+                                has_new_shadow = bool(
+                                    cand_eval.shadow_warnings and not right_brain_choice.shadow_warnings
+                                )
+                                if (
+                                    cand_eval.is_blunder
+                                    or cand_eval.is_repetition
+                                    or has_new_shadow
+                                    or is_suboptimal
+                                ):
+                                    selection_mode = "right_brain_blunder_veto_queued_for_sleep"
+                                    veto_reason = (
+                                        f"Left-Brain proposed {left_brain_proposed_san} "
+                                        f"(blunder={cand_eval.is_blunder}, repetition={cand_eval.is_repetition}, "
+                                        f"shadows={list(cand_eval.shadow_warnings)}, score={cand_eval.composite_score:.2f}); "
+                                        f"Right-Brain played {right_brain_choice.san} (score={right_brain_choice.composite_score:.2f})."
+                                    )
+                                    override_note = (
+                                        f"[Right-Brain Intuition Override: played {right_brain_choice.san} "
+                                        f"instead of {left_brain_proposed_san}.]"
+                                    )
+                                    try:
+                                        us_color = self.board.turn
+                                        vetoed_coords, _, _, _, _ = compute_candidate_move_fuzzy_coordinates(
+                                            self.board,
+                                            self.board.parse_san(left_brain_proposed_san),
+                                            perspective=us_color,
+                                            learned_leaves=self.learned_leaves,
+                                            bitboard_sleeve=self.bitboard_sleeve,
+                                        )
+                                        vetoed_coords["psychological/truth/theory"] = float(cand_eval.theory)
+                                        vetoed_coords["psychological/contemplation/confidence"] = float(
+                                            cand_eval.confidence
+                                        )
+                                        vetoed_coords["psychological/contemplation/clarity"] = float(cand_eval.clarity)
+                                        vetoed_coords["psychological/will/execution"] = float(
+                                            cand_eval.execution_bid or cand_eval.composite_score
+                                        )
+                                        if cand_eval.is_blunder:
+                                            vetoed_coords["cultural/efficiency/wastelessness"] = 0.25
+                                        safe_choice_coords, _, _, _, _ = compute_candidate_move_fuzzy_coordinates(
+                                            self.board,
+                                            self.board.parse_san(right_brain_choice.san),
+                                            perspective=us_color,
+                                            learned_leaves=self.learned_leaves,
+                                            bitboard_sleeve=self.bitboard_sleeve,
+                                        )
+                                        safe_choice_coords["psychological/truth/theory"] = float(
+                                            right_brain_choice.theory
+                                        )
+                                        safe_choice_coords["psychological/contemplation/confidence"] = float(
+                                            right_brain_choice.confidence
+                                        )
+                                        safe_choice_coords["psychological/contemplation/clarity"] = float(
+                                            right_brain_choice.clarity
+                                        )
+                                        safe_choice_coords["psychological/will/execution"] = float(
+                                            right_brain_choice.execution_bid or right_brain_choice.composite_score
+                                        )
+                                    except Exception:
+                                        vetoed_coords = None
+                                        safe_choice_coords = None
+                                else:
+                                    chosen_san = left_brain_proposed_san
+                                    selection_mode = "left_brain_kibitz_commit"
             except Exception:
                 pass
 

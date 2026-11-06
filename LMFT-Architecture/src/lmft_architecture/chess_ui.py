@@ -1049,7 +1049,7 @@ function renderState(s) {
   if (elMistake) elMistake.textContent = String(cMistake);
   if (elBlund) elBlund.textContent = String(cBlund);
 
-  const sig = JSON.stringify(msgs.map(m => [m.id, m.role_label, m.text, m.coached, m.savored, !!(m.telemetry && (m.telemetry.game_review || m.telemetry.sparring_referee_review))]));
+  const sig = JSON.stringify(msgs.map(m => [m.id, m.role_label, m.text, m.coached, m.savored, !!(m.telemetry && (m.telemetry.game_review || m.telemetry.sparring_referee_review || m.telemetry.intuition_override_note))]));
   if (sig !== lastRenderedChatSig) {
     lastRenderedChatSig = sig;
     const box = document.getElementById("chat-messages");
