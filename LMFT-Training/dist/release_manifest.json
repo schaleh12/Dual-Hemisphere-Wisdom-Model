@@ -2,8 +2,8 @@
   "schema_version": 1,
   "version": "0.2.0",
   "github_repo": "schaleh12/Dual-Hemisphere-Wisdom-Model",
-  "build_sha256": "4c8a04aeab87a357718cf1f7d54af5517e8f46ff13f24015ff2c9c72d31c80c9",
-  "build_short_hash": "4c8a04aeab87",
+  "build_sha256": "0cd885eb07513f0fe36180bd211c3aa9aac214fb6f36c6ef20a6a913abc3b1ad",
+  "build_short_hash": "0cd885eb0751",
   "files": {
     "src/lmft_architecture/__init__.py": {
       "sha256": "a89f56c2195e87129adbffa5065d8769ea096e13ba98783d217c4d120ee92623",
@@ -302,20 +302,20 @@
       "size_bytes": 3352
     },
     "dist/lmft-sanctuary-club-v0.1.0-win64.zip": {
-      "sha256": "1e5971e37cb7470a7f7d9afda5673cc5e85859f2470ea66a9b9207d0bcac7433",
-      "size_bytes": 398659
+      "sha256": "95594d252e7543bf4681fcd07582e9a3affa8ac6fd29563de4945c4e0f1c6268",
+      "size_bytes": 388632
     },
     "dist/impish_bloodmoon_patreon.enc": {
       "sha256": "30ee2d3b94331e70fba3afa30dd3aed006e007167e924b4a27afab9ee7a4c065",
       "size_bytes": 93649374
     },
     "outputs/rem_sleep_consolidated_ruleset.json": {
-      "sha256": "8d369701c755435bf1125347221d88cac7eb18ecbf287932e5ce36cf01b9d227",
-      "size_bytes": 30506
+      "sha256": "5b495d7779e33bf13be7a0eaba71029e00f532842d5fc8225bd484e2e7cebfc4",
+      "size_bytes": 8506
     },
     "outputs/sleep_consolidated_ruleset.json": {
-      "sha256": "92d7b51a299ce75f6631bb8aa6201ab04174584bc255bfd176955c7edc58548a",
-      "size_bytes": 84428
+      "sha256": "176364da2bc60c87acd8602f4ec893dd730a5277c15c43ae0bf456c1a6d2b04a",
+      "size_bytes": 10082
     },
     "outputs/continuous_tiered_ruleset.json": {
       "sha256": "b6769f70249a4c68f599c0a7e5a0f8da7afe1487de1f2f3e8e4be26e776f0d0d",
