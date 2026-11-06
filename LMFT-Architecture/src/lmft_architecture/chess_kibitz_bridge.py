@@ -132,25 +132,44 @@ def evaluate_chess_board_posture(
         temp_b = board.copy()
         temp_b.turn = us
         our_moves = list(temp_b.legal_moves)
+        check_board = temp_b
     else:
         our_moves = legal_moves
+        check_board = board
+
+    home_rank = 0 if us == chess.WHITE else 7
+    our_bishops = list(board.pieces(chess.BISHOP, us))
+    our_knights = list(board.pieces(chess.KNIGHT, us))
+    developed_bishops = sum(1 for sq in our_bishops if chess.square_rank(sq) != home_rank)
+    developed_knights = sum(1 for sq in our_knights if chess.square_rank(sq) != home_rank)
+    minor_total = max(1, len(our_bishops) + len(our_knights))
+    minor_dev_ratio = (developed_bishops + developed_knights) / minor_total
 
     # 1. Queen -> philosophical/being/agency (Red / Lightning: Volition & Attacking Drive)
     our_queens = list(board.pieces(chess.QUEEN, us))
+    queen_home_sq = chess.D1 if us == chess.WHITE else chess.D8
+    early_queen_out = bool(
+        our_queens
+        and queen_home_sq not in our_queens
+        and board.fullmove_number <= 7
+        and (developed_bishops + developed_knights) < 3
+    )
     queen_moves = [m for m in our_moves if board.piece_type_at(m.from_square) == chess.QUEEN]
     capture_moves = [m for m in our_moves if board.is_capture(m)]
-    checking_moves = [m for m in our_moves if board.gives_check(m)]
+    checking_moves = [m for m in our_moves if check_board.gives_check(m)]
     enemy_half_ranks = range(4, 8) if us == chess.WHITE else range(0, 4)
     forward_attacks = [
         m for m in our_moves if chess.square_rank(m.to_square) in enemy_half_ranks
     ]
     queen_presence = 0.32 if our_queens else 0.08
+    queen_mob_scale = (0.008 + 0.025 * minor_dev_ratio) if board.fullmove_number <= 8 else 0.035
     agency = _clamp01(
         queen_presence
-        + 0.035 * min(12, len(queen_moves))
+        + queen_mob_scale * min(12, len(queen_moves))
         + 0.06 * min(5, len(capture_moves))
         + 0.12 * min(3, len(checking_moves))
         + 0.015 * min(12, len(forward_attacks))
+        - (0.12 if early_queen_out else 0.0)
     )
 
     # 2. King -> philosophical/being/existence (Cyan / Water: Wellspring of Being & King Shelter)
@@ -159,6 +178,7 @@ def evaluate_chess_board_posture(
         existence = 0.10
         enemy_king_attackers = 0
         shield_pawns = 0
+        in_check_now = False
     else:
         king_file = chess.square_file(king_sq)
         king_rank = chess.square_rank(king_sq)
@@ -186,17 +206,26 @@ def evaluate_chess_board_posture(
 
         in_check_now = board.is_attacked_by(them, king_sq)
         back_rank_home = ((king_rank in (0, 1)) if us == chess.WHITE else (king_rank in (6, 7))) and not in_check_now
+        castled_shelter = 0.08 if (king_rank == home_rank and king_file in (2, 6) and not in_check_now) else 0.0
         existence = _clamp01(
             0.48
             + 0.11 * min(3, shield_pawns)
             + (0.10 if back_rank_home else -0.12)
+            + castled_shelter
             + 0.03 * min(4, safe_escape_squares)
             - 0.11 * min(5, enemy_king_attackers)
             - (0.36 if in_check_now else 0.0)
         )
 
     # 3. Bishop -> philosophical/structure/order (Magenta / Wind: Alignment & Coordination)
-    our_bishops = list(board.pieces(chess.BISHOP, us))
+    center_ring = {
+        chess.C3, chess.D3, chess.E3, chess.F3,
+        chess.C4, chess.D4, chess.E4, chess.F4,
+        chess.C5, chess.D5, chess.E5, chess.F5,
+        chess.C6, chess.D6, chess.E6, chess.F6,
+    }
+    active_knights = sum(1 for sq in our_knights if sq in center_ring)
+    rim_knights = sum(1 for sq in our_knights if chess.square_file(sq) in (0, 7))
     bishop_moves = [m for m in our_moves if board.piece_type_at(m.from_square) == chess.BISHOP]
     our_non_king_sqs = [
         sq
@@ -218,6 +247,10 @@ def evaluate_chess_board_posture(
     order = _clamp01(
         0.28
         + 0.08 * min(2, len(our_bishops))
+        + 0.06 * min(2, developed_bishops)
+        + 0.07 * min(2, active_knights)
+        - 0.08 * min(2, rim_knights)
+        - (0.10 if early_queen_out else 0.0)
         + 0.03 * min(10, len(bishop_moves))
         + 0.35 * coord_ratio
         - 0.14 * min(3, hanging_count)
@@ -225,21 +258,15 @@ def evaluate_chess_board_posture(
 
     # 4. Knight -> philosophical/structure/chaos (Green / Ice: Nonlinear Forks & Tactical Shatter)
     knight_moves = [m for m in our_moves if board.piece_type_at(m.from_square) == chess.KNIGHT]
-    center_ring = {
-        chess.C3, chess.D3, chess.E3, chess.F3,
-        chess.C4, chess.D4, chess.E4, chess.F4,
-        chess.C5, chess.D5, chess.E5, chess.F5,
-        chess.C6, chess.D6, chess.E6, chess.F6,
-    }
-    active_knights = sum(1 for sq in board.pieces(chess.KNIGHT, us) if sq in center_ring)
     chaos = _clamp01(
         0.12
-        + 0.06 * min(2, active_knights)
-        + 0.02 * min(8, len(knight_moves))
+        + 0.03 * min(2, active_knights)
+        + 0.06 * min(2, rim_knights)
+        + 0.015 * min(8, len(knight_moves))
         + 0.04 * min(5, len(capture_moves))
         + 0.06 * min(3, len(checking_moves))
         + 0.12 * min(3, hanging_count)
-        + (0.22 if board.is_check() else 0.0)
+        + (0.22 if in_check_now else 0.0)
     )
 
     # 5. Pawn -> philosophical/persistence/continuity (Blue / Fire: Connected Phalanx & Flow)
@@ -300,7 +327,7 @@ def evaluate_chess_board_posture(
     balances = compute_philosophical_color_harmony(phil_coords)
     warnings = detect_shadow_pathologies(
         phil_coords,
-        fact=0.25 if (board.is_check() or hanging_count > 0 or existence <= 0.35) else 0.65,
+        fact=0.25 if (in_check_now or hanging_count > 0 or existence <= 0.35) else 0.65,
         arousal=max(0.45, chaos),
         resonance=order,
     )
@@ -385,6 +412,8 @@ def extract_bitboard_features(
     next_board: chess.Board | None = None,
     blunder_penalty: float = 0.0,
     captured_val: float = 0.0,
+    recapture_loss: float = 0.0,
+    net_capture_gain: float | None = None,
 ) -> dict[str, float]:
     """Extract normalized 64-square bitboard features in O(1) without lookahead or engine calls."""
     us = board.turn if perspective is None else perspective
@@ -392,6 +421,12 @@ def extract_bitboard_features(
     nb = next_board if next_board is not None else board.copy()
     if next_board is None:
         nb.push(move)
+
+    eff_capture_gain = (
+        float(net_capture_gain)
+        if net_capture_gain is not None
+        else max(0.0, float(captured_val) - float(recapture_loss) - float(blunder_penalty))
+    )
 
     our_mat = sum(
         val * chess.popcount(nb.pieces_mask(pt, us))
@@ -403,7 +438,8 @@ def extract_bitboard_features(
         for pt, val in _PIECE_VALUES.items()
         if val > 0.0
     )
-    material_balance_norm = max(-1.0, min(1.0, (our_mat - their_mat) / 15.0))
+    effective_mat_diff = (our_mat - their_mat) - float(recapture_loss)
+    material_balance_norm = max(-1.0, min(1.0, effective_mat_diff / 12.0))
 
     our_attacks_bb = _union_attacks_bb(nb, us)
     their_attacks_bb = _union_attacks_bb(nb, them)
@@ -446,24 +482,31 @@ def extract_bitboard_features(
     castled_bonus = 0.25 if (king_sq is not None and chess.square_file(king_sq) in (2, 6)) else 0.0
     development_progress = _clamp01(0.75 * (developed_minors / total_minors) + castled_bonus)
 
-    move_net_safety = max(-1.0, min(1.0, 0.45 + 0.20 * captured_val - 0.42 * blunder_penalty))
+    move_net_safety = max(-1.0, min(1.0, 0.45 + 0.28 * eff_capture_gain - 0.48 * blunder_penalty))
 
     piece_type = board.piece_type_at(move.from_square) or chess.PAWN
     to_bb = chess.BB_SQUARES[move.to_square]
     from_bb = chess.BB_SQUARES[move.from_square]
+    to_file = chess.square_file(move.to_square)
     pos_gain = 0.0
     if board.is_castling(move):
-        pos_gain += 0.62
+        pos_gain += 0.65
     if piece_type == chess.PAWN and (to_bb & chess.BB_CENTER):
-        pos_gain += 0.52
+        pos_gain += 0.55
     elif piece_type in (chess.KNIGHT, chess.BISHOP) and (from_bb & home_rank_bb) and not (to_bb & home_rank_bb):
-        pos_gain += 0.42
+        pos_gain += 0.45
+    if piece_type == chess.KNIGHT and to_file in (0, 7) and eff_capture_gain < 0.8:
+        pos_gain -= 0.40
+    if piece_type == chess.QUEEN and board.fullmove_number <= 7 and developed_minors < 3 and eff_capture_gain < 0.8:
+        pos_gain -= 0.38
+    if piece_type == chess.BISHOP and captured_val > 0.0 and eff_capture_gain <= 0.05 and board.fullmove_number <= 10:
+        pos_gain -= 0.28
     if to_bb & _BB_EXTENDED_CENTER:
         pos_gain += 0.22
     if not nb.is_attacked_by(them, move.to_square):
         pos_gain += 0.28
     elif nb.attackers_mask(them, move.to_square) & nb.pieces_mask(chess.PAWN, them):
-        pos_gain -= 0.18
+        pos_gain -= 0.32
     if piece_type == chess.KING and not board.is_castling(move) and not board.is_check() and board.fullmove_number <= 12:
         pos_gain -= 0.55
     move_positional_gain = max(-1.0, min(1.0, pos_gain))
@@ -538,6 +581,8 @@ class BitboardIntuitionSleeve:
         next_board: chess.Board | None = None,
         blunder_penalty: float = 0.0,
         captured_val: float = 0.0,
+        recapture_loss: float = 0.0,
+        net_capture_gain: float | None = None,
         leaf_coords: Mapping[str, float] | None = None,
     ) -> dict[str, Any]:
         feats = extract_bitboard_features(
@@ -547,6 +592,8 @@ class BitboardIntuitionSleeve:
             next_board=next_board,
             blunder_penalty=blunder_penalty,
             captured_val=captured_val,
+            recapture_loss=recapture_loss,
+            net_capture_gain=net_capture_gain,
         )
         v_logit = float(self.value_bias) + sum(
             float(self.value_weights.get(k, 0.0)) * float(v) for k, v in feats.items()
@@ -561,7 +608,7 @@ class BitboardIntuitionSleeve:
                     leaf_adj += float(lw) * (float(leaf_coords[lk]) - 0.50)
         value_prior = _sigmoid01(v_logit + 0.55 * leaf_adj)
         policy_prior = _sigmoid01(p_logit + 0.75 * leaf_adj)
-        safety_gate = 0.25 if blunder_penalty >= 1.5 else 1.0
+        safety_gate = 0.25 if blunder_penalty >= 1.5 else (0.55 if blunder_penalty >= 0.8 else 1.0)
         coherence = 1.0 - min(1.0, abs(value_prior - policy_prior))
         sleeve_confidence = _clamp01(
             safety_gate * (0.45 * value_prior + 0.35 * policy_prior + 0.20 * coherence)
@@ -582,7 +629,12 @@ class BitboardIntuitionSleeve:
         is_hazard: bool = True,
         learning_rate: float = 0.08,
     ) -> dict[str, Any]:
-        """Distill a post-mortem Game Review critique (`played` vs `best_alternative`) into the sleeve weights."""
+        """Distill a post-mortem Game Review critique (`played` vs `best_alternative`) into the sleeve weights.
+
+        Preserves foundational leaf polarity so tactical blunders (`is_hazard=True`) reinforce safety and
+        virtue leaves where `best_alternative` exceeded `played` without ever training `order`, `continuity`,
+        `discreteness`, or `agency` in reverse when a developing move overlooked a tactical threat.
+        """
         lr = max(0.005, min(0.25, float(learning_rate)))
         updated_keys: list[str] = []
         ref_map = reference_coordinates or {}
@@ -590,13 +642,21 @@ class BitboardIntuitionSleeve:
             if lk in played_coordinates and lk in ref_map:
                 p_val = float(played_coordinates[lk])
                 r_val = float(ref_map[lk])
-                # If `played` was a blunder (`is_hazard=True`), shift weights toward `ref_val - p_val`.
-                # If `played` was a Brilliancy/Great Move (`is_hazard=False`), shift toward `p_val - r_val`.
-                delta = (r_val - p_val) if is_hazard else (p_val - r_val)
-                if abs(delta) >= 0.01:
-                    new_w = max(-2.5, min(2.5, float(self.leaf_weights[lk]) + lr * delta))
-                    self.leaf_weights[lk] = round(new_w, 4)
-                    updated_keys.append(lk)
+                raw_delta = (r_val - p_val) if is_hazard else (p_val - r_val)
+                if lk == "philosophical/structure/chaos":
+                    delta = min(0.0, raw_delta)
+                    if abs(delta) >= 0.01:
+                        new_w = max(-2.5, min(-0.20, float(self.leaf_weights[lk]) + lr * delta))
+                        self.leaf_weights[lk] = round(new_w, 4)
+                        updated_keys.append(lk)
+                else:
+                    # Foundational virtue leaves: reinforce positive structural advantage (`delta >= 0`)
+                    delta = max(0.0, raw_delta)
+                    if delta >= 0.01:
+                        floor_w = max(0.25, float(DEFAULT_SLEEVE_LEAF_WEIGHTS.get(lk, 0.35)) * 0.75)
+                        new_w = max(floor_w, min(2.5, float(self.leaf_weights[lk]) + lr * delta))
+                        self.leaf_weights[lk] = round(new_w, 4)
+                        updated_keys.append(lk)
 
         fact_p = float(played_coordinates.get("psychological/truth/fact", 0.50))
         fact_r = float(ref_map.get("psychological/truth/fact", 0.70))
@@ -638,13 +698,20 @@ class BitboardIntuitionSleeve:
         lw = dict(DEFAULT_SLEEVE_LEAF_WEIGHTS)
         if isinstance(raw.get("value_weights"), Mapping):
             for k, v in raw["value_weights"].items():
-                vw[str(k)] = float(v)
+                vw[str(k)] = max(0.20, float(v))
         if isinstance(raw.get("policy_weights"), Mapping):
             for k, v in raw["policy_weights"].items():
-                pw[str(k)] = float(v)
+                pw[str(k)] = max(0.20, float(v))
         if isinstance(raw.get("leaf_weights"), Mapping):
             for k, v in raw["leaf_weights"].items():
-                lw[str(k)] = float(v)
+                key = str(k)
+                val = float(v)
+                if key == "philosophical/structure/chaos":
+                    lw[key] = min(-0.20, max(-2.5, val))
+                elif key in DEFAULT_SLEEVE_LEAF_WEIGHTS:
+                    lw[key] = max(float(DEFAULT_SLEEVE_LEAF_WEIGHTS[key]), min(2.5, val))
+                else:
+                    lw[key] = val
         return cls(
             value_weights=vw,
             policy_weights=pw,
@@ -728,6 +795,7 @@ def compute_candidate_move_fuzzy_coordinates(
     them = not us
     piece_type = board.piece_type_at(move.from_square) or chess.PAWN
     moving_val = _PIECE_VALUES.get(piece_type, 1.0)
+    placed_val = _PIECE_VALUES.get(move.promotion, 9.0) if move.promotion else moving_val
     is_cap = board.is_capture(move)
     captured_val = 0.0
     if is_cap:
@@ -740,36 +808,89 @@ def compute_candidate_move_fuzzy_coordinates(
     next_board = board.copy()
     next_board.push(move)
 
-    dest_attacked_by_them = next_board.is_attacked_by(them, move.to_square)
-    dest_defended_by_us = next_board.is_attacked_by(us, move.to_square)
+    enemy_atts = list(next_board.attackers(them, move.to_square))
+    our_defs = list(next_board.attackers(us, move.to_square))
+    dest_attacked_by_them = bool(enemy_atts)
+    dest_defended_by_us = bool(our_defs)
     is_blunder = False
     blunder_penalty = 0.0
+    recapture_loss = 0.0
+
     if dest_attacked_by_them:
-        if not dest_defended_by_us and moving_val > captured_val + 0.5:
-            is_blunder = True
-            blunder_penalty = moving_val - captured_val
-        elif dest_defended_by_us:
-            min_att_val = min(
-                (
-                    _PIECE_VALUES.get(next_board.piece_type_at(a_sq) or chess.PAWN, 1.0)
-                    for a_sq in next_board.attackers(them, move.to_square)
-                    if next_board.piece_type_at(a_sq) != chess.KING
-                ),
-                default=99.0,
-            )
-            if (moving_val - captured_val) - min_att_val >= 1.5:
+        min_att_val = min(
+            (
+                _PIECE_VALUES.get(next_board.piece_type_at(a_sq) or chess.PAWN, 1.0)
+                for a_sq in enemy_atts
+                if next_board.piece_type_at(a_sq) != chess.KING
+            ),
+            default=placed_val,
+        )
+        if not dest_defended_by_us:
+            recapture_loss = placed_val
+            if placed_val > captured_val + 0.5:
                 is_blunder = True
-                blunder_penalty = 0.65 * ((moving_val - captured_val) - min_att_val)
+                blunder_penalty = placed_val - captured_val
+        else:
+            if len(enemy_atts) > len(our_defs):
+                recapture_loss = placed_val
+                if placed_val - captured_val >= 0.8:
+                    is_blunder = True
+                    blunder_penalty = placed_val - captured_val
+            elif placed_val > min_att_val:
+                recapture_loss = placed_val - min_att_val
+                if (placed_val - captured_val) - min_att_val >= 0.8:
+                    is_blunder = True
+                    blunder_penalty = (placed_val - captured_val) - min_att_val
+            elif captured_val > 0.0 and placed_val >= captured_val - 0.2:
+                recapture_loss = min(placed_val, captured_val)
+
+    net_capture_gain = max(0.0, captured_val - recapture_loss - blunder_penalty)
 
     for sq, pc in next_board.piece_map().items():
         if pc.color != us or pc.piece_type == chess.KING or sq == move.to_square:
             continue
         p_val = _PIECE_VALUES.get(pc.piece_type, 1.0)
-        if p_val >= 3.0 and next_board.is_attacked_by(them, sq) and not next_board.is_attacked_by(us, sq):
-            net_unprotected = p_val - captured_val
-            if net_unprotected >= 1.5 and net_unprotected > blunder_penalty:
+        sq_enemy_atts = list(next_board.attackers(them, sq))
+        if not sq_enemy_atts:
+            continue
+        sq_our_defs = list(next_board.attackers(us, sq))
+        if not sq_our_defs:
+            net_unprotected = p_val - net_capture_gain
+            if p_val >= 3.0 and net_unprotected >= 0.8:
                 is_blunder = True
-                blunder_penalty = net_unprotected
+                blunder_penalty = max(blunder_penalty, net_unprotected)
+            elif p_val == 1.0 and net_unprotected >= 0.8:
+                blunder_penalty = max(blunder_penalty, 0.55)
+        else:
+            sq_min_att_val = min(
+                (
+                    _PIECE_VALUES.get(next_board.piece_type_at(a_sq) or chess.PAWN, 1.0)
+                    for a_sq in sq_enemy_atts
+                    if next_board.piece_type_at(a_sq) != chess.KING
+                ),
+                default=99.0,
+            )
+            if p_val - sq_min_att_val >= 1.0:
+                sq_loss = (p_val - sq_min_att_val) - net_capture_gain
+                if sq_loss >= 0.8:
+                    is_blunder = True
+                    blunder_penalty = max(blunder_penalty, sq_loss)
+            elif p_val >= 3.0 and len(sq_enemy_atts) > len(sq_our_defs):
+                sq_loss = (0.75 * p_val) - net_capture_gain
+                if sq_loss >= 0.8:
+                    is_blunder = True
+                    blunder_penalty = max(blunder_penalty, sq_loss)
+
+    # Detect immediate 1-ply mate threats on `next_board` (`Qxf2#`, `Nxf2#`, `Qg2#`, `Rd8#`)
+    for reply in next_board.legal_moves:
+        if next_board.gives_check(reply):
+            next_board.push(reply)
+            is_mate_reply = next_board.is_checkmate()
+            next_board.pop()
+            if is_mate_reply:
+                is_blunder = True
+                blunder_penalty = max(blunder_penalty, 9.5)
+                break
 
     post_posture = evaluate_chess_board_posture(next_board, perspective=us)
 
@@ -779,7 +900,7 @@ def compute_candidate_move_fuzzy_coordinates(
     for leaf_id, val in post_posture.philosophical_coordinates.items():
         coords[leaf_id] = float(val)
     coords["cultural/efficiency/wastelessness"] = (
-        0.25 if is_blunder else round(min(0.95, 0.72 + 0.06 * captured_val), 4)
+        0.25 if is_blunder else round(min(0.95, 0.72 + 0.06 * net_capture_gain), 4)
     )
     coords["cultural/freedom/self-sufficiency"] = float(
         post_posture.philosophical_coordinates.get("philosophical/being/existence", 0.55)
@@ -793,6 +914,8 @@ def compute_candidate_move_fuzzy_coordinates(
         next_board=next_board,
         blunder_penalty=blunder_penalty,
         captured_val=captured_val,
+        recapture_loss=recapture_loss,
+        net_capture_gain=net_capture_gain,
         leaf_coords=coords,
     )
     existence = float(coords.get("philosophical/being/existence", 0.50))
@@ -806,6 +929,7 @@ def compute_candidate_move_fuzzy_coordinates(
     fact_coord = _clamp01(
         0.55 * float(sleeve_out["value_prior"])
         + 0.45 * existence
+        + 0.12 * min(4.0, net_capture_gain)
         - 0.22 * min(3.0, blunder_penalty)
     )
     # 2. `psychological/truth/theory`: Projected positional hypothesis on the bitboard
@@ -843,7 +967,7 @@ def compute_candidate_move_fuzzy_coordinates(
         0.08 + (0.45 if is_blunder else 0.0) + (0.20 if shadow_names else 0.0)
     )
     coords["experiential/reflection/salience"] = _clamp01(
-        0.45 + 0.08 * captured_val + 0.25 * float(sleeve_out["policy_prior"])
+        0.45 + 0.08 * net_capture_gain + 0.25 * float(sleeve_out["policy_prior"])
     )
     coords["experiential/phase/arousal"] = _clamp01(0.35 + 0.40 * agency + 0.25 * chaos)
 

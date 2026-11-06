@@ -259,6 +259,29 @@ def normalize_contrastive_target_leaves_and_thresholds(
         RETENTION_LEAF,
         NOVELTY_LEAF,
     }
+    shadow_leaf_set = {
+        "philosophical/being/tyrannical_volition",
+        "philosophical/being/nihilistic_withdrawal",
+        "philosophical/being/psychosis",
+        "philosophical/structure/dogmatic_rigidity",
+        "philosophical/structure/fragmentation",
+        "philosophical/structure/corruption",
+        "philosophical/persistence/stagnation",
+        "philosophical/persistence/amnesia",
+    }
+    virtue_leaf_set = {
+        "philosophical/being/existence",
+        "philosophical/structure/order",
+        "philosophical/persistence/continuity",
+        "philosophical/persistence/discreteness",
+        "cultural/efficiency/wastelessness",
+        "cultural/freedom/self-sufficiency",
+    }
+    has_wastelessness = "cultural/efficiency/wastelessness" in avg_coords
+    wastelessness_val = float(avg_coords.get("cultural/efficiency/wastelessness", 0.50))
+    explicit_hazard = has_wastelessness and wastelessness_val <= 0.35
+    explicit_coached = has_wastelessness and wastelessness_val >= 0.65
+
     divergent: list[tuple[float, str, float, float]] = []
     for k, raw_v in avg_coords.items():
         if not is_valid_leaf_id(k) or k in transient_exp:
@@ -267,6 +290,22 @@ def normalize_contrastive_target_leaves_and_thresholds(
             continue
         v_act = float(raw_v)
         v_ref = float(avg_ref_coords.get(k, v_act))
+        if explicit_coached:
+            # A `coached_` rule must never target shadow pathologies or low virtue leaves
+            if k in shadow_leaf_set:
+                continue
+            if k in virtue_leaf_set and (v_act < 0.55 or v_act < v_ref):
+                continue
+            if k == "cultural/freedom/needlessness" and v_act > 0.20:
+                continue
+            if k == "philosophical/structure/chaos" and v_act > 0.45:
+                continue
+        elif explicit_hazard:
+            # A `hazard_` rule must never target high virtue leaves or low needlessness
+            if k in virtue_leaf_set and (v_act >= 0.65 and v_act > v_ref):
+                continue
+            if k == "cultural/freedom/needlessness" and v_act <= 0.30:
+                continue
         abs_diff = abs(v_act - v_ref)
         if abs_diff >= 0.03:
             divergent.append((abs_diff, k, v_act, v_ref))

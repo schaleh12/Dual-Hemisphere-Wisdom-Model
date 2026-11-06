@@ -2,8 +2,8 @@
   "schema_version": 1,
   "version": "0.2.0",
   "github_repo": "schaleh12/Dual-Hemisphere-Wisdom-Model",
-  "build_sha256": "09648ec15b1809b4d6341172776cd83b1708fa8dde13e8683deaa90de17589e4",
-  "build_short_hash": "09648ec15b18",
+  "build_sha256": "5792b3207db1bb2e919422b3e51d3f5643cdfe3af9d0150fc5e5ce0ab53fb839",
+  "build_short_hash": "5792b3207db1",
   "files": {
     "src/lmft_architecture/__init__.py": {
       "sha256": "a89f56c2195e87129adbffa5065d8769ea096e13ba98783d217c4d120ee92623",
@@ -90,12 +90,12 @@
       "size_bytes": 3267
     },
     "src/lmft_architecture/chess_app.py": {
-      "sha256": "7073673251aeefbe2d01a4911c11e4e59a7bee43c916148b3b886d38d45932c6",
-      "size_bytes": 125095
+      "sha256": "f6c5ba90324f966442a4c17723fcc7a802619da156c5960b2d7b032ed4e61668",
+      "size_bytes": 128582
     },
     "src/lmft_architecture/chess_kibitz_bridge.py": {
-      "sha256": "cdeecc4539b7225b6b2b66f1420fa9e9a17c6d39566f3ee0290a46397e4bc643",
-      "size_bytes": 79362
+      "sha256": "3f34e5d0557d4933f1ad352bf08e39366958e4038886d9684b3a1207f1ede7dc",
+      "size_bytes": 85198
     },
     "src/lmft_architecture/chess_ui.py": {
       "sha256": "ca0168edca41c167c65e420d42de7f7dbbedf783615848b808476f333b9f62bc",
@@ -258,8 +258,8 @@
       "size_bytes": 2752
     },
     "src/lmft_architecture/sleep_consolidation.py": {
-      "sha256": "13184d5453393286b20503e59dcd786dd970b667aba84de0ea9e2c604f74e829",
-      "size_bytes": 30705
+      "sha256": "7f149fa1f088525dc3532d48ade28b7cd2a1e93652a9af18d20bb548710a4613",
+      "size_bytes": 32509
     },
     "src/lmft_architecture/subliminal_gap_splice.py": {
       "sha256": "1ef7a8a54a452ae8b0a4525691ec40ad9f581b68a6cf081d1d88c4c68e50ba01",
@@ -310,8 +310,8 @@
       "size_bytes": 93649374
     },
     "outputs/rem_sleep_consolidated_ruleset.json": {
-      "sha256": "5b495d7779e33bf13be7a0eaba71029e00f532842d5fc8225bd484e2e7cebfc4",
-      "size_bytes": 8506
+      "sha256": "2d56c3646222305c24535f2f746b03662362266b1a942d01bc8d25a34580a643",
+      "size_bytes": 13417
     },
     "outputs/sleep_consolidated_ruleset.json": {
       "sha256": "176364da2bc60c87acd8602f4ec893dd730a5277c15c43ae0bf456c1a6d2b04a",

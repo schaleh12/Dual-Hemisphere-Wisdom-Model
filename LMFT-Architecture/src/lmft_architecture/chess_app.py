@@ -283,6 +283,57 @@ def _ensure_foundational_rules(rules: tuple[FuzzyConceptRule, ...]) -> tuple[Fuz
             or "[! GREAT_MOVE" in r.description
         ):
             continue
+        if r.concept_name.startswith("hazard_"):
+            # Strip inverted virtue or low-needlessness leaves that contradict hazard polarity
+            cleaned_haz_leaves = {
+                k: float(v)
+                for k, v in r.target_leaves.items()
+                if not (
+                    (k == "cultural/freedom/needlessness" and float(v) <= 0.30)
+                    or (k in ("philosophical/being/existence", "cultural/freedom/self-sufficiency", "philosophical/structure/order") and float(v) >= 0.70)
+                )
+            }
+            if len(cleaned_haz_leaves) < 2:
+                continue
+            if cleaned_haz_leaves != dict(r.target_leaves):
+                r = FuzzyConceptRule(
+                    rule_id=r.rule_id,
+                    concept_name=r.concept_name,
+                    description=r.description,
+                    target_leaves=cleaned_haz_leaves,
+                    low=r.low,
+                    high=r.high,
+                )
+        elif r.concept_name.startswith("coached_"):
+            shadow_ids = {l.leaf_id for l in PHILOSOPHICAL_SHADOW_LEAVES}
+            virtue_ids = {
+                "philosophical/being/existence",
+                "philosophical/structure/order",
+                "philosophical/persistence/continuity",
+                "philosophical/persistence/discreteness",
+                "cultural/efficiency/wastelessness",
+                "cultural/freedom/self-sufficiency",
+            }
+            cleaned_coached_leaves = {
+                k: float(v)
+                for k, v in r.target_leaves.items()
+                if k not in shadow_ids
+                and not (k == "philosophical/structure/chaos" and float(v) >= 0.48)
+                and not (k == "cultural/freedom/needlessness" and float(v) > 0.20)
+                and not (k in virtue_ids and float(v) < 0.55)
+            }
+            min_req = 2 if len(r.target_leaves) >= 2 else 1
+            if len(cleaned_coached_leaves) < min_req:
+                continue
+            if cleaned_coached_leaves != dict(r.target_leaves):
+                r = FuzzyConceptRule(
+                    rule_id=r.rule_id,
+                    concept_name=r.concept_name,
+                    description=r.description,
+                    target_leaves=cleaned_coached_leaves,
+                    low=r.low,
+                    high=r.high,
+                )
         if "Played " in r.description and " instead of best move " in r.description:
             after_played = r.description.split("Played ", 1)[1].split(" ", 1)[0].strip()
             after_best = r.description.split(" instead of best move ", 1)[1].split(" ", 1)[0].rstrip(".").strip()
@@ -1618,7 +1669,14 @@ class ChessKibitzerRuntime:
         self.last_hybrid_move_arbitration = arbitration_record
         if self.last_board_reflex is not None:
             self.last_board_reflex["hybrid_arbitration"] = arbitration_record
-        if veto_reason and self.chat_messages:
+        if (
+            veto_reason
+            and self.chat_messages
+            and (
+                vetoed_coords is not None
+                and float(vetoed_coords.get("cultural/efficiency/wastelessness", 0.72)) <= 0.35
+            )
+        ):
             last_scene_id = int(self.chat_messages[-1].get("id", self.scene_counter))
             self.flag_turn_for_coaching(
                 last_scene_id,
@@ -2183,6 +2241,10 @@ class ChessKibitzerRuntime:
                     0.25,
                     float(s.external_coordinates.get("cultural/efficiency/wastelessness", 0.25)),
                 )
+                s.external_coordinates["cultural/freedom/needlessness"] = max(
+                    0.53,
+                    float(s.external_coordinates.get("cultural/freedom/needlessness", 0.53)),
+                )
             ckey = _cluster_key_for_unresolved(s)
             if ckey is not None:
                 clusters.setdefault((ckey, is_s_haz), []).append(s)
@@ -2209,6 +2271,10 @@ class ChessKibitzerRuntime:
                     0.25,
                     float(avg_coords.get("cultural/efficiency/wastelessness", 0.25)),
                 )
+                avg_coords["cultural/freedom/needlessness"] = max(
+                    0.53,
+                    float(avg_coords.get("cultural/freedom/needlessness", 0.53)),
+                )
             target_leaves, rule_low, rule_high = normalize_contrastive_target_leaves_and_thresholds(
                 ckey,
                 avg_coords,
@@ -2219,6 +2285,18 @@ class ChessKibitzerRuntime:
                     0.25,
                     float(target_leaves.get("cultural/efficiency/wastelessness", 0.25)),
                 )
+                for bad_k in (
+                    "cultural/freedom/needlessness",
+                    "philosophical/being/existence",
+                    "cultural/freedom/self-sufficiency",
+                    "philosophical/structure/order",
+                ):
+                    if bad_k == "cultural/freedom/needlessness" and float(target_leaves.get(bad_k, 1.0)) <= 0.30:
+                        target_leaves[bad_k] = 0.53
+                    elif bad_k != "cultural/freedom/needlessness" and float(target_leaves.get(bad_k, 0.0)) >= 0.65:
+                        target_leaves.pop(bad_k, None)
+                if len(target_leaves) < 2:
+                    target_leaves["cultural/freedom/needlessness"] = 0.53
             rep = group[0]
             rep_scene = rep.scene_index
 
@@ -2249,12 +2327,8 @@ class ChessKibitzerRuntime:
                         rule_low = max(rule_low, 0.68)
                         rule_high = max(rule_high, 0.84)
                     else:
-                        adjusted_leaves["philosophical/structure/chaos"] = round(
-                            max(0.55, float(avg_coords.get("philosophical/structure/chaos", 0.55))),
-                            2,
-                        )
-                        rule_low = max(rule_low, 0.72)
-                        rule_high = max(rule_high, 0.86)
+                        rule_low = max(rule_low, 0.76)
+                        rule_high = max(rule_high, 0.88)
                     new_rule = FuzzyConceptRule(
                         rule_id=new_rule.rule_id,
                         concept_name=new_rule.concept_name,
