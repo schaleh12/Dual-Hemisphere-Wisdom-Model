@@ -449,6 +449,9 @@ class ChessKibitzerRuntime:
         if lazy_load_gpu and self.left_brain is None:
             t = threading.Thread(target=self._background_warm_left_brain, daemon=True)
             t.start()
+        if lazy_load_gpu:
+            t_sync = threading.Thread(target=self._background_auto_sync_github_seed, daemon=True)
+            t_sync.start()
 
     def _is_default_live_state_dir(self) -> bool:
         try:
@@ -905,10 +908,9 @@ class ChessKibitzerRuntime:
         sleep_seed_path = out_dir / "sleep_consolidated_ruleset.json"
         sleeve_seed_path = out_dir / "bitboard_sleeve_weights.json"
         save_ruleset(rem_seed_path, tuple(self.rules), tuple(self.learned_leaves))
+        save_ruleset(sleep_seed_path, tuple(self.rules), tuple(self.learned_leaves))
         self.bitboard_sleeve.save(sleeve_seed_path)
-        if target_training_root is not None:
-            save_ruleset(sleep_seed_path, tuple(self.rules), tuple(self.learned_leaves))
-            self.archives.save_all(out_dir / "branch_archives")
+        self.archives.save_all(out_dir / "branch_archives")
         if target_root.resolve() == self.training_root.resolve():
             self.release_manifest = build_release_manifest(self.repo_root, write_to_disk=True)
         return {
@@ -2503,6 +2505,14 @@ class ChessKibitzerRuntime:
         snap["microwave_step_counter"] = self.microwave_step_counter
         snap["last_microwave_status"] = self.last_microwave_status
         return snap
+
+    def _background_auto_sync_github_seed(self) -> None:
+        """Quietly check GitHub on startup and auto-sync shared seed rules and code updates."""
+        try:
+            remote_manifest = fetch_remote_github_manifest(timeout_sec=4.0)
+            self.handle_check_github_sync(remote_manifest=remote_manifest, apply_sync=True)
+        except Exception:
+            pass
 
     def handle_check_github_sync(
         self,

@@ -25,6 +25,9 @@ import urllib.request
 APP_RELEASE_VERSION = "0.2.0"
 GITHUB_REPO_SLUG = "schaleh12/Dual-Hemisphere-Wisdom-Model"
 DEFAULT_REMOTE_MANIFEST_URL = (
+    f"https://raw.githubusercontent.com/{GITHUB_REPO_SLUG}/main/LMFT-Training/dist/release_manifest.json"
+)
+LEGACY_REMOTE_MANIFEST_URL = (
     f"https://raw.githubusercontent.com/{GITHUB_REPO_SLUG}/main/dist/release_manifest.json"
 )
 
@@ -32,6 +35,10 @@ SHARED_RELEASE_SEED_PATHS: tuple[str, ...] = (
     "outputs/rem_sleep_consolidated_ruleset.json",
     "outputs/sleep_consolidated_ruleset.json",
     "outputs/continuous_tiered_ruleset.json",
+    "outputs/bitboard_sleeve_weights.json",
+    "outputs/branch_archives/cultural_history.json",
+    "outputs/branch_archives/experiential_felt_diary.json",
+    "outputs/branch_archives/philosophical_lexicon.json",
 )
 
 PROTECTED_USER_STATE_PREFIXES: tuple[str, ...] = (
@@ -158,6 +165,7 @@ def verify_or_sync_against_manifest(
     changed_files: list[str] = []
     synced_files: list[str] = []
     skipped_protected: list[str] = []
+    active_fetcher = file_fetcher if file_fetcher is not None else fetch_remote_github_file
 
     for rel_raw, meta in sorted(remote_files.items()):
         rel = _normalize_rel_path(rel_raw)
@@ -172,8 +180,8 @@ def verify_or_sync_against_manifest(
         local_sha = compute_file_sha256(local_file).lower() if local_file.exists() else ""
         if local_sha != expected_sha:
             changed_files.append(rel)
-            if apply_sync and file_fetcher is not None:
-                payload = file_fetcher(rel)
+            if apply_sync and active_fetcher is not None:
+                payload = active_fetcher(rel)
                 actual_sha = hashlib.sha256(payload).hexdigest().lower()
                 if actual_sha != expected_sha:
                     raise ValueError(
@@ -200,15 +208,57 @@ def verify_or_sync_against_manifest(
     }
 
 
+def fetch_remote_github_file(
+    rel_path: str,
+    *,
+    repo_slug: str = GITHUB_REPO_SLUG,
+    branch: str = "main",
+    timeout_sec: float = 15.0,
+) -> bytes:
+    """Fetch a single tracked file from GitHub raw content (`LMFT-Training/` or `LMFT-Architecture/`)."""
+    norm = _normalize_rel_path(rel_path)
+    if norm.startswith(("dist/", "models/", "outputs/", "experiments/", "scripts/")):
+        sub_prefix = f"LMFT-Training/{norm}"
+    else:
+        sub_prefix = f"LMFT-Architecture/{norm}"
+    candidates = (
+        f"https://raw.githubusercontent.com/{repo_slug}/{branch}/{sub_prefix}",
+        f"https://raw.githubusercontent.com/{repo_slug}/{branch}/{norm}",
+    )
+    last_err: Exception | None = None
+    for url in candidates:
+        try:
+            req = urllib.request.Request(
+                url,
+                headers={"User-Agent": f"LMFT-Sanctuary-Club/{APP_RELEASE_VERSION}"},
+            )
+            with urllib.request.urlopen(req, timeout=timeout_sec) as resp:
+                return resp.read()
+        except Exception as exc:
+            last_err = exc
+    raise RuntimeError(f"Failed to fetch {rel_path!r} from GitHub: {last_err}")
+
+
 def fetch_remote_github_manifest(
     manifest_url: str = DEFAULT_REMOTE_MANIFEST_URL,
     *,
     timeout_sec: float = 5.0,
 ) -> dict[str, Any]:
     """Fetch `release_manifest.json` from GitHub over HTTPS."""
-    req = urllib.request.Request(
-        manifest_url,
-        headers={"User-Agent": f"LMFT-Sanctuary-Club/{APP_RELEASE_VERSION}"},
+    urls = (
+        (manifest_url, LEGACY_REMOTE_MANIFEST_URL)
+        if manifest_url == DEFAULT_REMOTE_MANIFEST_URL
+        else (manifest_url,)
     )
-    with urllib.request.urlopen(req, timeout=timeout_sec) as resp:
-        return json.loads(resp.read().decode("utf-8"))
+    last_err: Exception | None = None
+    for url in urls:
+        try:
+            req = urllib.request.Request(
+                url,
+                headers={"User-Agent": f"LMFT-Sanctuary-Club/{APP_RELEASE_VERSION}"},
+            )
+            with urllib.request.urlopen(req, timeout=timeout_sec) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except Exception as exc:
+            last_err = exc
+    raise RuntimeError(f"Failed to fetch remote manifest: {last_err}")

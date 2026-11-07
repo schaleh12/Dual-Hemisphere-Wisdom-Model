@@ -42,7 +42,7 @@ def build_release_zip(
     zip_path = out_dir / BUNDLE_NAME
 
     include_pairs: list[tuple[str, Path]] = []
-    for root_file in ("LMFT-Chess.exe", "LMFT-Bloodmoon.exe", "README.md"):
+    for root_file in ("LMFT-Chess.exe", "LMFT-Bloodmoon.exe", "Install-And-Run-LMFT-Chess.bat", "README.md"):
         for base in (ws_root, arch_root):
             p = base / root_file
             if p.exists():
@@ -63,13 +63,21 @@ def build_release_zip(
         "outputs/rem_sleep_consolidated_ruleset.json",
         "outputs/sleep_consolidated_ruleset.json",
         "outputs/continuous_tiered_ruleset.json",
+        "outputs/bitboard_sleeve_weights.json",
+        "outputs/branch_archives/cultural_history.json",
+        "outputs/branch_archives/experiential_felt_diary.json",
+        "outputs/branch_archives/philosophical_lexicon.json",
     ):
         p = train_root / ruleset_rel
         if p.exists():
             include_pairs.append((ruleset_rel, p))
 
     if include_model_weights:
-        for model_rel in ("models/right_brain_bridges", "models/left_brain_lora_cycle2"):
+        for model_rel in (
+            "models/right_brain_bridges",
+            "models/left_brain_qwen3_8b",
+            "models/left_brain_lora_cycle2",
+        ):
             m_dir = train_root / model_rel
             if m_dir.exists():
                 for mf in sorted(m_dir.rglob("*")):
@@ -80,6 +88,7 @@ def build_release_zip(
         for arcname, file_path in include_pairs:
             zf.write(file_path, arcname=arcname)
 
+    manifest = build_release_manifest(arch_root, write_to_disk=True)
     return zip_path
 
 

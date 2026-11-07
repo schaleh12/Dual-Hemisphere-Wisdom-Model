@@ -33,19 +33,25 @@ logs/
 
 # Local model weights, backend binaries, and credentials
 .cache/
-models/
-LMFT-Training/models/
+/models/
+LMFT-Training/models/*
+!LMFT-Training/models/left_brain_qwen3_8b/
+!LMFT-Training/models/left_brain_qwen3_8b/**
+!LMFT-Training/models/left_brain_lora_cycle2/
+!LMFT-Training/models/left_brain_lora_cycle2/**
+!LMFT-Training/models/left_brain_lora/
+!LMFT-Training/models/left_brain_lora/**
+!LMFT-Training/models/right_brain_bridges/
+!LMFT-Training/models/right_brain_bridges/*
+!LMFT-Training/models/right_brain_bridges/**
 .cache-lmft/
 *.gguf
-*.safetensors
 *.partial
-*.pt
 .env
 .env.*
 !.env.example
 .huggingface/
 *.token
 
-# Heavy release zip & encrypted bundles (keep release_manifest.json tracked)
-LMFT-Training/dist/*.zip
+# Heavy release zip & encrypted bundles (keep release_manifest.json and portable zip tracked)
 LMFT-Training/dist/*.enc

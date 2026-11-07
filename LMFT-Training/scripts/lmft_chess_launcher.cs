@@ -23,7 +23,7 @@ internal static class Program
                 Path.Combine(baseDir, ".venv", "Scripts", "pythonw.exe"),
             };
 
-            string exePath = "python.exe";
+            string exePath = null;
             foreach (string cand in pythonCandidates)
             {
                 if (File.Exists(cand))
@@ -31,6 +31,22 @@ internal static class Program
                     exePath = cand;
                     break;
                 }
+            }
+
+            if (exePath == null)
+            {
+                string bootstrapBat = Path.Combine(baseDir, "Install-And-Run-LMFT-Chess.bat");
+                if (File.Exists(bootstrapBat))
+                {
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = bootstrapBat,
+                        WorkingDirectory = baseDir,
+                        UseShellExecute = true,
+                    });
+                    return 0;
+                }
+                exePath = "python.exe";
             }
 
             string extraArgs = args.Length > 0 ? " " + string.Join(" ", args) : "";

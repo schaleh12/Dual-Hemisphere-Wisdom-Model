@@ -213,7 +213,7 @@ class NeuralBridgeClassifier:
             else torch.device("cuda" if torch.cuda.is_available() else "cpu")
         )
         self.device = resolved_device
-        self.model = model.to(self.device)
+        self.model = model.float().to(self.device)
         self.model.eval()
         self._last_text: str | None = None
         self._last_cache: dict[tuple[str, str], float] = {}
@@ -304,7 +304,9 @@ class NeuralBridgeClassifier:
     def save(self, directory: str | Path, *, metadata: Mapping | None = None) -> None:
         target = Path(directory)
         target.mkdir(parents=True, exist_ok=True)
-        self.model.save_pretrained(target)
+        orig_dtype = next(self.model.parameters()).dtype
+        self.model.half().save_pretrained(target)
+        self.model.to(dtype=orig_dtype)
         self.tokenizer.save_pretrained(target)
         meta_payload = {
             "schema_version": 1,
