@@ -3,13 +3,23 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
-using System.IO.Compression;
-using System.Net;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Windows.Forms;
+
+[assembly: AssemblyTitle("Celestriad 1.0 Setup & Hardware Diagnostics Wizard")]
+[assembly: AssemblyDescription("Setup, Integrity Check, and Hardware Diagnostics Wizard for Celestriad 1.0 (LMFT-Architecture)")]
+[assembly: AssemblyConfiguration("Release")]
+[assembly: AssemblyCompany("Language Model Fuzzy Tree Research")]
+[assembly: AssemblyProduct("Celestriad 1.0 — Dual-Hemisphere Wisdom Model")]
+[assembly: AssemblyCopyright("Copyright (c) 2026 Language Model Fuzzy Tree Research. MIT License.")]
+[assembly: AssemblyTrademark("")]
+[assembly: AssemblyCulture("")]
+[assembly: ComVisible(false)]
+[assembly: AssemblyVersion("0.2.0.0")]
+[assembly: AssemblyFileVersion("0.2.0.0")]
 
 internal static class Program
 {
@@ -63,27 +73,7 @@ internal sealed class InstallerWizardForm : Form
 
     public InstallerWizardForm()
     {
-        ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072; // TLS 1.2
-        string exeDir = AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\', '/');
-        bool isExistingRepoOrBundle =
-            Directory.Exists(Path.Combine(exeDir, "LMFT-Architecture")) ||
-            File.Exists(Path.Combine(exeDir, "LMFT-Chess.exe")) ||
-            File.Exists(Path.Combine(exeDir, "src", "lmft_architecture", "chess_app.py"));
-
-        if (isExistingRepoOrBundle)
-        {
-            baseDir = exeDir;
-        }
-        else
-        {
-            baseDir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Programs",
-                "Celestriad-1.0"
-            );
-            try { Directory.CreateDirectory(baseDir); } catch { }
-        }
-
+        baseDir = AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\', '/');
         archDir = Directory.Exists(Path.Combine(baseDir, "LMFT-Architecture"))
             ? Path.Combine(baseDir, "LMFT-Architecture")
             : baseDir;
@@ -91,7 +81,6 @@ internal sealed class InstallerWizardForm : Form
             ? Path.Combine(baseDir, "LMFT-Training")
             : baseDir;
         assetsDir = Path.Combine(archDir, "docs", "assets");
-        ExtractEmbeddedAssetsIfNeeded();
 
         Text = "Celestriad 1.0 — LMFT-Architecture Setup & Hardware Wizard";
         Size = new Size(860, 620);
@@ -105,6 +94,10 @@ internal sealed class InstallerWizardForm : Form
         if (File.Exists(icoPath))
         {
             try { Icon = new Icon(icoPath); } catch { }
+        }
+        else
+        {
+            try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
         }
 
         BuildShellLayout();
@@ -741,145 +734,8 @@ internal sealed class InstallerWizardForm : Form
         return null;
     }
 
-    private void ExtractEmbeddedAssetsIfNeeded()
-    {
-        try
-        {
-            Directory.CreateDirectory(assetsDir);
-            string[] embeddedNames = new string[]
-            {
-                "arecibo_desktop_icon.ico",
-                "arecibo_desktop_icon.jpg",
-                "celestriad_spirit_particle.ico",
-                "celestriad_spirit_particle.jpg",
-                "blue_screen_of_life_poem.jpg",
-            };
-            Assembly asm = Assembly.GetExecutingAssembly();
-            foreach (string name in embeddedNames)
-            {
-                string dest = Path.Combine(assetsDir, name);
-                if (!File.Exists(dest))
-                {
-                    using (Stream s = asm.GetManifestResourceStream(name))
-                    {
-                        if (s != null)
-                        {
-                            using (FileStream fs = new FileStream(dest, FileMode.Create, FileAccess.Write))
-                            {
-                                s.CopyTo(fs);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        catch { }
-    }
-
-    private void BootstrapStandaloneBundleIfNeeded()
-    {
-        try { ServicePointManager.SecurityProtocol |= (SecurityProtocolType)3072; } catch { }
-        string birthPy = Path.Combine(archDir, "src", "lmft_architecture", "birth.py");
-        string pyprojectToml = Path.Combine(archDir, "pyproject.toml");
-        string bridgesFile = Path.Combine(trainDir, "models", "right_brain_bridges", "doer_will_cultural", "model.safetensors");
-        string qwenProjFile = Path.Combine(trainDir, "models", "left_brain_qwen3_8b", "projector_weights.pt");
-
-        using (WebClient wc = new WebClient())
-        {
-            wc.Headers.Add("User-Agent", "Celestriad-Standalone-Installer/0.2.0");
-            if (!File.Exists(birthPy) || !File.Exists(Path.Combine(baseDir, "LMFT-Chess.exe")))
-            {
-                txtPage2Log.AppendText("\r\n[Standalone Mode] Downloading Celestriad 1.0 release bundle from GitHub...\r\n");
-                Application.DoEvents();
-                string zipUrl = "https://github.com/schaleh12/Dual-Hemisphere-Wisdom-Model/releases/download/v0.2.0/lmft-sanctuary-club-v0.1.0-win64.zip";
-                string tmpZip = Path.Combine(baseDir, "celestriad_release_bundle.zip");
-                try
-                {
-                    Directory.CreateDirectory(baseDir);
-                    wc.DownloadFile(zipUrl, tmpZip);
-                    using (ZipArchive archive = ZipFile.OpenRead(tmpZip))
-                    {
-                        foreach (ZipArchiveEntry entry in archive.Entries)
-                        {
-                            if (string.IsNullOrEmpty(entry.Name)) continue;
-                            string fullDest = Path.Combine(baseDir, entry.FullName.Replace('/', '\\'));
-                            string parent = Path.GetDirectoryName(fullDest);
-                            if (!string.IsNullOrEmpty(parent)) Directory.CreateDirectory(parent);
-                            entry.ExtractToFile(fullDest, true);
-                        }
-                    }
-                    try { File.Delete(tmpZip); } catch { }
-                    txtPage2Log.AppendText("✅ Extracted Celestriad 1.0 core bundle to: " + baseDir + "\r\n");
-                }
-                catch (Exception ex)
-                {
-                    txtPage2Log.AppendText("⚠️ Release bundle download notice: " + ex.Message + "\r\n");
-                }
-            }
-
-            if (!File.Exists(pyprojectToml))
-            {
-                try
-                {
-                    Directory.CreateDirectory(archDir);
-                    wc.DownloadFile("https://raw.githubusercontent.com/schaleh12/Dual-Hemisphere-Wisdom-Model/main/LMFT-Architecture/pyproject.toml", pyprojectToml);
-                }
-                catch { }
-            }
-
-            string rawBase = "https://raw.githubusercontent.com/schaleh12/Dual-Hemisphere-Wisdom-Model/main/LMFT-Training/";
-            string[] modelRelFiles = new string[]
-            {
-                "models/left_brain_qwen3_8b/corpus_callosum_meta.json",
-                "models/left_brain_qwen3_8b/lora_config.json",
-                "models/left_brain_qwen3_8b/projector_weights.pt",
-                "models/left_brain_qwen3_8b/lora_adapters.pt",
-                "models/right_brain_bridges/doer_will_cultural/bridge_metadata.json",
-                "models/right_brain_bridges/doer_will_cultural/config.json",
-                "models/right_brain_bridges/doer_will_cultural/tokenizer_config.json",
-                "models/right_brain_bridges/doer_will_cultural/tokenizer.json",
-                "models/right_brain_bridges/doer_will_cultural/model.safetensors",
-                "models/right_brain_bridges/feeler_contemplation_experiential/bridge_metadata.json",
-                "models/right_brain_bridges/feeler_contemplation_experiential/config.json",
-                "models/right_brain_bridges/feeler_contemplation_experiential/tokenizer_config.json",
-                "models/right_brain_bridges/feeler_contemplation_experiential/tokenizer.json",
-                "models/right_brain_bridges/feeler_contemplation_experiential/model.safetensors",
-                "models/right_brain_bridges/thinker_truth_philosophical/bridge_metadata.json",
-                "models/right_brain_bridges/thinker_truth_philosophical/config.json",
-                "models/right_brain_bridges/thinker_truth_philosophical/tokenizer_config.json",
-                "models/right_brain_bridges/thinker_truth_philosophical/tokenizer.json",
-                "models/right_brain_bridges/thinker_truth_philosophical/model.safetensors",
-            };
-
-            if (!File.Exists(bridgesFile) || !File.Exists(qwenProjFile))
-            {
-                txtPage2Log.AppendText("\r\nDownloading pre-trained Right-Brain MiniLM Bridges & Qwen3-8B Callosum weights...\r\n");
-                Application.DoEvents();
-                foreach (string rel in modelRelFiles)
-                {
-                    string localTarget = Path.Combine(trainDir, rel.Replace('/', '\\'));
-                    if (!File.Exists(localTarget))
-                    {
-                        try
-                        {
-                            string dir = Path.GetDirectoryName(localTarget);
-                            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-                            wc.DownloadFile(rawBase + rel, localTarget);
-                            Application.DoEvents();
-                        }
-                        catch { }
-                    }
-                }
-                txtPage2Log.AppendText("✅ Pre-trained neural bridge & Callosum checkpoints ready.\r\n");
-            }
-        }
-        ComputeLocalHashes();
-        RunInstallFolderIntegrityCheck();
-    }
-
     private void RunGithubSyncNow()
     {
-        BootstrapStandaloneBundleIfNeeded();
         string pyExe = FindPythonExe();
         if (pyExe == null)
         {
@@ -950,30 +806,18 @@ internal sealed class InstallerWizardForm : Form
         {
             try
             {
-                ProcessStartInfo psiCim = new ProcessStartInfo
+                DISPLAY_DEVICE dd = new DISPLAY_DEVICE();
+                dd.cb = Marshal.SizeOf(typeof(DISPLAY_DEVICE));
+                if (EnumDisplayDevices(null, 0, ref dd, 0) && !string.IsNullOrWhiteSpace(dd.DeviceString))
                 {
-                    FileName = "powershell.exe",
-                    Arguments = "-NoProfile -ExecutionPolicy Bypass -Command \"(Get-CimInstance Win32_VideoController | Select-Object -First 1).Name\"",
-                    UseShellExecute = false,
-                    RedirectStandardOutput = true,
-                    CreateNoWindow = true,
-                };
-                using (Process p = Process.Start(psiCim))
+                    detectedGpuName = dd.DeviceString.Trim();
+                }
+                else
                 {
-                    string output = p.StandardOutput.ReadToEnd();
-                    p.WaitForExit(4000);
-                    string trimmed = (output ?? "").Trim();
-                    if (!string.IsNullOrEmpty(trimmed))
-                    {
-                        detectedGpuName = trimmed.Split('\r', '\n')[0].Trim();
-                    }
+                    detectedGpuName = "Standard Windows Display Adapter";
                 }
             }
             catch
-            {
-                detectedGpuName = "Standard Windows Display Adapter";
-            }
-            if (detectedGpuName == "Detecting GPU...")
             {
                 detectedGpuName = "Standard Windows Display Adapter";
             }
@@ -1085,7 +929,6 @@ internal sealed class InstallerWizardForm : Form
     {
         try
         {
-            BootstrapStandaloneBundleIfNeeded();
             string venvDir = Path.Combine(archDir, ".venv");
             string venvPy = Path.Combine(venvDir, "Scripts", "python.exe");
             string cmdChain =
@@ -1112,7 +955,6 @@ internal sealed class InstallerWizardForm : Form
     {
         try
         {
-            BootstrapStandaloneBundleIfNeeded();
             string desktopDir = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
             string shortcutPath = Path.Combine(desktopDir, "Celestriad 1.0 — LMFT Chess.lnk");
             string targetExe = Path.Combine(baseDir, "LMFT-Chess.exe");
@@ -1122,25 +964,17 @@ internal sealed class InstallerWizardForm : Form
                 iconPath = targetExe;
             }
 
-            string psScript =
-                "$ws = New-Object -ComObject WScript.Shell; " +
-                "$s = $ws.CreateShortcut('" + shortcutPath.Replace("'", "''") + "'); " +
-                "$s.TargetPath = '" + targetExe.Replace("'", "''") + "'; " +
-                "$s.WorkingDirectory = '" + baseDir.Replace("'", "''") + "'; " +
-                "$s.IconLocation = '" + iconPath.Replace("'", "''") + "'; " +
-                "$s.Description = 'Launch Celestriad 1.0 — Dual-Hemisphere Chess Competitor & Coach'; " +
-                "$s.Save()";
-
-            ProcessStartInfo psi = new ProcessStartInfo
+            Type shellType = Type.GetTypeFromProgID("WScript.Shell");
+            if (shellType != null)
             {
-                FileName = "powershell.exe",
-                Arguments = "-NoProfile -ExecutionPolicy Bypass -Command \"" + psScript + "\"",
-                UseShellExecute = false,
-                CreateNoWindow = true,
-            };
-            using (Process p = Process.Start(psi))
-            {
-                p.WaitForExit(6000);
+                object shell = Activator.CreateInstance(shellType);
+                object shortcut = shellType.InvokeMember("CreateShortcut", BindingFlags.InvokeMethod, null, shell, new object[] { shortcutPath });
+                Type shortcutType = shortcut.GetType();
+                shortcutType.InvokeMember("TargetPath", BindingFlags.SetProperty, null, shortcut, new object[] { targetExe });
+                shortcutType.InvokeMember("WorkingDirectory", BindingFlags.SetProperty, null, shortcut, new object[] { baseDir });
+                shortcutType.InvokeMember("IconLocation", BindingFlags.SetProperty, null, shortcut, new object[] { iconPath });
+                shortcutType.InvokeMember("Description", BindingFlags.SetProperty, null, shortcut, new object[] { "Launch Celestriad 1.0 — Dual-Hemisphere Chess Competitor & Coach" });
+                shortcutType.InvokeMember("Save", BindingFlags.InvokeMethod, null, shortcut, null);
             }
         }
         catch (Exception ex)
@@ -1151,7 +985,6 @@ internal sealed class InstallerWizardForm : Form
 
     private void LaunchChessApp()
     {
-        BootstrapStandaloneBundleIfNeeded();
         string targetExe = Path.Combine(baseDir, "LMFT-Chess.exe");
         if (File.Exists(targetExe))
         {
@@ -1225,6 +1058,24 @@ internal sealed class InstallerWizardForm : Form
     [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GlobalMemoryStatusEx(ref MEMORYSTATUSEX lpBuffer);
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+    private struct DISPLAY_DEVICE
+    {
+        public int cb;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
+        public string DeviceName;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+        public string DeviceString;
+        public int StateFlags;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+        public string DeviceID;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+        public string DeviceKey;
+    }
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    private static extern bool EnumDisplayDevices(string lpDevice, uint iDevNum, ref DISPLAY_DEVICE lpDisplayDevice, uint dwFlags);
 
     private static Image LoadImageUnlocked(string path, string embeddedName = null)
     {

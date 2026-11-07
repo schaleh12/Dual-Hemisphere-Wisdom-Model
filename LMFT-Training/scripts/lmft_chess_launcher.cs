@@ -1,7 +1,19 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
+
+[assembly: AssemblyTitle("Celestriad 1.0 — LMFT-Chess Launcher")]
+[assembly: AssemblyDescription("Desktop Launcher for Celestriad 1.0 Dual-Hemisphere Chess Competitor & Coach")]
+[assembly: AssemblyConfiguration("Release")]
+[assembly: AssemblyCompany("Language Model Fuzzy Tree Research")]
+[assembly: AssemblyProduct("Celestriad 1.0 — Dual-Hemisphere Wisdom Model")]
+[assembly: AssemblyCopyright("Copyright (c) 2026 Language Model Fuzzy Tree Research. MIT License.")]
+[assembly: ComVisible(false)]
+[assembly: AssemblyVersion("0.2.0.0")]
+[assembly: AssemblyFileVersion("0.2.0.0")]
 
 internal static class Program
 {
