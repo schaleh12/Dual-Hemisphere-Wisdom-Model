@@ -789,7 +789,11 @@ class SubliminalGapLeftBrain:
                 if vocab_len > 1000:
                     for seen_id, cnt in gen_counts.items():
                         if cnt >= 2 and 0 <= seen_id < next_logits.size(0):
-                            pen = 1.25 + 0.15 * min(3, cnt - 1)
+                            tok_piece = self.tokenizer.decode([seen_id], skip_special_tokens=True).strip()
+                            min_cnt = 4 if len(tok_piece) <= 3 else 2
+                            if cnt < min_cnt:
+                                continue
+                            pen = 1.12 + 0.08 * min(3, cnt - min_cnt + 1)
                             if next_logits[seen_id] > 0:
                                 next_logits[seen_id] = next_logits[seen_id] / pen
                             else:

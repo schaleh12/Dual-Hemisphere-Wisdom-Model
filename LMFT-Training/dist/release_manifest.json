@@ -2,8 +2,8 @@
   "schema_version": 1,
   "version": "0.2.0",
   "github_repo": "schaleh12/Dual-Hemisphere-Wisdom-Model",
-  "build_sha256": "5f6d35c1f2a2efda53b240474b755375fe7c8a00acc716f55a897e302afa4761",
-  "build_short_hash": "5f6d35c1f2a2",
+  "build_sha256": "310d0810aa0ae0d7553139ccd146310f5da7c9e5d1012839929a948c88450310",
+  "build_short_hash": "310d0810aa0a",
   "files": {
     "src/lmft_architecture/__init__.py": {
       "sha256": "a89f56c2195e87129adbffa5065d8769ea096e13ba98783d217c4d120ee92623",
@@ -90,8 +90,8 @@
       "size_bytes": 3267
     },
     "src/lmft_architecture/chess_app.py": {
-      "sha256": "bb4916f4b74e84eb14f77fbaa69fe80260faf087c8a67326296ecd6aa168875a",
-      "size_bytes": 147218
+      "sha256": "aae4f6bde0ddace5bb965bffccff4f24e87278399c5c03962bf4c3d8450d4a16",
+      "size_bytes": 147750
     },
     "src/lmft_architecture/chess_kibitz_bridge.py": {
       "sha256": "19dca3effc55f2eaaa1f69571d6f232c3d7ff814a7c5ba1828bf54aeeb6e0d9e",
@@ -286,8 +286,8 @@
       "size_bytes": 2802
     },
     "src/lmft_architecture/three_legged_runtime.py": {
-      "sha256": "fbe6311b131b7dc0d802b1de78c5fb00adb3a103818a33ced1111a12d47d683d",
-      "size_bytes": 87134
+      "sha256": "f0b0f1f589bbd9b124c17d896407b2045a0fe47599f6fc70be0975c3dc096ab2",
+      "size_bytes": 87408
     },
     "src/lmft_architecture/train_left_brain_lora.py": {
       "sha256": "2769e1ef0007d184a9331874285cc0cb6689a5445a9093a3fadf3c19d7c53622",

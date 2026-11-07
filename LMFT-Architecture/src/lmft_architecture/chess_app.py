@@ -2568,7 +2568,10 @@ class ChessKibitzerRuntime:
         if self._qwen_left_brain is None:
             return None
         try:
-            sorted_scenes = sorted(queued_snapshot, key=lambda s: float(s.salience), reverse=True)
+            archive_scene_ids = {c.source_scene for c in self.archives.executive.action_clauses}
+            raw_sorted = sorted(queued_snapshot, key=lambda s: float(s.salience), reverse=True)
+            rep_sorted = [s for s in raw_sorted if s.scene_index in archive_scene_ids]
+            sorted_scenes = rep_sorted + [s for s in raw_sorted if s.scene_index not in archive_scene_ids] if rep_sorted else raw_sorted
             rep = sorted_scenes[0]
             clean_scenario = rep.scenario_text.split("[Coach note:", 1)[0].strip()
             review_note = (rep.game_review_annotation or "").strip()
@@ -2857,10 +2860,12 @@ class ChessKibitzerRuntime:
                         prev_chronicle=prev_chronicle,
                     )
                     sorted_queued = sorted(queued_snapshot, key=lambda s: float(s.salience), reverse=True)
+                    archive_scene_ids = {c.source_scene for c in self.archives.executive.action_clauses}
+                    rep_queued = [s for s in sorted_queued if s.scene_index in archive_scene_ids] or sorted_queued
                     if sleep_self_talk:
                         stanza_blocks = [b.strip() for b in sleep_self_talk.split("\n\n") if b.strip()]
                         for idx, st_block in enumerate(stanza_blocks):
-                            target_sc = sorted_queued[min(idx, len(sorted_queued) - 1)]
+                            target_sc = rep_queued[min(idx, len(rep_queued) - 1)]
                             self.archives = apply_dream_reflection_to_archives(
                                 self.archives,
                                 scene_index=target_sc.scene_index,
