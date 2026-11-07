@@ -59,7 +59,7 @@ To keep GPU memory clean and avoid mixing unrelated workflows into one interface
 - **How `Celestriad 1.0` Plays and Learns**:
   - **Silent Gear-1 Right-Brain Intuition During Play (`0` Per-Move LLM Chatter)**:
     - During a game, moves are selected silently in fast Gear-1 Right-Brain intuition via [`evaluate_candidate_moves_with_right_brain`](LMFT-Architecture/src/lmft_architecture/chess_kibitz_bridge.py) following the **4-Step Psychological Pipeline**:
-      $$\text{Intention (Ply 1 Impulse)} \longrightarrow \text{Theory (Ply 2–3 Rollout)} \longrightarrow \text{Confidence \& Clarity (40-Node Rules)} \longrightarrow \text{Execution Bid}$$
+      > **`Intention (Ply 1 Impulse)` ➔ `Theory (Ply 2–3 Rollout)` ➔ `Confidence & Clarity (40-Node Rules)` ➔ `Execution Bid`**
     - Every legal candidate move is scored across the 24-circuit [`BitboardIntuitionSleeve`](LMFT-Architecture/src/lmft_architecture/chess_kibitz_bridge.py), the 40-node Fuzzy Tree (`self.rules`, where repulsive `hazard_` rules act as a brake on blind execution), and active **REM Dream Vows** (`active_vow_leaves`).
   - **When the `Qwen3-8B` Left Brain Wakes Up**:
     1. **REM Sleep Match Chronicles & Longitudinal Vows (`rem_dream_chronicles`)**: During REM Sleep (`handle_run_rem_sleep`), the 4-bit `Qwen/Qwen3-8B` Left Brain wakes up to compose a **2-sentence cat-nap** or **4-sentence deep-sleep poem** (`Feeler -> Thinker -> Do-er Vow`), checks whether its previous dream vow was **`HONORED`** or **`BROKEN`** in pure coordinate space (`_evaluate_previous_dream_vow`), and harvests new `ContrastiveGapPair` rows (`celestriad_gap_trajectories.jsonl`).
