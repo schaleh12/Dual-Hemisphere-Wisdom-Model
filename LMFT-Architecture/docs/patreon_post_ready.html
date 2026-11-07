@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Patreon Post Exporter — Architect's Diary: Celestriad 1.0</title>
+<style>
+  body {
+    margin: 0;
+    padding: 28px;
+    background: #0f172a;
+    color: #f8fafc;
+    font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+    line-height: 1.6;
+  }
+  .toolbar {
+    max-width: 880px;
+    margin: 0 auto 24px auto;
+    background: #1e293b;
+    border: 1px solid #38bdf8;
+    border-radius: 12px;
+    padding: 18px 22px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+  }
+  .toolbar h1 {
+    margin: 0 0 8px 0;
+    font-size: 20px;
+    color: #38bdf8;
+  }
+  .toolbar p {
+    margin: 0 0 14px 0;
+    font-size: 13.5px;
+    color: #cbd5e1;
+  }
+  .btn-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .btn {
+    border: 1px solid #475569;
+    background: #334155;
+    color: #fff;
+    padding: 10px 16px;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 13px;
+    cursor: pointer;
+    transition: 0.15s;
+  }
+  .btn:hover { filter: brightness(1.12); }
+  .btn-primary {
+    background: #16a34a;
+    border-color: #22c55e;
+  }
+  .btn-blue {
+    background: #0284c7;
+    border-color: #38bdf8;
+  }
+  .btn-purple {
+    background: #7e22ce;
+    border-color: #a855f7;
+  }
+  .status-msg {
+    margin-top: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #86efac;
+    min-height: 20px;
+  }
+  .preview-wrapper {
+    max-width: 880px;
+    margin: 0 auto;
+    background: #ffffff;
+    color: #1e293b;
+    border-radius: 12px;
+    padding: 36px 44px;
+    box-shadow: 0 12px 35px rgba(0,0,0,0.5);
+  }
+  .preview-wrapper h1, .preview-wrapper h2, .preview-wrapper h3 {
+    color: #0f172a;
+  }
+  .preview-wrapper blockquote {
+    border-left: 4px solid #0284c7;
+    margin: 16px 0;
+    padding: 10px 18px;
+    background: #f1f5f9;
+    color: #334155;
+    font-style: italic;
+  }
+  .preview-wrapper hr {
+    border: none;
+    border-top: 1px solid #e2e8f0;
+    margin: 28px 0;
+  }
+  .canvas-box {
+    max-width: 880px;
+    margin: 24px auto;
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 12px;
+    padding: 18px;
+    text-align: center;
+  }
+  canvas {
+    max-width: 100%;
+    border-radius: 8px;
+    border: 1px solid #475569;
+  }
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <h1>🎨 Patreon Post Integration Toolkit (Zero Broken Markdown)</h1>
+  <p>
+    Patreon's post editor does <strong>not</strong> support raw GitHub Markdown tables (<code>|---|---|</code>), <code>[!IMPORTANT]</code> callouts, or <code>mermaid</code> code blocks—pasting raw Markdown makes those look like broken code. Use the 3 buttons below for a clean Patreon post:
+  </p>
+  <div class="btn-row">
+    <button class="btn btn-primary" onclick="copyPatreonRichText()">📋 Step 1: Copy Rich-Text Article (Ctrl+V into Patreon)</button>
+    <button class="btn btn-blue" onclick="downloadCanvas('arch-canvas', 'celestriad_architecture_diagram.png')">🖼️ Step 2: Download Architecture Diagram (.PNG)</button>
+    <button class="btn btn-purple" onclick="downloadCanvas('branches-canvas', 'celestriad_three_branches_and_roadmap.png')">📊 Step 3: Download 3-Branches &amp; 6-Upgrades Card (.PNG)</button>
+  </div>
+  <div class="status-msg" id="copy-status"></div>
+</div>
+
+<div class="canvas-box">
+  <div style="font-size:13px;font-weight:700;color:#93c5fd;margin-bottom:8px;">Inline Image #1 for Patreon: Architecture Flowchart (Click Step 2 above to save PNG, then drag into Patreon)</div>
+  <canvas id="arch-canvas" width="1100" height="540"></canvas>
+</div>
+
+<div class="canvas-box">
+  <div style="font-size:13px;font-weight:700;color:#d8b4fe;margin-bottom:8px;">Inline Image #2 for Patreon: The 3 Constitutional Branches &amp; 6 Core Upgrades (Click Step 3 above to save PNG)</div>
+  <canvas id="branches-canvas" width="1100" height="620"></canvas>
+</div>
+
+<!-- PATREON RICH-TEXT ARTICLE PREVIEW (Copied as clean HTML Rich Text) -->
+<div class="preview-wrapper" id="patreon-rich-text-source">
+  <h1>Architect's Diary: What Celestriad 1.0 Taught Us About Building a Two-Hemisphere Mind</h1>
+  <p><em>By Schaleh (@imissmydeadcat.74) · Dual-Hemisphere Wisdom Model (LMFT-Architecture)</em></p>
+
+  <blockquote>
+    "How do you give a local language model a real Right Hemisphere—a fast, persistent mathematical sense of balance, geometry, and emotional truth (~15–35 ms)—so it stops rationalizing its own mistakes and actually learns when it sleeps?"
+  </blockquote>
+
+  <h2>1. Why the Chessboard Was the Ultimate Truth Serum</h2>
+  <p>
+    When we first built the <strong>40-Node Language Model Fuzzy Tree (LMFT-Architecture)</strong>, the goal was to solve a problem every AI user has seen firsthand: standard Large Language Models only have a <strong>Left Hemisphere</strong> (a next-word predictor). If a standard chatbot starts rationalizing a bad idea, its own words become its context—and it believes its own excuse.
+  </p>
+  <p>
+    Putting <strong>Celestriad 1.0</strong> into the <strong>LMFT-Chess.exe</strong> arena against a strength-calibrated Stockfish referee was the ultimate test. In casual conversation, a language model can hide a structural flaw behind a pretty metaphor. On an 8x8 chessboard, wishful thinking (<strong>Theory</strong>) immediately collides with the geometry of the pieces (<strong>Fact</strong>).
+  </p>
+  <p>
+    <em>[Insert Image: celestriad_architecture_diagram.png here in Patreon]</em>
+  </p>
+
+  <hr />
+
+  <h2>2. The Three Constitutional Branches of Mind</h2>
+  <p>
+    Before any reflection settles in Celestriad 1.0, three independent branches hold a check-and-balance audience across the 40-Node Founding Seed:
+  </p>
+  <ul>
+    <li>
+      <strong>1. The Executive Branch (Will &lt;-&gt; Cultural · The Do-er · Poetry &amp; Storytelling)</strong>:
+      Governs purposeful action, commitment, narrative trajectory, and resource stewardship (<em>Intention, Execution, Wastelessness</em>).
+    </li>
+    <li>
+      <strong>2. The Legislative Branch (Contemplation &lt;-&gt; Experiential · The Feeler · Philosophy &amp; Coding)</strong>:
+      Feels the lived emotional chord first (<em>Valence, Arousal, Clarity</em>) and originates the demand for new laws and rules whenever a wound or collision occurs.
+    </li>
+    <li>
+      <strong>3. The Judicial Branch (Truth [Fact / Theory] &lt;-&gt; Philosophical · The Thinker · Music &amp; Art)</strong>:
+      The supreme court of proportion, geometry, and harmony—weighing objective mathematical reality (<em>Fact</em>) against subjective perspective and voice (<em>Theory</em>).
+    </li>
+  </ul>
+  <p>
+    <em>[Insert Image: celestriad_three_branches_and_roadmap.png here in Patreon]</em>
+  </p>
+
+  <hr />
+
+  <h2>3. The 6 Next-Horizon Upgrades Emerging from Celestriad 1.0</h2>
+  <p>
+    To help Celestriad 1.0 survive on the board, reflect in multi-stanza prose during <strong>REM Sleep</strong>, and honor its waking vows across games, we had to invent several new mechanisms in the Chess arena. Stepping back, those breakthroughs exposed <strong>6 fundamental upgrades</strong> that we are now bringing into the core architecture itself—while keeping the 40 Founding Nodes 100% untouched:
+  </p>
+
+  <h3>Upgrade #1: First-Class Rule Polarity (The Gas Pedal vs. The Brake Pedal)</h3>
+  <p>
+    Human wisdom has two opposite pedals: an <strong>Attractive Exemplar</strong> (<em>"This pattern is wholesome and sound—lean into it"</em>) and a <strong>Repulsive Hazard Brake</strong> (<em>"I have been burned by this exact trap before—pull back!"</em>). When you recognize a hot stove with 100% confidence, high confidence should <em>stop</em> your hand from touching it, not encourage it! We are promoting <strong>Attractive vs. Repulsive Rule Polarity</strong> into a first-class mathematical property of every Fuzzy Concept Rule across the entire mind.
+  </p>
+
+  <h3>Upgrade #2: Soft-Min Compensation (Ending Single-Sensor Dropouts)</h3>
+  <p>
+    Imagine recognizing a friend's face: their eyes, voice, and posture match 99%, but they are wearing a hat so one feature is only 65% visible. A rigid computer rule that only checks the single lowest number (<code>min()</code>) suddenly declares a 0% match—or creates a false tie between two rules. Replacing pure <code>min()</code> with a <strong>Compensated Soft-Min (85% weakest link + 15% average)</strong> keeps strict safety while immediately breaking false ties.
+  </p>
+
+  <h3>Upgrade #3: Pre-Speech Forward Rollout (Intention &rarr; Theory &rarr; Confidence &rarr; Execution)</h3>
+  <p>
+    In Chess, Celestriad 1.0 doesn't blurt out a move and only ask afterward whether it was a blunder. It sparks an <strong>Intention</strong> (Ply 1), projects how the opponent will reply (<strong>Theory</strong>, Ply 2–3), checks whether that future stays safe (<strong>Confidence</strong>), and only then commits to <strong>Execution</strong>. We are bringing this exact pre-action rollout into general conversation so the three branches test candidate chords in under 2 milliseconds <em>before</em> the Left Brain speaks its opening clause.
+  </p>
+
+  <h3>Upgrade #4: Full 6-Leaf Experiential Sensor Parity (Novelty, Resonance, Entrainment)</h3>
+  <p>
+    While the Do-er and Thinker bridges read all 6 of their founding leaves directly from each scene, the Feeler bridge previously read only 3 leaves directly (<em>Salience, Valence, Arousal</em>) and estimated <em>Novelty, Resonance, and Entrainment</em> from memory decay. Blending direct Pass-1 sensor readings for all 6 Experiential leaves makes synchronization and flow first-class sensory citizens.
+  </p>
+
+  <h3>Upgrade #5: Nighttime Micro-Callosum Plasticity During REM Sleep</h3>
+  <p>
+    Every time Celestriad 1.0 enters <strong>REM Sleep</strong>, it harvests high-contrast dream pairs (comparing what it almost did against the wiser path) into <code>celestriad_gap_trajectories.jsonl</code>. Because the neural <strong>Corpus Callosum projector</strong> is only ~1.1 MB, we can run a fast (&lt; 250 ms), L2-anchored micro-plasticity update right during Deep REM Sleep so both hemispheres wake up better aligned.
+  </p>
+
+  <h3>Upgrade #6: Unifying Celestriad 1.0 &amp; LMFT-Bloodmoon.exe</h3>
+  <p>
+    Finally, we are porting Celestriad 1.0's longitudinal <strong>REM Dream Chronicles</strong>, <strong>Active Waking Vows</strong>, <strong>3-Branch Archive Resonance Recall</strong>, and <strong>Tier-2 Learned Leaf Birth</strong> into <strong>LMFT-Bloodmoon.exe</strong> so both standalone applications share the exact same generational sleep engine.
+  </p>
+
+  <hr />
+
+  <p>
+    <strong>Download &amp; Try Celestriad 1.0 (v0.2.0) on GitHub Releases:</strong><br />
+    <a href="https://github.com/schaleh12/Dual-Hemisphere-Wisdom-Model/releases">https://github.com/schaleh12/Dual-Hemisphere-Wisdom-Model/releases</a>
+  </p>
+  <p>
+    <strong>Watch Demos &amp; Evolution Logs on YouTube:</strong><br />
+    <a href="https://www.youtube.com/@imissmydeadcat.74">https://www.youtube.com/@imissmydeadcat.74</a>
+  </p>
+</div>
+
+<script>
+function copyPatreonRichText() {
+  const el = document.getElementById("patreon-rich-text-source");
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+  try {
+    document.execCommand("copy");
+    document.getElementById("copy-status").textContent =
+      "✅ Copied formatted Rich Text! Now open your Patreon Post editor and press Ctrl+V.";
+  } catch (err) {
+    document.getElementById("copy-status").textContent = "Copy error: " + err;
+  }
+  sel.removeAllRanges();
+}
+
+function downloadCanvas(canvasId, filename) {
+  const c = document.getElementById(canvasId);
+  const link = document.createElement("a");
+  link.download = filename;
+  link.href = c.toDataURL("image/png");
+  link.click();
+  document.getElementById("copy-status").textContent =
+    "✅ Saved " + filename + "! Drag and drop it into a Patreon Image block.";
+}
+
+function drawRoundedRect(ctx, x, y, w, h, r, fill, stroke) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+  if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+  if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 2; ctx.stroke(); }
+}
+
+function renderArchCanvas() {
+  const c = document.getElementById("arch-canvas");
+  const ctx = c.getContext("2d");
+  const grad = ctx.createLinearGradient(0, 0, 1100, 540);
+  grad.addColorStop(0, "#0b1120");
+  grad.addColorStop(1, "#1e1b4b");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 1100, 540);
+
+  ctx.fillStyle = "#38bdf8";
+  ctx.font = "bold 22px Segoe UI";
+  ctx.fillText("CELESTRIAD 1.0 — DUAL-HEMISPHERE ARCHITECTURE & 6 CORE UPGRADES", 36, 44);
+  ctx.fillStyle = "#94a3b8";
+  ctx.font = "14px Segoe UI";
+  ctx.fillText("Frozen 40-Node Right-Brain Fuzzy Tree (~15 ms) + Local Left-Brain LLM Spliced at <|subliminal_gap|>", 36, 68);
+
+  const stages = [
+    {
+      y: 92, h: 88, fill: "#0f2942", stroke: "#38bdf8",
+      title: "1. EXTERNAL REALITY & PASS-1 SENSORS (FACT)",
+      sub1: "• Live Chessboard Geometry / Sparring Text / Embodied Sensors -> Un-clamped Pass-1 Fact",
+      sub2: "★ Upgrade #4: Full 6-Leaf Experiential Sensor Parity (Direct Novelty, Resonance & Entrainment)"
+    },
+    {
+      y: 198, h: 104, fill: "#1f1638", stroke: "#a855f7",
+      title: "2. RIGHT HEMISPHERE — 40-NODE FUZZY TREE & 3 CONSTITUTIONAL BRANCHES (~15 ms)",
+      sub1: "★ Upgrade #1: First-Class Rule Polarity (+1.0 Attractive Exemplars vs. -1.0 Repulsive Hazard Brakes)",
+      sub2: "★ Upgrade #2: Compensated Soft-Min (0.85 min + 0.15 mean)  |  ★ Upgrade #3: Pre-Gap Intention -> Theory -> Confidence Rollout"
+    },
+    {
+      y: 320, h: 86, fill: "#122b27", stroke: "#10b981",
+      title: "3. SYNTHETIC CORPUS CALLOSUM (<|subliminal_gap|> NON-VERBAL SPLICE)",
+      sub1: "• 52 Departmental Floats (17 Do-er + 16 Thinker + 16 Feeler + 3 Cadence) -> K = 4 Virtual Token Embeddings",
+      sub2: "• KV-Cache Ghost-Chord Masking & Stanza Residual Rotation (70/30 Culminating Synthesis)"
+    },
+    {
+      y: 424, h: 92, fill: "#2d1a12", stroke: "#f59e0b",
+      title: "4. LEFT HEMISPHERE (QWEN3-8B / BLOODMOON 12B) & NIGHTTIME REM SLEEP",
+      sub1: "★ Upgrade #5: Nighttime Micro-Callosum Plasticity (< 250 ms L2-anchored update on celestriad_gap_trajectories.jsonl)",
+      sub2: "★ Upgrade #6: Full Multi-Stanza REM Dream Chronicles, Active Waking Vows & Tier-2 Leaf Birth in Bloodmoon"
+    }
+  ];
+
+  stages.forEach((st, idx) => {
+    drawRoundedRect(ctx, 36, st.y, 1028, st.h, 12, st.fill, st.stroke);
+    ctx.fillStyle = "#f8fafc";
+    ctx.font = "bold 16px Segoe UI";
+    ctx.fillText(st.title, 56, st.y + 28);
+    ctx.fillStyle = "#cbd5e1";
+    ctx.font = "14px Segoe UI";
+    ctx.fillText(st.sub1, 56, st.y + 54);
+    ctx.fillStyle = "#fde68a";
+    ctx.font = "bold 14px Segoe UI";
+    ctx.fillText(st.sub2, 56, st.y + 78);
+
+    if (idx < stages.length - 1) {
+      ctx.fillStyle = "#38bdf8";
+      ctx.font = "bold 18px Segoe UI";
+      ctx.fillText("▼", 542, st.y + st.h + 15);
+    }
+  });
+}
+
+function renderBranchesCanvas() {
+  const c = document.getElementById("branches-canvas");
+  const ctx = c.getContext("2d");
+  const grad = ctx.createLinearGradient(0, 0, 1100, 620);
+  grad.addColorStop(0, "#0f172a");
+  grad.addColorStop(1, "#172554");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 1100, 620);
+
+  ctx.fillStyle = "#38bdf8";
+  ctx.font = "bold 21px Segoe UI";
+  ctx.fillText("THE THREE CONSTITUTIONAL BRANCHES OF MIND", 36, 42);
+
+  const branches = [
+    {
+      x: 36, w: 328, stroke: "#f97316", fill: "#2a1810",
+      name: "1. EXECUTIVE BRANCH",
+      pair: "Will <-> Cultural (17 Floats)",
+      role: "Role: The Do-er",
+      craft: "Medium: Poetry & Storytelling",
+      desc: "Purposeful action, narrative trajectory, commitment, and resource stewardship (Intention, Execution, Wastelessness)."
+    },
+    {
+      x: 386, w: 328, stroke: "#a855f7", fill: "#231433",
+      name: "2. LEGISLATIVE BRANCH",
+      pair: "Contemplation <-> Experiential (16 Floats)",
+      role: "Role: The Feeler",
+      craft: "Medium: Philosophy & Coding",
+      desc: "Feels the lived emotional chord first (Valence, Arousal, Clarity) and originates the demand for new laws when a wound occurs."
+    },
+    {
+      x: 736, w: 328, stroke: "#06b6d4", fill: "#0d2833",
+      name: "3. JUDICIAL BRANCH",
+      pair: "Truth (Fact/Theory) <-> Philosophical",
+      role: "Role: The Thinker",
+      craft: "Medium: Music & Art",
+      desc: "Supreme court of proportion and harmony—weighing objective mathematical reality (Fact) against subjective voice (Theory)."
+    }
+  ];
+
+  branches.forEach(b => {
+    drawRoundedRect(ctx, b.x, 58, b.w, 185, 12, b.fill, b.stroke);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 16px Segoe UI";
+    ctx.fillText(b.name, b.x + 16, 86);
+    ctx.fillStyle = "#93c5fd";
+    ctx.font = "bold 13px Segoe UI";
+    ctx.fillText(b.pair, b.x + 16, 110);
+    ctx.fillStyle = "#fde68a";
+    ctx.font = "bold 14px Segoe UI";
+    ctx.fillText(b.role + "  ·  " + b.craft, b.x + 16, 134);
+
+    ctx.fillStyle = "#cbd5e1";
+    ctx.font = "12.5px Segoe UI";
+    wrapText(ctx, b.desc, b.x + 16, 160, b.w - 32, 19);
+  });
+
+  ctx.fillStyle = "#a3e635";
+  ctx.font = "bold 20px Segoe UI";
+  ctx.fillText("SUMMARY OF THE 6 NEXT-HORIZON CORE UPGRADES", 36, 282);
+
+  const rows = [
+    ["#1  First-Class Rule Polarity", "reflection_classifier.py", "Separates Attractive Exemplars (+1.0) from Repulsive Hazard Brakes (-1.0) across all Will edges."],
+    ["#2  Compensated Soft-Min (0.85 / 0.15)", "reflection_classifier.py", "Ends single-sensor dropouts and breaks false Clarity = 0.0 ties on multi-leaf rules."],
+    ["#3  Pre-Gap 3-Branch Chord Rollout", "three_legged_runtime.py", "Brings Chess's Intention -> Theory -> Confidence -> Execution rollout to general dialogue."],
+    ["#4  6-Leaf Experiential Sensor Parity", "right_brain_equilibrium.py", "Adds direct Pass-1 sensing for Novelty, Resonance, and Entrainment."],
+    ["#5  Nighttime Micro-Callosum Plasticity", "chess_app.py / LoRA", "Updates the 1.1 MB Corpus Callosum projector in < 250 ms during Deep REM Sleep."],
+    ["#6  Bloodmoon Generational Sleep Parity", "bloodmoon_app.py", "Unifies Bloodmoon 12B with Multi-Stanza Dream Chronicles, Active Vows & Tier-2 Leaf Birth."]
+  ];
+
+  let ry = 300;
+  rows.forEach((r, i) => {
+    drawRoundedRect(ctx, 36, ry, 1028, 46, 8, i % 2 === 0 ? "#1e293b" : "#172033", "#334155");
+    ctx.fillStyle = "#38bdf8";
+    ctx.font = "bold 14px Segoe UI";
+    ctx.fillText(r[0], 52, ry + 28);
+    ctx.fillStyle = "#c084fc";
+    ctx.font = "13px Consolas";
+    ctx.fillText(r[1], 345, ry + 28);
+    ctx.fillStyle = "#f1f5f9";
+    ctx.font = "13.5px Segoe UI";
+    ctx.fillText(r[2], 545, ry + 28);
+    ry += 52;
+  });
+}
+
+function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+  const words = text.split(" ");
+  let line = "";
+  for (let n = 0; n < words.length; n++) {
+    const testLine = line + words[n] + " ";
+    const metrics = ctx.measureText(testLine);
+    if (metrics.width > maxWidth && n > 0) {
+      ctx.fillText(line, x, y);
+      line = words[n] + " ";
+      y += lineHeight;
+    } else {
+      line = testLine;
+    }
+  }
+  ctx.fillText(line, x, y);
+}
+
+renderArchCanvas();
+renderBranchesCanvas();
+</script>
+</body>
+</html>

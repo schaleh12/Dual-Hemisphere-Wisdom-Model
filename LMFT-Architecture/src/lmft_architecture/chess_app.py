@@ -2610,6 +2610,7 @@ class ChessKibitzerRuntime:
         forged_rules: tuple[FuzzyConceptRule, ...],
     ) -> int:
         """Harvest authentic `ContrastiveGapPair` records (L2 >= 0.35) from REM-resolved scenes to JSONL."""
+        self._last_harvested_gap_pairs: list[ContrastiveGapPair] = []
         if not queued_snapshot or self.active_lineage == "virgin":
             return 0
         clean_vow = " ".join(str(vow_sentence or "").split()).strip()
@@ -2740,6 +2741,7 @@ class ChessKibitzerRuntime:
                 )
                 with out_path.open("a", encoding="utf-8") as fh:
                     fh.write(json.dumps(pair.to_dict(), ensure_ascii=False) + "\n")
+                self._last_harvested_gap_pairs.append(pair)
                 harvested_now += 1
             except Exception:
                 continue
@@ -3228,6 +3230,19 @@ class ChessKibitzerRuntime:
                         vow_sentence,
                         forged_rules_list,
                     )
+                    if (
+                        is_deep_sleep
+                        and self._qwen_left_brain is not None
+                        and getattr(self._qwen_left_brain, "projector", None) is not None
+                        and getattr(self, "_last_harvested_gap_pairs", None)
+                    ):
+                        from .train_left_brain_lora import update_projector_on_harvested_gap_pairs
+
+                        self.last_callosum_plasticity_meta = update_projector_on_harvested_gap_pairs(
+                            self._qwen_left_brain.projector,
+                            self._last_harvested_gap_pairs,
+                            state_dir=self.state_dir,
+                        )
                     chronicle_entry = {
                         "cycle_index": int(self.sleep_cycle_index) + len(self.rem_dream_chronicles) + 1,
                         "game_number": int(self.games_completed_count),

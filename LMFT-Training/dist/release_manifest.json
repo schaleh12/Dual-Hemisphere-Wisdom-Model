@@ -2,8 +2,8 @@
   "schema_version": 1,
   "version": "0.2.0",
   "github_repo": "schaleh12/Dual-Hemisphere-Wisdom-Model",
-  "build_sha256": "86343ab674aa894d9cf8f4426619bad53d324b00e0636d0652153dc18ecda474",
-  "build_short_hash": "86343ab674aa",
+  "build_sha256": "2149ee1433ffbe8307bddc9ad0d86cfd397325208396ba81e773c5811c91047b",
+  "build_short_hash": "2149ee1433ff",
   "files": {
     "src/lmft_architecture/__init__.py": {
       "sha256": "a89f56c2195e87129adbffa5065d8769ea096e13ba98783d217c4d120ee92623",
@@ -66,8 +66,8 @@
       "size_bytes": 5515
     },
     "src/lmft_architecture/bloodmoon_app.py": {
-      "sha256": "9c23ad9bb84c7931dfcc347dbb3ec4b297fdb2213866034f8f3c21550ea3108d",
-      "size_bytes": 112978
+      "sha256": "e05f2df17305289db908b38e167101084285d64da4c6adc0e5168c9508802cea",
+      "size_bytes": 123082
     },
     "src/lmft_architecture/bloodmoon_ui.py": {
       "sha256": "35dc889b58af1867c20eec0645009f59a9dd5f613942646d1373e00bad95c7a0",
@@ -90,8 +90,8 @@
       "size_bytes": 3267
     },
     "src/lmft_architecture/chess_app.py": {
-      "sha256": "e5149739ccbee63b18cfda32e9b73e77c011578037689e7b82e606ca5b686dc2",
-      "size_bytes": 168121
+      "sha256": "afb0e52afa5b58e6bc4440e315446309be86f1a2dfdcae1c23828cadc99944f4",
+      "size_bytes": 168969
     },
     "src/lmft_architecture/chess_kibitz_bridge.py": {
       "sha256": "34049903ca933e1a4eb152196a668316b25381fdc23c47912bde76a406ea5dbf",
@@ -226,8 +226,8 @@
       "size_bytes": 6988
     },
     "src/lmft_architecture/reflection_classifier.py": {
-      "sha256": "e335f90ce535122848817470d689681cc6a6b36bc2729663fe0bcbcd827408b3",
-      "size_bytes": 59517
+      "sha256": "49531990dca8688f633c13f433d34a8d39ece2e216b9de3852aeade980fc4ecf",
+      "size_bytes": 61355
     },
     "src/lmft_architecture/reliability.py": {
       "sha256": "ab8fe7194e8e28d5707d43fc67adac59b1790e48c7803d4c16a5751f5d4d6916",
@@ -238,8 +238,8 @@
       "size_bytes": 23256
     },
     "src/lmft_architecture/right_brain_equilibrium.py": {
-      "sha256": "60c2f707576d0793fc0b2a8c2021df0b2eaf5a984abec5b5631c3ef8b6b57b04",
-      "size_bytes": 72812
+      "sha256": "2d94f73a9628aa12ed098d53c37efa8ebb19c7bdd087886bd49eed933c7388bd",
+      "size_bytes": 74508
     },
     "src/lmft_architecture/runtime.py": {
       "sha256": "0dd3dcba339ab4306a50d0b0ba2722f6e99a563c685fe641d657128036eee6f0",
@@ -286,12 +286,12 @@
       "size_bytes": 2802
     },
     "src/lmft_architecture/three_legged_runtime.py": {
-      "sha256": "2b094edb2ada7baccc8659f6734436ae4883806b88a59caa32a4588ffe763e3b",
-      "size_bytes": 91107
+      "sha256": "c8bb53e0a5017e173cca7789d3aaa1c5301c0108c12251cec74b4796bcf799c3",
+      "size_bytes": 94986
     },
     "src/lmft_architecture/train_left_brain_lora.py": {
-      "sha256": "484557fd8add4c837ae7e752c4d28a3d983fbd6329892433a8ecf23cde5ccb57",
-      "size_bytes": 40942
+      "sha256": "6803cd089c3d73a83d0bf8a5726155ee02d217da20d6d3fab0eb22e8dde8a1af",
+      "size_bytes": 44909
     },
     "src/lmft_architecture/virgin_baseline.py": {
       "sha256": "720ee8d2258e9d533ec4b1d1d26b32c5d2ff0054c24934090391c20fc29b8fb6",

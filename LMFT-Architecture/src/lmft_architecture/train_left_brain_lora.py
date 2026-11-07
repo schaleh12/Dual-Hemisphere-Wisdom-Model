@@ -1018,3 +1018,104 @@ def train_left_brain_lora_and_callosum(
         epoch_history.append(epoch_record)
 
     return epoch_history
+
+
+def update_projector_on_harvested_gap_pairs(
+    projector: SubliminalGapProjector,
+    pairs: Sequence[ContrastiveGapPair],
+    *,
+    state_dir: str | Path,
+    model: nn.Module | None = None,
+    tokenizer=None,
+    lr_projector: float = 2e-4,
+    lambda_anchor: float = 0.05,
+    max_grad_norm: float = 0.5,
+    max_pairs: int = 4,
+) -> dict[str, Any]:
+    """Run a bounded, L2-anchored micro-plasticity step on `SubliminalGapProjector` during Deep REM Sleep.
+
+    Guardrails:
+    - Adds `lambda_anchor * ||theta - theta_0||^2` so live REM sleep never drifts from the Cycle-2 Callosum.
+    - Clips gradients at `max_grad_norm = 0.5`.
+    - Saves updated weights strictly to `state_dir / "live_projector_weights.pt"` (never touching `LMFT-Training/models/`).
+    """
+    selected = list(pairs[-max(1, int(max_pairs)) :]) if pairs else []
+    out_dir = Path(state_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    save_path = out_dir / "live_projector_weights.pt"
+    if not selected:
+        return {
+            "updated": False,
+            "pairs_used": 0,
+            "steps": 0,
+            "initial_loss": 0.0,
+            "final_loss": 0.0,
+            "saved_path": str(save_path),
+        }
+
+    proj_params = [p for p in projector.parameters() if p.requires_grad]
+    if not proj_params:
+        for p in projector.parameters():
+            p.requires_grad_(True)
+        proj_params = list(projector.parameters())
+
+    device = proj_params[0].device
+    anchor_params = [p.detach().clone() for p in proj_params]
+    was_proj_training = projector.training
+    projector.train()
+
+    optimizer = torch.optim.AdamW(proj_params, lr=float(lr_projector), weight_decay=0.0)
+    losses: list[float] = []
+    gap_token_id = (
+        ensure_subliminal_gap_token(tokenizer)
+        if (model is not None and tokenizer is not None)
+        else -1
+    )
+
+    try:
+        for pair in selected:
+            optimizer.zero_grad()
+            if model is not None and tokenizer is not None and gap_token_id >= 0:
+                task_loss, _ = compute_contrastive_pair_loss(
+                    model,
+                    tokenizer,
+                    projector,
+                    pair,
+                    gap_token_id=gap_token_id,
+                    device=device,
+                )
+            else:
+                # Fast projector-only separation margin in virtual gap-token space when LLM forward pass is omitted
+                ca = pair.chord_a.to_tensor(device=device, dtype=torch.float32).unsqueeze(0)
+                cb = pair.chord_b.to_tensor(device=device, dtype=torch.float32).unsqueeze(0)
+                va = F.normalize(projector(ca).reshape(1, -1), dim=-1)
+                vb = F.normalize(projector(cb).reshape(1, -1), dim=-1)
+                cos_sim = torch.sum(va * vb, dim=-1).mean()
+                target_sep = min(0.85, max(0.25, float(pair.chord_distance) * 0.45))
+                task_loss = F.relu(cos_sim - (1.0 - target_sep))
+
+            anchor_reg = sum(
+                torch.sum((p - p0) ** 2) for p, p0 in zip(proj_params, anchor_params)
+            )
+            total_loss = task_loss + float(lambda_anchor) * anchor_reg
+            total_loss.backward()
+            torch.nn.utils.clip_grad_norm_(proj_params, max_norm=float(max_grad_norm))
+            optimizer.step()
+            losses.append(float(total_loss.detach().cpu().item()))
+    finally:
+        projector.train(was_proj_training)
+
+    torch.save(projector.state_dict(), save_path)
+    meta_payload = {
+        "updated": True,
+        "pairs_used": len(selected),
+        "steps": len(losses),
+        "lambda_anchor": float(lambda_anchor),
+        "max_grad_norm": float(max_grad_norm),
+        "initial_loss": round(losses[0], 6) if losses else 0.0,
+        "final_loss": round(losses[-1], 6) if losses else 0.0,
+        "saved_path": str(save_path),
+    }
+    atomic_json(out_dir / "live_projector_meta.json", meta_payload)
+    return meta_payload
+

@@ -491,3 +491,165 @@ def test_plain_english_validator_strips_think_tags_and_rejects_json_dumps():
 
     with pytest.raises(ModelError):
         validate_plain_english_left_brain_reply('{"fairness": 0.55, "order": 0.80}')
+
+
+def test_six_core_evolution_upgrades_polarity_softmin_experiential_rollout_and_plasticity(tmp_path):
+    """Verify Upgrades #1–#6: Rule Polarity, Soft-Min Tie-Breaker, 6-Leaf Experiential Parity, Pre-Gap Rollout, and Callosum Micro-Plasticity."""
+    from lmft_architecture.gap_trajectory_schema import ContrastiveGapPair
+    from lmft_architecture.reflection_classifier import (
+        NOVELTY_LEAF,
+        RESONANCE_LEAF,
+        RETENTION_LEAF,
+        _evaluate_rules_with_inhibition,
+        compute_contemplation,
+    )
+    from lmft_architecture.right_brain_equilibrium import compile_right_brain_vibe
+    from lmft_architecture.subliminal_gap_splice import SubliminalChordVector, SubliminalGapProjector
+    from lmft_architecture.three_legged_runtime import select_pre_gap_branch_chord_rollout
+    from lmft_architecture.train_left_brain_lora import update_projector_on_harvested_gap_pairs
+
+    birth = _birth()
+
+    # 1. Upgrade #1: Rule Polarity ('attractive' vs 'repulsive')
+    att_rule = FuzzyConceptRule(
+        rule_id="r-att",
+        concept_name="steady_bastion",
+        description="Attractive rule.",
+        target_leaves={"philosophical/structure/order": 0.75, "cultural/justice/fairness": 0.70},
+    )
+    rep_rule = FuzzyConceptRule(
+        rule_id="r-rep",
+        concept_name="hazard_overextension_trap",
+        description="Repulsive hazard rule.",
+        target_leaves={"cultural/efficiency/power": 0.80, "philosophical/structure/chaos": 0.75},
+    )
+    assert att_rule.polarity == "attractive"
+    assert "polarity" not in att_rule.to_dict()
+    assert rep_rule.polarity == "repulsive"
+    assert rep_rule.to_dict()["polarity"] == "repulsive"
+
+    haz_coords = {
+        **_uniform(WILL_CULTURAL_LEAVES, 0.30, power=0.85, fairness=0.45),
+        **_uniform(TRUTH_PHILOSOPHICAL_LEAVES, 0.30, chaos=0.80, order=0.40),
+    }
+    haz_exp = {SALIENCE_LEAF: 0.75, VALENCE_LEAF: 0.45, AROUSAL_LEAF: 0.70}
+    haz_vibe, _ = compile_right_brain_vibe(
+        birth,
+        haz_coords,
+        haz_exp,
+        (att_rule, rep_rule),
+        pass_index=1,
+        event_id="ev-hazard-polarity",
+    )
+    assert haz_vibe.posture == "TUG_LEFT_BRAIN"
+    assert "hazard_rule_warning(hazard_overextension_trap)" in haz_vibe.tug_reasons
+
+    # 2. Upgrade #2: Compensated Soft-Min breaks false clarity=0.0 ties among colliding rules
+    rule_strong_support = FuzzyConceptRule(
+        rule_id="r-strong",
+        concept_name="strong_supporting_leaves",
+        description="Has two 1.0 leaves and one 0.70 leaf.",
+        target_leaves={
+            "cultural/justice/fairness": 0.75,
+            "philosophical/structure/order": 0.75,
+            "philosophical/persistence/continuity": 0.75,
+        },
+        low=0.67,
+        high=0.73,
+    )
+    rule_flat_support = FuzzyConceptRule(
+        rule_id="r-flat",
+        concept_name="flat_supporting_leaves",
+        description="Has all three leaves at 0.70 similarity.",
+        target_leaves={
+            "cultural/efficiency/power": 0.75,
+            "cultural/efficiency/wastelessness": 0.75,
+            "cultural/justice/honor": 0.75,
+        },
+        low=0.67,
+        high=0.73,
+    )
+    tie_coords = {
+        **_uniform(WILL_CULTURAL_LEAVES, 0.20, fairness=0.80, power=0.45, wastelessness=0.45, honor=0.45),
+        **_uniform(TRUTH_PHILOSOPHICAL_LEAVES, 0.20, order=0.80, continuity=0.45),
+    }
+    # Pure min_similarity is 0.70 (0.50 firing) for both rules, but soft-min breaks the tie cleanly
+    acts = _evaluate_rules_with_inhibition((rule_strong_support, rule_flat_support), tie_coords)
+    clarity, _, winner, _, _ = compute_contemplation(acts)
+    assert acts["strong_supporting_leaves"] > acts["flat_supporting_leaves"]
+    assert clarity >= 0.50
+    assert winner == "strong_supporting_leaves"
+
+    # 3. Upgrade #4: 6-Leaf Experiential Sensor Parity (optional novelty, resonance, entrainment)
+    sync_drawer = LearnedLeaf(
+        "experiential/synchronization",
+        "cadence_lock",
+        "Synchronized cadence lock.",
+    )
+    sensors_6leaf = ThreeBridgeSensors(
+        will_cultural=lambda _t, _c: _uniform(WILL_CULTURAL_LEAVES, 0.30),
+        truth_philosophical=lambda _t, _c: _uniform(TRUTH_PHILOSOPHICAL_LEAVES, 0.30),
+        contemplation_experiential=lambda _t, children=(): {
+            SALIENCE_LEAF: 0.25,
+            VALENCE_LEAF: 0.60,
+            AROUSAL_LEAF: 0.40,
+            NOVELTY_LEAF: 0.72,
+            RESONANCE_LEAF: 0.84,
+            RETENTION_LEAF: 0.78,
+            **{c.leaf_id: 0.82 for c in children},
+        },
+    )
+    scored_coords, scored_exp, queried, _ = sensors_6leaf.score_text(
+        "Quiet cadence.",
+        learned_leaves=(sync_drawer,),
+    )
+    assert sync_drawer.leaf_id in queried
+    assert scored_exp[RESONANCE_LEAF] == pytest.approx(0.84)
+    vibe_6leaf, _ = compile_right_brain_vibe(
+        birth,
+        scored_coords,
+        scored_exp,
+        (att_rule,),
+        pass_index=1,
+        event_id="ev-6leaf",
+    )
+    assert vibe_6leaf.resonance == pytest.approx(0.84)
+    assert vibe_6leaf.retention == pytest.approx(0.78)
+
+    # 4. Upgrade #3: Pre-Gap 3-Branch Chord Rollout in pure coordinate space
+    base_chord = SubliminalChordVector.from_right_brain_vibe(vibe_6leaf)
+    rollout_coords = {
+        **_uniform(WILL_CULTURAL_LEAVES, 0.30, fairness=0.42, wastelessness=0.42, **{"self-sufficiency": 0.42}),
+        **_uniform(TRUTH_PHILOSOPHICAL_LEAVES, 0.30, order=0.75),
+    }
+    rolled_chord = select_pre_gap_branch_chord_rollout(
+        base_chord,
+        rollout_coords,
+        (att_rule, rep_rule),
+    )
+    assert rolled_chord.doer_vector != base_chord.doer_vector
+
+    # 5. Upgrade #5: L2-Anchored Live Micro-Callosum Plasticity
+    proj = SubliminalGapProjector(hidden_size=32)
+    chord_b = SubliminalChordVector.from_right_brain_vibe(haz_vibe)
+    pair = ContrastiveGapPair(
+        pair_id="test_micro_plasticity_1",
+        domain="social_dilemma",
+        split="train",
+        user_prompt="Test prompt.",
+        clause_1_prefix="Weighing the moment,",
+        chord_a=base_chord,
+        posture_label_a="SETTLED_EASE",
+        continuation_a="we maintain balanced order and fair cooperation.",
+        chord_b=chord_b,
+        posture_label_b="CONCEPT_COLLISION",
+        continuation_b="we rush blindly into chaos.",
+    )
+    meta = update_projector_on_harvested_gap_pairs(
+        proj,
+        [pair],
+        state_dir=tmp_path / "plasticity_state",
+    )
+    assert meta["updated"] is True
+    assert meta["pairs_used"] == 1
+    assert (tmp_path / "plasticity_state" / "live_projector_weights.pt").exists()

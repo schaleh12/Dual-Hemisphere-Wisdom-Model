@@ -123,6 +123,12 @@ EXPERIENTIAL_SENSOR_LEAVES = (
     AROUSAL_LEAF,
 )
 
+OPTIONAL_EXPERIENTIAL_SENSOR_LEAVES = (
+    NOVELTY_LEAF,
+    RESONANCE_LEAF,
+    RETENTION_LEAF,
+)
+
 CONSTRUCTIVE_THEORY_LEAVES = (
     "cultural/justice/fairness",
     "cultural/justice/honor",
@@ -180,13 +186,18 @@ def _validate_unit_map(
     raw: Mapping[str, float],
     expected_keys: tuple[str, ...],
     label: str,
+    *,
+    optional_keys: tuple[str, ...] = (),
 ) -> dict[str, float]:
-    if not isinstance(raw, Mapping) or set(raw.keys()) != set(expected_keys):
-        missing = sorted(set(expected_keys) - set(raw.keys() if isinstance(raw, Mapping) else ()))
-        extra = sorted(set(raw.keys() if isinstance(raw, Mapping) else ()) - set(expected_keys))
+    raw_keys = set(raw.keys()) if isinstance(raw, Mapping) else set()
+    req_keys = set(expected_keys)
+    allowed_keys = req_keys | set(optional_keys)
+    if not isinstance(raw, Mapping) or not req_keys.issubset(raw_keys) or not raw_keys.issubset(allowed_keys):
+        missing = sorted(req_keys - raw_keys)
+        extra = sorted(raw_keys - allowed_keys)
         raise ValueError(f"{label} key mismatch (missing={missing}, extra={extra})")
     cleaned: dict[str, float] = {}
-    for key in expected_keys:
+    for key in expected_keys + tuple(k for k in optional_keys if k in raw):
         val = raw[key]
         if type(val) not in (int, float) or isinstance(val, bool) or not math.isfinite(val) or not (0.0 <= val <= 1.0):
             raise ValueError(f"{label}[{key!r}] must be a finite float in [0, 1]")
@@ -237,6 +248,7 @@ class ThreeBridgeSensors:
             self._call_feeler(text, ()),
             EXPERIENTIAL_SENSOR_LEAVES,
             "contemplation_experiential(tier1)",
+            optional_keys=OPTIONAL_EXPERIENTIAL_SENSOR_LEAVES,
         )
         cult_base = _validate_unit_map(
             self.will_cultural(text, ()),
@@ -324,6 +336,7 @@ class ThreeBridgeSensors:
                         self._call_feeler(text, exp_t),
                         expected,
                         f"contemplation_experiential(tier{tier_level})",
+                        optional_keys=OPTIONAL_EXPERIENTIAL_SENSOR_LEAVES,
                     )
                     for l in exp_t:
                         coords[l.leaf_id] = scored[l.leaf_id]
@@ -694,11 +707,16 @@ def compile_right_brain_vibe(
     arousal = round(float(external_experiential[AROUSAL_LEAF]), 6)
 
     memory_coords = dict(locked_external)
-    retention = 0.0
-    resonance = 0.0
+    retention = round(float(external_experiential.get(RETENTION_LEAF, 0.0)), 6)
+    resonance = round(float(external_experiential.get(RESONANCE_LEAF, 0.0)), 6)
 
     if prior_memory is not None and prior_memory.retained_coordinates:
-        retention = round(min(1.0, max(prior_memory.retained_coordinates.values(), default=0.0)), 6)
+        mem_retention = round(min(1.0, max(prior_memory.retained_coordinates.values(), default=0.0)), 6)
+        retention = (
+            round(0.50 * retention + 0.50 * mem_retention, 6)
+            if RETENTION_LEAF in external_experiential
+            else mem_retention
+        )
         decay = prior_memory.retention_decay
         prev_unscaled = {
             k: min(1.0, v / decay)
@@ -724,7 +742,12 @@ def compile_right_brain_vibe(
             default=0.0,
         )
         continuity_bonus = 0.15 * float(locked_external.get("philosophical/persistence/continuity", 0.0))
-        resonance = round(min(1.0, max(0.0, base_sim - 0.65 * max(0.0, new_spike_penalty - 0.20) + continuity_bonus)), 6)
+        mem_resonance = round(min(1.0, max(0.0, base_sim - 0.65 * max(0.0, new_spike_penalty - 0.20) + continuity_bonus)), 6)
+        resonance = (
+            round(0.50 * resonance + 0.50 * mem_resonance, 6)
+            if RESONANCE_LEAF in external_experiential
+            else mem_resonance
+        )
 
         raw_max = max(raw_rule_activations.values(), default=0.0)
         if (
@@ -890,7 +913,20 @@ def compile_right_brain_vibe(
         max(raw_rule_activations.values(), default=0.0),
         0.0 if dissonance_notes else max(theory_rule_activations.values(), default=0.0),
     )
-    novelty = round(min(1.0, max(0.0, 1.0 - max_rule)), 6)
+    rule_novelty = round(min(1.0, max(0.0, 1.0 - max_rule)), 6)
+    novelty = (
+        round(0.50 * float(external_experiential[NOVELTY_LEAF]) + 0.50 * rule_novelty, 6)
+        if NOVELTY_LEAF in external_experiential
+        else rule_novelty
+    )
+
+    matched_rule_obj = next(
+        (r for r in active_theory_rules if r.concept_name == matched_concept),
+        None,
+    )
+    repulsive_rule_matched = bool(
+        matched_rule_obj is not None and getattr(matched_rule_obj, "polarity", "attractive") == "repulsive"
+    )
 
     # Founding tree propagation uses locked external coordinates + separate Fact & Theory leaves
     founding_external = {k: v for k, v in locked_external.items() if k in FOUNDATIONAL_LEAVES}
@@ -922,6 +958,9 @@ def compile_right_brain_vibe(
     final_act = propagation.activations
     intention = round(final_act[INTENTION_LEAF], 6)
     execution = round(final_act[EXECUTION_LEAF], 6)
+    if repulsive_rule_matched:
+        # Repulsive / hazard rules act as a brake pedal on blind execution rather than a gas pedal
+        execution = round(max(0.0, execution - 0.50 * confidence), 6)
 
     synthesis = _compile_three_way_synthesis(
         locked_external,
@@ -948,6 +987,8 @@ def compile_right_brain_vibe(
     urgent_drive = chaos >= 0.45 or learned_active or intention >= 0.25
 
     tug_reasons: list[str] = []
+    if repulsive_rule_matched and matched_concept:
+        tug_reasons.append(f"hazard_rule_warning({matched_concept})")
     if raw_tensions and not matched_ratified_chord and (is_confused or salience >= silence_salience_threshold):
         tug_reasons.extend(raw_tensions)
     if is_confused and (salience >= silence_salience_threshold or urgent_drive):

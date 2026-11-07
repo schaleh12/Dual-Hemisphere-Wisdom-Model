@@ -1368,6 +1368,93 @@ def compute_stanza_residual_chord(
     )
 
 
+def select_pre_gap_branch_chord_rollout(
+    base_chord: SubliminalChordVector,
+    external_coords: Mapping[str, float],
+    rules: Sequence[FuzzyConceptRule],
+    *,
+    ratified_chords: Sequence[FuzzyConceptRule] = (),
+) -> SubliminalChordVector:
+    """Evaluate 3 branch-led candidate chords in pure coordinate space (< 2 ms, 0 LLM calls).
+
+    Simulates Executive-led, Legislative-led, and Judicial-led constructive theory shifts against
+    known attractive and repulsive rules, nudging the opening `<|subliminal_gap|>` chord toward
+    the highest-confidence branch without ever overwriting Pass-1 `Fact` (`external_coords`).
+    """
+    all_rules = tuple(rules) + tuple(ratified_chords)
+    if not all_rules:
+        return base_chord
+
+    def _score_candidate(cand_coords: Mapping[str, float]) -> float:
+        att_scores: list[float] = []
+        rep_scores: list[float] = []
+        for r in all_rules:
+            if not all(k in cand_coords for k in r.target_leaves):
+                continue
+            val = float(r.evaluate(cand_coords))
+            if getattr(r, "polarity", "attractive") == "repulsive":
+                rep_scores.append(val)
+            else:
+                att_scores.append(val)
+        att_sorted = sorted(att_scores, reverse=True)
+        max_att = att_sorted[0] if att_sorted else 0.0
+        second_att = att_sorted[1] if len(att_sorted) > 1 else 0.0
+        clarity_att = max(0.0, max_att - second_att)
+        max_rep = max(rep_scores, default=0.0)
+        return round(max_att + 0.35 * clarity_att - 0.65 * max_rep, 6)
+
+    base_score = _score_candidate(external_coords)
+    branch_lifts: dict[str, tuple[str, ...]] = {
+        "executive": (
+            "cultural/justice/fairness",
+            "cultural/efficiency/wastelessness",
+            "cultural/freedom/self-sufficiency",
+        ),
+        "legislative": (
+            "cultural/freedom/needlessness",
+            "philosophical/being/existence",
+        ),
+        "judicial": (
+            "philosophical/structure/order",
+            "philosophical/persistence/continuity",
+            "philosophical/being/agency",
+        ),
+    }
+    best_branch: str | None = None
+    best_score = base_score
+    for branch_name, lift_keys in branch_lifts.items():
+        cand = dict(external_coords)
+        for k in lift_keys:
+            cand[k] = min(1.0, round(float(cand.get(k, 0.0)) + 0.18, 4))
+        sc = _score_candidate(cand)
+        if sc > best_score + 0.02:
+            best_score = sc
+            best_branch = branch_name
+
+    if best_branch is None:
+        return base_chord
+
+    doer_list = list(base_chord.doer_vector)
+    thinker_list = list(base_chord.thinker_vector)
+    feeler_list = list(base_chord.feeler_vector)
+    for k in branch_lifts[best_branch]:
+        if k in CULTURAL_FOUNDING_ORDER:
+            idx = CULTURAL_FOUNDING_ORDER.index(k)
+            doer_list[idx] = round(min(1.0, doer_list[idx] + 0.12), 6)
+        elif k in PHILOSOPHICAL_FOUNDING_ORDER:
+            idx = PHILOSOPHICAL_FOUNDING_ORDER.index(k)
+            thinker_list[idx] = round(min(1.0, thinker_list[idx] + 0.12), 6)
+    if best_branch == "legislative" and len(feeler_list) >= 3:
+        feeler_list[2] = round(min(1.0, feeler_list[2] + 0.10), 6)
+
+    return SubliminalChordVector(
+        doer_vector=tuple(doer_list),
+        thinker_vector=tuple(thinker_list),
+        feeler_vector=tuple(feeler_list),
+        cadence_vector=base_chord.cadence_vector,
+    )
+
+
 def run_three_legged_turn(
     birth_state: BirthState,
     scenario_text: str,
@@ -1649,6 +1736,13 @@ def run_three_legged_turn(
                             social_drift=social_drift,
                             learned_leaves=learned_tuple,
                         )
+                        if _pass_idx == 2 and mid_comma_vibe.posture == "TUG_LEFT_BRAIN":
+                            chord_at_comma = select_pre_gap_branch_chord_rollout(
+                                chord_at_comma,
+                                external_coords,
+                                rules,
+                                ratified_chords=pass_ratified_chords,
+                            )
                     if sanctuary_target_mode is not None:
                         from .chess_kibitz_bridge import apply_coregulation_lead_to_chord
 

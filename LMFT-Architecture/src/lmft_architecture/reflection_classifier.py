@@ -216,6 +216,7 @@ class FuzzyConceptRule:
     target_leaves: Mapping[str, float]
     low: float = 0.55
     high: float = 0.80
+    polarity: str = ""
 
     def __post_init__(self):
         if not isinstance(self.rule_id, str) or not self.rule_id.strip():
@@ -234,13 +235,21 @@ class FuzzyConceptRule:
         if (type(self.low) not in (int, float) or type(self.high) not in (int, float)
                 or not (0.0 <= self.low < self.high <= 1.0)):
             raise ValueError("rule thresholds must satisfy 0.0 <= low < high <= 1.0")
+        resolved_polarity = (
+            self.polarity.strip().lower()
+            if isinstance(self.polarity, str) and self.polarity.strip()
+            else ("repulsive" if self.concept_name.startswith("hazard_") else "attractive")
+        )
+        if resolved_polarity not in ("attractive", "repulsive"):
+            raise ValueError("polarity must be 'attractive' or 'repulsive'")
+        object.__setattr__(self, "polarity", resolved_polarity)
 
     @property
     def tier(self) -> int:
         """Return the deepest leaf tier (1, 2, or 3) used in target_leaves."""
         return max(leaf_tier(leaf_id) for leaf_id in self.target_leaves)
 
-    def evaluate(self, leaf_coordinates: Mapping[str, float]) -> float:
+    def evaluate(self, leaf_coordinates: Mapping[str, float], *, soft_min: bool = False) -> float:
         """Compute fuzzy rule firing strength in [0, 1] using shoulder/triangular leaf similarity."""
         similarities = []
         for leaf_id, target_val in self.target_leaves.items():
@@ -256,12 +265,18 @@ class FuzzyConceptRule:
                 sim = 1.0 - abs(actual - t_val)
             similarities.append(sim)
         min_similarity = min(similarities)
+        mean_similarity = sum(similarities) / len(similarities)
+        effective_sim = (
+            (0.85 * min_similarity + 0.15 * mean_similarity)
+            if (soft_min and min_similarity >= self.low)
+            else min_similarity
+        )
         universe = np.array([0.0, self.low, self.high, 1.0], dtype=float)
         curve = fuzz.trapmf(universe, [self.low, self.high, 1.0, 1.0])
-        return round(float(np.interp(min_similarity, universe, curve)), 6)
+        return round(float(np.interp(effective_sim, universe, curve)), 6)
 
     def to_dict(self) -> dict:
-        return {
+        out = {
             "rule_id": self.rule_id,
             "concept_name": self.concept_name,
             "description": self.description,
@@ -269,6 +284,9 @@ class FuzzyConceptRule:
             "low": self.low,
             "high": self.high,
         }
+        if self.polarity != "attractive":
+            out["polarity"] = self.polarity
+        return out
 
     @classmethod
     def from_dict(cls, data: dict) -> "FuzzyConceptRule":
@@ -279,6 +297,7 @@ class FuzzyConceptRule:
             target_leaves=dict(data["target_leaves"]),
             low=float(data.get("low", 0.55)),
             high=float(data.get("high", 0.80)),
+            polarity=str(data.get("polarity", "")),
         )
 
 
@@ -588,6 +607,21 @@ def _evaluate_rules_with_inhibition(
         if r.tier < deepest_active_tier and max_deeper >= CONFUSION_THRESHOLD:
             val = round(val * (1.0 - 0.5 * max_deeper), 6)
         rule_activations[r.concept_name] = val
+
+    # Compensated Soft-Min tie-breaker (Upgrade #2): when 2+ active rules in the deepest tier
+    # collide within CONFUSION_THRESHOLD on pure min_similarity, re-evaluate those colliding rules
+    # with `soft_min=True` (0.85 * min_sim + 0.15 * mean_sim) so rules with stronger supporting
+    # leaves break false ties without ever inflating non-colliding runner-up rules.
+    sorted_vals = sorted(rule_activations.values(), reverse=True)
+    if len(sorted_vals) >= 2 and sorted_vals[0] >= CONFUSION_THRESHOLD and (sorted_vals[0] - sorted_vals[1]) < CONFUSION_THRESHOLD:
+        top_val = sorted_vals[0]
+        colliding = [
+            r for r in rules
+            if r.tier == deepest_active_tier and (top_val - rule_activations[r.concept_name]) < CONFUSION_THRESHOLD
+        ]
+        if len(colliding) >= 2:
+            for r in colliding:
+                rule_activations[r.concept_name] = r.evaluate(coords, soft_min=True)
     return rule_activations
 
 
