@@ -102,6 +102,7 @@ from .neural_bridge_classifiers import (
     NeuralThreeBridgeSuite,
 )
 from .philosophical_abstraction_matrix import PHILOSOPHICAL_SHADOW_LEAVES
+from .propagation import Association
 from .reflection_classifier import (
     AROUSAL_LEAF,
     FOUNDATIONAL_LEAVES,
@@ -117,6 +118,8 @@ from .reflection_classifier import (
     save_ruleset,
 )
 from .right_brain_equilibrium import (
+    RIGHT_BRAIN_WILL_EDGES,
+    RIGHT_BRAIN_WILL_VERSION,
     SettledDiary,
     ThreeBridgeSensors,
     compile_right_brain_vibe,
@@ -431,6 +434,7 @@ class ChessKibitzerRuntime:
         self.chord_memory = ChordMemoryBank()
         self.archives = self._load_initial_archives()
         self.bitboard_sleeve = self._load_initial_bitboard_sleeve()
+        self.will_edges = self._load_initial_will_edges()
 
         self.sleep_queue: list[UnresolvedSleepScene] = []
         self._hazard_scene_indices: set[int] = set()
@@ -582,6 +586,38 @@ class ChessKibitzerRuntime:
         if self._is_default_live_state_dir() and seed_sleeve.exists():
             return BitboardIntuitionSleeve.load(seed_sleeve)
         return BitboardIntuitionSleeve()
+
+    def _load_initial_will_edges(self) -> tuple[Association, ...]:
+        user_edges = self.state_dir / "will_edges.json"
+        if user_edges.exists():
+            try:
+                raw = json.loads(user_edges.read_text(encoding="utf-8"))
+                weights_map = raw.get("weights", {}) if isinstance(raw, dict) else {}
+                loaded: list[Association] = []
+                for e in RIGHT_BRAIN_WILL_EDGES:
+                    w = float(weights_map.get(e.id, e.weight))
+                    if e.id in ("rb-will-3", "rb-will-8") or float(e.weight) < 0.0:
+                        w = round(max(-1.0, min(-0.35, w)), 4)
+                    else:
+                        w = round(max(0.25, min(1.0, w)), 4)
+                    loaded.append(
+                        Association(
+                            e.id,
+                            e.source_id,
+                            e.target_id,
+                            w,
+                            e.confidence,
+                            e.plasticity,
+                            e.created_event_id,
+                            e.last_updated_event_id,
+                            e.active,
+                            e.kind,
+                        )
+                    )
+                return tuple(loaded)
+            except Exception:
+                pass
+        return RIGHT_BRAIN_WILL_EDGES
 
     def _load_initial_savored_ids(self) -> list[int]:
         self.sparring_engine = ObjectiveCalibratedSparringEngine(
@@ -893,6 +929,13 @@ class ChessKibitzerRuntime:
         save_contemplation_ledger(self.state_dir / "contemplation_ledger.json", self.ledger)
         self.bitboard_sleeve.save(self.state_dir / "bitboard_sleeve_weights.json")
         atomic_json(
+            self.state_dir / "will_edges.json",
+            {
+                "version": RIGHT_BRAIN_WILL_VERSION,
+                "weights": {e.id: round(float(e.weight), 4) for e in self.will_edges},
+            },
+        )
+        atomic_json(
             self.state_dir / "club_meta.json",
             {
                 "savored_turn_ids": list(self.savored_turn_ids),
@@ -1027,6 +1070,7 @@ class ChessKibitzerRuntime:
             self.learned_leaves = virgin.learned_leaves
             self.archives = virgin.archives
             self.ledger = virgin.ledger
+            self.will_edges = RIGHT_BRAIN_WILL_EDGES
             self.memory = None
             self.diary = SettledDiary()
             self.chord_memory = ChordMemoryBank()
@@ -1055,6 +1099,7 @@ class ChessKibitzerRuntime:
         self.learned_leaves = self._load_default_learned_leaves()
         self.archives = self._load_initial_archives()
         self.ledger = self._load_initial_ledger()
+        self.will_edges = self._load_initial_will_edges()
         self.savored_turn_ids = self._load_initial_savored_ids()
         self.memory = None
         self._load_threads_for_active_lineage()
@@ -1224,6 +1269,7 @@ class ChessKibitzerRuntime:
                 comma_chord_transform=comma_chord_transform,
                 conversation_history=conv_history,
                 lead_with_gap=(room == "chess" and not clause_1_prefix),
+                will_edges=self.will_edges,
             )
         finally:
             if acquired:
@@ -2140,6 +2186,7 @@ class ChessKibitzerRuntime:
             clean_rules = VIRGIN_FOUNDATIONAL_RULES
         self.rules = _ensure_foundational_rules(clean_rules)
         self.bitboard_sleeve = BitboardIntuitionSleeve()
+        self.will_edges = RIGHT_BRAIN_WILL_EDGES
         self.archives = ThreeBranchArchives()
         self.ledger = ContemplationLedger()
         self.diary = SettledDiary()
@@ -2632,10 +2679,13 @@ class ChessKibitzerRuntime:
             ledger=self.ledger,
             hazard_scene_indices=self._hazard_scene_indices,
             ensure_rules_fn=_ensure_foundational_rules,
+            will_edges=self.will_edges,
         )
         self.rules = _ensure_foundational_rules(report.updated_rules)
         if report.updated_learned_leaves:
             self.learned_leaves = tuple(report.updated_learned_leaves)
+        if report.updated_will_edges:
+            self.will_edges = tuple(report.updated_will_edges)
         self._last_minted_leaves = report.minted_leaves
         self.archives = report.updated_archives
         self.ledger = report.updated_ledger

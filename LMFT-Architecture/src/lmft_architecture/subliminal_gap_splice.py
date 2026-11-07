@@ -294,6 +294,73 @@ def score_leaf_anchor_weights_at_birth(
     )
 
 
+def sculpt_learned_leaf_anchor_weights(
+    leaf: LearnedLeaf,
+    avg_coords: Mapping[str, float],
+    avg_ref_coords: Mapping[str, float] | None = None,
+    *,
+    learning_rate: float = 0.12,
+) -> LearnedLeaf:
+    """Contrastively sculpt a dynamic Tier-2 `LearnedLeaf`'s 8 `anchor_weights` during REM Sleep.
+
+    - Protects the 16 frozen Stage 1-5 + Shadow baseline leaves (`_DEFAULT_LEAF_ANCHOR_WEIGHTS`)
+      so Cycle-0 Virgin SHA-256 locks and baseline tests remain byte-identical.
+    - Applies gentle Homeostatic Anchor Decay (`decay = 0.02 * lr`) toward the leaf's topological
+      birth signature (`topo_w`), then sculpts each of the 8 departmental weights proportional to
+      the contrastive deficit `|avg_coords[k] - avg_ref_coords[k]|` (normalizing peak weight to `1.0`).
+    """
+    if leaf.leaf_id in _DEFAULT_LEAF_ANCHOR_WEIGHTS:
+        return leaf
+
+    dept_root = leaf.leaf_id.split("/")[0]
+    dept_prefix = f"{dept_root}/"
+    if dept_prefix not in DEPARTMENT_FOUNDING_ANCHORS:
+        return leaf
+
+    if dept_root == "cultural":
+        dept_keys = CULTURAL_FOUNDING_ORDER + (INTENTION_LEAF, EXECUTION_LEAF)
+    elif dept_root == "philosophical":
+        dept_keys = PHILOSOPHICAL_FOUNDING_ORDER + (THEORY_LEAF, FACT_LEAF)
+    else:
+        dept_keys = EXPERIENTIAL_FOUNDING_ORDER + (CLARITY_LEAF, CONFIDENCE_LEAF)
+
+    topo_w = semantic_child_drawer_signature(
+        leaf.leaf_id,
+        department_prefix=dept_prefix,
+        description=leaf.description,
+        anchor_weights=None,
+    )
+    cur_w = (
+        leaf.anchor_weights
+        if (leaf.anchor_weights is not None and len(leaf.anchor_weights) == DEPARTMENT_CHILD_CHORD_DIM)
+        else topo_w
+    )
+    lr = max(0.01, min(0.35, float(learning_rate)))
+    decay = 0.02 * lr
+
+    sculpted: list[float] = []
+    for i in range(DEPARTMENT_CHILD_CHORD_DIM):
+        k_i = dept_keys[i]
+        act_v = float(avg_coords.get(k_i, 0.50))
+        if avg_ref_coords is not None:
+            ref_v = float(avg_ref_coords.get(k_i, act_v))
+            signal_i = abs(act_v - ref_v)
+        else:
+            signal_i = abs(act_v - 0.50) * 0.50
+        decayed = float(cur_w[i]) + decay * (float(topo_w[i]) - float(cur_w[i]))
+        w_i = max(0.05, min(1.0, decayed + lr * signal_i))
+        sculpted.append(w_i)
+
+    peak = max(sculpted)
+    norm_w = tuple(round(v / peak, 6) for v in sculpted)
+    return LearnedLeaf(
+        parent_branch=leaf.parent_branch,
+        leaf_name=leaf.leaf_name,
+        description=leaf.description,
+        anchor_weights=norm_w,
+    )
+
+
 def pool_departmental_child_chord(
     coordinates: Mapping[str, float],
     *,

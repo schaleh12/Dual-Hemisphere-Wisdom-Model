@@ -1540,3 +1540,49 @@ def test_weight_space_circuit_sculpting_homeostatic_decay_and_clean_cluster_nami
     assert "cultural/efficiency/hazard_high_power_chaos" not in cleaned_tangled[0].target_leaves
 
 
+def test_chess_runtime_will_edges_persistence_and_virgin_lock(tmp_path: Path) -> None:
+    """Verify D066: ChessKibitzerRuntime sculpts and persists `will_edges.json` in Schooled mode while keeping Virgin locked."""
+    from lmft_architecture.right_brain_equilibrium import RIGHT_BRAIN_WILL_EDGES
+
+    state_dir = tmp_path / "d066_will_state"
+    runtime = ChessKibitzerRuntime(
+        state_dir=state_dir,
+        left_brain=_make_mini_left_brain(),
+        lazy_load_gpu=False,
+    )
+    runtime.set_auto_rem_sleep(False)
+    assert runtime.will_edges == RIGHT_BRAIN_WILL_EDGES
+
+    runtime.handle_set_fen("r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 3 3")
+    rev = runtime.sparring_engine.audit_played_move_for_game_review(
+        runtime.board,
+        "Bxf7+",
+        perspective=chess.WHITE,
+    )
+    runtime.handle_chess_move("Bxf7+")
+    last_id = int(runtime.chat_messages[-1]["id"])
+    runtime.flag_turn_for_coaching(
+        last_id,
+        user_note=rev["annotation_summary"],
+        check_auto_sleep=False,
+        is_hazard=True,
+        override_coordinates=rev["played_coordinates"],
+        contrastive_reference_coordinates=rev["contrastive_reference_coordinates"],
+        game_review_annotation=rev["annotation_summary"],
+        played_bitboard_features=rev["played_bitboard_features"],
+        reference_bitboard_features=rev["reference_bitboard_features"],
+    )
+    runtime.handle_run_rem_sleep()
+
+    assert runtime.will_edges != RIGHT_BRAIN_WILL_EDGES
+    assert (state_dir / "will_edges.json").exists()
+
+    # Switching to Virgin locks `will_edges` to `RIGHT_BRAIN_WILL_EDGES`, and switching back restores sculpted edges
+    sculpted_snapshot = runtime.will_edges
+    runtime.switch_brain_lineage("virgin")
+    assert runtime.will_edges == RIGHT_BRAIN_WILL_EDGES
+    runtime.switch_brain_lineage("schooled")
+    assert runtime.will_edges == sculpted_snapshot
+
+
+

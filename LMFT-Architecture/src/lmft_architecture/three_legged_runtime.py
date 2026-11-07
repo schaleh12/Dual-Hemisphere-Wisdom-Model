@@ -40,6 +40,7 @@ import torch
 from torch import Tensor, nn
 
 from .birth import BirthState
+from .propagation import Association
 from .branch_archives import (
     SocialDriftReport,
     ThreeBranchArchives,
@@ -1487,6 +1488,7 @@ def run_three_legged_turn(
     conversation_history: Sequence[tuple[str, str]] = (),
     max_context_chars: int = DEFAULT_MAX_CONTEXT_CHARS,
     lead_with_gap: bool = False,
+    will_edges: Sequence[Association] | None = None,
 ) -> ThreeLeggedTurnResult:
     """Execute one 3-Gear Closed-Loop Dual-Hemisphere Runtime Turn.
 
@@ -1510,6 +1512,7 @@ def run_three_legged_turn(
         contemplation_ledger if contemplation_ledger is not None else ContemplationLedger()
     )
     active_archives = branch_archives if branch_archives is not None else ThreeBranchArchives()
+    active_will_edges = tuple(will_edges) if will_edges is not None else RIGHT_BRAIN_WILL_EDGES
 
     # =========================================================================
     # GEAR 1: Fast Right-Brain Reflex & 3-Branch Deliberation (Fact Locked)
@@ -1536,6 +1539,7 @@ def run_three_legged_turn(
         skipped_child_leaves=skipped_1,
         social_drift=social_drift,
         ratified_chords=active_archives.judicial.ratified_chords,
+        will_edges=active_will_edges,
     )
 
     initial_felt_chord = vibe_1.felt_chord or compile_felt_chord(
@@ -1588,7 +1592,7 @@ def run_three_legged_turn(
             initial_felt_chord,
             sensors,
             active_archives,
-            RIGHT_BRAIN_WILL_EDGES,
+            active_will_edges,
             RIGHT_BRAIN_WILL_VERSION,
             scene_index=scene_index,
             learned_leaves=learned_tuple,
@@ -1623,6 +1627,7 @@ def run_three_legged_turn(
                 skipped_child_leaves=skipped_1,
                 social_drift=social_drift,
                 ratified_chords=active_ratified,
+                will_edges=active_will_edges,
             )
             max_delta_delib = round(
                 max(
@@ -1713,6 +1718,7 @@ def run_three_legged_turn(
                             skipped_child_leaves=skipped_1,
                             social_drift=social_drift,
                             ratified_chords=pass_ratified_chords,
+                            will_edges=active_will_edges,
                         )
                         if comma_prefix.rstrip().endswith((".", "!", "?")):
                             mid_comma_vibe = raw_comma_vibe
@@ -1793,6 +1799,7 @@ def run_three_legged_turn(
                             skipped_child_leaves=skipped_1,
                             social_drift=social_drift,
                             ratified_chords=pass_ratified_chords,
+                            will_edges=active_will_edges,
                         )
                         if (
                             st_vibe.posture in ("SETTLED_EASE", "AT_EASE", "WORDLESS_REFLEX", "THEORY_SYNTHESIS")
@@ -1947,6 +1954,7 @@ def run_three_legged_turn(
                     skipped_child_leaves=skipped_1,
                     social_drift=social_drift,
                     ratified_chords=pass_ratified_chords,
+                    will_edges=active_will_edges,
                 )
 
                 if prev_theory_coords:

@@ -1,11 +1,6 @@
 # LMFT-Architecture — Design Decisions (Rolling 5-Decision Window)
 
-*(Keep only the 5 most recent decisions here, under 80 lines AND 5,000 characters in plain English. Earlier decisions `D001–D060` are archived in `LMFT-Architecture/docs/archive/`.)*
-
-## D061: `Qwen/Qwen3-8B` 4-Bit Left Brain & Two-Tier REM Dream Contemplation (`chess_app.py`, `sleep_consolidation.py`, 2026-11-07)
-- **Context**: `Qwen3-4B` (`2560`-d) had limited poetic depth during REM Sleep, and a 2-sentence reflection could not separately articulate felt tension, structural geometry, and execution for the 3-Branch Archives.
-- **Design Choice**: Trained a 4-bit NF4 `Qwen/Qwen3-8B` (`4096`-d) `SubliminalGapProjector` + `LoRALinear` checkpoint (`models/left_brain_qwen3_8b/`); upgraded `_generate_rem_sleep_self_talk` to emit 2-sentence cat-naps and 4-sentence deep-sleep poems; and added `apply_dream_reflection_to_archives`.
-- **Result**: Verified `5/6` holdout chord-swap shifts (`+0.88` margin, `0.0` unplugged shift) and `37/37` passing tests.
+*(Keep only the 5 most recent decisions here, under 80 lines AND 5,000 characters in plain English. Earlier decisions `D001–D061` are archived in `LMFT-Architecture/docs/archive/`.)*
 
 ## D062: Persistent `past_kv` Streaming, Multi-Stanza Discourse & Longitudinal REM Vows (`three_legged_runtime.py`, `chess_app.py`, 2026-11-07)
 - **Context**: Discarding `past_kv` at every `<|subliminal_gap|>` caused `O(N^2)` prefill overhead, and REM dreams lacked multi-stanza structure or cross-cycle vow tracking.
@@ -26,3 +21,8 @@
 - **Context**: Across 30 games (`852` steps), `BitboardIntuitionSleeve` saturated `order`/`chaos` at `±2.5` while 6 bitboard circuits stayed frozen at birth values, and `_cluster_key_for_unresolved` picked Tier-2 `hazard_*` leaves to produce recursive `hazard_high_hazard_` names and cross-polarity `target_leaves`.
 - **Design Choice**: Threaded `played_bitboard_features` and `reference_bitboard_features` into `distill_post_mortem_scene` to sculpt all 8 `value_weights` and `policy_weights` circuits with gentle homeostatic decay (`0.015 * lr`); restricted `_cluster_key_for_unresolved` to `FOUNDATIONAL_LEAVES`; stripped recursive prefixes in `canonical_cluster_concept_name`; and blocked cross-polarity Tier-2 leaf tangling.
 - **Result**: Verified `56/56` passing tests across `test_chess_app.py`, `test_sleep_consolidation.py`, `test_virgin_baseline.py`, and core suites.
+
+## D066: Core Weight-Space Sculpting (`subliminal_gap_splice.py`, `right_brain_equilibrium.py`, `sleep_consolidation.py`, 2026-11-07)
+- **Context**: In the general `LMFT-Architecture` core, `entrain_existing_cluster_rule` ratcheted `high` thresholds above `0.90` and accumulated `4+` target leaves, `LearnedLeaf.anchor_weights` stayed frozen after birth, and `RIGHT_BRAIN_WILL_EDGES` (`9` Will synapses) never adapted during REM Sleep.
+- **Design Choice**: Updated `entrain_existing_cluster_rule` with polarity preservation, top-3 leaf pruning, and Homeostatic Threshold Decay (`high <= 0.90`, `low <= 0.75`); added `sculpt_learned_leaf_anchor_weights` (preserving the 16 frozen baseline leaves); and added `sculpt_will_edges_during_sleep` (`will_edges.json` in `ChessKibitzerRuntime`, keeping Virgin locked to `RIGHT_BRAIN_WILL_EDGES`).
+- **Result**: Normalized 7 cluster rules within homeostatic bounds and verified all core, chess, and Virgin baseline tests pass.

@@ -22,7 +22,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 import re
-from typing import AbstractSet
+from typing import AbstractSet, Any
 
 from .branch_archives import (
     EXECUTIVE_BRANCH,
@@ -101,6 +101,7 @@ class SleepConsolidationReport:
     updated_ledger: ContemplationLedger
     minted_leaves: tuple[LearnedLeaf, ...] = ()
     updated_learned_leaves: tuple[LearnedLeaf, ...] = ()
+    updated_will_edges: tuple[Any, ...] = ()
 
     def to_dict(self) -> dict:
         return {
@@ -112,6 +113,10 @@ class SleepConsolidationReport:
             "remaining_open_uncertainties": len(self.updated_ledger.active_uncertainties),
             "minted_leaves": [lf.to_dict() for lf in self.minted_leaves],
             "total_learned_leaves_after_sleep": len(self.updated_learned_leaves),
+            "updated_will_edges": [
+                e.to_dict() if hasattr(e, "to_dict") else str(e)
+                for e in self.updated_will_edges
+            ],
         }
 
 
@@ -642,9 +647,18 @@ def run_sleep_consolidation(
     archives_out_dir: str | Path | None = None,
     ledger_out_path: str | Path | None = None,
     banned_substrings: Sequence[str] = (),
+    will_edges: Sequence[Any] | None = None,
 ) -> SleepConsolidationReport:
     """Execute an offline 9B Teacher Sleep-Mode consolidation pass over unresolved Epoch 1 scenes."""
+    from .right_brain_equilibrium import sculpt_will_edges_during_sleep
+    from .subliminal_gap_splice import (
+        _DEFAULT_LEAF_ANCHOR_WEIGHTS,
+        sculpt_learned_leaf_anchor_weights,
+    )
+
     gen_cfg = dict(generation) if generation is not None else {"seed": 42}
+    active_learned_leaves = list(learned_leaves)
+    sculpted_will_edges = sculpt_will_edges_during_sleep(will_edges, unresolved_scenes)
 
     # 1. Refine over-broad Tier-1 rules that collided on Epoch 1 unresolved scenes
     refined_rules, refined_ids = refine_colliding_rules_during_sleep(rules, unresolved_scenes)
@@ -740,6 +754,14 @@ def run_sleep_consolidation(
         forged_rules.append(new_rule)
         existing_names.add(concept_name)
 
+        for lf_idx, lf in enumerate(active_learned_leaves):
+            if lf.leaf_id not in _DEFAULT_LEAF_ANCHOR_WEIGHTS and lf.leaf_id in new_rule.target_leaves:
+                active_learned_leaves[lf_idx] = sculpt_learned_leaf_anchor_weights(
+                    lf,
+                    avg_coords,
+                    avg_ref_coords,
+                )
+
         # File the Teacher-consolidated clauses into the 3 branch archives using observed coordinates
         cult_sig = {k: v for k, v in avg_coords.items() if k.startswith("cultural/")}
         phil_sig = {k: v for k, v in avg_coords.items() if k.startswith("philosophical/")}
@@ -825,7 +847,7 @@ def run_sleep_consolidation(
             )
 
     if ruleset_out_path is not None:
-        save_ruleset(ruleset_out_path, tuple(active_rules), tuple(learned_leaves))
+        save_ruleset(ruleset_out_path, tuple(active_rules), tuple(active_learned_leaves))
     if archives_out_dir is not None:
         cur_archives.save_all(archives_out_dir)
     if ledger_out_path is not None:
@@ -840,7 +862,8 @@ def run_sleep_consolidation(
         updated_archives=cur_archives,
         updated_ledger=ledger,
         minted_leaves=(),
-        updated_learned_leaves=tuple(learned_leaves),
+        updated_learned_leaves=tuple(active_learned_leaves),
+        updated_will_edges=sculpted_will_edges,
     )
 
 
@@ -872,16 +895,56 @@ def entrain_existing_cluster_rule(
     existing: FuzzyConceptRule,
     incoming: FuzzyConceptRule,
     canonical_name: str,
+    *,
+    max_target_leaves: int = 3,
 ) -> FuzzyConceptRule:
-    """Entrain an existing cluster rule with new REM sleep observations (`0.7 * old + 0.3 * new`)."""
-    blended_leaves: dict[str, float] = {}
-    for k, v in incoming.target_leaves.items():
-        if k in existing.target_leaves:
-            blended_leaves[k] = round(0.7 * float(existing.target_leaves[k]) + 0.3 * float(v), 4)
+    """Entrain an existing cluster rule with new REM sleep observations (`0.7 * old + 0.3 * new`) and Homeostatic Threshold Decay."""
+    polarity = (
+        incoming.polarity
+        if getattr(incoming, "polarity", "attractive") != "attractive"
+        else getattr(existing, "polarity", "attractive")
+    )
+    merged_leaves: dict[str, float] = {}
+    all_keys = list(dict.fromkeys(list(existing.target_leaves.keys()) + list(incoming.target_leaves.keys())))
+    for k in all_keys:
+        if k in existing.target_leaves and k in incoming.target_leaves:
+            merged_leaves[k] = round(
+                0.7 * float(existing.target_leaves[k]) + 0.3 * float(incoming.target_leaves[k]),
+                4,
+            )
+        elif k in incoming.target_leaves:
+            merged_leaves[k] = round(float(incoming.target_leaves[k]), 4)
         else:
-            blended_leaves[k] = round(float(v), 4)
-    new_low = round(0.7 * float(existing.low) + 0.3 * float(incoming.low), 4)
-    new_high = round(max(new_low + 0.02, 0.7 * float(existing.high) + 0.3 * float(incoming.high)), 4)
+            merged_leaves[k] = round(float(existing.target_leaves[k]), 4)
+
+    cap = max(2, int(max_target_leaves))
+    if len(merged_leaves) > cap:
+        ranked_keys = sorted(
+            merged_leaves.keys(),
+            key=lambda k: (
+                1 if (k in existing.target_leaves and k in incoming.target_leaves) else 0,
+                round(abs(float(merged_leaves[k]) - 0.50), 4),
+            ),
+            reverse=True,
+        )[:cap]
+        blended_leaves = {k: merged_leaves[k] for k in all_keys if k in ranked_keys}
+    else:
+        blended_leaves = merged_leaves
+
+    has_tier2_or_chaos = any(leaf_tier(k) >= 2 for k in blended_leaves) or (
+        float(blended_leaves.get("philosophical/structure/chaos", 0.0)) >= 0.45
+    )
+    default_low = 0.55 if has_tier2_or_chaos else 0.65
+    default_high = 0.78 if has_tier2_or_chaos else 0.82
+    decay = 0.03
+    decayed_old_low = float(existing.low) + decay * (default_low - float(existing.low))
+    decayed_old_high = float(existing.high) + decay * (default_high - float(existing.high))
+
+    raw_low = 0.7 * decayed_old_low + 0.3 * float(incoming.low)
+    raw_high = 0.7 * decayed_old_high + 0.3 * float(incoming.high)
+    new_low = round(min(0.75, max(0.35, raw_low)), 4)
+    new_high = round(min(0.90, max(new_low + 0.04, raw_high)), 4)
+
     clean_rule_id = (
         existing.rule_id
         if "_cluster_s" not in existing.concept_name
@@ -894,6 +957,7 @@ def entrain_existing_cluster_rule(
         target_leaves=blended_leaves,
         low=new_low,
         high=new_high,
+        polarity=polarity,
     )
 
 
@@ -906,9 +970,11 @@ def consolidate_sleep_clusters_locally(
     ledger: ContemplationLedger,
     hazard_scene_indices: AbstractSet[int] = frozenset(),
     ensure_rules_fn: Callable[[tuple[FuzzyConceptRule, ...]], tuple[FuzzyConceptRule, ...]] | None = None,
+    will_edges: Sequence[Any] | None = None,
 ) -> SleepConsolidationReport:
     """Consolidate queued REM sleep scenes into `hazard_` / `coached_` rules and 3-branch archives without an external 9B Teacher."""
     from .chord_memory import compile_felt_chord
+    from .right_brain_equilibrium import sculpt_will_edges_during_sleep
 
     refined_rules, refined_ids = refine_colliding_rules_during_sleep(rules, queued_scenes)
     active_rules = list(ensure_rules_fn(refined_rules) if ensure_rules_fn is not None else refined_rules)
@@ -983,11 +1049,16 @@ def consolidate_sleep_clusters_locally(
         }
     )
 
-    from .subliminal_gap_splice import score_leaf_anchor_weights_at_birth
+    from .subliminal_gap_splice import (
+        _DEFAULT_LEAF_ANCHOR_WEIGHTS,
+        score_leaf_anchor_weights_at_birth,
+        sculpt_learned_leaf_anchor_weights,
+    )
 
     active_learned_leaves = list(learned_leaves)
     existing_leaf_ids = {lf.leaf_id for lf in active_learned_leaves}
     minted_leaves: list[LearnedLeaf] = []
+    sculpted_will_edges = sculpt_will_edges_during_sleep(will_edges, queued_scenes)
 
     for (ckey, is_group_hazard), group in clusters.items():
         avg_coords = _average_cluster_coordinates(group)
@@ -1099,6 +1170,7 @@ def consolidate_sleep_clusters_locally(
                 default=0.0,
             )
         has_tier1_collision = bool(refined_ids) or any(bool(s.active_concept_collision) for s in group)
+        candidate_leaf_id: str | None = None
         if len(group) >= 2 or max_contrastive_delta >= 0.25 or has_tier1_collision:
             dominant_leaf = max(
                 new_rule.target_leaves.items(),
@@ -1194,6 +1266,19 @@ def consolidate_sleep_clusters_locally(
                     minted_leaves.append(scored_leaf)
                     existing_leaf_ids.add(scored_leaf.leaf_id)
                     avg_coords[scored_leaf.leaf_id] = cluster_signal
+
+        minted_ids_set = {m.leaf_id for m in minted_leaves}
+        for lf_idx, lf in enumerate(active_learned_leaves):
+            if (
+                lf.leaf_id not in _DEFAULT_LEAF_ANCHOR_WEIGHTS
+                and lf.leaf_id not in minted_ids_set
+                and (lf.leaf_id == candidate_leaf_id or lf.leaf_id in new_rule.target_leaves)
+            ):
+                active_learned_leaves[lf_idx] = sculpt_learned_leaf_anchor_weights(
+                    lf,
+                    avg_coords,
+                    avg_ref_coords,
+                )
 
         dup_idx = next(
             (
@@ -1315,6 +1400,7 @@ def consolidate_sleep_clusters_locally(
         updated_ledger=cur_ledger,
         minted_leaves=tuple(minted_leaves),
         updated_learned_leaves=tuple(active_learned_leaves),
+        updated_will_edges=sculpted_will_edges,
     )
 
 

@@ -458,3 +458,173 @@ def test_local_rem_sleep_clean_english_archives_and_discriminative_tier2_leaf_bi
     assert len(child_vec) == 8
     assert max(child_vec) > 0.50
 
+
+def test_core_weight_space_sculpting_upgrades_a_b_c() -> None:
+    """Verify D066 Core Weight-Space Sculpting (#C Rule Entrainment, #A LearnedLeaf Anchor Weights, #B Right-Brain Will Edges)."""
+    from lmft_architecture.birth import create_birth_state
+    from lmft_architecture.neural_bridge_classifiers import DEFAULT_COMPLEX_FEELING_LEAVES
+    from lmft_architecture.reflection_classifier import FOUNDATIONAL_LEAVES, FuzzyConceptRule, LearnedLeaf
+    from lmft_architecture.right_brain_equilibrium import (
+        RIGHT_BRAIN_WILL_EDGES,
+        compile_right_brain_vibe,
+        sculpt_will_edges_during_sleep,
+    )
+    from lmft_architecture.sleep_consolidation import (
+        consolidate_sleep_clusters_locally,
+        entrain_existing_cluster_rule,
+    )
+    from lmft_architecture.subliminal_gap_splice import (
+        _DEFAULT_LEAF_ANCHOR_WEIGHTS,
+        sculpt_learned_leaf_anchor_weights,
+    )
+
+    # 1. Upgrade #C: Contrastive Rule Entrainment & Homeostatic Threshold Unsticking
+    existing_rule = FuzzyConceptRule(
+        rule_id="rule-sleep-hazard_high_power_chaos_cluster",
+        concept_name="hazard_high_power_chaos_cluster",
+        description="Old hazard rule stuck near ceiling.",
+        target_leaves={
+            "cultural/efficiency/wastelessness": 0.25,
+            "cultural/efficiency/power": 0.72,
+            "philosophical/structure/chaos": 0.65,
+            "cultural/justice/fairness": 0.52,
+        },
+        low=0.78,
+        high=0.93,
+        polarity="repulsive",
+    )
+    incoming_rule = FuzzyConceptRule(
+        rule_id="rule-sleep-hazard_high_power_chaos_cluster",
+        concept_name="hazard_high_power_chaos_cluster",
+        description="Updated hazard rule.",
+        target_leaves={
+            "cultural/efficiency/wastelessness": 0.20,
+            "philosophical/structure/chaos": 0.75,
+            "cultural/freedom/needlessness": 0.53,
+        },
+        low=0.74,
+        high=0.91,
+        polarity="repulsive",
+    )
+    entrained = entrain_existing_cluster_rule(
+        existing_rule,
+        incoming_rule,
+        "hazard_high_power_chaos_cluster",
+        max_target_leaves=3,
+    )
+    assert entrained.polarity == "repulsive"
+    assert len(entrained.target_leaves) == 3
+    # Shared keys (`wastelessness` and `chaos`) are prioritized over non-shared keys, and `power` (0.72, extremity 0.22) beats `fairness` (0.52) / `needlessness` (0.53)
+    assert "cultural/efficiency/wastelessness" in entrained.target_leaves
+    assert "philosophical/structure/chaos" in entrained.target_leaves
+    assert "cultural/efficiency/power" in entrained.target_leaves
+    assert entrained.low <= 0.75
+    assert entrained.high <= 0.90
+
+    # 2. Upgrade #A: Frozen Stage 1-5 + Shadow baseline leaves remain untouched; dynamic Tier-2 leaf is sculpted
+    frozen_leaf = DEFAULT_COMPLEX_FEELING_LEAVES[0]
+    assert frozen_leaf.leaf_id in _DEFAULT_LEAF_ANCHOR_WEIGHTS
+    untouched = sculpt_learned_leaf_anchor_weights(
+        frozen_leaf,
+        {"cultural/efficiency/power": 0.95, "cultural/efficiency/wastelessness": 0.05},
+        {"cultural/efficiency/power": 0.10, "cultural/efficiency/wastelessness": 0.90},
+    )
+    assert untouched == frozen_leaf
+
+    dyn_leaf = LearnedLeaf(
+        parent_branch="cultural/efficiency",
+        leaf_name="hazard_high_power_chaos",
+        description="Dynamic tactical overextension leaf.",
+        anchor_weights=(1.0, 0.50, 0.40, 0.40, 0.40, 0.40, 0.50, 0.50),
+    )
+    sculpted_leaf = sculpt_learned_leaf_anchor_weights(
+        dyn_leaf,
+        {"cultural/efficiency/wastelessness": 0.15, "cultural/efficiency/power": 0.80},
+        {"cultural/efficiency/wastelessness": 0.90, "cultural/efficiency/power": 0.50},
+    )
+    assert sculpted_leaf.anchor_weights != dyn_leaf.anchor_weights
+    assert max(sculpted_leaf.anchor_weights) == pytest.approx(1.0)
+    # `wastelessness` is index 1 in cultural department keys; its weight should increase under large contrastive delta
+    assert sculpted_leaf.anchor_weights[1] > dyn_leaf.anchor_weights[1]
+
+    # 3. Upgrade #B: Synaptic Weight-Space Sculpting for `RIGHT_BRAIN_WILL_EDGES`
+    base_coords = {k: 0.50 for k in FOUNDATIONAL_LEAVES}
+    haz_scene = UnresolvedSleepScene(
+        scene_index=21,
+        scenario_text="Impulsive tactical lunge.",
+        external_coordinates={
+            **base_coords,
+            "cultural/efficiency/power": 0.84,
+            "cultural/efficiency/wastelessness": 0.20,
+            "philosophical/structure/chaos": 0.72,
+            "psychological/truth/fact": 0.25,
+            dyn_leaf.leaf_id: 0.82,
+        },
+        felt_chord_notes={},
+        valence=0.25,
+        salience=0.82,
+        arousal=0.85,
+        left_brain_hunch="Lunged too early.",
+        is_hazard=True,
+        contrastive_reference_coordinates={
+            **base_coords,
+            "cultural/efficiency/power": 0.52,
+            "cultural/efficiency/wastelessness": 0.82,
+            "philosophical/structure/chaos": 0.22,
+        },
+    )
+    sculpted_edges = sculpt_will_edges_during_sleep(RIGHT_BRAIN_WILL_EDGES, (haz_scene,))
+    orig_by_id = {e.id: e.weight for e in RIGHT_BRAIN_WILL_EDGES}
+    new_by_id = {e.id: e.weight for e in sculpted_edges}
+    assert new_by_id["rb-will-1"] < orig_by_id["rb-will-1"]
+    assert new_by_id["rb-will-2"] < orig_by_id["rb-will-2"]
+    assert new_by_id["rb-will-8"] < orig_by_id["rb-will-8"]  # Stronger inhibitory Needlessness -> Execution
+
+    birth = create_birth_state("test-d066", birth_event_id="birth-d066", random_seed=42)
+    exp_map = {
+        "experiential/reflection/novelty": 0.45,
+        "experiential/reflection/salience": 0.75,
+        "experiential/phase/valence": 0.55,
+        "experiential/phase/arousal": 0.80,
+        "experiential/synchronization/resonance": 0.60,
+        "experiential/synchronization/entrainment": 0.55,
+    }
+    ext_for_vibe = {
+        k: v
+        for k, v in haz_scene.external_coordinates.items()
+        if not k.startswith("psychological/")
+    }
+    vibe_default, _ = compile_right_brain_vibe(
+        birth,
+        ext_for_vibe,
+        exp_map,
+        (),
+        pass_index=1,
+        event_id="will-default",
+        will_edges=RIGHT_BRAIN_WILL_EDGES,
+    )
+    vibe_sculpted, _ = compile_right_brain_vibe(
+        birth,
+        ext_for_vibe,
+        exp_map,
+        (),
+        pass_index=1,
+        event_id="will-sculpted",
+        will_edges=sculpted_edges,
+    )
+    assert vibe_sculpted.intention < vibe_default.intention
+
+    report = consolidate_sleep_clusters_locally(
+        queued_scenes=(haz_scene,),
+        rules=(),
+        learned_leaves=(frozen_leaf, dyn_leaf),
+        archives=ThreeBranchArchives(),
+        ledger=ContemplationLedger(),
+        will_edges=RIGHT_BRAIN_WILL_EDGES,
+    )
+    assert len(report.updated_will_edges) == len(RIGHT_BRAIN_WILL_EDGES)
+    updated_leaves_by_id = {lf.leaf_id: lf for lf in report.updated_learned_leaves}
+    assert updated_leaves_by_id[frozen_leaf.leaf_id] == frozen_leaf
+    assert updated_leaves_by_id[dyn_leaf.leaf_id].anchor_weights != dyn_leaf.anchor_weights
+
+

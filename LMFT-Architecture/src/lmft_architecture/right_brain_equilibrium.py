@@ -27,13 +27,14 @@ Plain-English architecture:
      (`SELF_RATIONALIZATION_DISSONANCE`).
 """
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 import inspect
 import json
 import math
 from pathlib import Path
 import re
+from typing import Any
 
 from .birth import BirthState
 from .branch_archives import (
@@ -180,6 +181,73 @@ RIGHT_BRAIN_WILL_EDGES = (
     Association("rb-will-7", CONFIDENCE_LEAF, EXECUTION_LEAF, 0.5, 0.5, 0.5, RIGHT_BRAIN_WILL_VERSION, RIGHT_BRAIN_WILL_VERSION),
     Association("rb-will-8", "cultural/freedom/needlessness", EXECUTION_LEAF, -0.8, 0.5, 0.5, RIGHT_BRAIN_WILL_VERSION, RIGHT_BRAIN_WILL_VERSION),
 )
+
+
+def sculpt_will_edges_during_sleep(
+    will_edges: Sequence[Association] | None,
+    unresolved_scenes: Sequence[Any],
+    *,
+    learning_rate: float = 0.06,
+) -> tuple[Association, ...]:
+    """Sculpt the 9 Right-Brain Will synaptic weights during REM Sleep with Homeostatic Anchor Decay."""
+    active_edges = tuple(will_edges) if will_edges is not None else RIGHT_BRAIN_WILL_EDGES
+    if not unresolved_scenes:
+        return active_edges
+
+    lr = max(0.01, min(0.25, float(learning_rate)))
+    decay = 0.02 * lr
+    default_weights = {e.id: float(e.weight) for e in RIGHT_BRAIN_WILL_EDGES}
+    weights = {
+        e.id: float(e.weight) + decay * (default_weights.get(e.id, float(e.weight)) - float(e.weight))
+        for e in active_edges
+    }
+
+    n_scenes = max(1, len(unresolved_scenes))
+    step_lr = lr / math.sqrt(n_scenes)
+    for s in unresolved_scenes:
+        is_haz = bool(getattr(s, "is_hazard", False))
+        coords = getattr(s, "external_coordinates", {}) or {}
+        if is_haz:
+            arousal_val = float(getattr(s, "arousal", 0.50))
+            power_val = float(coords.get("cultural/efficiency/power", 0.50))
+            fact_val = float(coords.get("psychological/truth/fact", 0.40))
+            imp_excess = max(0.0, max(arousal_val, power_val) - fact_val)
+            if "rb-will-1" in weights:
+                weights["rb-will-1"] -= 0.25 * step_lr * imp_excess
+            if "rb-will-2" in weights:
+                weights["rb-will-2"] -= 0.25 * step_lr * imp_excess
+            if "rb-will-5" in weights:
+                weights["rb-will-5"] += 0.35 * step_lr * imp_excess
+            if "rb-will-8" in weights:
+                weights["rb-will-8"] -= 0.30 * step_lr * imp_excess
+        else:
+            if "rb-will-6" in weights:
+                weights["rb-will-6"] += 0.25 * step_lr
+            if "rb-will-7" in weights:
+                weights["rb-will-7"] += 0.25 * step_lr
+
+    sculpted: list[Association] = []
+    for e in active_edges:
+        raw_w = weights.get(e.id, float(e.weight))
+        if e.id in ("rb-will-3", "rb-will-8") or float(e.weight) < 0.0:
+            clamped_w = round(max(-1.0, min(-0.35, raw_w)), 4)
+        else:
+            clamped_w = round(max(0.25, min(1.0, raw_w)), 4)
+        sculpted.append(
+            Association(
+                e.id,
+                e.source_id,
+                e.target_id,
+                clamped_w,
+                e.confidence,
+                e.plasticity,
+                e.created_event_id,
+                e.last_updated_event_id,
+                e.active,
+                e.kind,
+            )
+        )
+    return tuple(sculpted)
 
 
 def _validate_unit_map(
@@ -697,6 +765,7 @@ def compile_right_brain_vibe(
     silence_salience_threshold: float = SILENCE_SALIENCE_THRESHOLD,
     social_drift: SocialDriftReport | None = None,
     ratified_chords: tuple[FuzzyConceptRule, ...] = (),
+    will_edges: Sequence[Association] | None = None,
 ) -> tuple[RightBrainVibe, ContinuousMemoryState]:
     """Compile all 24 founding leaves while keeping external Fact separate from internal Theory."""
     locked_external = dict(external_coords)
@@ -945,10 +1014,11 @@ def compile_right_brain_vibe(
         INTENTION_LEAF: 0.0,
         EXECUTION_LEAF: 0.0,
     }
+    active_will_edges = tuple(will_edges) if will_edges is not None else RIGHT_BRAIN_WILL_EDGES
     propagation = propagate_activation(
         birth_state,
         proposed_memberships,
-        RIGHT_BRAIN_WILL_EDGES,
+        active_will_edges,
         event_id=event_id,
         source_instance=f"pass-{pass_index}",
         relationship_source=RIGHT_BRAIN_WILL_VERSION,
