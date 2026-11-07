@@ -637,7 +637,40 @@ class ChessKibitzerRuntime:
         except Exception:
             return None
 
+    def _prune_ephemeral_history(self, *, max_messages: int = 160, max_turn_records: int = 200) -> None:
+        """Keep `chat_messages` and `_turn_records_by_id` bounded during multi-hour AFK sparring."""
+        protected_ids = {s.scene_index for s in self.sleep_queue} | set(self.savored_turn_ids)
+        if len(self.chat_messages) > max_messages:
+            excess = len(self.chat_messages) - max_messages
+            kept: list[dict[str, Any]] = []
+            dropped = 0
+            for m in self.chat_messages:
+                mid = m.get("id")
+                is_routine_move = (
+                    dropped < excess
+                    and bool(m.get("is_gear_1_fallback"))
+                    and not m.get("coached")
+                    and not m.get("savored")
+                    and not m.get("auto_rem_sleep_receipt")
+                    and mid not in protected_ids
+                )
+                if is_routine_move:
+                    dropped += 1
+                    continue
+                kept.append(m)
+            if len(kept) > max_messages:
+                kept = kept[-max_messages:]
+            self.chat_messages = kept
+
+        if len(self._turn_records_by_id) > max_turn_records:
+            for k in sorted(self._turn_records_by_id.keys()):
+                if len(self._turn_records_by_id) <= max_turn_records:
+                    break
+                if k not in protected_ids:
+                    self._turn_records_by_id.pop(k, None)
+
     def _sync_active_thread_record(self, *, persist: bool = True) -> None:
+        self._prune_ephemeral_history()
         if not self.active_thread_id:
             self.active_thread_id = "thread-1"
         cur = self.threads.get(self.active_thread_id)
@@ -1493,7 +1526,7 @@ class ChessKibitzerRuntime:
                 "savored": False,
             }
         )
-        self._sync_active_thread_record(persist=True)
+        self._sync_active_thread_record(persist=human_turn)
 
         # End-of-Game REM Sleep Surprise Logging for verified human move hazards
         if (
@@ -1534,7 +1567,6 @@ class ChessKibitzerRuntime:
 
     def handle_chess_ai_move(self, *, in_sparring_mode: bool = False) -> dict[str, Any]:
         """Select and play Celestriad's move silently via fast Gear-1 Right-Brain 40-node + bitboard sleeve intuition."""
-        _ = in_sparring_mode
         if self.board.is_game_over() or self.clock_flagged_loser is not None:
             raise ValueError("The game is already over.")
         t_ai_start = time.perf_counter()
@@ -1577,6 +1609,8 @@ class ChessKibitzerRuntime:
             is_human_move=False,
             move_started_at=t_ai_start,
         )
+        if not in_sparring_mode:
+            self._sync_active_thread_record(persist=True)
         arbitration_record = {
             "selection_mode": selection_mode,
             "chosen_move_san": chosen_san,
@@ -2218,7 +2252,7 @@ class ChessKibitzerRuntime:
                 elif not veto_queued:
                     self._hazard_scene_indices.discard(last_scene_id)
                     self.sleep_queue = [s for s in self.sleep_queue if s.scene_index != last_scene_id]
-                self._sync_active_thread_record(persist=True)
+                self._sync_active_thread_record(persist=bool(review["should_queue_for_sleep"]))
             snap = self.get_state_snapshot()
             mover_tag = "LMFT"
         else:
@@ -2243,7 +2277,7 @@ class ChessKibitzerRuntime:
                 if pending_referee_review is not None:
                     self.chat_messages[-1].setdefault("telemetry", {})["sparring_referee_review"] = pending_referee_review
                 self._last_sparring_referee_review = None
-                self._sync_active_thread_record(persist=True)
+                self._sync_active_thread_record(persist=False)
             snap = self.get_state_snapshot()
             mover_tag = f"SparringEngine({self.opponent_target_elo:.0f})"
 

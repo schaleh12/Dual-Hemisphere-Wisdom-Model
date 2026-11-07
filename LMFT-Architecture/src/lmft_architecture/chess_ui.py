@@ -1168,7 +1168,7 @@ function toggleAutoSelfPlay() {
   btn.innerHTML = `<span>⏹ Stop Self-Train</span><small>Oven Running...</small>`;
   pollState();
   stepSelfPlayOnce();
-  autoSelfPlayTimer = setInterval(stepSelfPlayOnce, 2200);
+  autoSelfPlayTimer = setInterval(stepSelfPlayOnce, 900);
 }
 
 async function undoChessMove() { await apiPost("/api/chess/undo", {}); }
