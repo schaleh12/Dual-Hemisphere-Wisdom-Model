@@ -2,8 +2,8 @@
   "schema_version": 1,
   "version": "0.2.0",
   "github_repo": "schaleh12/Dual-Hemisphere-Wisdom-Model",
-  "build_sha256": "d7cac1522ebf33e1e648fbd239b7866682838ae978901a212616e29bd39c4f2f",
-  "build_short_hash": "d7cac1522ebf",
+  "build_sha256": "d11c7fa106f782d5ba44c02490266bb3f5f551ca291f5c2623d6bb98ef1830e1",
+  "build_short_hash": "d11c7fa106f7",
   "files": {
     "src/lmft_architecture/__init__.py": {
       "sha256": "a89f56c2195e87129adbffa5065d8769ea096e13ba98783d217c4d120ee92623",
@@ -90,16 +90,16 @@
       "size_bytes": 3267
     },
     "src/lmft_architecture/chess_app.py": {
-      "sha256": "a48d92077c1c17e54b8c7bb67bf297aa80961d9eeeb0b5c9464d1e5729e882b0",
-      "size_bytes": 128904
+      "sha256": "6f9c43b1200cb8a960d6b2ac3f63bde257f88053c1098fd04d8bbf541f3a00ed",
+      "size_bytes": 130524
     },
     "src/lmft_architecture/chess_kibitz_bridge.py": {
       "sha256": "19dca3effc55f2eaaa1f69571d6f232c3d7ff814a7c5ba1828bf54aeeb6e0d9e",
       "size_bytes": 107062
     },
     "src/lmft_architecture/chess_ui.py": {
-      "sha256": "46045ff41bf8e251bf05671ae5621ac3c25bf9142602263f1a6b5012dccf8909",
-      "size_bytes": 74129
+      "sha256": "b50ba715924a5ee3ac04211ee4b9ae1db4439a79023eb77761db765da894101c",
+      "size_bytes": 74128
     },
     "src/lmft_architecture/chord_memory.py": {
       "sha256": "6714d9c6cd9e0f7ae199e92a44f7371f168f65fb32319260d4b24d0ed1c54a66",
