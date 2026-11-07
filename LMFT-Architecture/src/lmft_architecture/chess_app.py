@@ -9,15 +9,16 @@ Enforces:
    - Reads and writes learned chess wisdom rules, 3-branch archives, contemplation ledger,
      and threads in `outputs/chess_kibitzer_state/` while keeping the `Cycle 0` Virgin
      Baseline strictly read-only.
-2. **Simultaneous Integration in an Objective Harmony (`Pretext -> Subtext -> Context`)**:
-   - **Pretext**: Prior expectation in the sliding conversation history
-     (`format_sliding_conversation_history`), continuously accumulating both human dialogue
-     and spontaneous self-kibitzing notes across moves.
-   - **Subtext**: Live Pass-1 `Fact` from `BoardAnchoredBridgeSensors` (`python-chess`
-     6-Piece/6-Color posture + MiniLM bridges) and the 52-float `SubliminalChordVector`
-     spliced at `<|subliminal_gap|>`.
-   - **Context**: Grounded continuation (`verify_or_ground_chess_moves_in_reply`),
-     spontaneously appended to the live kibitz stream on human moves and AI self-play moves.
+2. **Silent Gear-1 Right-Brain Play & Targeted Left-Brain Self-Talk**:
+   - **During Chess Play**: Moves are selected and played silently in fast Gear-1 Right-Brain
+     intuition (`evaluate_candidate_moves_with_right_brain` + `FuzzyConceptRule`s +
+     `BitboardIntuitionSleeve`) with zero per-move Left-Brain chatter.
+   - **Case A — REM Sleep Self-Talk**: During REM Sleep (`handle_run_rem_sleep`), the Left Brain
+     (`Qwen3-4B`) wakes up to reflect on queued blunders (`??`), brilliancies (`!!`), and coached
+     moments while consolidating new `hazard_` and `coached_` fuzzy rules.
+   - **Case B — Insightful Human Questions**: When a human asks a question in chat
+     (`handle_chat_message`), the Right Brain probes the 40-node Fuzzy Tree and wakes the Left
+     Brain (`1..3` `<|subliminal_gap|>` sentences) with live Pass-2 comma/sentence scoring.
 3. **End-of-Game REM Sleep**:
    - Whenever board reality (`Fact`) collides with the verbal plan (`Theory` unsettled or
      Shadow Pathology warning), logs the surprise to the Contemplation Ledger and
@@ -128,6 +129,7 @@ from .subliminal_gap_splice import SubliminalChordVector
 from .three_legged_runtime import (
     SubliminalGapLeftBrain,
     ThreeLeggedTurnResult,
+    _compile_mid_sentence_comma_vibe,
     run_three_legged_turn,
 )
 from .virgin_baseline import VIRGIN_FOUNDATIONAL_RULES, load_virgin_baseline_state
@@ -2414,7 +2416,7 @@ class ChessKibitzerRuntime:
                         comma_prefix,
                         learned_leaves=self.learned_leaves,
                     )
-                    c_vibe, _ = compile_right_brain_vibe(
+                    raw_c_vibe, _ = compile_right_brain_vibe(
                         self.birth_state,
                         base_coords,
                         exp_coords,
@@ -2426,6 +2428,10 @@ class ChessKibitzerRuntime:
                         internal_theory_coords=c_coords,
                         internal_theory_experiential=c_exp,
                     )
+                    if comma_prefix.rstrip().endswith((".", "!", "?")):
+                        c_vibe = raw_c_vibe
+                    else:
+                        c_vibe = _compile_mid_sentence_comma_vibe(sleep_vibe, raw_c_vibe)
                 else:
                     c_vibe = sleep_vibe
                 c_chord = SubliminalChordVector.from_right_brain_vibe(

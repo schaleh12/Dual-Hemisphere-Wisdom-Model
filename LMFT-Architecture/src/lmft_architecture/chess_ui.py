@@ -843,7 +843,9 @@ async function playHumanMoveAndAutoReply(moveStr) {
       try {
         await playAiMove();
       } finally {
-        if (turnPill) turnPill.textContent = "Your Turn — Click a Piece to Play";
+        if (turnPill && (!lastBoardClockSnap || !lastBoardClockSnap.isGameOver)) {
+          turnPill.textContent = "Your Turn — Click a Piece to Play";
+        }
       }
     }, 180);
   }
@@ -1064,7 +1066,7 @@ function renderState(s) {
     if (t.intuition_override_note) return true;
     const pc = t.player_coaching;
     if (pc && (pc.is_hazard || pc.glyph || (pc.classification && !String(pc.classification).startsWith("SOLID")))) return true;
-    const gr = m.sender === "sparring_opponent" ? (t.sparring_referee_review || t.game_review) : t.game_review;
+    const gr = m.sender === "sparring_opponent" ? null : t.game_review;
     if (gr && (gr.is_hazard || gr.glyph || gr.should_queue_for_sleep || (gr.classification && !String(gr.classification).startsWith("SOLID")))) return true;
     return false;
   });
@@ -1085,7 +1087,8 @@ function renderState(s) {
           ? `<div class="subtext-strip"><span>Pretext turns: ${sub.pretext_turns || 0}</span><span>Subtext Dominant: ${escapeHtml(sub.dominant_piece || "")} (${escapeHtml(sub.dominant_color || "")})</span><span>${escapeHtml(gearLabel)}</span></div>`
           : "";
         const pc = t.player_coaching;
-        const gr = m.sender === "sparring_opponent" ? (t.sparring_referee_review || t.game_review) : null;
+        const nonSolidCompGr = (!pc && t.game_review && (t.game_review.is_hazard || t.game_review.glyph || (t.game_review.classification && !String(t.game_review.classification).startsWith("SOLID")))) ? t.game_review : null;
+        const gr = m.sender === "sparring_opponent" ? (t.sparring_referee_review || t.game_review) : nonSolidCompGr;
         const bannerCls = (pc && pc.is_hazard) || (gr && gr.is_hazard)
           ? "coach-banner haz"
           : ((pc && pc.glyph) || (gr && gr.glyph) ? "coach-banner brill" : "coach-banner");
