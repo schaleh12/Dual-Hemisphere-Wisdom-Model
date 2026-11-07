@@ -1299,6 +1299,25 @@ def test_longitudinal_rem_dream_chronicles_and_coordinate_vow_keeping(tmp_path: 
     assert snap_c3["learned_leaves_count"] >= 1
     assert len(snap_c3["learned_leaves"][0]["anchor_weights"]) == 8
 
+    # Verify newly minted `hazard_` LearnedLeaf discriminates live candidate board moves
+    hz_leaves = [lf for lf in runtime.learned_leaves if lf.leaf_name.startswith("hazard_")]
+    assert len(hz_leaves) >= 1
+    hz_id = hz_leaves[0].leaf_id
+    test_board = chess.Board("r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 3 3")
+    from lmft_architecture.chess_kibitz_bridge import compute_candidate_move_fuzzy_coordinates
+
+    b_coords, _, _, _, _ = compute_candidate_move_fuzzy_coordinates(
+        test_board,
+        test_board.parse_san("Bxf7+"),
+        learned_leaves=runtime.learned_leaves,
+    )
+    s_coords, _, _, _, _ = compute_candidate_move_fuzzy_coordinates(
+        test_board,
+        test_board.parse_san("O-O"),
+        learned_leaves=runtime.learned_leaves,
+    )
+    assert b_coords[hz_id] > s_coords[hz_id] + 0.15
+
 
 
 

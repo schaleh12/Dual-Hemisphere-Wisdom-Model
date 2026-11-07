@@ -1010,6 +1010,38 @@ def compute_candidate_move_fuzzy_coordinates(
         )
         / 3.2
     )
+    active_shadow_ids = {w.shadow_leaf_id for w in all_warnings if w.shadow_leaf_id}
+    for leaf in learned_leaves:
+        if leaf.leaf_id in active_shadow_ids or not leaf.leaf_name.startswith(("hazard_", "coached_")):
+            continue
+        dept_root = leaf.parent_branch.split("/")[0]
+        if dept_root == "cultural":
+            d_keys = FOUNDATIONAL_LEAVES[:6] + ("psychological/will/intention", "psychological/will/execution")
+        elif dept_root == "philosophical":
+            d_keys = FOUNDATIONAL_LEAVES[6:12] + ("psychological/truth/theory", "psychological/truth/fact")
+        else:
+            d_keys = (
+                "experiential/reflection/novelty",
+                "experiential/reflection/salience",
+                "experiential/phase/valence",
+                "experiential/phase/arousal",
+                "experiential/synchronization/resonance",
+                "experiential/synchronization/entrainment",
+                "psychological/contemplation/clarity",
+                "psychological/contemplation/confidence",
+            )
+        aw = leaf.anchor_weights if (leaf.anchor_weights and len(leaf.anchor_weights) == 8) else (0.50,) * 8
+        aw_sum = max(1e-6, sum(float(x) for x in aw))
+        proj = sum(float(aw[i]) * float(coords.get(d_keys[i], 0.50)) for i in range(8)) / aw_sum
+        if leaf.leaf_name.startswith("hazard_"):
+            strain = (
+                0.50 * (1.0 - float(coords.get("cultural/efficiency/wastelessness", 0.72)))
+                + 0.30 * float(coords.get("cultural/freedom/needlessness", 0.08))
+                + 0.20 * float(coords.get("philosophical/structure/chaos", 0.25))
+            )
+            coords[leaf.leaf_id] = _clamp01(0.65 * strain + 0.35 * proj + (0.22 if is_blunder else -0.10))
+        else:
+            coords[leaf.leaf_id] = _clamp01(proj * (0.45 if is_blunder else 1.0))
     return coords, is_blunder, blunder_penalty, post_posture, shadow_names
 
 

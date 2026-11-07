@@ -1054,11 +1054,26 @@ def consolidate_sleep_clusters_locally(
             parent_branch = dominant_leaf.rsplit("/", 1)[0]
             if parent_branch in FOUNDING_PARENT_BRANCHES:
                 raw_val = float(avg_coords.get(dominant_leaf, 0.50))
+                calm_val = float(calm_book_coords.get(dominant_leaf, 0.50))
                 if is_group_hazard and raw_val < 0.50:
                     cluster_signal = min(1.0, round(0.50 + (0.50 - raw_val) + 0.5 * max_contrastive_delta, 4))
+                    calm_baseline_score = round(max(0.0, 0.50 - calm_val), 4)
+                elif is_group_hazard:
+                    cluster_signal = min(1.0, round(max(raw_val, 0.50 + max_contrastive_delta), 4))
+                    calm_baseline_score = round(calm_val, 4)
                 else:
                     cluster_signal = min(1.0, round(max(raw_val, 0.50 + max_contrastive_delta), 4))
-                calm_baseline_score = 0.0
+                    calm_baseline_score = (
+                        round(calm_val, 4)
+                        if (max_contrastive_delta < 0.08 and abs(raw_val - calm_val) < 0.05 and len(group) < 2)
+                        else round(
+                            max(
+                                float(calm_book_coords.get("philosophical/structure/chaos", 0.22)),
+                                float(calm_book_coords.get("cultural/freedom/needlessness", 0.09)),
+                            ),
+                            4,
+                        )
+                    )
                 clean_slug_tail = re.sub(r"[^a-z0-9_]+", "_", ckey.replace("_cluster", "").lower()).strip("_")
                 leaf_slug = f"{prefix}_{clean_slug_tail}"[:36].strip("_")
                 if not re.fullmatch(r"[a-z][a-z0-9_-]{2,40}", leaf_slug):
@@ -1079,12 +1094,47 @@ def consolidate_sleep_clusters_locally(
                             f"Harmonious positional coordination and sustainable initiative across {human_theme} "
                             f"reinforcing long-term structural balance."
                         )
-                    scored_leaf = score_leaf_anchor_weights_at_birth(
+                    base_scored = score_leaf_anchor_weights_at_birth(
                         LearnedLeaf(
                             parent_branch=parent_branch,
                             leaf_name=leaf_slug,
                             description=leaf_desc,
                         )
+                    )
+                    dept_root = parent_branch.split("/")[0]
+                    if dept_root == "cultural":
+                        dept_keys = FOUNDATIONAL_LEAVES[:6] + (
+                            "psychological/will/intention",
+                            "psychological/will/execution",
+                        )
+                    elif dept_root == "philosophical":
+                        dept_keys = FOUNDATIONAL_LEAVES[6:12] + (
+                            "psychological/truth/theory",
+                            "psychological/truth/fact",
+                        )
+                    else:
+                        dept_keys = (
+                            NOVELTY_LEAF,
+                            SALIENCE_LEAF,
+                            VALENCE_LEAF,
+                            AROUSAL_LEAF,
+                            RESONANCE_LEAF,
+                            RETENTION_LEAF,
+                            "psychological/contemplation/clarity",
+                            "psychological/contemplation/confidence",
+                        )
+                    topo_w = base_scored.anchor_weights or (0.50,) * 8
+                    blended_w = [
+                        max(0.05, min(1.0, 0.55 * float(topo_w[i]) + 0.45 * float(avg_coords.get(dept_keys[i], 0.50))))
+                        for i in range(8)
+                    ]
+                    peak_bw = max(blended_w)
+                    norm_w = tuple(round(v / peak_bw, 6) for v in blended_w)
+                    scored_leaf = LearnedLeaf(
+                        parent_branch=parent_branch,
+                        leaf_name=leaf_slug,
+                        description=leaf_desc,
+                        anchor_weights=norm_w,
                     )
                     active_learned_leaves.append(scored_leaf)
                     minted_leaves.append(scored_leaf)
