@@ -120,6 +120,7 @@ from .right_brain_equilibrium import (
 from .runtime_store import atomic_json
 from .sleep_consolidation import (
     UnresolvedSleepScene,
+    apply_dream_reflection_to_archives,
     canonical_cluster_concept_name,
     consolidate_sleep_clusters_locally,
     entrain_existing_cluster_rule,
@@ -335,7 +336,7 @@ def _merge_rulesets(
 
 
 class ChessKibitzerRuntime:
-    """Thread-safe controller for `LMFT-Chess.exe` (Qwen3-4B Chess Wisdom & Self-Kibitzer App)."""
+    """Thread-safe controller for `LMFT-Chess.exe` (Qwen3-8B / 4B Chess Wisdom & Self-Kibitzer App)."""
 
     def __init__(
         self,
@@ -368,6 +369,7 @@ class ChessKibitzerRuntime:
         self.active_lineage = "schooled"
         self.active_checkpoint_label = "Cycle 2 (models/left_brain_lora_cycle2)"
         self.sleep_cycle_index = 2
+        self._resolve_checkpoint_dir()
 
         self.birth_state = birth_state or create_birth_state(
             "lmft-chess-kibitzer",
@@ -1010,6 +1012,7 @@ class ChessKibitzerRuntime:
         else:
             self.left_brain_status = "GEAR_1_ONLY (No LoRA checkpoint found)"
         self.active_checkpoint_label = f"Cycle {self.sleep_cycle_index} (models/left_brain_lora_cycle2)"
+        self._resolve_checkpoint_dir()
         self.rules = self._load_default_rules()
         self.learned_leaves = self._load_default_learned_leaves()
         self.archives = self._load_initial_archives()
@@ -1021,6 +1024,11 @@ class ChessKibitzerRuntime:
         return self.get_state_snapshot()
 
     def _resolve_checkpoint_dir(self) -> Path | None:
+        c_8b = self.training_root / "models" / "left_brain_qwen3_8b"
+        if (c_8b / "corpus_callosum_meta.json").exists():
+            self.active_checkpoint_label = "Cycle 2 (Qwen3-8B · models/left_brain_qwen3_8b)"
+            self.sleep_cycle_index = 2
+            return c_8b
         c2 = self.training_root / "models" / "left_brain_lora_cycle2"
         if (c2 / "corpus_callosum_meta.json").exists():
             self.active_checkpoint_label = "Cycle 2 (models/left_brain_lora_cycle2)"
@@ -2396,6 +2404,8 @@ class ChessKibitzerRuntime:
         self,
         queued_snapshot: tuple[UnresolvedSleepScene, ...],
         forged_rules: tuple[FuzzyConceptRule, ...],
+        *,
+        num_sentences: int = 4,
     ) -> str | None:
         """Let the Left Brain talk to itself during REM sleep about the consolidated scenes and rules."""
         if not queued_snapshot:
@@ -2418,10 +2428,28 @@ class ChessKibitzerRuntime:
                 if review_note and review_note not in clean_scenario
                 else (review_note or clean_scenario)[:240]
             )
-            sleep_prompt = (
-                f"{moment_desc}.{rule_summary} "
-                f"What is the key positional lesson to carry forward from this moment?"
-            )
+            target_sents = max(1, min(6, int(num_sentences)))
+            if target_sents >= 4:
+                extra_moments = [
+                    (s.game_review_annotation or s.scenario_text.split("[Coach note:", 1)[0]).strip()[:110]
+                    for s in queued_snapshot
+                    if s.scene_index != rep.scene_index
+                ][:2]
+                extra_clause = (
+                    f" Other queued moments: {'; '.join(extra_moments)}."
+                    if extra_moments
+                    else ""
+                )
+                sleep_prompt = (
+                    f"{moment_desc}.{extra_clause}{rule_summary} "
+                    f"Reflect deeply across four sentences on why the played move diverged from the best continuation, "
+                    f"how the board's structural balance shifted, and the lasting principle to carry into future games."
+                )
+            else:
+                sleep_prompt = (
+                    f"{moment_desc}.{rule_summary} "
+                    f"What is the key positional lesson to carry forward from this moment?"
+                )
             valid_ext_keys = set(FOUNDATIONAL_LEAVES) | {lf.leaf_id for lf in self.learned_leaves}
             base_coords: dict[str, float] = {k: 0.50 for k in FOUNDATIONAL_LEAVES}
             for lf in self.learned_leaves:
@@ -2500,7 +2528,7 @@ class ChessKibitzerRuntime:
             dream_text, _ = self._qwen_left_brain.generate_with_subliminal_splice(
                 sleep_prompt,
                 sleep_chord,
-                num_sentences=2,
+                num_sentences=target_sents,
                 conversation_history=(),
                 chord_builder_at_comma=_build_sleep_comma_chord,
                 lead_with_gap=True,
@@ -2574,10 +2602,24 @@ class ChessKibitzerRuntime:
                         refined_ids, forged_rules_list, _clause_ids = (
                             self._consolidate_sleep_clusters_locally(queued_snapshot)
                         )
+                    is_deep_sleep = (
+                        not auto_triggered
+                        or self.board.is_game_over(claim_draw=True)
+                        or self.clock_flagged_loser is not None
+                    )
+                    dream_sentences = 4 if is_deep_sleep else 2
                     sleep_self_talk = self._generate_rem_sleep_self_talk(
                         queued_snapshot,
                         forged_rules_list,
+                        num_sentences=dream_sentences,
                     )
+                    if sleep_self_talk:
+                        rep_scene_idx = max(queued_snapshot, key=lambda s: float(s.salience)).scene_index
+                        self.archives = apply_dream_reflection_to_archives(
+                            self.archives,
+                            scene_index=rep_scene_idx,
+                            dream_text=sleep_self_talk,
+                        )
                 else:
                     refined_ids = ()
                 self.last_rem_sleep_self_talk = sleep_self_talk

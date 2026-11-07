@@ -2,8 +2,8 @@
   "schema_version": 1,
   "version": "0.2.0",
   "github_repo": "schaleh12/Dual-Hemisphere-Wisdom-Model",
-  "build_sha256": "79b11cb55ba5d37dad11472592c4bfded51c419f67fdca75ba98d195acd0cd2a",
-  "build_short_hash": "79b11cb55ba5",
+  "build_sha256": "655cc1976f8d157dde2f91fb25d16df473a2e1902a549787b330db54d1aece16",
+  "build_short_hash": "655cc1976f8d",
   "files": {
     "src/lmft_architecture/__init__.py": {
       "sha256": "a89f56c2195e87129adbffa5065d8769ea096e13ba98783d217c4d120ee92623",
@@ -90,8 +90,8 @@
       "size_bytes": 3267
     },
     "src/lmft_architecture/chess_app.py": {
-      "sha256": "03029488472c464736f82aeac68b0437f6307a8a3c5480a5200322747e4fb6bd",
-      "size_bytes": 131283
+      "sha256": "c0774968f870a1cf2da31c54cffb74e7987a3e30506527e3e79e84321e83749a",
+      "size_bytes": 133445
     },
     "src/lmft_architecture/chess_kibitz_bridge.py": {
       "sha256": "19dca3effc55f2eaaa1f69571d6f232c3d7ff814a7c5ba1828bf54aeeb6e0d9e",
@@ -158,8 +158,8 @@
       "size_bytes": 8080
     },
     "src/lmft_architecture/impish_bloodmoon_adapter.py": {
-      "sha256": "a867c5970fb189759e34eb75ece49958314e0e1b719e8f9e9f48d8998e2b56d6",
-      "size_bytes": 24185
+      "sha256": "4b311691626d4c0e2bc59877bcfde460ae8c382c02532ab31b09450bda943b86",
+      "size_bytes": 23725
     },
     "src/lmft_architecture/insufficiency.py": {
       "sha256": "2f0f91b9e286ee4e2042fb23ebc89baba90cfebecdc3e9eb1bb7289c8fc8052c",
@@ -258,8 +258,8 @@
       "size_bytes": 2752
     },
     "src/lmft_architecture/sleep_consolidation.py": {
-      "sha256": "f919c8303641ad3b75485abd7132a49c156e8b8e5ceed9cc3ead9f4ef75c2705",
-      "size_bytes": 46386
+      "sha256": "8e1d69c39ea2dc28d8ec3da47ebc682e1dcf92b6a00d24f28231bbdae3108037",
+      "size_bytes": 48849
     },
     "src/lmft_architecture/subliminal_gap_splice.py": {
       "sha256": "1ef7a8a54a452ae8b0a4525691ec40ad9f581b68a6cf081d1d88c4c68e50ba01",
@@ -286,8 +286,8 @@
       "size_bytes": 2802
     },
     "src/lmft_architecture/three_legged_runtime.py": {
-      "sha256": "e223260246c3909ca7a4cfeb090151f2ec68d0ceaa20e213bd480475fb448fa7",
-      "size_bytes": 64343
+      "sha256": "b54fd4c76f62a352d152521d17c8b7484bbaba17d0e83ac84a654c35dda1760a",
+      "size_bytes": 64395
     },
     "src/lmft_architecture/train_left_brain_lora.py": {
       "sha256": "2769e1ef0007d184a9331874285cc0cb6689a5445a9093a3fadf3c19d7c53622",
@@ -310,8 +310,8 @@
       "size_bytes": 93649374
     },
     "outputs/rem_sleep_consolidated_ruleset.json": {
-      "sha256": "9a618b13ea7b5f32fcde7b1a71c6b121c33260f7ba240bc94f0be3bcc9baae69",
-      "size_bytes": 13732
+      "sha256": "af3841a77ef8d043527577b66ff6385d955c65503cb3abac3431ac9e55967fa3",
+      "size_bytes": 14784
     },
     "outputs/sleep_consolidated_ruleset.json": {
       "sha256": "9cc84ab1183bb399a5dbbe8d586a0d080fbc3d8e84acbe7272d8e493f2b4a52d",

@@ -317,6 +317,8 @@ def train_impish_bloodmoon_callosum_and_lora(
     lora_dropout: float = 0.05,
     num_top_layers: int | None = 16,
     intermediate_size: int = 256,
+    sleep_cycle_index: int = 1,
+    warmup_steps: int = 0,
     load_in_4bit: bool | None = None,
     device: str | torch.device | None = None,
     repo_root: str | Path | None = None,
@@ -345,7 +347,7 @@ def train_impish_bloodmoon_callosum_and_lora(
         if load_in_4bit is not None
         else (
             resolved_device.type == "cuda"
-            and any(tag in resolved_hf_id.lower() for tag in ("12b", "impish_bloodmoon"))
+            and any(tag in resolved_hf_id.lower() for tag in ("8b", "9b", "12b", "impish_bloodmoon"))
         )
     )
 
@@ -433,6 +435,7 @@ def train_impish_bloodmoon_callosum_and_lora(
         epochs=int(epochs),
         lr_projector=float(lr_projector),
         lr_lora=float(lr_lora),
+        warmup_steps=int(warmup_steps),
     )
 
     meta = save_lora_and_callosum_checkpoint(
@@ -440,7 +443,7 @@ def train_impish_bloodmoon_callosum_and_lora(
         model=model,
         projector=projector,
         lora_config=lora_cfg,
-        sleep_cycle_index=1,
+        sleep_cycle_index=int(sleep_cycle_index),
         trained_trajectories_count=len(train_pairs) * 2,
         notes=f"Trained Corpus Callosum + LoRA for {resolved_hf_id} ({len(train_pairs)} contrastive pairs, {epochs} epochs).",
         base_model_id=resolved_hf_id,

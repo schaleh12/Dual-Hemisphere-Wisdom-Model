@@ -95,6 +95,7 @@ from .train_left_brain_lora import (
 )
 
 DEFAULT_QWEN_4B_HF_ID = "Qwen/Qwen3-4B"
+DEFAULT_QWEN_8B_HF_ID = "Qwen/Qwen3-8B"
 DEFAULT_MAX_CONTEXT_CHARS = 12_000
 
 
@@ -343,7 +344,7 @@ class SubliminalGapLeftBrain:
             if load_in_4bit is not None
             else (
                 resolved_device.type == "cuda"
-                and any(tag in resolved_model_id.lower() for tag in ("12b", "impish_bloodmoon"))
+                and any(tag in resolved_model_id.lower() for tag in ("8b", "9b", "12b", "impish_bloodmoon"))
             )
         )
 

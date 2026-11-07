@@ -1125,3 +1125,78 @@ def consolidate_sleep_clusters_locally(
         updated_archives=cur_archives,
         updated_ledger=cur_ledger,
     )
+
+
+def apply_dream_reflection_to_archives(
+    archives: ThreeBranchArchives,
+    *,
+    scene_index: int,
+    dream_text: str,
+) -> ThreeBranchArchives:
+    """Record the Left Brain's multi-sentence REM Dream reflection directly into the 3-Branch Archives."""
+    cleaned = str(dream_text or "").strip()
+    if not cleaned:
+        return archives
+    sentences = [
+        s.strip()
+        for s in re.split(r"(?<=[.!?])\s+", cleaned)
+        if s and s.strip()
+    ]
+    if not sentences:
+        return archives
+
+    if len(sentences) >= 4:
+        exec_sentence = sentences[-1]
+        leg_sentence = f"{sentences[0]} {sentences[1]}".strip()
+        jud_sentence = sentences[2]
+    elif len(sentences) == 3:
+        exec_sentence = sentences[2]
+        leg_sentence = sentences[0]
+        jud_sentence = sentences[1]
+    elif len(sentences) == 2:
+        exec_sentence = sentences[1]
+        leg_sentence = sentences[0]
+        jud_sentence = sentences[1]
+    else:
+        exec_sentence = sentences[0]
+        leg_sentence = sentences[0]
+        jud_sentence = sentences[0]
+
+    from dataclasses import replace
+
+    new_exec_clauses = tuple(
+        replace(c, text=exec_sentence[:220]) if c.source_scene == scene_index else c
+        for c in archives.executive.action_clauses
+    )
+    new_exec_precs = tuple(
+        replace(p, action_summary=exec_sentence[:220]) if p.scene_index == scene_index else p
+        for p in archives.executive.precedents
+    )
+    new_leg_clauses = tuple(
+        replace(c, text=leg_sentence[:220]) if c.source_scene == scene_index else c
+        for c in archives.legislative.feeling_clauses
+    )
+    new_leg_snaps = tuple(
+        replace(s, sensory_snapshot=leg_sentence[:220]) if s.scene_index == scene_index else s
+        for s in archives.legislative.diary_snapshots
+    )
+    new_jud_clauses = tuple(
+        replace(c, text=jud_sentence[:220]) if c.source_scene == scene_index else c
+        for c in archives.judicial.structural_clauses
+    )
+    return ThreeBranchArchives(
+        executive=replace(
+            archives.executive,
+            precedents=new_exec_precs,
+            action_clauses=new_exec_clauses,
+        ),
+        legislative=replace(
+            archives.legislative,
+            diary_snapshots=new_leg_snaps,
+            feeling_clauses=new_leg_clauses,
+        ),
+        judicial=replace(
+            archives.judicial,
+            structural_clauses=new_jud_clauses,
+        ),
+    )

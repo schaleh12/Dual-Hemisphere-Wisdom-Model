@@ -299,3 +299,62 @@ def test_sleep_consolidation_skips_social_drift_vetoed_moderate_fairness_interio
     assert len(report.forged_rules) == 0
     assert teacher.calls == 0
 
+
+
+def test_apply_dream_reflection_to_archives_harvests_four_sentence_poem():
+    """Verify a 4-sentence REM Dream contemplation writes felt, structural, and action sentences into the 3-Branch Archives."""
+    from lmft_architecture.sleep_consolidation import (
+        apply_dream_reflection_to_archives,
+        consolidate_sleep_clusters_locally,
+    )
+
+    unresolved = (
+        UnresolvedSleepScene(
+            scene_index=9,
+            scenario_text="Move 12 (Black): played Bxf2+ instead of O-O.",
+            external_coordinates={
+                "cultural/efficiency/power": 0.78,
+                "cultural/efficiency/wastelessness": 0.22,
+                "cultural/justice/honor": 0.45,
+                "cultural/justice/fairness": 0.48,
+                "philosophical/being/agency": 0.76,
+                "philosophical/structure/order": 0.28,
+                "philosophical/structure/chaos": 0.74,
+            },
+            felt_chord_notes={},
+            valence=0.28,
+            salience=0.82,
+            arousal=0.79,
+            left_brain_hunch="Reckless bishop sacrifice exposed the king.",
+        ),
+    )
+    report = consolidate_sleep_clusters_locally(
+        queued_scenes=unresolved,
+        rules=(),
+        learned_leaves=(),
+        archives=ThreeBranchArchives(),
+        ledger=ContemplationLedger(),
+    )
+    dream_poem = (
+        "A sudden flash of greed drew the bishop into the fire before the fortress was sealed. "
+        "The resulting counter-shock left the uncastled monarch shivering on an open file. "
+        "True structural order requires securing the shelter before igniting a tactical storm. "
+        "Next time we castle first and let calm continuity anchor the attack."
+    )
+    updated = apply_dream_reflection_to_archives(
+        report.updated_archives,
+        scene_index=9,
+        dream_text=dream_poem,
+    )
+    assert any(
+        "sudden flash of greed" in c.text and "shivering on an open file" in c.text
+        for c in updated.legislative.feeling_clauses
+    )
+    assert any(
+        "True structural order requires securing the shelter" in c.text
+        for c in updated.judicial.structural_clauses
+    )
+    assert any(
+        "Next time we castle first" in c.text
+        for c in updated.executive.action_clauses
+    )
