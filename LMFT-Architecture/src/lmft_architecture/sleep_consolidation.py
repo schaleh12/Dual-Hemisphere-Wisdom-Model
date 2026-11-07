@@ -686,7 +686,7 @@ def run_sleep_consolidation(
         if concept_name in existing_names:
             concept_name = f"{concept_name}_{ckey.split('_')[0]}"
 
-        rep_scene = group[0].scene_index
+        rep_scene = max(group, key=lambda s: float(s.salience)).scene_index
         new_rule = FuzzyConceptRule(
             rule_id=f"rule-sleep-s{rep_scene}-{concept_name[:28]}",
             concept_name=concept_name,
@@ -976,7 +976,7 @@ def consolidate_sleep_clusters_locally(
                     target_leaves.pop(bad_k, None)
             if len(target_leaves) < 2:
                 target_leaves["cultural/freedom/needlessness"] = 0.53
-        rep = group[0]
+        rep = max(group, key=lambda s: float(s.salience))
         rep_scene = rep.scene_index
 
         prefix = "hazard" if is_group_hazard else "coached"

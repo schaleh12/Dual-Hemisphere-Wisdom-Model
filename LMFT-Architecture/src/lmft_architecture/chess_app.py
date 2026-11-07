@@ -1052,8 +1052,9 @@ class ChessKibitzerRuntime:
         if self._qwen_left_brain is not None:
             self.left_brain = self._qwen_left_brain
             return
+        is_8b_ckpt = "8b" in str(ckpt_dir).lower()
         self.left_brain_loading = True
-        self.left_brain_status = "LOADING_QWEN_4B..."
+        self.left_brain_status = "LOADING_QWEN_8B..." if is_8b_ckpt else "LOADING_QWEN_4B..."
         try:
             loaded = SubliminalGapLeftBrain.from_checkpoint(
                 ckpt_dir,
@@ -1064,7 +1065,8 @@ class ChessKibitzerRuntime:
             self.left_brain = loaded
             if loaded.callosum_metadata is not None:
                 self.sleep_cycle_index = int(loaded.callosum_metadata.sleep_cycle_index)
-            self.left_brain_status = f"READY (Cycle {self.sleep_cycle_index})"
+            model_tag = "Qwen3-8B · " if is_8b_ckpt else ""
+            self.left_brain_status = f"READY ({model_tag}Cycle {self.sleep_cycle_index})"
         except Exception as exc:
             self.left_brain_status = f"GEAR_1_FALLBACK ({type(exc).__name__}: {exc})"
         finally:
