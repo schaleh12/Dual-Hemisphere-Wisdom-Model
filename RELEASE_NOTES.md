@@ -1,6 +1,16 @@
 # `Celestriad 1.0` (`v0.2.0`) — Dual-Hemisphere Wisdom Model Release
 
-> **▶️ Support the Architect on YouTube:** **[`@imissmydeadcat.74`](https://www.youtube.com/@imissmydeadcat.74)**
+> **▶️ Support the Architect on YouTube:** **[`@imissmydeadcat.74`](https://www.youtube.com/@imissmydeadcat.74)** · **📜 Poetry Portfolio:** **[Imgur Gallery (Schaleh / Marcus Auron)](https://imgur.com/gallery/poetry-portfolio-alias-schaleh-marcus-auron-YU73erI)**
+
+---
+
+## ⬇️ Quick Start — How to Download & Launch (Windows 10 / 11)
+
+1. **Download the Full Release Bundle:** **[`lmft-sanctuary-club-v0.1.0-win64.zip`](https://github.com/schaleh12/Dual-Hemisphere-Wisdom-Model/releases/latest/download/lmft-sanctuary-club-v0.1.0-win64.zip)** *(or click [`Launch-Setup-Wizard.bat`](https://github.com/schaleh12/Dual-Hemisphere-Wisdom-Model/releases/latest/download/Launch-Setup-Wizard.bat) directly under Assets below — it will automatically download and unpack the bundle if needed)*.
+2. **Extract & Run:** Right-click the `.zip` -> **Extract All**, then double-click **`Launch-Setup-Wizard.bat`** (for the 5-page graphical Setup Wizard + Desktop Shortcuts) or **`Launch-LMFT-Chess.bat`** to play right away.
+3. **100% Malwarebytes & Antivirus Friendly:** Contains **zero unsigned `.exe` wrappers** — every script is open, readable plain-text Python (`.py`) running inside the officially signed **Python Software Foundation** interpreter (`pythonw.exe`).
+
+---
 
 ## 📜 *"The Celestial Seal of the way towards life"*
 
@@ -52,7 +62,9 @@ When Celestriad blunders (`??`) or finds a brilliancy (`!!`) against you or its 
 
 ### 4. Visitor-Friendly Quality of Life in This Release
 - **🚀 In-App Space Center Tour**: Click **`🚀 Space Center Tour`** in the top header anytime to explore 6 interactive exhibits explaining how the technology works.
-- **🎵 Under-Board 4-Track Celestriad Jukebox**: Built right below the chessboard with Play/Pause, Prev/Next, and a **`🔊 Mute / 🔇 Muted`** toggle featuring 4 classic tracks (*Forever Rachel*, *The Floating Continent*, *Magitek Research Facility*, and *Schala's Theme Piano*).
+- **🎵 Under-Board 5-Track Celestriad Jukebox + Poetry & Esper Theories**:
+  - Built right below the chessboard with Play/Pause, Prev/Next, and a **`🔊 Mute / 🔇 Muted`** toggle featuring 5 classic tracks (*Forever Rachel*, *The Floating Continent*, *Magitek Research Facility*, *Schala's Theme Piano*, and *Esper World — FFVI*).
+  - Includes one-click buttons right underneath the Jukebox for the **[Poetry Portfolio (Schaleh / Marcus Auron)](https://imgur.com/gallery/poetry-portfolio-alias-schaleh-marcus-auron-YU73erI)** and the in-app **✧ Esper Theories (`The Electro-Gravitational Alphabet of Espers`)** full-resolution chart.
 - **🔄 5-Page Python GUI Setup Wizard (`Launch-Setup-Wizard.bat` / `installer_wizard.py`), Auto-Update & Self-Relaunch**:
   - **100% Antivirus & Malwarebytes Friendly (Zero Unsigned `.EXE` Wrappers)**: Distributed strictly as readable plain-text Python (`.py`) and `.bat` launchers running inside the officially signed **Python Software Foundation** interpreter (`pythonw.exe`), with zero opaque `.exe` wrappers.
   - Run `Launch-Setup-Wizard.bat` for the 5-step graphical setup, Windows Defender verification, Google Antigravity detection + custom hardware system prompt, and Arecibo Reply Desktop Shortcut creation, or run `Launch-LMFT-Chess.bat` directly.
