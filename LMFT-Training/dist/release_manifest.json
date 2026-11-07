@@ -2,8 +2,8 @@
   "schema_version": 1,
   "version": "0.2.0",
   "github_repo": "schaleh12/Dual-Hemisphere-Wisdom-Model",
-  "build_sha256": "e33655c9ebadaf4ed2f7acad4822363cd95fda09cd6db9095757ad859da58b16",
-  "build_short_hash": "e33655c9ebad",
+  "build_sha256": "3c350e93c2f0178b5e6bb1312fec4ff33ab6bb725d06e50bd59a73516353162c",
+  "build_short_hash": "3c350e93c2f0",
   "files": {
     "src/lmft_architecture/__init__.py": {
       "sha256": "a89f56c2195e87129adbffa5065d8769ea096e13ba98783d217c4d120ee92623",
@@ -90,16 +90,16 @@
       "size_bytes": 3267
     },
     "src/lmft_architecture/chess_app.py": {
-      "sha256": "a9ada8bcc764621483f595f2ac306f5fbcf72de2be06ab88c0748fb4621fa329",
-      "size_bytes": 167459
+      "sha256": "e0111029fd7ad751a01414537d802b7af251b0118c5b435a141a0a8dfcf3bc20",
+      "size_bytes": 168322
     },
     "src/lmft_architecture/chess_kibitz_bridge.py": {
       "sha256": "34049903ca933e1a4eb152196a668316b25381fdc23c47912bde76a406ea5dbf",
       "size_bytes": 110731
     },
     "src/lmft_architecture/chess_ui.py": {
-      "sha256": "2ded6c9e2f1f70dbcf4947e7aa991ec91583035a3b28cc81126352a24dd4bebe",
-      "size_bytes": 97174
+      "sha256": "b6b96afce4056ca8389506f89be0aba7524b8ea4ffa4dcdba16a0ec60140f90d",
+      "size_bytes": 97643
     },
     "src/lmft_architecture/chord_memory.py": {
       "sha256": "6714d9c6cd9e0f7ae199e92a44f7371f168f65fb32319260d4b24d0ed1c54a66",
@@ -154,8 +154,8 @@
       "size_bytes": 23245
     },
     "src/lmft_architecture/github_auto_sync.py": {
-      "sha256": "ac62205d4f7e0202036b9b84a4177d143a4e837bdb10beaf210e4b31c86d109d",
-      "size_bytes": 10170
+      "sha256": "b22df36d4f36d52fee2fca9287c02d1363d0f8bac6164849e113a0c577872626",
+      "size_bytes": 10236
     },
     "src/lmft_architecture/impish_bloodmoon_adapter.py": {
       "sha256": "4b311691626d4c0e2bc59877bcfde460ae8c382c02532ab31b09450bda943b86",
@@ -304,6 +304,10 @@
     "docs/assets/celestial_seal_poem.jpg": {
       "sha256": "a2d98ba6b0adffd354c56e7f4d7ca574332c6d3683e407c7351463f7b69de113",
       "size_bytes": 96030
+    },
+    "docs/assets/icy_sea_board.png": {
+      "sha256": "b07921ca997ae19fa485a67f1e631ec73706ca8e01ae41d0012ad2502a56d1e8",
+      "size_bytes": 228883
     },
     "outputs/rem_sleep_consolidated_ruleset.json": {
       "sha256": "7c27ad395cf32d53e8c771cf263477111fc55e9834b00dc7c2f4358d189c7c71",

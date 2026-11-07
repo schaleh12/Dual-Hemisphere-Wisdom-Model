@@ -331,6 +331,20 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
     --sq-light: #dce6f2;
     --sq-dark: #4b7399;
     --sq-hl: rgba(56, 189, 248, 0.44);
+    background-color: #4b7399;
+    background-image: url("/assets/icy_sea_board.png"), url("https://images.chesscomfiles.com/chess-themes/boards/icy_sea/150.png");
+    background-size: 100% 100%;
+    background-position: center;
+    background-repeat: no-repeat;
+    border-color: #2b445e;
+  }
+  .board-frame.theme-icy .sq.light {
+    background: transparent;
+    color: #4b7399;
+  }
+  .board-frame.theme-icy .sq.dark {
+    background: transparent;
+    color: #dce6f2;
   }
   .board-frame.theme-green {
     --sq-light: #eeeed2;

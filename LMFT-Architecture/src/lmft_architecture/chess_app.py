@@ -3363,6 +3363,21 @@ def create_chess_http_server(
                     self.end_headers()
                     self.wfile.write(img_bytes)
                     return
+            if self.path.startswith("/assets/icy_sea_board.png"):
+                board_img = runtime.repo_root / "docs" / "assets" / "icy_sea_board.png"
+                if not board_img.exists():
+                    from lmft_architecture.workspace_paths import resolve_arch_root
+
+                    board_img = resolve_arch_root() / "docs" / "assets" / "icy_sea_board.png"
+                if board_img.exists():
+                    img_bytes = board_img.read_bytes()
+                    self.send_response(int(HTTPStatus.OK))
+                    self.send_header("Content-Type", "image/png")
+                    self.send_header("Cache-Control", "public, max-age=3600")
+                    self.send_header("Content-Length", str(len(img_bytes)))
+                    self.end_headers()
+                    self.wfile.write(img_bytes)
+                    return
             if self.path == "/api/state":
                 self._send_json(runtime.get_state_snapshot())
                 return

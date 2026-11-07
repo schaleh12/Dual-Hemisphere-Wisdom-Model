@@ -58,9 +58,13 @@ def build_release_zip(
                 include_pairs.append((root_file, p))
                 break
 
-    poem_asset = arch_root / "docs" / "assets" / "celestial_seal_poem.jpg"
-    if poem_asset.exists():
-        include_pairs.append(("docs/assets/celestial_seal_poem.jpg", poem_asset))
+    for asset_rel in (
+        "docs/assets/celestial_seal_poem.jpg",
+        "docs/assets/icy_sea_board.png",
+    ):
+        asset_path = arch_root / asset_rel
+        if asset_path.exists():
+            include_pairs.append((asset_rel, asset_path))
 
     for py_file in sorted((arch_root / "src" / "lmft_architecture").rglob("*")):
         if py_file.is_file() and py_file.suffix in (".py", ".enc"):

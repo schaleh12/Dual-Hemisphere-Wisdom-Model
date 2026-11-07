@@ -352,6 +352,11 @@ def test_http_server_threads_sync_and_release_bundle(tmp_path: Path) -> None:
             assert img_resp.status == 200
             assert img_resp.headers.get("Content-Type") == "image/jpeg"
             assert len(img_bytes) > 50_000
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/assets/icy_sea_board.png", timeout=5) as board_resp:
+            board_bytes = board_resp.read()
+            assert board_resp.status == 200
+            assert board_resp.headers.get("Content-Type") == "image/png"
+            assert len(board_bytes) > 100_000
     finally:
         server.shutdown()
         server.server_close()

@@ -110,9 +110,13 @@ def build_release_manifest(
         for py_path in sorted(src_dir.glob("*.py")):
             rel_str = _normalize_rel_path(py_path.resolve().relative_to(arch_root))
             candidate_pairs.append((rel_str, py_path))
-    poem_asset = arch_root / "docs" / "assets" / "celestial_seal_poem.jpg"
-    if poem_asset.exists():
-        candidate_pairs.append(("docs/assets/celestial_seal_poem.jpg", poem_asset))
+    for asset_rel in (
+        "docs/assets/celestial_seal_poem.jpg",
+        "docs/assets/icy_sea_board.png",
+    ):
+        asset_path = arch_root / asset_rel
+        if asset_path.exists():
+            candidate_pairs.append((asset_rel, asset_path))
     for rel_extra in SHARED_RELEASE_SEED_PATHS:
         extra = train_root / rel_extra
         if extra.exists():
