@@ -1158,6 +1158,109 @@ def test_speaker_attribution_and_clean_slate_reset(tmp_path: Path) -> None:
     assert snap_reset["elo"]["lmft_elo"] == 1000.0
     assert runtime.bitboard_sleeve.steps_distilled == 0
     assert all(not r.concept_name.startswith(("hazard_", "coached_")) for r in runtime.rules)
+    assert snap_reset["rem_dream_chronicles"] == []
+
+
+def test_longitudinal_rem_dream_chronicles_and_coordinate_vow_keeping(tmp_path: Path) -> None:
+    """Verify multi-stanza REM dream chronicles and pure coordinate vow-tracking (`NEW_VOW` -> `BROKEN` -> `HONORED`)."""
+    state_dir = tmp_path / "dream_chronicles_state"
+    left_brain = _make_mini_left_brain()
+    runtime = ChessKibitzerRuntime(
+        state_dir=state_dir,
+        left_brain=left_brain,
+        lazy_load_gpu=False,
+    )
+    runtime.set_auto_rem_sleep(False)
+
+    # Cycle 1: Queue two distinct tactical scenes so Deep REM Sleep generates a 2-stanza Match Chronicle (`NEW_VOW`)
+    runtime.handle_set_fen("r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 3 3")
+    blunder_rev = runtime.sparring_engine.audit_played_move_for_game_review(
+        runtime.board,
+        "Bxf7+",
+        perspective=chess.WHITE,
+    )
+    runtime.handle_chess_move("Bxf7+")
+    id_1 = int(runtime.chat_messages[-1]["id"])
+    runtime.flag_turn_for_coaching(
+        id_1,
+        user_note=blunder_rev["annotation_summary"],
+        check_auto_sleep=False,
+        is_hazard=True,
+        override_coordinates=blunder_rev["played_coordinates"],
+        contrastive_reference_coordinates=blunder_rev["contrastive_reference_coordinates"],
+        game_review_annotation=blunder_rev["annotation_summary"],
+    )
+    runtime.handle_chess_move("Kxf7")
+    id_2 = int(runtime.chat_messages[-1]["id"])
+    runtime.flag_turn_for_coaching(
+        id_2,
+        user_note="King shelter disrupted after recapture.",
+        check_auto_sleep=False,
+        is_hazard=False,
+    )
+
+    snap_c1 = runtime.handle_run_rem_sleep()
+    chronicles_1 = snap_c1["rem_dream_chronicles"]
+    assert len(chronicles_1) == 1
+    assert chronicles_1[0]["vow_outcome"] == "NEW_VOW"
+    assert len(chronicles_1[0]["stanzas"]) == 2
+    assert "\n\n" in (snap_c1["last_rem_sleep_self_talk"] or "")
+    assert len(chronicles_1[0]["vowed_leaves"]) >= 1
+    assert chronicles_1[0]["vow_sentence"]
+
+    # Cycle 2: Repeat the same blunder on the vowed coordinate leaves -> `vow_outcome == "BROKEN"`
+    runtime.handle_set_fen("r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 3 3")
+    runtime.handle_chess_move("Bxf7+")
+    id_3 = int(runtime.chat_messages[-1]["id"])
+    runtime.flag_turn_for_coaching(
+        id_3,
+        user_note=blunder_rev["annotation_summary"],
+        check_auto_sleep=False,
+        is_hazard=True,
+        override_coordinates=blunder_rev["played_coordinates"],
+        contrastive_reference_coordinates=blunder_rev["contrastive_reference_coordinates"],
+        game_review_annotation=blunder_rev["annotation_summary"],
+    )
+    snap_c2 = runtime.handle_run_rem_sleep()
+    chronicles_2 = snap_c2["rem_dream_chronicles"]
+    assert len(chronicles_2) == 2
+    assert chronicles_2[-1]["vow_outcome"] == "BROKEN"
+    assert len(chronicles_2[-1]["vow_overlap_leaves"]) >= 1
+    assert "Longitudinal Dream Vow Status: BROKEN" in snap_c2["last_rem_sleep_receipt"]
+
+    # Cycle 3: Play a sound castling move (`O-O`) with `is_hazard=False` -> `vow_outcome == "HONORED"`
+    runtime.handle_set_fen("r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 3 3")
+    sound_rev = runtime.sparring_engine.audit_played_move_for_game_review(
+        runtime.board,
+        "O-O",
+        perspective=chess.WHITE,
+    )
+    runtime.handle_chess_move("O-O")
+    id_4 = int(runtime.chat_messages[-1]["id"])
+    runtime.flag_turn_for_coaching(
+        id_4,
+        user_note="Castled safely to honor King shelter.",
+        check_auto_sleep=False,
+        is_hazard=False,
+        override_coordinates=sound_rev["played_coordinates"],
+        contrastive_reference_coordinates=sound_rev["contrastive_reference_coordinates"],
+        game_review_annotation="[! GREAT_MOVE]: Castled safely.",
+    )
+    snap_c3 = runtime.handle_run_rem_sleep()
+    chronicles_3 = snap_c3["rem_dream_chronicles"]
+    assert len(chronicles_3) == 3
+    assert chronicles_3[-1]["vow_outcome"] == "HONORED"
+    assert "Longitudinal Dream Vow Status: HONORED" in snap_c3["last_rem_sleep_receipt"]
+
+    # Verify persistence across restart in `club_meta.json`
+    reloaded = ChessKibitzerRuntime(
+        state_dir=state_dir,
+        left_brain=left_brain,
+        lazy_load_gpu=False,
+    )
+    assert len(reloaded.rem_dream_chronicles) == 3
+    assert reloaded.rem_dream_chronicles[-1]["vow_outcome"] == "HONORED"
+
 
 
 

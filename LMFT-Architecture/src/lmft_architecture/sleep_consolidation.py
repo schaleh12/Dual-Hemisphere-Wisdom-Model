@@ -1200,3 +1200,17 @@ def apply_dream_reflection_to_archives(
             structural_clauses=new_jud_clauses,
         ),
     )
+
+
+def extract_dream_vow_sentence(dream_text: str) -> str:
+    """Return the final Executive vow/takeaway sentence from a REM dream stanza or chronicle."""
+    cleaned = " ".join(str(dream_text or "").split()).strip()
+    if not cleaned:
+        return ""
+    sentences = [
+        s.strip()
+        for s in re.split(r"(?<=[.!?])\s+", cleaned)
+        if s and s.strip()
+    ]
+    return sentences[-1] if sentences else cleaned
+

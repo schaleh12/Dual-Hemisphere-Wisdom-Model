@@ -31,7 +31,7 @@ directions in the LLM prompt:
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 import re
@@ -61,6 +61,7 @@ from .contemplation_ledger import (
 )
 from .reflection_classifier import (
     ContinuousMemoryState,
+    FOUNDATIONAL_LEAVES,
     FuzzyConceptRule,
     LearnedLeaf,
 )
@@ -82,6 +83,9 @@ from .right_brain_equilibrium import (
 )
 from .sleep_consolidation import UnresolvedSleepScene
 from .subliminal_gap_splice import (
+    CULTURAL_FOUNDING_ORDER,
+    EXPERIENTIAL_FOUNDING_ORDER,
+    PHILOSOPHICAL_FOUNDING_ORDER,
     SUBLIMINAL_GAP_TOKEN,
     CorpusCallosumMetadata,
     SubliminalChordVector,
@@ -518,6 +522,21 @@ class SubliminalGapLeftBrain:
         tok_ids = self.tokenizer.encode(" " + cleaned, add_special_tokens=False)
         if not tok_ids:
             tok_ids = self.tokenizer.encode(cleaned, add_special_tokens=False)
+        if not tok_ids:
+            return torch.empty((1, 0, hidden_size), dtype=embed_dtype, device=self.device)
+        num_emb = int(embed_layer.weight.shape[0])
+        safe_ids = [int(t) if 0 <= int(t) < num_emb else 0 for t in tok_ids]
+        id_tensor = torch.tensor([safe_ids], dtype=torch.long, device=self.device)
+        return embed_layer(id_tensor).to(dtype=embed_dtype)
+
+    def _encode_stanza_break_embeds(self) -> Tensor:
+        """Encode a paragraph break (`'\\n\\n'`) into `[1, K, H]` embeddings for multi-stanza streaming."""
+        embed_layer = self.model.get_input_embeddings()
+        embed_dtype = next(embed_layer.parameters()).dtype
+        hidden_size = int(embed_layer.weight.shape[1])
+        tok_ids = self.tokenizer.encode("\n\n", add_special_tokens=False)
+        if not tok_ids:
+            tok_ids = self.tokenizer.encode("\n", add_special_tokens=False)
         if not tok_ids:
             return torch.empty((1, 0, hidden_size), dtype=embed_dtype, device=self.device)
         num_emb = int(embed_layer.weight.shape[0])
@@ -970,6 +989,128 @@ class SubliminalGapLeftBrain:
                 except Exception:
                     pass
 
+    @torch.no_grad()
+    def generate_multi_stanza_discourse(
+        self,
+        scenario_text: str,
+        chord: SubliminalChordVector | None = None,
+        *,
+        max_stanzas: int = 2,
+        sentences_per_stanza: int = 3,
+        pass_index: int = 2,
+        clause_1_prefix: str | None = None,
+        conversation_history: Sequence[tuple[str, str]] = (),
+        max_context_chars: int = DEFAULT_MAX_CONTEXT_CHARS,
+        chord_builder_at_comma: Callable[
+            [str],
+            SubliminalChordVector | tuple[SubliminalChordVector, str | None, tuple[str, ...]],
+        ]
+        | None = None,
+        stanza_boundary_callback: Callable[
+            [int, str, str],
+            tuple[bool, SubliminalChordVector | None],
+        ]
+        | None = None,
+        lead_with_gap: bool = False,
+    ) -> tuple[str, tuple[str, ...], tuple[SplicedThoughtTrace, ...]]:
+        """Generate `1..max_stanzas` stanzas (`sentences_per_stanza` sentences each) joined by `\\n\\n` over a single persistent `past_kv` cache."""
+        stanza_limit = int(max_stanzas)
+        sent_per_stanza = int(sentences_per_stanza)
+        if not (1 <= stanza_limit <= 4):
+            raise ValueError(f"max_stanzas must be in [1, 4], got {max_stanzas!r}")
+        if not (1 <= sent_per_stanza <= 6):
+            raise ValueError(f"sentences_per_stanza must be in [1, 6], got {sentences_per_stanza!r}")
+
+        history_prefix = format_sliding_conversation_history(
+            conversation_history,
+            max_context_chars=max_context_chars,
+        )
+        history_block = f"{history_prefix}\n" if history_prefix else ""
+        base_prompt = f"{history_block}User: {scenario_text.strip()}\nAssistant:"
+        stream_state = self._init_turn_stream_state(base_prompt)
+        completed_stanzas: list[str] = []
+        all_traces: list[SplicedThoughtTrace] = []
+        active_stanza_chord: SubliminalChordVector | None = chord
+        chord_rotated_for_stanza = False
+        try:
+            for stanza_idx in range(stanza_limit):
+                if stanza_idx > 0 and stream_state is not None:
+                    _append_pending_embeds(stream_state, self._encode_stanza_break_embeds())
+                stanza_sentences: list[str] = []
+                for sent_idx in range(sent_per_stanza):
+                    prior_parts = list(completed_stanzas)
+                    if stanza_sentences:
+                        prior_parts.append(" ".join(stanza_sentences))
+                    prior_text = "\n\n".join(prior_parts).strip()
+                    override_c1 = clause_1_prefix if (stanza_idx == 0 and sent_idx == 0) else None
+                    use_rotated_chord = (
+                        stanza_idx > 0
+                        and sent_idx == 0
+                        and chord_rotated_for_stanza
+                        and active_stanza_chord is not None
+                    )
+                    trace = self.generate_two_clause_thought(
+                        scenario_text,
+                        chord=active_stanza_chord,
+                        pass_index=pass_index,
+                        clause_1_prefix=override_c1,
+                        prior_assistant_text=prior_text,
+                        conversation_history=conversation_history,
+                        max_context_chars=max_context_chars,
+                        chord_builder_at_comma=None if use_rotated_chord else chord_builder_at_comma,
+                        lead_with_gap=lead_with_gap,
+                        _stream_state=stream_state,
+                    )
+                    vocab_len = len(self.tokenizer) if hasattr(self.tokenizer, "__len__") else 0
+                    if vocab_len > 1000 and (stanza_sentences or completed_stanzas):
+                        cand_words = set(re.findall(r"[a-z0-9]+", trace.full_thought.lower()))
+                        is_dup = False
+                        prior_all_sents = [t.full_thought for t in all_traces]
+                        for prev in prior_all_sents:
+                            if trace.full_thought.strip().lower() == prev.strip().lower():
+                                is_dup = True
+                                break
+                            prev_words = set(re.findall(r"[a-z0-9]+", prev.lower()))
+                            if cand_words and prev_words:
+                                overlap = len(cand_words & prev_words) / max(1, min(len(cand_words), len(prev_words)))
+                                if overlap >= 0.72:
+                                    is_dup = True
+                                    break
+                        if is_dup and stanza_sentences:
+                            break
+                    stanza_sentences.append(trace.full_thought)
+                    all_traces.append(trace)
+
+                stanza_text = " ".join(stanza_sentences).strip()
+                if stanza_text:
+                    completed_stanzas.append(stanza_text)
+                cumulative_text = "\n\n".join(completed_stanzas).strip()
+                if stanza_idx + 1 >= stanza_limit:
+                    break
+                chord_rotated_for_stanza = False
+                if stanza_boundary_callback is not None:
+                    should_stop, next_chord = stanza_boundary_callback(
+                        stanza_idx,
+                        stanza_text,
+                        cumulative_text,
+                    )
+                    if should_stop:
+                        break
+                    if next_chord is not None:
+                        active_stanza_chord = next_chord
+                        chord_rotated_for_stanza = True
+            self.last_sentence_count = len(all_traces)
+            return "\n\n".join(completed_stanzas).strip(), tuple(completed_stanzas), tuple(all_traces)
+        finally:
+            if stream_state is not None:
+                stream_state.past_kv = None
+            if self.device.type == "cuda" and torch.cuda.is_available():
+                try:
+                    if torch.cuda.memory_reserved(self.device) > 11 * (1024**3):
+                        torch.cuda.empty_cache()
+                except Exception:
+                    pass
+
 
 @dataclass(frozen=True)
 class ThreeLeggedTurnResult:
@@ -1120,6 +1261,89 @@ def _compile_mid_sentence_comma_vibe(
     )
 
 
+def compute_stanza_residual_chord(
+    birth_state: BirthState,
+    external_coords: Mapping[str, float],
+    stanza_theory_coords: Mapping[str, float],
+    stanza_vibe: RightBrainVibe,
+    stanza_index: int = 1,
+    *,
+    deliberation: ThreeClassifierDeliberation | None = None,
+    social_drift: SocialDriftReport | None = None,
+    learned_leaves: Sequence[LearnedLeaf] = (),
+) -> SubliminalChordVector:
+    """Compute the next stanza's `SubliminalChordVector` from true coordinate deficits across the 24 Founding Leaves.
+
+    - Zero fake dissonance spikes (`AGENTS.md` Rule 4): shifts departmental weights strictly
+      proportionally to `deficit[k] = max(0.0, float(external_coords[k]) - float(stanza_theory_coords[k]))`
+      and genuine `stanza_vibe.self_registry.dissonance_notes`.
+    - Natural 3-Branch stanza rotation (`Legislative/Feeler -> Judicial/Thinker -> Executive/Do-er`)
+      weighted by each branch's actual neglected coordinate deficit.
+    """
+    _ = birth_state
+    base_chord = SubliminalChordVector.from_right_brain_vibe(
+        stanza_vibe,
+        deliberation=deliberation,
+        social_drift=social_drift,
+        learned_leaves=learned_leaves,
+    )
+    deficits: dict[str, float] = {}
+    all_founding = (
+        CULTURAL_FOUNDING_ORDER
+        + PHILOSOPHICAL_FOUNDING_ORDER
+        + EXPERIENTIAL_FOUNDING_ORDER
+    )
+    for k in all_founding:
+        ext_val = float(external_coords.get(k, stanza_vibe.coordinates.get(k, 0.0)))
+        th_val = float(stanza_theory_coords.get(k, 0.0))
+        deficits[k] = max(0.0, ext_val - th_val)
+
+    feeler_def = sum(deficits[k] for k in EXPERIENTIAL_FOUNDING_ORDER) / len(EXPERIENTIAL_FOUNDING_ORDER)
+    thinker_def = sum(deficits[k] for k in PHILOSOPHICAL_FOUNDING_ORDER) / len(PHILOSOPHICAL_FOUNDING_ORDER)
+    doer_def = sum(deficits[k] for k in CULTURAL_FOUNDING_ORDER) / len(CULTURAL_FOUNDING_ORDER)
+    max_def = max(deficits.values(), default=0.0)
+
+    if int(stanza_index) <= 0:
+        feeler_w, thinker_w, doer_w = 0.65, 0.35, 0.25
+    elif int(stanza_index) == 1:
+        feeler_w, thinker_w, doer_w = 0.30, 0.70, 0.40
+    else:
+        feeler_w, thinker_w, doer_w = 0.25, 0.40, 0.75
+
+    doer_list = list(base_chord.doer_vector)
+    for idx, k in enumerate(CULTURAL_FOUNDING_ORDER):
+        doer_list[idx] = round(min(1.0, max(0.0, doer_list[idx] + doer_w * deficits[k])), 6)
+    if int(stanza_index) >= 2:
+        action_pull = 0.55 * max(doer_def, thinker_def)
+        doer_list[6] = round(min(1.0, max(0.0, doer_list[6] + action_pull)), 6)
+        doer_list[7] = round(min(1.0, max(0.0, doer_list[7] + action_pull)), 6)
+
+    thinker_list = list(base_chord.thinker_vector)
+    for idx, k in enumerate(PHILOSOPHICAL_FOUNDING_ORDER):
+        thinker_list[idx] = round(min(1.0, max(0.0, thinker_list[idx] + thinker_w * deficits[k])), 6)
+    if int(stanza_index) == 1:
+        thinker_list[7] = round(
+            min(1.0, max(0.0, thinker_list[7] + 0.50 * thinker_def)),
+            6,
+        )
+
+    feeler_list = list(base_chord.feeler_vector)
+    for idx, k in enumerate(EXPERIENTIAL_FOUNDING_ORDER):
+        feeler_list[idx] = round(min(1.0, max(0.0, feeler_list[idx] + feeler_w * deficits[k])), 6)
+
+    cadence_list = list(base_chord.cadence_vector)
+    if stanza_vibe.self_registry.dissonance_notes or max_def > 0.20:
+        dissonance_shift = 0.25 * max_def + (0.12 if stanza_vibe.self_registry.dissonance_notes else 0.0)
+        cadence_list[1] = round(min(1.0, max(0.0, cadence_list[1] + dissonance_shift)), 6)
+
+    return SubliminalChordVector(
+        doer_vector=tuple(doer_list),
+        thinker_vector=tuple(thinker_list),
+        feeler_vector=tuple(feeler_list),
+        cadence_vector=tuple(cadence_list),
+    )
+
+
 def run_three_legged_turn(
     birth_state: BirthState,
     scenario_text: str,
@@ -1146,6 +1370,8 @@ def run_three_legged_turn(
     sanctuary_lead_alpha: float = 0.25,
     force_spoken_reply: bool = False,
     num_sentences: int = 1,
+    max_stanzas: int = 1,
+    sentences_per_stanza: int = 3,
     comma_chord_transform: Callable[[SubliminalChordVector], SubliminalChordVector] | None = None,
     conversation_history: Sequence[tuple[str, str]] = (),
     max_context_chars: int = DEFAULT_MAX_CONTEXT_CHARS,
@@ -1240,6 +1466,7 @@ def run_three_legged_turn(
         or sanctuary_target_mode is not None
         or comma_chord_transform is not None
         or int(num_sentences) > 1
+        or int(max_stanzas) > 1
     )
     if current_vibe.posture == "TUG_LEFT_BRAIN" or open_thread.triggered or should_speak:
         # Step 1B: Right-Brain 3-Branch Coordinate Deliberation (~15-30 ms, 0 LLM calls)
@@ -1402,7 +1629,97 @@ def run_three_legged_turn(
                         mid_comma_vibe.self_registry.dissonance_notes,
                     )
 
-                if int(num_sentences) > 1:
+                if int(max_stanzas) > 1:
+                    prev_stanza_theory_coords: dict[str, float] = {}
+
+                    def _stanza_boundary_callback(
+                        stanza_idx: int,
+                        stanza_text: str,
+                        cumulative_text: str,
+                        *,
+                        _pass_idx: int = p,
+                    ) -> tuple[bool, SubliminalChordVector | None]:
+                        nonlocal prev_stanza_theory_coords
+                        eval_text = stanza_text.strip() or cumulative_text.strip()
+                        st_coords, st_exp, _, _ = sensors.score_text(
+                            eval_text,
+                            learned_leaves=learned_tuple,
+                            branch_gating=branch_gating,
+                        )
+                        st_vibe, _ = compile_right_brain_vibe(
+                            birth_state,
+                            external_coords,
+                            external_exp,
+                            rules,
+                            pass_index=_pass_idx,
+                            event_id=f"scene-{scene_index}-pass-{_pass_idx}-stanza-{stanza_idx + 1}",
+                            prior_memory=prior_memory,
+                            learned_leaves=learned_tuple,
+                            internal_theory_coords=st_coords,
+                            internal_theory_experiential=st_exp,
+                            queried_child_leaves=queried_1,
+                            skipped_child_leaves=skipped_1,
+                            social_drift=social_drift,
+                            ratified_chords=pass_ratified_chords,
+                        )
+                        if (
+                            st_vibe.posture in ("SETTLED_EASE", "AT_EASE", "WORDLESS_REFLEX", "THEORY_SYNTHESIS")
+                            and float(st_vibe.clarity) >= 0.68
+                            and not st_vibe.self_registry.dissonance_notes
+                        ):
+                            return True, None
+                        if stanza_idx >= 1 and prev_stanza_theory_coords:
+                            stanza_delta = max(
+                                (
+                                    abs(float(st_coords.get(k, 0.0)) - float(prev_stanza_theory_coords.get(k, 0.0)))
+                                    for k in set(st_coords) | set(prev_stanza_theory_coords)
+                                ),
+                                default=0.0,
+                            )
+                            if stanza_delta < 0.04:
+                                return True, None
+                        if stanza_idx + 1 >= int(max_stanzas):
+                            return True, None
+                        prev_stanza_theory_coords = dict(st_coords)
+                        next_chord = compute_stanza_residual_chord(
+                            birth_state,
+                            external_coords,
+                            st_coords,
+                            st_vibe,
+                            stanza_index=stanza_idx + 1,
+                            deliberation=deliberation,
+                            social_drift=social_drift,
+                            learned_leaves=learned_tuple,
+                        )
+                        if sanctuary_target_mode is not None:
+                            from .chess_kibitz_bridge import apply_coregulation_lead_to_chord
+
+                            next_chord = apply_coregulation_lead_to_chord(
+                                next_chord,
+                                sanctuary_target_mode,
+                                alpha=sanctuary_lead_alpha,
+                            )
+                        if comma_chord_transform is not None:
+                            next_chord = comma_chord_transform(next_chord)
+                        return False, next_chord
+
+                    multi_text, _stanza_list, multi_traces = subliminal_left_brain.generate_multi_stanza_discourse(
+                        scenario_text,
+                        max_stanzas=int(max_stanzas),
+                        sentences_per_stanza=int(sentences_per_stanza),
+                        pass_index=p,
+                        clause_1_prefix=cached_clause_1_prefix,
+                        conversation_history=conversation_history,
+                        max_context_chars=max_context_chars,
+                        chord_builder_at_comma=_build_chord_at_comma,
+                        stanza_boundary_callback=_stanza_boundary_callback,
+                        lead_with_gap=lead_with_gap,
+                    )
+                    if clause_1_prefix is None and multi_traces and not lead_with_gap:
+                        cached_clause_1_prefix = multi_traces[0].clause_1_prefix
+                    spliced_traces.extend(multi_traces)
+                    reply_text = validate_plain_english_left_brain_reply(multi_text)
+                elif int(num_sentences) > 1:
                     multi_text, multi_traces = subliminal_left_brain.generate_multi_sentence_script(
                         scenario_text,
                         num_sentences=int(num_sentences),

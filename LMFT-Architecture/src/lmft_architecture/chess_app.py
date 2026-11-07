@@ -124,6 +124,7 @@ from .sleep_consolidation import (
     canonical_cluster_concept_name,
     consolidate_sleep_clusters_locally,
     entrain_existing_cluster_rule,
+    extract_dream_vow_sentence,
     run_sleep_consolidation,
 )
 from .subliminal_gap_splice import SubliminalChordVector
@@ -131,6 +132,7 @@ from .three_legged_runtime import (
     SubliminalGapLeftBrain,
     ThreeLeggedTurnResult,
     _compile_mid_sentence_comma_vibe,
+    compute_stanza_residual_chord,
     run_three_legged_turn,
 )
 from .virgin_baseline import VIRGIN_FOUNDATIONAL_RULES, load_virgin_baseline_state
@@ -574,6 +576,8 @@ class ChessKibitzerRuntime:
         self.player_move_accuracies: list[float] = []
         self.last_player_coaching: dict[str, Any] | None = None
         self.last_player_elo_receipt: dict[str, Any] | None = None
+        if not hasattr(self, "rem_dream_chronicles"):
+            self.rem_dream_chronicles: list[dict[str, Any]] = []
 
         meta_path = self.state_dir / "club_meta.json"
         if meta_path.exists():
@@ -592,6 +596,11 @@ class ChessKibitzerRuntime:
                 self.player_losses = int(raw.get("player_losses", 0))
                 self.player_draws = int(raw.get("player_draws", 0))
                 self.player_games_completed = int(raw.get("player_games_completed", 0))
+                raw_chronicles = raw.get("rem_dream_chronicles", [])
+                if isinstance(raw_chronicles, list):
+                    self.rem_dream_chronicles = [
+                        dict(c) for c in raw_chronicles if isinstance(c, dict)
+                    ][-5:]
                 return [int(x) for x in raw.get("savored_turn_ids", [])]
             except Exception:
                 pass
@@ -871,6 +880,7 @@ class ChessKibitzerRuntime:
                 "player_losses": int(self.player_losses),
                 "player_draws": int(self.player_draws),
                 "player_games_completed": int(self.player_games_completed),
+                "rem_dream_chronicles": list(self.rem_dream_chronicles[-5:]),
             },
         )
 
@@ -1112,6 +1122,8 @@ class ChessKibitzerRuntime:
         clause_1_prefix: str | None = None,
         custom_sensors: Any | None = None,
         num_sentences: int = 1,
+        max_stanzas: int = 1,
+        sentences_per_stanza: int = 3,
         comma_chord_transform: Any | None = None,
         include_conversation_history: bool = False,
         skip_left_brain: bool = False,
@@ -1166,6 +1178,8 @@ class ChessKibitzerRuntime:
                 sanctuary_lead_alpha=0.25,
                 force_spoken_reply=force_spoken_reply,
                 num_sentences=int(num_sentences),
+                max_stanzas=int(max_stanzas),
+                sentences_per_stanza=int(sentences_per_stanza),
                 comma_chord_transform=comma_chord_transform,
                 conversation_history=conv_history,
                 lead_with_gap=(room == "chess" and not clause_1_prefix),
@@ -1187,8 +1201,14 @@ class ChessKibitzerRuntime:
         trace_info: dict[str, Any] = {}
         if turn.spliced_traces:
             st = turn.spliced_traces[-1]
+            stanza_blocks = [
+                p.strip()
+                for p in (turn.final_conscious_note or "").split("\n\n")
+                if p.strip()
+            ]
             trace_info = {
                 "sentence_count": len(turn.spliced_traces),
+                "stanza_count": max(1, len(stanza_blocks)),
                 "clause_1_prefix": st.clause_1_prefix,
                 "post_gap_continuation": st.post_gap_continuation,
                 "comma_scored_live": st.comma_scored_live,
@@ -1285,6 +1305,12 @@ class ChessKibitzerRuntime:
             "auto_sleep_threshold": self.auto_sleep_threshold,
             "last_rem_sleep_receipt": getattr(self, "last_rem_sleep_receipt", None),
             "last_rem_sleep_self_talk": getattr(self, "last_rem_sleep_self_talk", None),
+            "rem_dream_chronicles": list(self.rem_dream_chronicles[-5:]),
+            "sleep": {
+                "rem_dream_chronicles": list(self.rem_dream_chronicles[-5:]),
+                "last_rem_sleep_receipt": getattr(self, "last_rem_sleep_receipt", None),
+                "last_rem_sleep_self_talk": getattr(self, "last_rem_sleep_self_talk", None),
+            },
             "microwave_step_counter": self.microwave_step_counter,
             "last_microwave_status": self.last_microwave_status,
             "release_sync": self.last_sync_status,
@@ -1685,13 +1711,22 @@ class ChessKibitzerRuntime:
         clause_1_prefix: str | None = None,
         anchor_to_board: bool | None = None,
         num_sentences: int = 1,
+        max_stanzas: int = 1,
     ) -> dict[str, Any]:
         clean_text = text.strip()
         if not clean_text:
             raise ValueError("Message text cannot be empty")
-        sent_count = int(num_sentences)
+        raw_sent_val = int(num_sentences)
+        if raw_sent_val in (20, 30):
+            sent_count = 3
+            stanza_count_req = raw_sent_val // 10
+        else:
+            sent_count = raw_sent_val
+            stanza_count_req = int(max_stanzas)
         if not (1 <= sent_count <= 6):
             raise ValueError(f"num_sentences must be between 1 and 6, got {num_sentences!r}")
+        if not (1 <= stanza_count_req <= 4):
+            raise ValueError(f"max_stanzas must be between 1 and 4, got {max_stanzas!r}")
 
         if room in ("chess", "sanctuary"):
             self.active_room = room
@@ -1729,7 +1764,8 @@ class ChessKibitzerRuntime:
             else clean_text
         )
         effective_sent_count = sent_count
-        if sent_count == 1:
+        effective_max_stanzas = stanza_count_req
+        if sent_count == 1 and stanza_count_req == 1:
             probe_sensors = (
                 merge_board_fact_with_chat_sensors(self.board_posture, self.sensors)
                 if use_board_context
@@ -1763,6 +1799,13 @@ class ChessKibitzerRuntime:
             )
             if is_insightful_inquiry:
                 if (
+                    len(clean_text.split()) >= 16
+                    and float(p_vibe.clarity) < 0.42
+                    and (float(p_vibe.salience) >= 0.60 or float(p_vibe.novelty) >= 0.52)
+                ):
+                    effective_max_stanzas = 2
+                    effective_sent_count = 3
+                elif (
                     float(p_vibe.clarity) < 0.48
                     or float(p_vibe.salience) >= 0.55
                     or float(p_vibe.novelty) >= 0.45
@@ -1781,10 +1824,15 @@ class ChessKibitzerRuntime:
             clause_1_prefix=clause_1_prefix,
             custom_sensors=self.sensors if (self.active_room == "chess" and not use_board_context) else None,
             num_sentences=effective_sent_count,
+            max_stanzas=effective_max_stanzas,
+            sentences_per_stanza=effective_sent_count if effective_max_stanzas > 1 else 3,
             include_conversation_history=True,
         )
         telemetry["num_sentences"] = effective_sent_count
-        telemetry["insightful_inquiry_deliberation"] = bool(effective_sent_count > 1 and sent_count == 1)
+        telemetry["max_stanzas"] = effective_max_stanzas
+        telemetry["insightful_inquiry_deliberation"] = bool(
+            (effective_sent_count > 1 or effective_max_stanzas > 1) and sent_count == 1 and stanza_count_req == 1
+        )
         raw_reply = turn.final_conscious_note or self._synthesize_gear_1_note(
             turn,
             room=self.active_room,
@@ -1963,6 +2011,7 @@ class ChessKibitzerRuntime:
         self.last_elo_receipt = None
         self.last_rem_sleep_receipt = None
         self.last_rem_sleep_self_talk = None
+        self.rem_dream_chronicles.clear()
         self.microwave_step_counter = 0
         self.last_microwave_status = None
         self.board = chess.Board()
@@ -2411,14 +2460,107 @@ class ChessKibitzerRuntime:
             "reason": reason,
         }
 
+    def _evaluate_previous_dream_vow(
+        self,
+        queued_snapshot: tuple[UnresolvedSleepScene, ...],
+        forged_rules: tuple[FuzzyConceptRule, ...],
+    ) -> tuple[str, tuple[str, ...], dict[str, Any] | None]:
+        """Compare the previous dream chronicle's `vowed_leaves` against current sleep scenes in pure coordinate space."""
+        if not self.rem_dream_chronicles:
+            return "NEW_VOW", (), None
+        prev_chronicle = self.rem_dream_chronicles[-1]
+        vowed_leaves = [str(k) for k in prev_chronicle.get("vowed_leaves", []) if str(k)]
+        if not vowed_leaves:
+            return "NEW_VOW", (), prev_chronicle
+
+        vowed_set = set(vowed_leaves)
+        overlapping: list[str] = []
+
+        for r in forged_rules:
+            if r.concept_name.startswith("hazard_"):
+                for lk in r.target_leaves:
+                    if lk in vowed_set and lk not in overlapping:
+                        overlapping.append(lk)
+
+        for s in queued_snapshot:
+            is_haz = bool(s.is_hazard or s.scene_index in self._hazard_scene_indices)
+            if is_haz and s.game_review_annotation and (
+                "[!! BRILLIANCY" in s.game_review_annotation
+                or "[! GREAT_MOVE" in s.game_review_annotation
+            ):
+                is_haz = False
+            if not is_haz:
+                continue
+            ext = s.external_coordinates or {}
+            ref = s.contrastive_reference_coordinates or {}
+            for lk in vowed_leaves:
+                if lk in overlapping:
+                    continue
+                if ref and lk in ref and lk in ext:
+                    if abs(float(ref[lk]) - float(ext[lk])) >= 0.12:
+                        overlapping.append(lk)
+                        continue
+                val = float(ext.get(lk, 0.50))
+                if any(tag in lk for tag in ("chaos", "needlessness", "discreteness")):
+                    if val >= 0.58:
+                        overlapping.append(lk)
+                elif val <= 0.42:
+                    overlapping.append(lk)
+
+        if overlapping:
+            return "BROKEN", tuple(overlapping), prev_chronicle
+        return "HONORED", tuple(vowed_leaves), prev_chronicle
+
+    @staticmethod
+    def _extract_cycle_vowed_leaves(
+        queued_snapshot: tuple[UnresolvedSleepScene, ...],
+        forged_rules: tuple[FuzzyConceptRule, ...],
+    ) -> tuple[str, ...]:
+        """Extract the primary target/contrastive Founding Leaves consolidated in this REM sleep cycle."""
+        leaves: list[str] = []
+        for r in forged_rules:
+            for lk, _th in sorted(r.target_leaves.items(), key=lambda kv: (-float(kv[1]), kv[0])):
+                if lk not in leaves:
+                    leaves.append(lk)
+                if len(leaves) >= 4:
+                    return tuple(leaves)
+        for s in queued_snapshot:
+            ext = s.external_coordinates or {}
+            ref = s.contrastive_reference_coordinates or {}
+            if ref:
+                deltas = sorted(
+                    ((abs(float(ref.get(k, 0.5)) - float(ext.get(k, 0.5))), k) for k in set(ref) | set(ext)),
+                    reverse=True,
+                )
+                for dv, lk in deltas:
+                    if dv >= 0.08 and lk in FOUNDATIONAL_LEAVES and lk not in leaves:
+                        leaves.append(lk)
+                        if len(leaves) >= 3:
+                            return tuple(leaves)
+            else:
+                devs = sorted(
+                    ((abs(float(v) - 0.50), k) for k, v in ext.items() if k in FOUNDATIONAL_LEAVES),
+                    reverse=True,
+                )
+                for dv, lk in devs:
+                    if dv >= 0.10 and lk not in leaves:
+                        leaves.append(lk)
+                        if len(leaves) >= 3:
+                            return tuple(leaves)
+        return tuple(leaves)
+
     def _generate_rem_sleep_self_talk(
         self,
         queued_snapshot: tuple[UnresolvedSleepScene, ...],
         forged_rules: tuple[FuzzyConceptRule, ...],
         *,
         num_sentences: int = 4,
+        max_stanzas: int = 1,
+        vow_outcome: str = "NEW_VOW",
+        vow_overlap_leaves: tuple[str, ...] = (),
+        prev_chronicle: dict[str, Any] | None = None,
     ) -> str | None:
-        """Let the Left Brain talk to itself during REM sleep about the consolidated scenes and rules."""
+        """Let the Left Brain talk to itself during REM sleep about the consolidated scenes, rules, and longitudinal vows."""
         if not queued_snapshot:
             return None
         if self._qwen_left_brain is None and self._lazy_load_gpu:
@@ -2426,7 +2568,8 @@ class ChessKibitzerRuntime:
         if self._qwen_left_brain is None:
             return None
         try:
-            rep = max(queued_snapshot, key=lambda s: float(s.salience))
+            sorted_scenes = sorted(queued_snapshot, key=lambda s: float(s.salience), reverse=True)
+            rep = sorted_scenes[0]
             clean_scenario = rep.scenario_text.split("[Coach note:", 1)[0].strip()
             review_note = (rep.game_review_annotation or "").strip()
             rule_summary = (
@@ -2439,52 +2582,79 @@ class ChessKibitzerRuntime:
                 if review_note and review_note not in clean_scenario
                 else (review_note or clean_scenario)[:240]
             )
+            vow_context_clause = ""
+            conv_hist: list[tuple[str, str]] = []
+            if prev_chronicle and prev_chronicle.get("vow_sentence"):
+                prev_vow_str = str(prev_chronicle["vow_sentence"]).strip()
+                conv_hist.append(("Previous REM Sleep Vow", prev_vow_str))
+                if vow_outcome == "BROKEN" and vow_overlap_leaves:
+                    short_leaves = ", ".join(k.split("/")[-1] for k in vow_overlap_leaves[:3])
+                    vow_context_clause = (
+                        f" Our previous vow was tested and broken on [{short_leaves}]."
+                    )
+                elif vow_outcome == "HONORED":
+                    vow_context_clause = " Our previous positional vow held firm."
+
             target_sents = max(1, min(6, int(num_sentences)))
-            if target_sents >= 4:
+            stanza_limit = max(1, min(3, int(max_stanzas)))
+            if target_sents >= 4 or stanza_limit >= 2:
                 extra_moments = [
                     (s.game_review_annotation or s.scenario_text.split("[Coach note:", 1)[0]).strip()[:110]
-                    for s in queued_snapshot
-                    if s.scene_index != rep.scene_index
-                ][:2]
+                    for s in sorted_scenes[1:3]
+                ]
                 extra_clause = (
                     f" Other queued moments: {'; '.join(extra_moments)}."
                     if extra_moments
                     else ""
                 )
                 sleep_prompt = (
-                    f"{moment_desc}.{extra_clause}{rule_summary} "
-                    f"Reflect deeply across four sentences on why the played move diverged from the best continuation, "
-                    f"how the board's structural balance shifted, and the lasting principle to carry into future games."
+                    f"{moment_desc}.{extra_clause}{rule_summary}{vow_context_clause} "
+                    f"Reflect deeply on why the played move diverged from the best continuation, "
+                    f"how the board's structural balance shifted, and the lasting vow to carry into future games."
                 )
             else:
                 sleep_prompt = (
-                    f"{moment_desc}.{rule_summary} "
+                    f"{moment_desc}.{rule_summary}{vow_context_clause} "
                     f"What is the key positional lesson to carry forward from this moment?"
                 )
             valid_ext_keys = set(FOUNDATIONAL_LEAVES) | {lf.leaf_id for lf in self.learned_leaves}
-            base_coords: dict[str, float] = {k: 0.50 for k in FOUNDATIONAL_LEAVES}
-            for lf in self.learned_leaves:
-                base_coords.setdefault(lf.leaf_id, 0.0)
-            for k, v in rep.external_coordinates.items():
-                if k in valid_ext_keys:
-                    base_coords[k] = float(v)
-            for k, v in rep.felt_chord_notes.items():
-                if k in valid_ext_keys:
-                    base_coords[k] = float(v)
-            contrastive_theory_coords: dict[str, float] | None = None
-            if rep.contrastive_reference_coordinates:
-                contrastive_theory_coords = dict(base_coords)
-                for rk, rv in rep.contrastive_reference_coordinates.items():
-                    if rk in valid_ext_keys:
-                        contrastive_theory_coords[rk] = float(rv)
-            exp_coords = {
-                "experiential/reflection/novelty": 0.48,
-                "experiential/reflection/salience": float(rep.salience),
-                "experiential/phase/valence": float(rep.valence),
-                "experiential/phase/arousal": float(rep.arousal),
-                "experiential/synchronization/resonance": 0.65,
-                "experiential/synchronization/entrainment": 0.65,
-            }
+
+            def _coords_for_scene(sc: UnresolvedSleepScene) -> tuple[dict[str, float], dict[str, float] | None, dict[str, float]]:
+                b_c: dict[str, float] = {k: 0.50 for k in FOUNDATIONAL_LEAVES}
+                for lf in self.learned_leaves:
+                    b_c.setdefault(lf.leaf_id, 0.0)
+                for k, v in sc.external_coordinates.items():
+                    if k in valid_ext_keys:
+                        b_c[k] = float(v)
+                for k, v in sc.felt_chord_notes.items():
+                    if k in valid_ext_keys:
+                        b_c[k] = float(v)
+                c_th: dict[str, float] | None = None
+                if sc.contrastive_reference_coordinates:
+                    c_th = dict(b_c)
+                    for rk, rv in sc.contrastive_reference_coordinates.items():
+                        if rk in valid_ext_keys:
+                            c_th[rk] = float(rv)
+                sal_v = float(sc.salience)
+                val_v = float(sc.valence)
+                res_v = 0.65
+                if vow_outcome == "BROKEN":
+                    sal_v = min(1.0, max(sal_v, 0.78))
+                    val_v = min(val_v, 0.28)
+                elif vow_outcome == "HONORED":
+                    val_v = max(val_v, 0.68)
+                    res_v = 0.78
+                e_c = {
+                    "experiential/reflection/novelty": 0.48,
+                    "experiential/reflection/salience": sal_v,
+                    "experiential/phase/valence": val_v,
+                    "experiential/phase/arousal": float(sc.arousal),
+                    "experiential/synchronization/resonance": res_v,
+                    "experiential/synchronization/entrainment": 0.65,
+                }
+                return b_c, c_th, e_c
+
+            base_coords, contrastive_theory_coords, exp_coords = _coords_for_scene(rep)
             sleep_vibe, _ = compile_right_brain_vibe(
                 self.birth_state,
                 base_coords,
@@ -2536,14 +2706,61 @@ class ChessKibitzerRuntime:
                     c_vibe.self_registry.dissonance_notes,
                 )
 
-            dream_text, _ = self._qwen_left_brain.generate_with_subliminal_splice(
-                sleep_prompt,
-                sleep_chord,
-                num_sentences=target_sents,
-                conversation_history=(),
-                chord_builder_at_comma=_build_sleep_comma_chord,
-                lead_with_gap=True,
-            )
+            if stanza_limit > 1 and hasattr(self._qwen_left_brain, "generate_multi_stanza_discourse"):
+                def _sleep_stanza_boundary(
+                    stanza_idx: int,
+                    stanza_text: str,
+                    cumulative_text: str,
+                ) -> tuple[bool, SubliminalChordVector | None]:
+                    if stanza_idx + 1 >= stanza_limit:
+                        return True, None
+                    next_sc = sorted_scenes[min(stanza_idx + 1, len(sorted_scenes) - 1)]
+                    nx_base, _nx_th, nx_exp = _coords_for_scene(next_sc)
+                    st_coords, st_exp, _, _ = self.sensors.score_text(
+                        stanza_text.strip() or cumulative_text.strip(),
+                        learned_leaves=self.learned_leaves,
+                    )
+                    st_vibe, _ = compile_right_brain_vibe(
+                        self.birth_state,
+                        nx_base,
+                        nx_exp,
+                        self.rules,
+                        pass_index=2,
+                        event_id=f"rem_sleep_stanza_{stanza_idx + 1}",
+                        prior_memory=self.memory,
+                        learned_leaves=self.learned_leaves,
+                        internal_theory_coords=st_coords,
+                        internal_theory_experiential=st_exp,
+                    )
+                    next_chord = compute_stanza_residual_chord(
+                        self.birth_state,
+                        nx_base,
+                        st_coords,
+                        st_vibe,
+                        stanza_index=stanza_idx + 1,
+                        learned_leaves=self.learned_leaves,
+                    )
+                    return False, next_chord
+
+                dream_text, _, _ = self._qwen_left_brain.generate_multi_stanza_discourse(
+                    sleep_prompt,
+                    sleep_chord,
+                    max_stanzas=stanza_limit,
+                    sentences_per_stanza=3,
+                    conversation_history=tuple(conv_hist),
+                    chord_builder_at_comma=_build_sleep_comma_chord,
+                    stanza_boundary_callback=_sleep_stanza_boundary,
+                    lead_with_gap=True,
+                )
+            else:
+                dream_text, _ = self._qwen_left_brain.generate_with_subliminal_splice(
+                    sleep_prompt,
+                    sleep_chord,
+                    num_sentences=target_sents,
+                    conversation_history=tuple(conv_hist),
+                    chord_builder_at_comma=_build_sleep_comma_chord,
+                    lead_with_gap=True,
+                )
             return dream_text.strip() or None
         except Exception:
             return None
@@ -2579,6 +2796,8 @@ class ChessKibitzerRuntime:
                 ]
                 forged_rules_list: tuple[FuzzyConceptRule, ...] = ()
                 sleep_self_talk: str | None = None
+                vow_outcome = "NEW_VOW"
+                vow_overlap_leaves: tuple[str, ...] = ()
                 if queued_count > 0:
                     for s in queued_snapshot:
                         if s.contrastive_reference_coordinates is not None or s.game_review_annotation:
@@ -2613,24 +2832,65 @@ class ChessKibitzerRuntime:
                         refined_ids, forged_rules_list, _clause_ids = (
                             self._consolidate_sleep_clusters_locally(queued_snapshot)
                         )
+                    vow_outcome, vow_overlap_leaves, prev_chronicle = self._evaluate_previous_dream_vow(
+                        queued_snapshot,
+                        forged_rules_list,
+                    )
+                    cycle_vowed_leaves = self._extract_cycle_vowed_leaves(
+                        queued_snapshot,
+                        forged_rules_list,
+                    )
                     is_deep_sleep = (
                         not auto_triggered
                         or self.board.is_game_over(claim_draw=True)
                         or self.clock_flagged_loser is not None
                     )
+                    dream_stanzas = min(3, len(queued_snapshot)) if (is_deep_sleep and len(queued_snapshot) >= 2) else 1
                     dream_sentences = 4 if is_deep_sleep else 2
                     sleep_self_talk = self._generate_rem_sleep_self_talk(
                         queued_snapshot,
                         forged_rules_list,
                         num_sentences=dream_sentences,
+                        max_stanzas=dream_stanzas,
+                        vow_outcome=vow_outcome,
+                        vow_overlap_leaves=vow_overlap_leaves,
+                        prev_chronicle=prev_chronicle,
                     )
+                    sorted_queued = sorted(queued_snapshot, key=lambda s: float(s.salience), reverse=True)
                     if sleep_self_talk:
-                        rep_scene_idx = max(queued_snapshot, key=lambda s: float(s.salience)).scene_index
-                        self.archives = apply_dream_reflection_to_archives(
-                            self.archives,
-                            scene_index=rep_scene_idx,
-                            dream_text=sleep_self_talk,
-                        )
+                        stanza_blocks = [b.strip() for b in sleep_self_talk.split("\n\n") if b.strip()]
+                        for idx, st_block in enumerate(stanza_blocks):
+                            target_sc = sorted_queued[min(idx, len(sorted_queued) - 1)]
+                            self.archives = apply_dream_reflection_to_archives(
+                                self.archives,
+                                scene_index=target_sc.scene_index,
+                                dream_text=st_block,
+                            )
+                    else:
+                        stanza_blocks = []
+
+                    fallback_vow = (
+                        forged_rules_list[0].description
+                        if forged_rules_list
+                        else f"Guard {', '.join(k.split('/')[-1] for k in cycle_vowed_leaves[:2]) or 'king shelter'} before over-extending."
+                    )
+                    vow_sentence = (
+                        extract_dream_vow_sentence(sleep_self_talk)
+                        if sleep_self_talk
+                        else fallback_vow
+                    )
+                    chronicle_entry = {
+                        "cycle_index": int(self.sleep_cycle_index) + len(self.rem_dream_chronicles) + 1,
+                        "game_number": int(self.games_completed_count),
+                        "stanzas": stanza_blocks if stanza_blocks else [vow_sentence],
+                        "vow_sentence": vow_sentence,
+                        "vowed_leaves": list(cycle_vowed_leaves),
+                        "vow_outcome": vow_outcome,
+                        "vow_overlap_leaves": list(vow_overlap_leaves),
+                    }
+                    self.rem_dream_chronicles.append(chronicle_entry)
+                    if len(self.rem_dream_chronicles) > 5:
+                        self.rem_dream_chronicles = self.rem_dream_chronicles[-5:]
                 else:
                     refined_ids = ()
                 self.last_rem_sleep_self_talk = sleep_self_talk
@@ -2652,6 +2912,12 @@ class ChessKibitzerRuntime:
                     f"forged {forged_count} new rule(s), refined {len(refined_ids)} colliding rule(s), "
                     f"and persisted {len(self.savored_turn_ids)} savored vibe(s) to disk."
                 ]
+                if queued_count > 0 and self.rem_dream_chronicles:
+                    latest_chron = self.rem_dream_chronicles[-1]
+                    lines.append(
+                        f"Longitudinal Dream Vow Status: {latest_chron['vow_outcome']} "
+                        f"(vowed leaves: {', '.join(k.split('/')[-1] for k in latest_chron['vowed_leaves']) or 'none'})"
+                    )
                 if sleep_self_talk:
                     lines.append(f"\nREM Dream Self-Reflection:\n  \"{sleep_self_talk}\"")
                 if forged_rules_list:
@@ -2803,6 +3069,7 @@ def create_chess_http_server(
                             sanctuary_mode=str(data.get("sanctuary_mode", "tilt_reset")),
                             anchor_to_board=bool(anchor_val) if anchor_val is not None else None,
                             num_sentences=int(data.get("num_sentences", 1)),
+                            max_stanzas=int(data.get("max_stanzas", 1)),
                         )
                     )
                     return

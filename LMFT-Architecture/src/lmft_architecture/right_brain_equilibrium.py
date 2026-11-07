@@ -1268,8 +1268,8 @@ def validate_plain_english_left_brain_reply(raw: str) -> str:
         raise ModelError("Left Brain returned empty reply")
     if cleaned.startswith("{") and cleaned.endswith("}"):
         raise ModelError("Left Brain returned JSON instead of plain-English thought")
-    if len(cleaned) > 1500:
-        cleaned = cleaned[:1500].strip()
+    if len(cleaned) > 3000:
+        cleaned = cleaned[:3000].strip()
     return cleaned
 
 

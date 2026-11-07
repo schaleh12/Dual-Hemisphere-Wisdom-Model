@@ -678,3 +678,157 @@ def test_persistent_past_kv_cache_across_clauses_and_sentences() -> None:
     assert kv_model.step_embed_lengths[0] >= 20
     assert all(flag is True for flag in kv_model.past_kv_present_flags[1:])
     assert all(length <= 16 for length in kv_model.step_embed_lengths[1:])
+
+
+def test_multi_stanza_discourse_and_residual_deficit_chord_pivot() -> None:
+    """Verify `compute_stanza_residual_chord`, multi-stanza `\\n\\n` KV-cache streaming, and equilibrium/diminishing-returns stopping."""
+    from lmft_architecture.right_brain_equilibrium import compile_right_brain_vibe
+    from lmft_architecture.three_legged_runtime import compute_stanza_residual_chord
+
+    birth = _birth()
+    rules = (
+        FuzzyConceptRule(
+            rule_id="rule_fortress",
+            concept_name="positional_fortress",
+            description="Disciplined positional fortress and structural continuity.",
+            target_leaves={
+                "philosophical/structure/order": 0.80,
+                "philosophical/persistence/continuity": 0.80,
+                "cultural/efficiency/wastelessness": 0.80,
+            },
+        ),
+    )
+    ext_coords = _neutral_coords(
+        **{
+            "philosophical/structure/order": 0.88,
+            "philosophical/persistence/continuity": 0.85,
+            "cultural/efficiency/wastelessness": 0.84,
+        }
+    )
+    ext_exp = {
+        "experiential/reflection/novelty": 0.56,
+        "experiential/reflection/salience": 0.68,
+        "experiential/phase/valence": 0.55,
+        "experiential/phase/arousal": 0.44,
+        "experiential/synchronization/resonance": 0.52,
+        "experiential/synchronization/retention": 0.50,
+    }
+    # Stanza 1 under-addresses `philosophical/structure/order` (`0.32` vs external `0.88` -> deficit `0.56`)
+    stanza_1_theory = _neutral_coords(
+        **{
+            "philosophical/structure/order": 0.32,
+            "philosophical/persistence/continuity": 0.40,
+            "cultural/efficiency/wastelessness": 0.38,
+        }
+    )
+    vibe_s1, _ = compile_right_brain_vibe(
+        birth,
+        ext_coords,
+        ext_exp,
+        rules,
+        pass_index=2,
+        event_id="stanza-1",
+        internal_theory_coords=stanza_1_theory,
+        internal_theory_experiential=ext_exp,
+    )
+    base_chord = SubliminalChordVector.from_right_brain_vibe(vibe_s1)
+    residual_chord = compute_stanza_residual_chord(
+        birth,
+        ext_coords,
+        stanza_1_theory,
+        vibe_s1,
+        stanza_index=1,
+    )
+    # `philosophical/structure/order` (idx 2), `philosophical/persistence/continuity` (idx 4),
+    # and `cultural/efficiency/wastelessness` (doer idx 1) all shift upward on true coordinate deficit
+    assert residual_chord.thinker_vector[2] > base_chord.thinker_vector[2]
+    assert residual_chord.thinker_vector[4] > base_chord.thinker_vector[4]
+    assert residual_chord.doer_vector[1] > base_chord.doer_vector[1]
+    residual_s2 = compute_stanza_residual_chord(
+        birth,
+        ext_coords,
+        stanza_1_theory,
+        vibe_s1,
+        stanza_index=2,
+    )
+    assert residual_s2.doer_vector[6] > base_chord.doer_vector[6]
+    assert residual_s2.doer_vector[7] > base_chord.doer_vector[7]
+    # Zero fake dissonance spike when deficit is zero and no dissonance notes exist
+    zero_deficit_chord = compute_stanza_residual_chord(
+        birth,
+        ext_coords,
+        ext_coords,
+        vibe_s1,
+        stanza_index=1,
+    )
+    if not vibe_s1.self_registry.dissonance_notes:
+        assert zero_deficit_chord.dissonance_pressure == pytest.approx(base_chord.dissonance_pressure)
+
+    # Verify `generate_multi_stanza_discourse` streams `\\n\\n` over a single persistent `past_kv`
+    torch.manual_seed(17)
+    tok = _WordLevelTestTokenizer()
+    gap_id = ensure_subliminal_gap_token(tok)
+    for w in ("The", "center", "is", "under", "pressure,", "we", "shelter", "the", "King."):
+        tok.encode(w)
+    chord_a, _chord_b = compile_chess_posture_chords(
+        queen_volition=0.80,
+        king_safety=0.75,
+        bishop_alignment=0.72,
+        knight_disruption=0.45,
+        pawn_chain_flow=0.76,
+        rook_bastion=0.74,
+    )
+    model = _MiniCausalLM(vocab_size=64, hidden_size=32, num_layers=2)
+    projector = SubliminalGapProjector(hidden_size=32)
+    left_brain = SubliminalGapLeftBrain(
+        model,
+        tok,
+        projector,
+        gap_token_id=gap_id,
+        device="cpu",
+        max_clause_1_tokens=5,
+        max_post_gap_tokens=7,
+    )
+    rotated_chords_seen: list[SubliminalChordVector] = []
+
+    def _boundary_cb(st_idx: int, _st_txt: str, _cum_txt: str):
+        rotated_chords_seen.append(residual_chord)
+        return (st_idx >= 1, residual_chord)
+
+    discourse, stanzas, traces = left_brain.generate_multi_stanza_discourse(
+        "The center is under pressure and our King needs shelter.",
+        chord_a,
+        max_stanzas=3,
+        sentences_per_stanza=2,
+        stanza_boundary_callback=_boundary_cb,
+        lead_with_gap=True,
+    )
+    assert len(stanzas) == 2
+    assert len(traces) == 4
+    assert "\n\n" in discourse
+    assert traces[2].spliced_chord == residual_chord
+
+    # Verify `run_three_legged_turn` with `max_stanzas=3` stops early on diminishing returns (`max_theory_delta < 0.04`)
+    sensors_converge = _DeterministicBridgeSensors(
+        _neutral_coords(**{"philosophical/structure/order": 0.45}),
+        ext_exp,
+        reply_coords=stanza_1_theory,
+        reply_exp=ext_exp,
+    )
+    turn_stanzas = run_three_legged_turn(
+        birth,
+        "Analyze the long-term pawn structure across multiple stanzas.",
+        sensors_converge,
+        rules,
+        scene_index=9,
+        subliminal_left_brain=left_brain,
+        max_passes=2,
+        max_stanzas=3,
+        sentences_per_stanza=2,
+        force_spoken_reply=True,
+        lead_with_gap=True,
+    )
+    # Stanza 0 and Stanza 1 return identical `stanza_1_theory` (`delta == 0.0 < 0.04`), so Stanza 2 is skipped!
+    assert len(turn_stanzas.spliced_traces) == 4
+    assert "\n\n" in (turn_stanzas.final_conscious_note or "")
+
