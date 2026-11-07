@@ -2,8 +2,8 @@
   "schema_version": 1,
   "version": "0.2.0",
   "github_repo": "schaleh12/Dual-Hemisphere-Wisdom-Model",
-  "build_sha256": "2149ee1433ffbe8307bddc9ad0d86cfd397325208396ba81e773c5811c91047b",
-  "build_short_hash": "2149ee1433ff",
+  "build_sha256": "163649ed480b6b88081657d29cb50e480d6f07a683665fccd565f7c99b7abb58",
+  "build_short_hash": "163649ed480b",
   "files": {
     "src/lmft_architecture/__init__.py": {
       "sha256": "a89f56c2195e87129adbffa5065d8769ea096e13ba98783d217c4d120ee92623",
@@ -154,12 +154,16 @@
       "size_bytes": 23245
     },
     "src/lmft_architecture/github_auto_sync.py": {
-      "sha256": "52b2af1990f6a3e35fa531312e79a715bb2b9526b2670eb321c20921a33a9d72",
-      "size_bytes": 10492
+      "sha256": "8f61a61abf10801bd112cdd007c2a99049aba6041051b40ef8f8de13675921ea",
+      "size_bytes": 10636
     },
     "src/lmft_architecture/impish_bloodmoon_adapter.py": {
       "sha256": "4b311691626d4c0e2bc59877bcfde460ae8c382c02532ab31b09450bda943b86",
       "size_bytes": 23725
+    },
+    "src/lmft_architecture/installer_wizard.py": {
+      "sha256": "f599b5faac265a637cfda6995c4de8550f4f22e5f1c1cc7998fc9a2c3ee92119",
+      "size_bytes": 41373
     },
     "src/lmft_architecture/insufficiency.py": {
       "sha256": "2f0f91b9e286ee4e2042fb23ebc89baba90cfebecdc3e9eb1bb7289c8fc8052c",
@@ -324,6 +328,18 @@
     "docs/assets/celestriad_spirit_particle.ico": {
       "sha256": "306c6888b49efe35e6a19c6d7e20174ca19b69cc921d7826f702eab078506617",
       "size_bytes": 219931
+    },
+    "docs/assets/arecibo_preview.png": {
+      "sha256": "e4e52510f8d4ddb40f3a58347ac0e45cc394ebcae010356f44a013134a28ca82",
+      "size_bytes": 38641
+    },
+    "docs/assets/spirit_particle_preview.png": {
+      "sha256": "36d65b4da08ea3883c4381f80e0e39507186ea3911d14087d1f7fb22033f8a74",
+      "size_bytes": 49406
+    },
+    "docs/assets/celestial_seal_preview.png": {
+      "sha256": "82237b89c606e10c36b75bcac99822b716b416270035408b5f3b025110dec581",
+      "size_bytes": 149433
     },
     "docs/assets/icy_sea_board.png": {
       "sha256": "b07921ca997ae19fa485a67f1e631ec73706ca8e01ae41d0012ad2502a56d1e8",

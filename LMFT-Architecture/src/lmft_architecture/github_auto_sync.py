@@ -117,6 +117,9 @@ def build_release_manifest(
         "docs/assets/arecibo_desktop_icon.ico",
         "docs/assets/celestriad_spirit_particle.jpg",
         "docs/assets/celestriad_spirit_particle.ico",
+        "docs/assets/arecibo_preview.png",
+        "docs/assets/spirit_particle_preview.png",
+        "docs/assets/celestial_seal_preview.png",
         "docs/assets/icy_sea_board.png",
     ):
         asset_path = arch_root / asset_rel

@@ -53,6 +53,7 @@ When Celestriad blunders (`??`) or finds a brilliancy (`!!`) against you or its 
 ### 4. Visitor-Friendly Quality of Life in This Release
 - **🚀 In-App Space Center Tour**: Click **`🚀 Space Center Tour`** in the top header anytime to explore 6 interactive exhibits explaining how the technology works.
 - **🎵 Under-Board 4-Track Celestriad Jukebox**: Built right below the chessboard with Play/Pause, Prev/Next, and a **`🔊 Mute / 🔇 Muted`** toggle featuring 4 classic tracks (*Forever Rachel*, *The Floating Continent*, *Magitek Research Facility*, and *Schala's Theme Piano*).
-- **🔄 5-Page Windows GUI Setup Wizard (`LMFT-Installer-Wizard.exe`), Auto-Update & Self-Relaunch**:
-  - Run `LMFT-Installer-Wizard.exe` for the 5-step graphical setup, Windows Defender verification, Google Antigravity detection + custom hardware system prompt, and Arecibo Reply Desktop Shortcut creation, or run `LMFT-Chess.exe` directly.
+- **🔄 5-Page Python GUI Setup Wizard (`Launch-Setup-Wizard.bat` / `installer_wizard.py`), Auto-Update & Self-Relaunch**:
+  - **100% Antivirus & Malwarebytes Friendly (Zero Unsigned `.EXE` Wrappers)**: Distributed strictly as readable plain-text Python (`.py`) and `.bat` launchers running inside the officially signed **Python Software Foundation** interpreter (`pythonw.exe`), with zero opaque `.exe` wrappers.
+  - Run `Launch-Setup-Wizard.bat` for the 5-step graphical setup, Windows Defender verification, Google Antigravity detection + custom hardware system prompt, and Arecibo Reply Desktop Shortcut creation, or run `Launch-LMFT-Chess.bat` directly.
   - Once installed, future releases pushed to GitHub are automatically downloaded, verified by SHA-256, and **automatically relaunched** on startup or when you click **`🔄 Auto-Update`**—without ever overwriting your personal Elo rating or saved games.

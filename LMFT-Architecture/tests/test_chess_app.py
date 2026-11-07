@@ -1347,6 +1347,49 @@ def test_longitudinal_rem_dream_chronicles_and_coordinate_vow_keeping(tmp_path: 
     assert b_coords[hz_id] > s_coords[hz_id] + 0.15
 
 
+def test_pure_python_installer_wizard_and_zero_unsigned_exes() -> None:
+    """Verify the pure-Python 5-page Setup Wizard (`installer_wizard.py`) and confirm zero unsigned `.exe` wrappers exist."""
+    import zipfile
+    from lmft_architecture.installer_wizard import (
+        build_custom_antigravity_prompt,
+        check_install_folder_integrity,
+        compute_core_sha256_report,
+        detect_system_hardware,
+        resolve_workspace_paths,
+    )
+
+    base_dir, arch_dir, train_dir, assets_dir = resolve_workspace_paths()
+    assert (base_dir / "Launch-Setup-Wizard.bat").is_file()
+    assert (base_dir / "Launch-LMFT-Chess.bat").is_file()
+    assert (base_dir / "Launch-LMFT-Bloodmoon.bat").is_file()
+
+    # Zero custom-compiled unsigned .exe wrappers in root
+    for banned_exe in ("LMFT-Installer-Wizard.exe", "LMFT-Chess.exe", "LMFT-Bloodmoon.exe"):
+        assert not (base_dir / banned_exe).exists()
+
+    hw = detect_system_hardware()
+    assert "gpu_name" in hw and "ram_gb" in hw and float(hw["ram_gb"]) > 0.0
+    prompt = build_custom_antigravity_prompt(hw)
+    assert "Google Antigravity" in prompt and "birth.py" in prompt
+
+    sha_report = compute_core_sha256_report(base_dir, arch_dir, train_dir)
+    assert "[SHA-256] birth.py" in sha_report
+    assert "[SHA-256] installer_wizard.py" in sha_report
+
+    integrity_report, core_ok = check_install_folder_integrity(base_dir, arch_dir, train_dir, assets_dir)
+    assert core_ok is True
+    assert "✅ [OK] 1. Core 40-Node Seed (birth.py)" in integrity_report
+
+    zip_path = train_dir / "dist" / "lmft-sanctuary-club-v0.1.0-win64.zip"
+    if zip_path.is_file():
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            names = zf.namelist()
+            assert not any(n.lower().endswith(".exe") for n in names)
+            assert "Launch-Setup-Wizard.bat" in names
+            assert "Launch-LMFT-Chess.bat" in names
+
+
+
 
 
 

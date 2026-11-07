@@ -46,9 +46,9 @@ def build_release_zip(
         ("dist/release_manifest.json", manifest_path),
     ]
     for root_file in (
-        "LMFT-Installer-Wizard.exe",
-        "LMFT-Chess.exe",
-        "LMFT-Bloodmoon.exe",
+        "Launch-Setup-Wizard.bat",
+        "Launch-LMFT-Chess.bat",
+        "Launch-LMFT-Bloodmoon.bat",
         "pyproject.toml",
         "README.md",
         "RELEASE_NOTES.md",
@@ -66,6 +66,9 @@ def build_release_zip(
         "docs/assets/arecibo_desktop_icon.ico",
         "docs/assets/celestriad_spirit_particle.jpg",
         "docs/assets/celestriad_spirit_particle.ico",
+        "docs/assets/arecibo_preview.png",
+        "docs/assets/spirit_particle_preview.png",
+        "docs/assets/celestial_seal_preview.png",
         "docs/assets/icy_sea_board.png",
     ):
         asset_path = arch_root / asset_rel

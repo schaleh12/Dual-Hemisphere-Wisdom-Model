@@ -1,6 +1,6 @@
 # Dual-Hemisphere Wisdom Model (`LMFT-Architecture`)
 
-> **A Persistent 40-Node Right-Brain Fuzzy Tree Paired with Local Language Models via a Non-Verbal `<|subliminal_gap|>` Comma Splice — Proven Across Two Standalone Desktop Applications (`LMFT-Chess.exe` & `LMFT-Bloodmoon.exe`).**
+> **A Persistent 40-Node Right-Brain Fuzzy Tree Paired with Local Language Models via a Non-Verbal `<|subliminal_gap|>` Comma Splice — Proven Across Two Standalone Desktop Applications (`Launch-LMFT-Chess.bat` & `Launch-LMFT-Bloodmoon.bat`).**
 >
 > **▶️ Support the Architect on YouTube:** **[`@imissmydeadcat.74`](https://www.youtube.com/@imissmydeadcat.74)**
 >
@@ -32,8 +32,8 @@ Standard language models are **single-hemisphere text predictors**: they generat
 
 To keep GPU memory clean and avoid mixing unrelated workflows into one confusing interface, this repository ships **two completely separate standalone desktop applications** at the top level. Both import the pure core engine from `LMFT-Architecture/src/lmft_architecture/`, and each runs on its own port, its own local language model, and its own isolated state directory inside `LMFT-Training/outputs/`:
 
-### Standalone App #1: `LMFT-Chess.exe` — Self-Kibitzing Chess Competitor & Coach (`Qwen/Qwen3-4B`)
-- **Launch**: Double-click [`LMFT-Chess.exe`](LMFT-Chess.exe) (or run `.\LMFT-Architecture\.venv\Scripts\python.exe -m lmft_architecture.chess_app --single-window`, default port `8420`).
+### Standalone App #1: `Launch-LMFT-Chess.bat` — Self-Kibitzing Chess Competitor & Coach (`Qwen/Qwen3-8B` / `Qwen3-4B`)
+- **Launch**: Double-click [`Launch-LMFT-Chess.bat`](Launch-LMFT-Chess.bat) or [`Launch-Setup-Wizard.bat`](Launch-Setup-Wizard.bat) (runs `.\LMFT-Architecture\.venv\Scripts\pythonw.exe -m lmft_architecture.chess_app --single-window`, default port `8420`).
 - **What It Does**:
   - Built as a **self-trained chess kibitzer and sparring partner**—the kind of bot that could sit on Chess.com or Lichess and not only play legal moves, but **talk through the relationship between chess thinking and chess playing out loud**.
   - **Board-Anchored `Fact`**: On every turn, Pass-1 Philosophical `Fact` is computed directly from the live `python-chess` board (`evaluate_chess_board_posture` in [`chess_kibitz_bridge.py`](LMFT-Architecture/src/lmft_architecture/chess_kibitz_bridge.py)—material balance, King safety, center control, pawn structure, and tactical tension).
@@ -48,8 +48,8 @@ To keep GPU memory clean and avoid mixing unrelated workflows into one confusing
     - **Strict Anti-Cheat Air-Gap**: `LMFT` **never** queries Stockfish or the sparring engine to choose `LMFT`'s own moves (enforced by [`test_strict_airgap_sparring_engine_and_objective_elo_update`](LMFT-Architecture/tests/test_chess_app.py)). The sparring engine is strictly the **opponent on the opposite color** (automatically dialing its strength via `UCI_LimitStrength` / `UCI_Elo` / `Skill Level` to match `LMFT`'s current FIDE Elo) and the **post-move referee** (flagging `>= 1.5`-pawn drops for End-of-Game REM Sleep and updating `LMFT`'s FIDE Elo honestly after each game).
   - **Isolated State**: Saves all games, Elo ratings, kibitz streams, and End-of-Game REM Sleep rules to `LMFT-Training/outputs/chess_kibitzer_state/`.
 
-### Standalone App #2: `LMFT-Bloodmoon.exe` — Clockwise Content-Evolution Studio (`Impish_Bloodmoon_12B`)
-- **Launch**: Double-click [`LMFT-Bloodmoon.exe`](LMFT-Bloodmoon.exe) (or run `.\LMFT-Architecture\.venv\Scripts\python.exe -m lmft_architecture.bloodmoon_app --single-window`, default port `8421`).
+### Standalone App #2: `Launch-LMFT-Bloodmoon.bat` — Clockwise Content-Evolution Studio (`Impish_Bloodmoon_12B`)
+- **Launch**: Double-click [`Launch-LMFT-Bloodmoon.bat`](Launch-LMFT-Bloodmoon.bat) (runs `.\LMFT-Architecture\.venv\Scripts\pythonw.exe -m lmft_architecture.bloodmoon_app --single-window`, default port `8421`).
 - **What It Does**:
   - A dedicated **3-phase clockwise content-evolution and self-immunization loop** powered by 4-bit `Impish_Bloodmoon_12B`.
   - **Hard One-Way Polarity Rule (`feminine_to_masculine` ONLY)**: Enforced at the code level in [`entrainment_sparring.py`](LMFT-Architecture/src/lmft_architecture/entrainment_sparring.py) (any reverse polarity call raises a `ValueError`). The female modality is strictly the script producer and is never subjected to hypnotic content.
@@ -128,8 +128,9 @@ The workspace is split so the **Pure Core Architecture** (`LMFT-Architecture/`) 
 
 ```text
 Language Model Fuzzy Tree Research/      # Top-level Git repository & Desktop project root
-├── LMFT-Chess.exe                       # Standalone App #1: Self-Kibitzing Chess Competitor (Qwen3-4B)
-├── LMFT-Bloodmoon.exe                   # Standalone App #2: Clockwise Content-Evolution Studio (Impish_Bloodmoon_12B)
+├── Launch-Setup-Wizard.bat              # 5-Page Python GUI Setup & Hardware Diagnostics Wizard
+├── Launch-LMFT-Chess.bat                # Standalone App #1: Self-Kibitzing Chess Competitor (Qwen3-8B / 4B)
+├── Launch-LMFT-Bloodmoon.bat            # Standalone App #2: Clockwise Content-Evolution Studio (Impish_Bloodmoon_12B)
 ├── AGENTS.md                            # Anti-delusion, plain-English, and zero-rigging development rules
 ├── PROJECT_STATE.md                     # Concise (<40 lines) current status & benchmark summary
 ├── DECISIONS.md                         # Rolling engineering decision log (5 most recent decisions)
@@ -145,23 +146,24 @@ Language Model Fuzzy Tree Research/      # Top-level Git repository & Desktop pr
     ├── models/                          # Local checkpoints (right_brain_bridges, left_brain_lora_cycle2, left_brain_impish_bloodmoon)
     ├── outputs/                         # Consolidated rulesets, reports, chess_kibitzer_state/, and impish_bloodmoon_state/
     ├── experiments/                     # GPU benchmark & curriculum training scripts
-    ├── dist/                            # Portable release zip & encrypted model bundles
-    └── scripts/                         # C# native launcher sources & release bundle builder
+    ├── dist/                            # Portable release zip & manifest
+    └── scripts/                         # Release bundle builder
 ```
 
 ---
 
 ## 6. Quickstart & 1-Click Install / Auto-Sync (Windows / CUDA GPU)
 
-### 1. 5-Page Windows GUI Setup Wizard & Auto-Updating Launcher (`LMFT-Installer-Wizard.exe` / `LMFT-Chess.exe`)
-Double-click **[`LMFT-Installer-Wizard.exe`](LMFT-Installer-Wizard.exe)** for the 5-page graphical setup, hardware diagnostic, and Desktop shortcut wizard, or launch **[`LMFT-Chess.exe`](LMFT-Chess.exe)** directly:
+### 1. 5-Page Python GUI Setup Wizard & Launchers (`Launch-Setup-Wizard.bat` / `Launch-LMFT-Chess.bat`)
+Double-click **[`Launch-Setup-Wizard.bat`](Launch-Setup-Wizard.bat)** for the 5-page graphical setup, hardware diagnostic, and Desktop shortcut wizard (`installer_wizard.py`), or launch **[`Launch-LMFT-Chess.bat`](Launch-LMFT-Chess.bat)** directly:
 ```powershell
-.\LMFT-Installer-Wizard.exe
+.\Launch-Setup-Wizard.bat
 # or launch directly (auto-updates on startup):
-.\LMFT-Chess.exe
-.\LMFT-Bloodmoon.exe
+.\Launch-LMFT-Chess.bat
+.\Launch-LMFT-Bloodmoon.bat
 ```
-- **5-Page Graphical Setup Wizard**: If `.venv` does not exist yet on a fresh machine, `LMFT-Chess.exe` automatically opens `LMFT-Installer-Wizard.exe` to check your GPU/RAM, generate a custom Google Antigravity prompt, verify folder integrity, create the Arecibo Reply Desktop Icon, and provision `.venv`.
+- **100% Antivirus & Malwarebytes Friendly (Zero Unsigned `.EXE` Files)**: Every component is distributed as readable plain-text `.py` and `.bat` scripts executed by the officially signed **Python Software Foundation** interpreter (`pythonw.exe` / `python.exe`), eliminating false-positive heuristic alerts on Malwarebytes, Windows SmartScreen, and VirusTotal.
+- **5-Page Graphical Setup Wizard**: If `.venv` does not exist yet on a fresh machine, `Launch-LMFT-Chess.bat` automatically opens the 5-Page Setup Wizard (`installer_wizard.py`) to check your GPU/RAM, generate a custom Google Antigravity prompt, verify folder integrity, create the Arecibo Reply Desktop Icon, and provision `.venv`.
 - **Pre-Trained Checkpoints Included**: The repository includes the trained **3 Right-Brain `MiniLM` Bridge Classifiers** (`LMFT-Training/models/right_brain_bridges/`) and the trained **`Qwen3-8B` & `Qwen3-4B` Left-Brain LoRA + Corpus Callosum Projectors** (`LMFT-Training/models/left_brain_qwen3_8b/` and `left_brain_lora_cycle2/`), so the full voice and 40-node tree work out of the box.
 - **Automatic GitHub Master-Seed Sync**: On startup (and whenever you click **`[Sync Updates]`** in the header), the app checks `schaleh12/Dual-Hemisphere-Wisdom-Model` (`release_manifest.json`), verifies SHA-256 digests, and non-destructively merges newly evolved rules, Tier-2 `LearnedLeaf` nodes, and bitboard sleeve weights into your local runtime without overwriting your personal games or Elo rating.
 

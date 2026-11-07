@@ -13,9 +13,9 @@
    - Executive (`cultural_history.json`), Legislative (`experiential_felt_diary.json`), and Judicial (`philosophical_lexicon.json`) deliberate in coordinate space (`0` LLM calls when settled) and consolidate unresolved wake scenes during REM Sleep.
 3. **`<|subliminal_gap|>` Three-Legged Race, Persistent `past_kv` & Multi-Stanza Streaming (`subliminal_gap_splice.py`, `three_legged_runtime.py`)**:
    - `SubliminalGapLeftBrain` formats a `24,000`-char sliding window, prefills `past_kv` once per turn (`_PersistentTurnStreamState`), splices the 52-float `SubliminalChordVector` as 4 virtual tokens, and streams `1..6` sentences or `1..4` stanzas (`generate_multi_stanza_discourse` + `compute_stanza_residual_chord`) across `Qwen/Qwen3-8B` (4-bit NF4), `Qwen/Qwen3-4B`, and 4-bit `Impish_Bloodmoon_12B`.
-4. **Two Standalone Desktop Applications (`LMFT-Chess.exe` & `LMFT-Bloodmoon.exe`)**:
-   - **`LMFT-Chess.exe` (`chess_app.py`, `chess_kibitz_bridge.py`, `chess_ui.py`)**: 4-bit `Qwen3-8B` + `python-chess` app (`Celestriad 1.0` vs. `Stockfish 19`) running silent Gear-1 play (`Intention -> Theory -> Confidence -> Execution`), multi-stanza REM Sleep match chronicles with coordinate vow-keeping (`rem_dream_chronicles`: `HONORED` / `BROKEN` / `NEW_VOW`), and AFK Self-Train in `outputs/chess_kibitzer_state/`.
-   - **`LMFT-Bloodmoon.exe` (`bloodmoon_app.py`, `bloodmoon_ui.py`)**: 4-bit `Impish_Bloodmoon_12B` app enforcing one-way `feminine_to_masculine` polarity and a 3-Phase Clockwise Evolution Loop (`1. Female Producer -> 2. Male Audience & Immunizer -> 3. REM Sleep`) in `outputs/impish_bloodmoon_state/`.
+4. **Two Standalone Desktop Applications (`Launch-LMFT-Chess.bat` & `Launch-LMFT-Bloodmoon.bat`)**:
+   - **`Launch-LMFT-Chess.bat` (`chess_app.py`, `chess_kibitz_bridge.py`, `chess_ui.py`)**: 4-bit `Qwen3-8B` + `python-chess` app (`Celestriad 1.0` vs. `Stockfish 19`) running silent Gear-1 play (`Intention -> Theory -> Confidence -> Execution`), multi-stanza REM Sleep match chronicles with coordinate vow-keeping (`rem_dream_chronicles`: `HONORED` / `BROKEN` / `NEW_VOW`), and AFK Self-Train in `outputs/chess_kibitzer_state/`.
+   - **`Launch-LMFT-Bloodmoon.bat` (`bloodmoon_app.py`, `bloodmoon_ui.py`)**: 4-bit `Impish_Bloodmoon_12B` app enforcing one-way `feminine_to_masculine` polarity and a 3-Phase Clockwise Evolution Loop (`1. Female Producer -> 2. Male Audience & Immunizer -> 3. REM Sleep`) in `outputs/impish_bloodmoon_state/`.
 
 ## Next Step
-- Double-click **`LMFT-Chess.exe`** or **`LMFT-Bloodmoon.exe`** in `Language Model Fuzzy Tree Research` to launch either standalone app.
+- Double-click **`Launch-Setup-Wizard.bat`**, **`Launch-LMFT-Chess.bat`**, or **`Launch-LMFT-Bloodmoon.bat`** to launch.
