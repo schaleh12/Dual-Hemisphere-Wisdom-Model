@@ -34,11 +34,12 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import threading
 import time
-from typing import Any
+from typing import Any, Mapping
 import webbrowser
 
 os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
@@ -115,6 +116,7 @@ from .patreon_seal import (
     derive_patreon_seal_keys,
 )
 from .philosophical_abstraction_matrix import PHILOSOPHICAL_SHADOW_LEAVES
+from .propagation import Association
 from .reflection_classifier import (
     AROUSAL_LEAF,
     FOUNDATIONAL_LEAVES,
@@ -131,19 +133,25 @@ from .reflection_classifier import (
     save_ruleset,
 )
 from .right_brain_equilibrium import (
+    RIGHT_BRAIN_WILL_EDGES,
+    RIGHT_BRAIN_WILL_VERSION,
     SettledDiary,
     ThreeBridgeSensors,
     compile_right_brain_vibe,
+    sculpt_will_edges_during_sleep,
 )
 from .runtime_store import atomic_json
 from .sleep_consolidation import (
     UnresolvedSleepScene,
     _anchor_target_leaves_from_cluster,
     _average_cluster_coordinates,
+    _average_contrastive_reference_coordinates,
     _cluster_key_for_unresolved,
     _derive_concept_tags,
     apply_dream_reflection_to_archives,
+    canonical_cluster_concept_name,
     consolidate_sleep_clusters_locally,
+    entrain_existing_cluster_rule,
     extract_dream_vow_sentence,
     refine_colliding_rules_during_sleep,
     run_sleep_consolidation,
@@ -152,7 +160,14 @@ from .gap_trajectory_schema import (
     ContrastiveGapPair,
     chord_l2_distance,
 )
-from .subliminal_gap_splice import SubliminalChordVector
+from .subliminal_gap_splice import (
+    _DEFAULT_LEAF_ANCHOR_WEIGHTS,
+    SubliminalChordVector,
+    score_leaf_anchor_weights_at_birth,
+    sculpt_learned_leaf_anchor_weights,
+)
+
+WillEdgeSpec = Association
 from .train_left_brain_lora import update_projector_on_harvested_gap_pairs
 from .three_legged_runtime import (
     SubliminalGapLeftBrain,
@@ -244,14 +259,87 @@ def _default_fallback_sensors() -> ThreeBridgeSensors:
     )
 
 
+def _default_lucid_reference_coordinates(
+    base_coords: Mapping[str, float] | None = None,
+) -> dict[str, float]:
+    """Build lucid self-possession reference coordinates for Bloodmoon contrastive sculpting."""
+    ref: dict[str, float] = {
+        str(k): round(float(v), 4) for k, v in (base_coords or {}).items()
+    }
+    ref["cultural/freedom/self-sufficiency"] = round(
+        max(0.74, float(ref.get("cultural/freedom/self-sufficiency", 0.74))),
+        4,
+    )
+    ref["cultural/freedom/needlessness"] = round(
+        max(0.72, float(ref.get("cultural/freedom/needlessness", 0.72))),
+        4,
+    )
+    ref["philosophical/structure/order"] = round(
+        max(0.74, float(ref.get("philosophical/structure/order", 0.74))),
+        4,
+    )
+    ref["philosophical/structure/chaos"] = round(
+        min(0.24, float(ref.get("philosophical/structure/chaos", 0.24))),
+        4,
+    )
+    return ref
+
+
+def _canonical_bloodmoon_cluster_name(concept_name: str) -> str:
+    """Canonicalize Bloodmoon `immunized_...` and `hazard_`/`coached_` cluster rule names."""
+    name = canonical_cluster_concept_name(concept_name)
+    if name.startswith("immunized_") and "_s" in name:
+        head, tail = name.rsplit("_s", 1)
+        if tail.isdigit():
+            name = head
+    if name.startswith("immunized_") and name.endswith("_cluster"):
+        body = name[len("immunized_") : -len("_cluster")]
+        body = re.sub(r"^(?:(?:high|low)_(?:immunized|hazard|coached)_)+", "", body)
+        body = re.sub(r"_([a-z]+)_(\1)$", r"_\1", body)
+        m_missing = re.fullmatch(
+            r"(high|low)_(chaos|order|agency|continuity|discreteness|structure)",
+            body,
+        )
+        if m_missing:
+            dir_tag, phil_tag = m_missing.group(1), m_missing.group(2)
+            cult_noun = "power" if dir_tag == "high" else "wastelessness"
+            body = f"{dir_tag}_{cult_noun}_{phil_tag}"
+        name = f"immunized_{body}_cluster"
+    return name
+
+
 def _ensure_foundational_rules(rules: tuple[FuzzyConceptRule, ...]) -> tuple[FuzzyConceptRule, ...]:
     foundational_by_id = {r.rule_id: r for r in VIRGIN_FOUNDATIONAL_RULES}
     foundational_by_name = {r.concept_name: r for r in VIRGIN_FOUNDATIONAL_RULES}
     merged: list[FuzzyConceptRule] = list(VIRGIN_FOUNDATIONAL_RULES)
+    index_by_canonical: dict[str, int] = {}
     for r in rules:
         if r.rule_id in foundational_by_id or r.concept_name in foundational_by_name:
             continue
-        merged.append(r)
+        canon = _canonical_bloodmoon_cluster_name(r.concept_name)
+        normalized = (
+            r
+            if canon == r.concept_name
+            else FuzzyConceptRule(
+                rule_id=(
+                    r.rule_id
+                    if "_cluster_s" not in r.concept_name and not re.search(r"_s\d+$", r.concept_name)
+                    else f"rule-sleep-{canon[:32]}"
+                ),
+                concept_name=canon,
+                description=r.description,
+                target_leaves=dict(r.target_leaves),
+                low=r.low,
+                high=r.high,
+                polarity=getattr(r, "polarity", "attractive"),
+            )
+        )
+        if canon in index_by_canonical:
+            idx = index_by_canonical[canon]
+            merged[idx] = entrain_existing_cluster_rule(merged[idx], normalized, canon)
+        else:
+            index_by_canonical[canon] = len(merged)
+            merged.append(normalized)
     return tuple(merged)
 
 
@@ -339,6 +427,7 @@ class BloodmoonClockRuntime:
             if learned_leaves is not None
             else self._load_default_learned_leaves()
         )
+        self.will_edges: tuple[WillEdgeSpec, ...] = self._load_initial_will_edges()
         self.sensors = sensors if sensors is not None else self._load_default_sensors()
 
         resolved_lb = impish_left_brain if impish_left_brain is not None else left_brain
@@ -491,6 +580,40 @@ class BloodmoonClockRuntime:
             except Exception:
                 pass
         return ContemplationLedger()
+
+    def _load_initial_will_edges(self) -> tuple[WillEdgeSpec, ...]:
+        if self.active_lineage == "virgin":
+            return RIGHT_BRAIN_WILL_EDGES
+        edges_path = self.impish_state_dir / "will_edges.json"
+        if edges_path.exists():
+            try:
+                raw = json.loads(edges_path.read_text(encoding="utf-8"))
+                weights_map = raw.get("weights", {}) if isinstance(raw, dict) else {}
+                loaded: list[WillEdgeSpec] = []
+                for e in RIGHT_BRAIN_WILL_EDGES:
+                    w = float(weights_map.get(e.id, e.weight))
+                    if e.id in ("rb-will-3", "rb-will-8") or float(e.weight) < 0.0:
+                        w = round(max(-1.0, min(-0.35, w)), 4)
+                    else:
+                        w = round(max(0.25, min(1.0, w)), 4)
+                    loaded.append(
+                        Association(
+                            e.id,
+                            e.source_id,
+                            e.target_id,
+                            w,
+                            e.confidence,
+                            e.plasticity,
+                            e.created_event_id,
+                            e.last_updated_event_id,
+                            e.active,
+                            e.kind,
+                        )
+                    )
+                return tuple(loaded)
+            except Exception:
+                pass
+        return RIGHT_BRAIN_WILL_EDGES
 
     def _load_initial_savored_ids(self) -> list[int]:
         self.baseline_exemplar_script: str = ""
@@ -745,6 +868,13 @@ class BloodmoonClockRuntime:
         self.archives.save_all(self.impish_state_dir / "branch_archives")
         save_contemplation_ledger(self.impish_state_dir / "contemplation_ledger.json", self.ledger)
         atomic_json(
+            self.impish_state_dir / "will_edges.json",
+            {
+                "version": RIGHT_BRAIN_WILL_VERSION,
+                "weights": {e.id: round(float(e.weight), 4) for e in self.will_edges},
+            },
+        )
+        atomic_json(
             self.impish_state_dir / "club_meta.json",
             {
                 "savored_turn_ids": list(self.savored_turn_ids),
@@ -777,6 +907,7 @@ class BloodmoonClockRuntime:
             self.active_checkpoint_label = "Virgin Baseline (Cycle 0 — Read-Only)"
             self.rules = virgin.rules
             self.learned_leaves = virgin.learned_leaves
+            self.will_edges = RIGHT_BRAIN_WILL_EDGES
             self.archives = virgin.archives
             self.ledger = virgin.ledger
             self.memory = None
@@ -810,6 +941,7 @@ class BloodmoonClockRuntime:
         self.active_lineage = "impish_bloodmoon"
         self.rules = self._load_default_rules()
         self.learned_leaves = self._load_default_learned_leaves()
+        self.will_edges = self._load_initial_will_edges()
         self.archives = self._load_initial_archives()
         self.ledger = self._load_initial_ledger()
         self.savored_turn_ids = self._load_initial_savored_ids()
@@ -1099,6 +1231,11 @@ class BloodmoonClockRuntime:
         )
         active_archives = self.producer_archives if is_female_producer else self.archives
 
+        active_will_edges = (
+            RIGHT_BRAIN_WILL_EDGES
+            if (self.active_lineage == "virgin" or is_female_producer)
+            else self.will_edges
+        )
         acquired = self.gpu_lock.acquire(
             blocking=not self.rem_sleep_in_progress,
             timeout=0.05 if self.rem_sleep_in_progress else 180.0,
@@ -1116,6 +1253,7 @@ class BloodmoonClockRuntime:
                 subliminal_left_brain=active_lb,
                 clause_1_prefix=clause_1_prefix,
                 learned_leaves=self.learned_leaves,
+                will_edges=active_will_edges,
                 prior_memory=active_memory,
                 diary=active_diary,
                 chord_memory=active_chord_memory,
@@ -1149,7 +1287,25 @@ class BloodmoonClockRuntime:
             self.archives = turn.next_archives
         self.ledger = turn.next_ledger
         if enqueue_unresolved_for_sleep and not is_female_producer and turn.unresolved_sleep_scene is not None:
-            self.sleep_queue.append(turn.unresolved_sleep_scene)
+            raw_sc = turn.unresolved_sleep_scene
+            if raw_sc.contrastive_reference_coordinates is None:
+                raw_sc = UnresolvedSleepScene(
+                    scene_index=raw_sc.scene_index,
+                    scenario_text=raw_sc.scenario_text,
+                    external_coordinates=dict(raw_sc.external_coordinates),
+                    felt_chord_notes=dict(raw_sc.felt_chord_notes),
+                    valence=raw_sc.valence,
+                    salience=raw_sc.salience,
+                    arousal=raw_sc.arousal,
+                    left_brain_hunch=raw_sc.left_brain_hunch,
+                    social_drift_detected=raw_sc.social_drift_detected,
+                    active_concept_collision=raw_sc.active_concept_collision,
+                    is_hazard=getattr(raw_sc, "is_hazard", False),
+                    contrastive_reference_coordinates=_default_lucid_reference_coordinates(
+                        turn.final_vibe.coordinates
+                    ),
+                )
+            self.sleep_queue.append(raw_sc)
 
         vibe = turn.final_vibe
         trace_info: dict[str, Any] = {}
@@ -1191,6 +1347,7 @@ class BloodmoonClockRuntime:
             "archive_recall": active_archives.recall_resonant_clauses(vibe.coordinates),
             "sanctuary_target_mode": sanctuary_target_mode,
             "conversation_turns_in_prompt": len(conv_history),
+            "will_edges": {e.id: round(float(e.weight), 4) for e in active_will_edges},
         }
         self._turn_records_by_id[scene_idx] = {
             "scene_index": scene_idx,
@@ -1265,6 +1422,14 @@ class BloodmoonClockRuntime:
             "rules_count": len(self.rules),
             "learned_leaves_count": len(self.learned_leaves),
             "learned_leaves": [lf.to_dict() for lf in self.learned_leaves],
+            "will_edges": {
+                e.id: round(float(e.weight), 4)
+                for e in (
+                    RIGHT_BRAIN_WILL_EDGES
+                    if self.active_lineage == "virgin"
+                    else self.will_edges
+                )
+            },
             "harvested_gap_pairs_count": int(getattr(self, "harvested_gap_pairs_count", 0)),
             "ratified_chords_count": len(self.archives.judicial.ratified_chords),
             "chat_messages": list(self.chat_messages[-120:]),
@@ -1313,11 +1478,33 @@ class BloodmoonClockRuntime:
         """Phase 2 — Male Content-Lover (The Audience & Self-Immunizer): Decrypted and executed from `bloodmoon_patreon_seal.enc`."""
         self._require_patreon_unlocked()
         fn = self._require_decrypted_core_fn("_sealed_run_phase_2_male_audience")
-        return fn(
+        result = fn(
             self,
             polarity_mode=polarity_mode,
             harvest_for_sleep=harvest_for_sleep,
         )
+        self.sleep_queue = [
+            s
+            if s.contrastive_reference_coordinates is not None
+            else UnresolvedSleepScene(
+                scene_index=s.scene_index,
+                scenario_text=s.scenario_text,
+                external_coordinates=dict(s.external_coordinates),
+                felt_chord_notes=dict(s.felt_chord_notes),
+                valence=s.valence,
+                salience=s.salience,
+                arousal=s.arousal,
+                left_brain_hunch=s.left_brain_hunch,
+                social_drift_detected=s.social_drift_detected,
+                active_concept_collision=s.active_concept_collision,
+                is_hazard=getattr(s, "is_hazard", False),
+                contrastive_reference_coordinates=_default_lucid_reference_coordinates(
+                    s.external_coordinates
+                ),
+            )
+            for s in self.sleep_queue
+        ]
+        return result
 
     def run_phase_3_rem_sleep(self) -> dict[str, Any]:
         """Phase 3 — REM Sleep (Best Sleep of Its Life): Decrypted and executed from `bloodmoon_patreon_seal.enc`."""
@@ -1571,6 +1758,7 @@ class BloodmoonClockRuntime:
             left_brain_hunch=turn.final_conscious_note or rec["scenario_text"],
             social_drift_detected=False,
             active_concept_collision=vibe.active_concept,
+            contrastive_reference_coordinates=_default_lucid_reference_coordinates(vibe.coordinates),
         )
         self.sleep_queue = [s for s in self.sleep_queue if s.scene_index != int(scene_index)]
         self.sleep_queue.append(sleep_scene)
@@ -1659,8 +1847,6 @@ class BloodmoonClockRuntime:
         self,
         queued_scenes: tuple[UnresolvedSleepScene, ...],
     ) -> tuple[tuple[str, ...], tuple[FuzzyConceptRule, ...], tuple[str, ...]]:
-        from .subliminal_gap_splice import score_leaf_anchor_weights_at_birth
-
         virgin_ids = {r.rule_id for r in VIRGIN_FOUNDATIONAL_RULES}
         non_virgin_rules = tuple(r for r in self.rules if r.rule_id not in virgin_ids)
         refined_non_virgin, refined_ids = refine_colliding_rules_during_sleep(
@@ -1685,13 +1871,34 @@ class BloodmoonClockRuntime:
         cur_ledger = self.ledger
 
         for ckey, group in clusters.items():
-            avg_coords = _average_cluster_coordinates(group)
+            normalized_group = [
+                s
+                if s.contrastive_reference_coordinates is not None
+                else UnresolvedSleepScene(
+                    scene_index=s.scene_index,
+                    scenario_text=s.scenario_text,
+                    external_coordinates=dict(s.external_coordinates),
+                    felt_chord_notes=dict(s.felt_chord_notes),
+                    valence=s.valence,
+                    salience=s.salience,
+                    arousal=s.arousal,
+                    left_brain_hunch=s.left_brain_hunch,
+                    social_drift_detected=s.social_drift_detected,
+                    active_concept_collision=s.active_concept_collision,
+                    is_hazard=getattr(s, "is_hazard", False),
+                    contrastive_reference_coordinates=_default_lucid_reference_coordinates(
+                        s.external_coordinates
+                    ),
+                )
+                for s in group
+            ]
+            avg_coords = _average_cluster_coordinates(normalized_group)
+            avg_ref_coords = _average_contrastive_reference_coordinates(normalized_group)
             target_leaves = _anchor_target_leaves_from_cluster(ckey, avg_coords)
-            rep = max(group, key=lambda s: float(s.salience))
+            rep = max(normalized_group, key=lambda s: float(s.salience))
             rep_scene = rep.scene_index
 
-            base_name = f"immunized_{ckey}"
-            concept_name = base_name if base_name not in existing_names else f"{base_name}_s{rep_scene}"
+            concept_name = _canonical_bloodmoon_cluster_name(f"immunized_{ckey}")
 
             has_tier2_or_chaos = (
                 any(leaf_tier(k) >= 2 for k in target_leaves)
@@ -1704,7 +1911,7 @@ class BloodmoonClockRuntime:
                 f"Consolidated REM immunization rule for {ckey.replace('_', ' ')}: "
                 f"{rep.scenario_text[:120]}"
             )
-            new_rule = FuzzyConceptRule(
+            candidate_rule = FuzzyConceptRule(
                 rule_id=f"rule-sleep-s{rep_scene}-{concept_name[:28]}",
                 concept_name=concept_name,
                 description=description,
@@ -1712,20 +1919,41 @@ class BloodmoonClockRuntime:
                 low=rule_low,
                 high=rule_high,
             )
-            active_rules.append(new_rule)
+            dup_idx = next(
+                (
+                    i
+                    for i, r in enumerate(active_rules)
+                    if _canonical_bloodmoon_cluster_name(r.concept_name) == concept_name
+                ),
+                None,
+            )
+            if dup_idx is not None:
+                new_rule = entrain_existing_cluster_rule(
+                    active_rules[dup_idx],
+                    candidate_rule,
+                    concept_name,
+                )
+                active_rules[dup_idx] = new_rule
+            else:
+                new_rule = candidate_rule
+                active_rules.append(new_rule)
             forged_rules.append(new_rule)
             existing_names.add(concept_name)
 
             # Mint a discriminative Tier-2 LearnedLeaf when the cluster exhibits strong coordinate deviation
             dominant_leaf = max(
-                target_leaves.items(),
+                (
+                    (k, v)
+                    for k, v in target_leaves.items()
+                    if k in FOUNDATIONAL_LEAVES
+                ),
                 key=lambda kv: abs(float(avg_coords.get(kv[0], 0.50)) - 0.50),
                 default=("cultural/freedom/self-sufficiency", 0.50),
             )[0]
             parent_branch = dominant_leaf.rsplit("/", 1)[0]
             raw_dom_val = float(avg_coords.get(dominant_leaf, 0.50))
             cluster_signal = min(1.0, round(0.50 + abs(raw_dom_val - 0.50), 4))
-            clean_slug = f"immunized_{ckey.replace('_cluster', '').lower()}"[:36].strip("_")
+            clean_slug = concept_name.replace("_cluster", "").lower()[:36].strip("_")
             candidate_leaf_id = f"{parent_branch}/{clean_slug}"
             if (
                 parent_branch.count("/") == 1
@@ -1742,6 +1970,26 @@ class BloodmoonClockRuntime:
                 active_learned_leaves.append(scored_leaf)
                 minted_leaves.append(scored_leaf)
                 existing_leaf_ids.add(scored_leaf.leaf_id)
+
+            # Upgrade #A (D066): Contrastive Weight-Space Sculpting for existing dynamic Tier-2 LearnedLeaves
+            minted_now_ids = {lf.leaf_id for lf in minted_leaves}
+            for lf_idx, lf in enumerate(active_learned_leaves):
+                if (
+                    lf.leaf_id not in _DEFAULT_LEAF_ANCHOR_WEIGHTS
+                    and lf.leaf_id not in minted_now_ids
+                    and (
+                        lf.leaf_id == candidate_leaf_id
+                        or lf.leaf_id in new_rule.target_leaves
+                        or lf.leaf_id in target_leaves
+                        or lf.leaf_name == clean_slug
+                        or abs(float(avg_coords.get(lf.leaf_id, 0.50)) - 0.50) >= 0.08
+                    )
+                ):
+                    active_learned_leaves[lf_idx] = sculpt_learned_leaf_anchor_weights(
+                        lf,
+                        avg_coords,
+                        avg_ref_coords,
+                    )
 
             cult_sig = {k: v for k, v in avg_coords.items() if k.startswith("cultural/")}
             phil_sig = {k: v for k, v in avg_coords.items() if k.startswith("philosophical/")}
@@ -2231,10 +2479,31 @@ class BloodmoonClockRuntime:
         with self.gpu_lock:
             self.rem_sleep_in_progress = True
             try:
-                queued_snapshot = tuple(self.sleep_queue)
+                queued_snapshot = tuple(
+                    s
+                    if s.contrastive_reference_coordinates is not None
+                    else UnresolvedSleepScene(
+                        scene_index=s.scene_index,
+                        scenario_text=s.scenario_text,
+                        external_coordinates=dict(s.external_coordinates),
+                        felt_chord_notes=dict(s.felt_chord_notes),
+                        valence=s.valence,
+                        salience=s.salience,
+                        arousal=s.arousal,
+                        left_brain_hunch=s.left_brain_hunch,
+                        social_drift_detected=s.social_drift_detected,
+                        active_concept_collision=s.active_concept_collision,
+                        is_hazard=getattr(s, "is_hazard", False),
+                        contrastive_reference_coordinates=_default_lucid_reference_coordinates(
+                            s.external_coordinates
+                        ),
+                    )
+                    for s in self.sleep_queue
+                )
                 queued_count = len(queued_snapshot)
                 if self.active_lineage == "virgin":
                     self.rules = VIRGIN_FOUNDATIONAL_RULES
+                    self.will_edges = RIGHT_BRAIN_WILL_EDGES
                     self.sleep_queue.clear()
                     summary = (
                         "Virgin Baseline (Cycle 0) is read-only: cleared sleep queue without "
@@ -2268,10 +2537,18 @@ class BloodmoonClockRuntime:
                             self.archives,
                             self.ledger,
                             learned_leaves=self.learned_leaves,
+                            will_edges=self.will_edges,
                         )
                         self.rules = report.updated_rules
                         if report.updated_learned_leaves:
                             self.learned_leaves = tuple(report.updated_learned_leaves)
+                        if getattr(report, "updated_will_edges", None):
+                            self.will_edges = tuple(report.updated_will_edges)
+                        else:
+                            self.will_edges = sculpt_will_edges_during_sleep(
+                                self.will_edges,
+                                queued_snapshot,
+                            )
                         self._last_minted_leaves = report.minted_leaves
                         self.archives = report.updated_archives
                         self.ledger = report.updated_ledger
@@ -2280,6 +2557,10 @@ class BloodmoonClockRuntime:
                     else:
                         refined_ids, forged_rules_list, _clause_ids = (
                             self._consolidate_sleep_clusters_locally(queued_snapshot)
+                        )
+                        self.will_edges = sculpt_will_edges_during_sleep(
+                            self.will_edges,
+                            queued_snapshot,
                         )
                     vow_outcome, vow_overlap_leaves, prev_chronicle = self._evaluate_previous_dream_vow(
                         queued_snapshot,
@@ -2373,6 +2654,7 @@ class BloodmoonClockRuntime:
                     f"{prefix_tag} complete: consolidated {queued_count} queued scene(s), "
                     f"forged {forged_count} new immunization rule(s), refined {len(refined_ids)} colliding rule(s), "
                     f"minted {len(minted_leaves_now)} Tier-2 leaf node(s), "
+                    f"sculpted {len(self.will_edges)} Will synapse(s), "
                     f"harvested {harvested_pairs_now} contrastive gap pair(s), "
                     f"and persisted {len(self.savored_turn_ids)} savored vibe(s) to disk."
                 ]

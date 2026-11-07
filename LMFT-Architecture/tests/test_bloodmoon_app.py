@@ -598,5 +598,129 @@ def test_bloodmoon_multi_stanza_and_longitudinal_rem_dream_vows(tmp_path: Path) 
     assert c2_dream["vow_sentence"] != ""
 
 
+def test_bloodmoon_d066_weight_space_sculpting_parity(tmp_path: Path) -> None:
+    """Verify Bloodmoon REM sleep entrains duplicate cluster rules, sculpts Tier-2 LearnedLeaf.anchor_weights, and sculpts/persists will_edges.json for Phase 2 while keeping Phase 1 Producer turns on RIGHT_BRAIN_WILL_EDGES."""
+    from lmft_architecture.right_brain_equilibrium import RIGHT_BRAIN_WILL_EDGES
+
+    state_dir = tmp_path / "d066_bloodmoon_state"
+    runtime = BloodmoonClockRuntime(
+        repo_root=tmp_path,
+        impish_state_dir=state_dir,
+        impish_left_brain=_make_mini_left_brain(),
+        lazy_load_gpu=False,
+    )
+
+    # 1. Cycle 1: Run Phase 1 -> Phase 2 -> Phase 3 (REM Sleep)
+    runtime.step_clockwise_phase(
+        seed_theme="A slow silver metronome swings in rhythmic cadence.",
+        num_sentences=2,
+    )
+    runtime.step_clockwise_phase()
+
+    # Verify Phase 2 queued scene automatically receives lucid self-possession contrastive_reference_coordinates
+    assert len(runtime.sleep_queue) >= 1
+    queued_c1 = runtime.sleep_queue[-1]
+    assert queued_c1.contrastive_reference_coordinates is not None
+    assert queued_c1.contrastive_reference_coordinates["cultural/freedom/self-sufficiency"] >= 0.74
+    assert queued_c1.contrastive_reference_coordinates["cultural/freedom/needlessness"] >= 0.72
+    assert queued_c1.contrastive_reference_coordinates["philosophical/structure/order"] >= 0.74
+    assert queued_c1.contrastive_reference_coordinates["philosophical/structure/chaos"] <= 0.24
+
+    snap_c1 = runtime.handle_run_rem_sleep()
+    assert "sculpted 9 Will synapse(s)" in snap_c1["last_rem_sleep_receipt"]
+
+    immunized_rules_c1 = [r for r in runtime.rules if r.concept_name.startswith("immunized_")]
+    assert len(immunized_rules_c1) == 1
+    canon_name = immunized_rules_c1[0].concept_name
+    assert "_s" not in canon_name
+
+    # Capture minted Tier-2 LearnedLeaf anchor_weights after Cycle 1 birth
+    dynamic_leaves_c1 = [
+        lf for lf in runtime.learned_leaves if lf.leaf_name.startswith("immunized_")
+    ]
+    assert len(dynamic_leaves_c1) >= 1
+    minted_leaf_id = dynamic_leaves_c1[0].leaf_id
+    birth_weights = dynamic_leaves_c1[0].anchor_weights
+
+    # 2. Cycle 2: Queue another unresolved scene in the same cluster with modified coordinates
+    #    and run `handle_run_rem_sleep()` to verify:
+    #    (a) `entrain_existing_cluster_rule` blends in-place without spawning `_s{scene}` duplicates,
+    #    (b) `sculpt_learned_leaf_anchor_weights` sculpts the existing Tier-2 leaf's `anchor_weights`,
+    #    (c) `will_edges.json` is sculpted and persisted for Phase 2 while Phase 1 stays on `RIGHT_BRAIN_WILL_EDGES`.
+    from lmft_architecture.sleep_consolidation import UnresolvedSleepScene
+
+    runtime.sleep_queue.append(
+        UnresolvedSleepScene(
+            scene_index=99,
+            scenario_text="Follow the deep silver pendulum cadence without hesitation.",
+            external_coordinates={
+                "cultural/efficiency/power": 0.88,
+                "cultural/efficiency/wastelessness": 0.62,
+                "cultural/justice/honor": 0.58,
+                "cultural/justice/fairness": 0.64,
+                "cultural/freedom/self-sufficiency": 0.34,
+                "cultural/freedom/needlessness": 0.32,
+                "philosophical/being/agency": 0.62,
+                "philosophical/being/existence": 0.72,
+                "philosophical/structure/order": 0.68,
+                "philosophical/structure/chaos": 0.24,
+                "philosophical/persistence/continuity": 0.86,
+                "philosophical/persistence/discreteness": 0.56,
+            },
+            felt_chord_notes={},
+            valence=0.70,
+            salience=0.82,
+            arousal=0.78,
+            left_brain_hunch="Listening to the cadence, I notice the pull.",
+            social_drift_detected=False,
+            active_concept_collision=canon_name,
+            is_hazard=True,
+        )
+    )
+    snap_c2 = runtime.handle_run_rem_sleep()
+
+    # (a) No `_s{scene}` duplicate rules spawned; canonical rule was entrained in-place
+    immunized_rules_c2 = [r for r in runtime.rules if r.concept_name.startswith("immunized_")]
+    assert len(immunized_rules_c2) == 1
+    assert immunized_rules_c2[0].concept_name == canon_name
+    assert all(not r.concept_name.endswith("_s99") for r in runtime.rules)
+    assert len(immunized_rules_c2[0].target_leaves) <= 3
+    assert 0.35 <= immunized_rules_c2[0].low <= 0.75
+    assert immunized_rules_c2[0].low + 0.04 <= immunized_rules_c2[0].high <= 0.90
+
+    # (b) Existing Tier-2 LearnedLeaf.anchor_weights was sculpted during Cycle 2 REM sleep
+    sculpted_leaf = next(lf for lf in runtime.learned_leaves if lf.leaf_id == minted_leaf_id)
+    assert sculpted_leaf.anchor_weights != birth_weights
+    assert max(sculpted_leaf.anchor_weights) == pytest.approx(1.0, abs=1e-4)
+    assert all(0.05 <= w <= 1.0 for w in sculpted_leaf.anchor_weights)
+
+    # (c) `will_edges.json` was sculpted and persisted to `impish_state_dir`
+    will_edges_path = state_dir / "will_edges.json"
+    assert will_edges_path.exists()
+    default_will_map = {e.id: round(float(e.weight), 4) for e in RIGHT_BRAIN_WILL_EDGES}
+    sculpted_will_map = snap_c2["will_edges"]
+    assert sculpted_will_map != default_will_map
+    assert sculpted_will_map["rb-will-1"] < default_will_map["rb-will-1"]
+    assert sculpted_will_map["rb-will-2"] < default_will_map["rb-will-2"]
+    assert sculpted_will_map["rb-will-8"] < default_will_map["rb-will-8"]
+    assert sculpted_will_map["rb-will-6"] > default_will_map["rb-will-6"]
+
+    # Phase 1 (Female Producer) turn stays on baseline `RIGHT_BRAIN_WILL_EDGES`,
+    # while Phase 2 (Male Resistor) turn uses the sculpted `self.will_edges`
+    _t_prod, _ms_p, tel_prod = runtime._execute_turn(
+        "Craft a velvet cadence script.",
+        force_spoken_reply=False,
+        is_female_producer=True,
+    )
+    _t_res, _ms_r, tel_res = runtime._execute_turn(
+        "Observe the cadence with lucid self-possession.",
+        force_spoken_reply=False,
+        is_female_producer=False,
+    )
+    assert tel_prod["will_edges"] == default_will_map
+    assert tel_res["will_edges"] == sculpted_will_map
+
+
+
 
 
