@@ -1100,6 +1100,21 @@ def test_speaker_attribution_and_clean_slate_reset(tmp_path: Path) -> None:
     hist_pairs = runtime._extract_clean_conversation_history()
     assert len(hist_pairs) == 1
 
+    # Short non-question remarks stay at 1 sentence (`insightful_inquiry_deliberation is False`)
+    s_short = runtime.handle_chat_message("Good game so far.", room="chess", anchor_to_board=True)
+    assert s_short["chat_messages"][-1]["telemetry"]["insightful_inquiry_deliberation"] is False
+    assert s_short["chat_messages"][-1]["telemetry"]["num_sentences"] == 1
+    assert "auto_rem_sleep_receipt" in CHESS_SINGLE_PAGE_HTML
+
+    # Early-ply Gear-1 Right-Brain move selection rotates among nearly-tied sound openings across games
+    runtime.handle_set_fen("start")
+    runtime.games_completed_count = 0
+    mv_g0 = runtime.handle_chess_ai_move()["last_hybrid_move_arbitration"]["chosen_move_san"]
+    runtime.handle_set_fen("start")
+    runtime.games_completed_count = 1
+    mv_g1 = runtime.handle_chess_ai_move()["last_hybrid_move_arbitration"]["chosen_move_san"]
+    assert mv_g0 != mv_g1
+
     # 4. If Celestriad's 5:00 clock runs out (0:00), no hardcoded instinct bailout saves it;
     #    it forfeits on time, queues the time-forfeit turn into `sleep_queue`, talks to itself
     #    during REM sleep, and consolidates a permanent clock-persistence hazard rule.

@@ -1610,6 +1610,19 @@ class ChessKibitzerRuntime:
 
         top_candidates = all_evals[:6]
         right_brain_choice = top_candidates[0]
+        if len(self.move_history_san) < 6 and len(top_candidates) > 1 and self.games_completed_count > 0:
+            best_score = right_brain_choice.composite_score
+            sound_opening = [
+                c
+                for c in top_candidates[:4]
+                if not c.is_blunder
+                and not c.is_repetition
+                and not c.shadow_warnings
+                and (best_score - c.composite_score) <= 0.18
+            ]
+            if len(sound_opening) > 1:
+                rot_idx = (self.games_completed_count + (len(self.move_history_san) // 2)) % len(sound_opening)
+                right_brain_choice = sound_opening[rot_idx]
         chosen_san = right_brain_choice.san
         selection_mode = "gear_1_right_brain_intuition"
 
@@ -1692,6 +1705,11 @@ class ChessKibitzerRuntime:
             if anchor_to_board is not None
             else bool(self.board.move_stack)
         )
+        if use_board_context:
+            self.board_posture = evaluate_chess_board_posture(
+                self.board,
+                perspective=self.board.turn,
+            )
         scenario_input = (
             build_natural_chess_scenario_prompt(
                 self.board,
@@ -1725,11 +1743,12 @@ class ChessKibitzerRuntime:
                 skipped_child_leaves=s_p,
             )
             is_insightful_inquiry = ("?" in clean_text or len(clean_text.split()) >= 10) and (
-                float(p_exp.get("experiential/reflection/novelty", 0.0)) >= 0.35
-                or float(p_exp.get("experiential/reflection/salience", 0.0)) >= 0.45
-                or float(p_coords.get("psychological/truth/theory", 0.0)) >= 0.45
+                float(p_vibe.novelty) >= 0.30
+                or float(p_vibe.salience) >= 0.42
+                or float(p_vibe.arousal) >= 0.42
+                or float(p_vibe.intention) >= 0.42
                 or p_vibe.posture == "TUG_LEFT_BRAIN"
-                or float(p_vibe.clarity) < 0.62
+                or float(p_vibe.clarity) < 0.65
                 or bool(p_vibe.self_registry.dissonance_notes)
                 or bool(p_vibe.shadow_pathology_warnings)
             )
@@ -2646,15 +2665,21 @@ class ChessKibitzerRuntime:
             return None
         try:
             rep = max(queued_snapshot, key=lambda s: float(s.salience))
+            clean_scenario = rep.scenario_text.split("[Coach note:", 1)[0].strip()
+            review_note = (rep.game_review_annotation or "").strip()
             rule_summary = (
-                f" Consolidated rule {forged_rules[0].concept_name}."
+                f" Consolidated rule: {forged_rules[0].concept_name}."
                 if forged_rules
                 else ""
             )
-            raw_note = (rep.game_review_annotation or rep.scenario_text).split("[Coach note:", 1)[0].strip()
+            moment_desc = (
+                f"{clean_scenario[:180]} ({review_note[:160]})"
+                if review_note and review_note not in clean_scenario
+                else (review_note or clean_scenario)[:240]
+            )
             sleep_prompt = (
-                f"During REM sleep consolidation, reflect on this critical board moment: "
-                f"{raw_note[:220]}.{rule_summary}"
+                f"{moment_desc}.{rule_summary} "
+                f"What is the key positional lesson to carry forward from this moment?"
             )
             valid_ext_keys = set(FOUNDATIONAL_LEAVES) | {lf.leaf_id for lf in self.learned_leaves}
             base_coords: dict[str, float] = {k: 0.50 for k in FOUNDATIONAL_LEAVES}
@@ -2666,10 +2691,12 @@ class ChessKibitzerRuntime:
             for k, v in rep.felt_chord_notes.items():
                 if k in valid_ext_keys:
                     base_coords[k] = float(v)
+            contrastive_theory_coords: dict[str, float] | None = None
             if rep.contrastive_reference_coordinates:
+                contrastive_theory_coords = dict(base_coords)
                 for rk, rv in rep.contrastive_reference_coordinates.items():
                     if rk in valid_ext_keys:
-                        base_coords.setdefault(rk, float(rv))
+                        contrastive_theory_coords[rk] = float(rv)
             exp_coords = {
                 "experiential/reflection/novelty": 0.48,
                 "experiential/reflection/salience": float(rep.salience),
@@ -2683,10 +2710,12 @@ class ChessKibitzerRuntime:
                 base_coords,
                 exp_coords,
                 self.rules,
-                pass_index=2,
+                pass_index=2 if contrastive_theory_coords is not None else 1,
                 event_id=f"rem_sleep_{rep.scene_index}",
                 prior_memory=self.memory,
                 learned_leaves=self.learned_leaves,
+                internal_theory_coords=contrastive_theory_coords,
+                internal_theory_experiential=exp_coords if contrastive_theory_coords is not None else None,
             )
             sleep_chord = SubliminalChordVector.from_right_brain_vibe(
                 sleep_vibe,

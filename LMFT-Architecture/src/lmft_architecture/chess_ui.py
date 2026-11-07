@@ -1049,7 +1049,7 @@ function renderState(s) {
   if (elMistake) elMistake.textContent = String(cMistake);
   if (elBlund) elBlund.textContent = String(cBlund);
 
-  const sig = JSON.stringify(msgs.map(m => [m.id, m.role_label, m.text, m.coached, m.savored, !!(m.telemetry && (m.telemetry.game_review || m.telemetry.sparring_referee_review || m.telemetry.intuition_override_note))]));
+  const sig = JSON.stringify(msgs.map(m => [m.id, m.role_label, m.text, m.coached, m.savored, !!m.auto_rem_sleep_receipt, !!(m.telemetry && (m.telemetry.game_review || m.telemetry.sparring_referee_review || m.telemetry.intuition_override_note))]));
   if (sig !== lastRenderedChatSig) {
     lastRenderedChatSig = sig;
     const box = document.getElementById("chat-messages");
@@ -1070,6 +1070,9 @@ function renderState(s) {
       const coachStripHtml = pc
         ? `<div class="${bannerCls}"><strong>Custom Coach (${escapeHtml(pc.classification || "SOLID")} · ${Number(pc.move_accuracy_pct || 0).toFixed(0)}% Acc · Est. ${Number(pc.estimated_performance_elo || 1000).toFixed(0)} Elo):</strong> ${escapeHtml(pc.coaching_advice || "")}</div>`
         : (gr ? `<div class="${bannerCls}"><strong>🐟 Stockfish 19 Post-Move Referee:</strong> ${escapeHtml(gr.annotation_summary || "")}</div>` : (t.intuition_override_note ? `<div class="coach-banner">${escapeHtml(t.intuition_override_note)}</div>` : ""));
+      const autoSleepHtml = m.auto_rem_sleep_receipt
+        ? `<div class="coach-banner brill" style="white-space:pre-wrap;margin-top:6px;"><strong>🌙 Auto-REM Sleep Dream &amp; Consolidation:</strong>\n${escapeHtml(m.auto_rem_sleep_receipt)}</div>`
+        : "";
       const actionsHtml = (m.sender === "companion" && typeof m.id === "number")
         ? `<div style="margin-top:6px;display:flex;gap:6px;">
              <button class="btn" style="padding:3px 8px;font-size:10px;" onclick="coachTurn(${m.id})">${m.coached ? "Queued for Sleep" : "Coach / Queue for Sleep"}</button>
@@ -1085,6 +1088,7 @@ function renderState(s) {
           <div class="msg-text">${escapeHtml(m.text)}</div>
           ${subHtml}
           ${coachStripHtml}
+          ${autoSleepHtml}
           ${actionsHtml}
         </div>
       `;
