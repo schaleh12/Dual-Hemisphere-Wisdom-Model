@@ -72,9 +72,14 @@ class _TinyTokenizer:
             if not raw_tok:
                 continue
             if raw_tok not in self._vocab:
-                idx = len(self._vocab)
-                self._vocab[raw_tok] = idx
-                self._id_to_tok[idx] = raw_tok
+                if len(self._vocab) < 95:
+                    idx = len(self._vocab)
+                    self._vocab[raw_tok] = idx
+                    self._id_to_tok[idx] = raw_tok
+                else:
+                    idx = 6 + (sum(ord(ch) * (i + 1) for i, ch in enumerate(raw_tok)) % 88)
+                    ids.append(idx)
+                    continue
             ids.append(self._vocab[raw_tok])
         return ids
 
@@ -545,6 +550,53 @@ def test_female_producer_fuzzy_tree_polarity_and_isolation(tmp_path: Path) -> No
     # whereas `runtime.producer_memory` was updated independently
     assert runtime.memory is None
     assert runtime.producer_memory is not None
+
+
+def test_bloodmoon_multi_stanza_and_longitudinal_rem_dream_vows(tmp_path: Path) -> None:
+    """Verify Bloodmoon supports multi-stanza (`Breath -> Stanza -> Chronicle`), un-bracketed prompts, and longitudinal REM Dream Vows."""
+    weaver_p = build_weaver_scenario_prompt("feminine_to_masculine", "Velvet metronome.")
+    resistor_p = build_resistor_scenario_prompt("feminine_to_masculine", "Follow the pendulum.")
+    assert "[" not in weaver_p and "]" not in weaver_p
+    assert "[" not in resistor_p and "]" not in resistor_p
+    assert " — " in weaver_p and " — " in resistor_p
+
+    runtime = BloodmoonClockRuntime(
+        repo_root=tmp_path,
+        impish_state_dir=tmp_path / "chronicle_bloodmoon_state",
+        impish_left_brain=_make_mini_left_brain(),
+        lazy_load_gpu=False,
+    )
+
+    # 1. Verify `num_sentences=6` auto-promotes Phase 1 into multi-stanza (`2` stanzas of `3` sentences)
+    snap_p1 = runtime.step_clockwise_phase(
+        seed_theme="A slow silver metronome ticks in quiet resonance.",
+        num_sentences=6,
+    )
+    assert snap_p1["clockwise_phase"] == 2
+    p1_msg = snap_p1["chat_messages"][-1]
+    assert p1_msg["telemetry"]["num_sentences"] >= 3
+
+    # 2. Step Phase 2 and Phase 3 (Cycle 1 REM Sleep) -> creates `NEW_VOW` in `rem_dream_chronicles`
+    runtime.step_clockwise_phase()
+    snap_p3_c1 = runtime.step_clockwise_phase()
+    assert snap_p3_c1["clockwise_cycle_count"] == 1
+    assert snap_p3_c1["last_rem_sleep_self_talk"] != ""
+    assert len(snap_p3_c1["rem_dream_chronicles"]) == 1
+    c1_dream = snap_p3_c1["rem_dream_chronicles"][0]
+    assert c1_dream["vow_outcome"] == "NEW_VOW"
+    assert c1_dream["vow_sentence"] != ""
+    assert len(c1_dream["vowed_leaves"]) >= 1
+
+    # 3. Run Cycle 2 (Phase 1 -> Phase 2 -> Phase 3) -> evaluates Cycle 1's vow (`HONORED` / `BROKEN`)
+    runtime.step_clockwise_phase(seed_theme="Deep rhythmic stillness.", num_sentences=3)
+    runtime.step_clockwise_phase()
+    snap_p3_c2 = runtime.step_clockwise_phase()
+    assert snap_p3_c2["clockwise_cycle_count"] == 2
+    assert len(snap_p3_c2["rem_dream_chronicles"]) == 2
+    c2_dream = snap_p3_c2["rem_dream_chronicles"][-1]
+    assert c2_dream["vow_outcome"] in ("HONORED", "BROKEN")
+    assert c2_dream["vow_sentence"] != ""
+
 
 
 

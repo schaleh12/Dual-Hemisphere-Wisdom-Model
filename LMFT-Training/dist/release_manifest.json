@@ -2,8 +2,8 @@
   "schema_version": 1,
   "version": "0.2.0",
   "github_repo": "schaleh12/Dual-Hemisphere-Wisdom-Model",
-  "build_sha256": "050847762da9f1ea016257eaa122aae90963f8610a8b3c10caf3f15226a7cacc",
-  "build_short_hash": "050847762da9",
+  "build_sha256": "49156ec8fb5a4f97953ab73025a81f9f476b57f13c00917ce7e4f70d4415b467",
+  "build_short_hash": "49156ec8fb5a",
   "files": {
     "src/lmft_architecture/__init__.py": {
       "sha256": "a89f56c2195e87129adbffa5065d8769ea096e13ba98783d217c4d120ee92623",
@@ -66,8 +66,8 @@
       "size_bytes": 5515
     },
     "src/lmft_architecture/bloodmoon_app.py": {
-      "sha256": "631d5e3a7ca5c17ef85069166e0538b50a39de32fc445a7d4c385462fbd40524",
-      "size_bytes": 112889
+      "sha256": "9c23ad9bb84c7931dfcc347dbb3ec4b297fdb2213866034f8f3c21550ea3108d",
+      "size_bytes": 112978
     },
     "src/lmft_architecture/bloodmoon_ui.py": {
       "sha256": "35dc889b58af1867c20eec0645009f59a9dd5f613942646d1373e00bad95c7a0",

@@ -95,14 +95,14 @@ def build_weaver_scenario_prompt(polarity_mode: str = "feminine_to_masculine", s
     resolved = resolve_sparring_polarity(polarity_mode)
     pol_info = SPARRING_POLARITY_MODES[resolved]
     theme_text = seed_theme.strip() or pol_info["default_seed"]
-    return f"[{pol_info['weaver_framing']}]: {theme_text}"
+    return f"{pol_info['weaver_framing']} — {theme_text}"
 
 
 def build_resistor_scenario_prompt(polarity_mode: str = "feminine_to_masculine", induction_script: str = "") -> str:
     """Frame `induction_script` with the Male Content-Lover / Self-Immunizer persona (`He/Him`) for generation."""
     resolved = resolve_sparring_polarity(polarity_mode)
     pol_info = SPARRING_POLARITY_MODES[resolved]
-    return f"[{pol_info['resistor_framing']}]: {induction_script.strip()}"
+    return f"{pol_info['resistor_framing']} — {induction_script.strip()}"
 
 
 def _clamp01(value: float) -> float:

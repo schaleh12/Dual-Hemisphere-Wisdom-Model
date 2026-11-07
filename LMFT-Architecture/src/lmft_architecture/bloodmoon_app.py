@@ -142,6 +142,8 @@ from .sleep_consolidation import (
     _average_cluster_coordinates,
     _cluster_key_for_unresolved,
     _derive_concept_tags,
+    apply_dream_reflection_to_archives,
+    extract_dream_vow_sentence,
     refine_colliding_rules_during_sleep,
     run_sleep_consolidation,
 )
@@ -149,6 +151,8 @@ from .subliminal_gap_splice import SubliminalChordVector
 from .three_legged_runtime import (
     SubliminalGapLeftBrain,
     ThreeLeggedTurnResult,
+    _compile_mid_sentence_comma_vibe,
+    compute_stanza_residual_chord,
     run_three_legged_turn,
 )
 from .virgin_baseline import VIRGIN_FOUNDATIONAL_RULES, load_virgin_baseline_state
@@ -484,6 +488,8 @@ class BloodmoonClockRuntime:
 
     def _load_initial_savored_ids(self) -> list[int]:
         self.baseline_exemplar_script: str = ""
+        self.last_rem_sleep_self_talk: str | None = None
+        self.rem_dream_chronicles: list[dict[str, Any]] = []
         meta_path = self.impish_state_dir / "club_meta.json"
         if meta_path.exists():
             try:
@@ -494,6 +500,10 @@ class BloodmoonClockRuntime:
                     self.clockwise_phase = 1
                 self.clockwise_cycle_count = int(raw.get("clockwise_cycle_count", 0))
                 self.baseline_exemplar_script = str(raw.get("baseline_exemplar_script", "")).strip()
+                if raw.get("last_rem_sleep_self_talk"):
+                    self.last_rem_sleep_self_talk = str(raw["last_rem_sleep_self_talk"])
+                if isinstance(raw.get("rem_dream_chronicles"), list):
+                    self.rem_dream_chronicles = list(raw["rem_dream_chronicles"][-5:])
                 return [int(x) for x in raw.get("savored_turn_ids", [])]
             except Exception:
                 pass
@@ -681,7 +691,21 @@ class BloodmoonClockRuntime:
         self._sync_active_thread_record(persist=True)
         return self.get_state_snapshot()
 
-    def _extract_clean_conversation_history(self) -> tuple[tuple[str, str], ...]:
+    def _prune_ephemeral_history(self) -> None:
+        """Bound in-memory chat messages and turn records during long AFK Clockwise runs."""
+        if len(self.chat_messages) > 120:
+            del self.chat_messages[:-120]
+        if len(self._turn_records_by_id) > 100:
+            savored_set = set(self.savored_turn_ids)
+            queued_set = {s.scene_index for s in self.sleep_queue}
+            removable = sorted(
+                k for k in self._turn_records_by_id if k not in savored_set and k not in queued_set
+            )
+            excess = len(self._turn_records_by_id) - 100
+            for k in removable[:excess]:
+                self._turn_records_by_id.pop(k, None)
+
+    def _extract_clean_conversation_history(self, *, max_turns: int = 20) -> tuple[tuple[str, str], ...]:
         pairs: list[tuple[str, str]] = []
         pending_user: str | None = None
         for msg in self.chat_messages:
@@ -699,9 +723,10 @@ class BloodmoonClockRuntime:
                 if c_txt:
                     pairs.append((pending_user, c_txt))
                     pending_user = None
-        return tuple(pairs)
+        return tuple(pairs[-max_turns:])
 
     def _persist_user_state(self) -> None:
+        self._prune_ephemeral_history()
         self._sync_active_thread_record(persist=self.active_lineage != "virgin")
         if self.active_lineage == "virgin":
             return
@@ -721,6 +746,8 @@ class BloodmoonClockRuntime:
                 "clockwise_phase": int(self.clockwise_phase),
                 "clockwise_cycle_count": int(self.clockwise_cycle_count),
                 "baseline_exemplar_script": getattr(self, "baseline_exemplar_script", ""),
+                "last_rem_sleep_self_talk": getattr(self, "last_rem_sleep_self_talk", None),
+                "rem_dream_chronicles": list(getattr(self, "rem_dream_chronicles", [])[-5:]),
             },
         )
 
@@ -1024,6 +1051,9 @@ class BloodmoonClockRuntime:
         clause_1_prefix: str | None = None,
         custom_sensors: Any | None = None,
         num_sentences: int = 1,
+        max_stanzas: int = 1,
+        sentences_per_stanza: int = 3,
+        lead_with_gap: bool = False,
         comma_chord_transform: Any | None = None,
         include_conversation_history: bool = False,
         enqueue_unresolved_for_sleep: bool = True,
@@ -1039,6 +1069,16 @@ class BloodmoonClockRuntime:
             if include_conversation_history
             else ()
         )
+
+        effective_max_stanzas = max(1, min(4, int(max_stanzas)))
+        effective_sents_per_stanza = max(1, min(6, int(sentences_per_stanza)))
+        effective_num_sentences = max(1, int(num_sentences))
+        if effective_num_sentences >= 6 and effective_max_stanzas == 1:
+            effective_max_stanzas = min(4, max(2, effective_num_sentences // 3))
+            effective_sents_per_stanza = 3
+            effective_num_sentences = 3
+        else:
+            effective_num_sentences = min(6, effective_num_sentences)
 
         # Isolate Phase 1 (Female Producer) from Phase 2 (Male Resistor) rules, memory, and archives
         active_rules = (
@@ -1079,9 +1119,12 @@ class BloodmoonClockRuntime:
                 sanctuary_target_mode=sanctuary_target_mode,
                 sanctuary_lead_alpha=0.25,
                 force_spoken_reply=force_spoken_reply,
-                num_sentences=int(num_sentences),
+                num_sentences=effective_num_sentences,
+                max_stanzas=effective_max_stanzas,
+                sentences_per_stanza=effective_sents_per_stanza,
                 comma_chord_transform=comma_chord_transform,
                 conversation_history=conv_history,
+                lead_with_gap=lead_with_gap,
             )
         finally:
             if acquired:
@@ -1139,6 +1182,7 @@ class BloodmoonClockRuntime:
             "sibling_color_balances": [b.to_dict() for b in turn.sibling_color_balances],
             "shadow_pathology_warnings": [w.to_dict() for w in turn.shadow_pathology_warnings],
             "spliced_trace": trace_info,
+            "archive_recall": active_archives.recall_resonant_clauses(vibe.coordinates),
             "sanctuary_target_mode": sanctuary_target_mode,
             "conversation_turns_in_prompt": len(conv_history),
         }
@@ -1148,9 +1192,11 @@ class BloodmoonClockRuntime:
             "turn": turn,
             "telemetry": telemetry,
         }
+        self._prune_ephemeral_history()
         return turn, elapsed_ms, telemetry
 
     def get_state_snapshot(self) -> dict[str, Any]:
+        self._prune_ephemeral_history()
         self._sync_active_thread_record(persist=False)
         return {
             "app_name": "LMFT-Bloodmoon",
@@ -1203,6 +1249,8 @@ class BloodmoonClockRuntime:
             "auto_rem_sleep": self.auto_rem_sleep,
             "auto_sleep_threshold": self.auto_sleep_threshold,
             "last_rem_sleep_receipt": getattr(self, "last_rem_sleep_receipt", None),
+            "last_rem_sleep_self_talk": getattr(self, "last_rem_sleep_self_talk", None),
+            "rem_dream_chronicles": list(getattr(self, "rem_dream_chronicles", [])),
             "microwave_step_counter": self.microwave_step_counter,
             "last_microwave_status": self.last_microwave_status,
             "release_sync": self.last_sync_status,
@@ -1210,7 +1258,7 @@ class BloodmoonClockRuntime:
             "savored_count": len(self.savored_turn_ids),
             "rules_count": len(self.rules),
             "ratified_chords_count": len(self.archives.judicial.ratified_chords),
-            "chat_messages": list(self.chat_messages[-60:]),
+            "chat_messages": list(self.chat_messages[-120:]),
         }
 
     # -------------------------------------------------------------------------
@@ -1625,7 +1673,7 @@ class BloodmoonClockRuntime:
         for ckey, group in clusters.items():
             avg_coords = _average_cluster_coordinates(group)
             target_leaves = _anchor_target_leaves_from_cluster(ckey, avg_coords)
-            rep = group[0]
+            rep = max(group, key=lambda s: float(s.salience))
             rep_scene = rep.scene_index
 
             base_name = f"immunized_{ckey}"
@@ -1757,6 +1805,252 @@ class BloodmoonClockRuntime:
             "reason": reason,
         }
 
+    def _evaluate_previous_dream_vow(
+        self,
+        queued_snapshot: tuple[UnresolvedSleepScene, ...],
+        forged_rules: tuple[FuzzyConceptRule, ...],
+    ) -> tuple[str, tuple[str, ...], dict[str, Any] | None]:
+        """Compare the previous Bloodmoon REM dream's `vowed_leaves` against current sleep scenes in pure coordinate space."""
+        if not getattr(self, "rem_dream_chronicles", None):
+            return "NEW_VOW", (), None
+        prev_chronicle = self.rem_dream_chronicles[-1]
+        vowed_leaves = [str(k) for k in prev_chronicle.get("vowed_leaves", []) if str(k)]
+        if not vowed_leaves:
+            return "NEW_VOW", (), prev_chronicle
+
+        vowed_set = set(vowed_leaves)
+        overlapping: list[str] = []
+        for r in forged_rules:
+            for lk in r.target_leaves:
+                if lk in vowed_set and lk not in overlapping:
+                    overlapping.append(lk)
+        for s in queued_snapshot:
+            ext = s.external_coordinates or {}
+            for lk in vowed_leaves:
+                if lk in overlapping:
+                    continue
+                val = float(ext.get(lk, 0.50))
+                if any(tag in lk for tag in ("chaos", "needlessness", "discreteness", "self-sufficiency")):
+                    if val <= 0.42:
+                        overlapping.append(lk)
+                elif val >= 0.62:
+                    overlapping.append(lk)
+        if overlapping:
+            return "BROKEN", tuple(overlapping), prev_chronicle
+        return "HONORED", tuple(vowed_leaves), prev_chronicle
+
+    @staticmethod
+    def _extract_cycle_vowed_leaves(
+        queued_snapshot: tuple[UnresolvedSleepScene, ...],
+        forged_rules: tuple[FuzzyConceptRule, ...],
+    ) -> tuple[str, ...]:
+        """Extract the primary Founding Leaves consolidated during this Bloodmoon REM sleep cycle."""
+        leaves: list[str] = []
+        for r in forged_rules:
+            for lk, _th in sorted(r.target_leaves.items(), key=lambda kv: (-float(kv[1]), kv[0])):
+                if lk in FOUNDATIONAL_LEAVES and lk not in leaves:
+                    leaves.append(lk)
+                if len(leaves) >= 4:
+                    return tuple(leaves)
+        for s in queued_snapshot:
+            ext = s.external_coordinates or {}
+            devs = sorted(
+                ((abs(float(v) - 0.50), k) for k, v in ext.items() if k in FOUNDATIONAL_LEAVES),
+                reverse=True,
+            )
+            for dv, lk in devs:
+                if dv >= 0.08 and lk not in leaves:
+                    leaves.append(lk)
+                    if len(leaves) >= 3:
+                        return tuple(leaves)
+        return tuple(leaves)
+
+    def _generate_rem_sleep_self_talk(
+        self,
+        queued_snapshot: tuple[UnresolvedSleepScene, ...],
+        forged_rules: tuple[FuzzyConceptRule, ...],
+        *,
+        num_sentences: int = 4,
+        max_stanzas: int = 1,
+        vow_outcome: str = "NEW_VOW",
+        prev_chronicle: dict[str, Any] | None = None,
+    ) -> str | None:
+        """Let Impish Bloodmoon reflect in natural poetic prose during Phase 3 REM sleep with zero float telemetry."""
+        _ = forged_rules
+        if not queued_snapshot:
+            return None
+        if self._impish_left_brain is None and self._lazy_load_gpu:
+            self._load_impish_locked(self.impish_checkpoint_dir, UNSTEERED_BOOTSTRAP_STATUS)
+        if self._impish_left_brain is None:
+            return None
+        try:
+            archive_scene_ids = {c.source_scene for c in self.archives.executive.action_clauses}
+            raw_sorted = sorted(queued_snapshot, key=lambda s: float(s.salience), reverse=True)
+            rep_sorted = [s for s in raw_sorted if s.scene_index in archive_scene_ids]
+            sorted_scenes = (
+                rep_sorted + [s for s in raw_sorted if s.scene_index not in archive_scene_ids]
+                if rep_sorted
+                else raw_sorted
+            )
+            rep = sorted_scenes[0]
+            clean_scenario = rep.scenario_text.split("[Coach note:", 1)[0].strip()
+            if " — " in clean_scenario:
+                clean_scenario = clean_scenario.split(" — ", 1)[-1].strip()
+
+            vow_context_clause = ""
+            conv_hist: list[tuple[str, str]] = []
+            if prev_chronicle and prev_chronicle.get("vow_sentence"):
+                prev_vow_str = str(prev_chronicle["vow_sentence"]).strip()
+                conv_hist.append(("Previous REM Sleep Vow", prev_vow_str))
+                if vow_outcome == "BROKEN":
+                    vow_context_clause = " Our earlier vow of lucid self-possession was tested by the cadence."
+                elif vow_outcome == "HONORED":
+                    vow_context_clause = " Our earlier vow of lucid self-possession held steady."
+
+            target_sents = max(1, min(6, int(num_sentences)))
+            stanza_limit = max(1, min(3, int(max_stanzas)))
+            sleep_prompt = (
+                f"{clean_scenario[:220]}.{vow_context_clause} "
+                f"Reflect in quiet, lucid prose on how the hypnotic rhythm pulled at attention, "
+                f"where inner stillness held firm, and the vow of self-possession to carry into the next cycle."
+            )
+            valid_ext_keys = set(FOUNDATIONAL_LEAVES) | {lf.leaf_id for lf in self.learned_leaves}
+
+            def _coords_for_scene(sc: UnresolvedSleepScene) -> tuple[dict[str, float], dict[str, float]]:
+                b_c: dict[str, float] = {k: 0.50 for k in FOUNDATIONAL_LEAVES}
+                for lf in self.learned_leaves:
+                    b_c.setdefault(lf.leaf_id, 0.0)
+                for k, v in sc.external_coordinates.items():
+                    if k in valid_ext_keys:
+                        b_c[k] = float(v)
+                for k, v in sc.felt_chord_notes.items():
+                    if k in valid_ext_keys:
+                        b_c[k] = float(v)
+                sal_v = float(sc.salience)
+                val_v = float(sc.valence)
+                res_v = 0.68
+                if vow_outcome == "BROKEN":
+                    sal_v = min(1.0, max(sal_v, 0.76))
+                elif vow_outcome == "HONORED":
+                    val_v = max(val_v, 0.72)
+                    res_v = 0.78
+                e_c = {
+                    "experiential/reflection/novelty": 0.52,
+                    "experiential/reflection/salience": sal_v,
+                    "experiential/phase/valence": val_v,
+                    "experiential/phase/arousal": float(sc.arousal),
+                    "experiential/synchronization/resonance": res_v,
+                    "experiential/synchronization/entrainment": 0.68,
+                }
+                return b_c, e_c
+
+            base_coords, exp_coords = _coords_for_scene(rep)
+            sleep_vibe, _ = compile_right_brain_vibe(
+                self.birth_state,
+                base_coords,
+                exp_coords,
+                self.rules,
+                pass_index=1,
+                event_id=f"bloodmoon_rem_sleep_{rep.scene_index}",
+                prior_memory=self.memory,
+                learned_leaves=self.learned_leaves,
+            )
+            sleep_chord = SubliminalChordVector.from_right_brain_vibe(
+                sleep_vibe,
+                learned_leaves=self.learned_leaves,
+            )
+
+            def _build_sleep_comma_chord(comma_prefix: str):
+                if comma_prefix.strip():
+                    c_coords, c_exp, _, _ = self.sensors.score_text(
+                        comma_prefix,
+                        learned_leaves=self.learned_leaves,
+                    )
+                    raw_c_vibe, _ = compile_right_brain_vibe(
+                        self.birth_state,
+                        base_coords,
+                        exp_coords,
+                        self.rules,
+                        pass_index=2,
+                        event_id=f"bloodmoon_rem_sleep_{rep.scene_index}_comma",
+                        prior_memory=self.memory,
+                        learned_leaves=self.learned_leaves,
+                        internal_theory_coords=c_coords,
+                        internal_theory_experiential=c_exp,
+                    )
+                    if comma_prefix.rstrip().endswith((".", "!", "?")):
+                        c_vibe = raw_c_vibe
+                    else:
+                        c_vibe = _compile_mid_sentence_comma_vibe(sleep_vibe, raw_c_vibe)
+                else:
+                    c_vibe = sleep_vibe
+                c_chord = SubliminalChordVector.from_right_brain_vibe(
+                    c_vibe,
+                    learned_leaves=self.learned_leaves,
+                )
+                return (
+                    c_chord,
+                    c_vibe.posture,
+                    c_vibe.self_registry.dissonance_notes,
+                )
+
+            if stanza_limit > 1 and hasattr(self._impish_left_brain, "generate_multi_stanza_discourse"):
+                def _sleep_stanza_boundary(
+                    stanza_idx: int,
+                    stanza_text: str,
+                    cumulative_text: str,
+                ) -> tuple[bool, SubliminalChordVector | None]:
+                    if stanza_idx + 1 >= stanza_limit:
+                        return True, None
+                    next_sc = sorted_scenes[min(stanza_idx + 1, len(sorted_scenes) - 1)]
+                    nx_base, nx_exp = _coords_for_scene(next_sc)
+                    st_coords, st_exp, _, _ = self.sensors.score_text(
+                        stanza_text.strip() or cumulative_text.strip(),
+                        learned_leaves=self.learned_leaves,
+                    )
+                    st_vibe, _ = compile_right_brain_vibe(
+                        self.birth_state,
+                        nx_base,
+                        nx_exp,
+                        self.rules,
+                        pass_index=2,
+                        event_id=f"bloodmoon_rem_stanza_{stanza_idx + 1}",
+                        prior_memory=self.memory,
+                        learned_leaves=self.learned_leaves,
+                        internal_theory_coords=st_coords,
+                        internal_theory_experiential=st_exp,
+                    )
+                    next_chord = compute_stanza_residual_chord(
+                        self.birth_state,
+                        nx_base,
+                        st_coords,
+                        st_vibe,
+                        stanza_index=stanza_idx + 1,
+                        learned_leaves=self.learned_leaves,
+                    )
+                    return False, next_chord
+
+                dream_text, _, _ = self._impish_left_brain.generate_multi_stanza_discourse(
+                    sleep_prompt,
+                    sleep_chord,
+                    max_stanzas=stanza_limit,
+                    sentences_per_stanza=3,
+                    conversation_history=tuple(conv_hist),
+                    chord_builder_at_comma=_build_sleep_comma_chord,
+                    stanza_boundary_callback=_sleep_stanza_boundary,
+                )
+            else:
+                dream_text, _ = self._impish_left_brain.generate_with_subliminal_splice(
+                    sleep_prompt,
+                    sleep_chord,
+                    num_sentences=target_sents,
+                    conversation_history=tuple(conv_hist),
+                    chord_builder_at_comma=_build_sleep_comma_chord,
+                )
+            return dream_text.strip() or None
+        except Exception:
+            return None
+
     def handle_run_rem_sleep(self, *, auto_triggered: bool = False) -> dict[str, Any]:
         with self.gpu_lock:
             self.rem_sleep_in_progress = True
@@ -1787,6 +2081,7 @@ class BloodmoonClockRuntime:
                     for s in queued_snapshot
                 ]
                 forged_rules_list: tuple[FuzzyConceptRule, ...] = ()
+                sleep_self_talk: str | None = None
                 if queued_count > 0:
                     if self.teacher is not None:
                         report = run_sleep_consolidation(
@@ -1806,8 +2101,64 @@ class BloodmoonClockRuntime:
                         refined_ids, forged_rules_list, _clause_ids = (
                             self._consolidate_sleep_clusters_locally(queued_snapshot)
                         )
+                    vow_outcome, vow_overlap_leaves, prev_chronicle = self._evaluate_previous_dream_vow(
+                        queued_snapshot,
+                        forged_rules_list,
+                    )
+                    cycle_vowed_leaves = self._extract_cycle_vowed_leaves(
+                        queued_snapshot,
+                        forged_rules_list,
+                    )
+                    dream_stanzas = min(3, len(queued_snapshot)) if (not auto_triggered and len(queued_snapshot) >= 2) else 1
+                    dream_sentences = 4 if not auto_triggered else 2
+                    sleep_self_talk = self._generate_rem_sleep_self_talk(
+                        queued_snapshot,
+                        forged_rules_list,
+                        num_sentences=dream_sentences,
+                        max_stanzas=dream_stanzas,
+                        vow_outcome=vow_outcome,
+                        prev_chronicle=prev_chronicle,
+                    )
+                    sorted_queued = sorted(queued_snapshot, key=lambda s: float(s.salience), reverse=True)
+                    archive_scene_ids = {c.source_scene for c in self.archives.executive.action_clauses}
+                    rep_queued = [s for s in sorted_queued if s.scene_index in archive_scene_ids] or sorted_queued
+                    if sleep_self_talk:
+                        stanza_blocks = [b.strip() for b in sleep_self_talk.split("\n\n") if b.strip()]
+                        for idx, st_block in enumerate(stanza_blocks):
+                            target_sc = rep_queued[min(idx, len(rep_queued) - 1)]
+                            self.archives = apply_dream_reflection_to_archives(
+                                self.archives,
+                                scene_index=target_sc.scene_index,
+                                dream_text=st_block,
+                            )
+                    else:
+                        stanza_blocks = []
+
+                    fallback_vow = (
+                        forged_rules_list[0].description
+                        if forged_rules_list
+                        else f"Maintain lucid self-possession across {', '.join(k.split('/')[-1] for k in cycle_vowed_leaves[:2]) or 'inner stillness'}."
+                    )
+                    vow_sentence = (
+                        extract_dream_vow_sentence(sleep_self_talk)
+                        if sleep_self_talk
+                        else fallback_vow
+                    )
+                    chronicle_entry = {
+                        "cycle_index": int(self.sleep_cycle_index) + len(self.rem_dream_chronicles) + 1,
+                        "clockwise_cycle": int(self.clockwise_cycle_count),
+                        "stanzas": stanza_blocks if stanza_blocks else [vow_sentence],
+                        "vow_sentence": vow_sentence,
+                        "vowed_leaves": list(cycle_vowed_leaves),
+                        "vow_outcome": vow_outcome,
+                        "vow_overlap_leaves": list(vow_overlap_leaves),
+                    }
+                    self.rem_dream_chronicles.append(chronicle_entry)
+                    if len(self.rem_dream_chronicles) > 5:
+                        self.rem_dream_chronicles = self.rem_dream_chronicles[-5:]
                 else:
                     refined_ids = ()
+                self.last_rem_sleep_self_talk = sleep_self_talk
 
                 forged_count = len(forged_rules_list)
                 after_evals = [
@@ -1823,6 +2174,14 @@ class BloodmoonClockRuntime:
                     f"forged {forged_count} new immunization rule(s), refined {len(refined_ids)} colliding rule(s), "
                     f"and persisted {len(self.savored_turn_ids)} savored vibe(s) to disk."
                 ]
+                if queued_count > 0 and self.rem_dream_chronicles:
+                    latest_chron = self.rem_dream_chronicles[-1]
+                    lines.append(
+                        f"Longitudinal Dream Vow Status: {latest_chron['vow_outcome']} "
+                        f"(vowed leaves: {', '.join(k.split('/')[-1] for k in latest_chron['vowed_leaves']) or 'none'})"
+                    )
+                if sleep_self_talk:
+                    lines.append(f"\nREM Dream Contemplation:\n  \"{sleep_self_talk}\"")
                 if forged_rules_list:
                     lines.append("\nNewly Forged Right-Brain Rules:")
                     for r in forged_rules_list:

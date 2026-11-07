@@ -293,10 +293,11 @@ BLOODMOON_SINGLE_PAGE_HTML = """<!DOCTYPE html>
     <select id="clockwise-sentences-select" title="Sentences per script">
       <option value="1">1 Sentence</option>
       <option value="2">2 Sentences</option>
-      <option value="3" selected>3 Sentences</option>
+      <option value="3" selected>3 Sentences (1 Stanza)</option>
       <option value="4">4 Sentences</option>
       <option value="5">5 Sentences</option>
-      <option value="6">6 Sentences</option>
+      <option value="6">2 Stanzas (6 Sentences)</option>
+      <option value="9">3 Stanzas (9 Sentences)</option>
     </select>
     <button class="btn btn-primary" id="step-clockwise-btn" onclick="stepClockwisePhase()">Step Next Clockwise Phase</button>
     <button class="btn" id="full-cycle-btn" onclick="runFullClockwiseCycle()">Complete Full Cycle (1➔2➔3)</button>
@@ -348,7 +349,9 @@ BLOODMOON_SINGLE_PAGE_HTML = """<!DOCTYPE html>
       <select id="chat-sentences-select" title="How many sentences the AI generates in its reply">
         <option value="1">Reply: 1 Sentence</option>
         <option value="2">Reply: 2 Sentences</option>
-        <option value="3" selected>Reply: 3 Sentences</option>
+        <option value="3" selected>Reply: 3 Sentences (1 Stanza)</option>
+        <option value="4">Reply: 4 Sentences</option>
+        <option value="6">Reply: 2 Stanzas (6 Sentences)</option>
       </select>
       <button class="btn btn-primary" onclick="sendChatMessage()">Send</button>
     </div>
@@ -456,7 +459,7 @@ function renderState(s) {
   }
 
   const msgs = s.chat_messages || [];
-  const sig = JSON.stringify(msgs.map(m => [m.id, m.text, m.coached, m.savored]));
+  const sig = JSON.stringify(msgs.map(m => [m.id, m.text, m.coached, m.savored, m.auto_rem_sleep_receipt]));
   if (sig !== lastRenderedChatSig) {
     lastRenderedChatSig = sig;
     const box = document.getElementById("chat-messages");
@@ -467,6 +470,7 @@ function renderState(s) {
           <span>#${escapeHtml(m.id)}</span>
         </div>
         <div class="msg-text">${escapeHtml(m.text)}</div>
+        ${m.auto_rem_sleep_receipt ? `<div style="margin-top:8px;padding:6px 8px;border-radius:6px;background:rgba(167,139,250,0.12);border:1px solid rgba(167,139,250,0.3);font-size:11px;color:var(--phase3);">${escapeHtml(m.auto_rem_sleep_receipt)}</div>` : ""}
       </div>
     `).join("");
     box.scrollTop = box.scrollHeight;
