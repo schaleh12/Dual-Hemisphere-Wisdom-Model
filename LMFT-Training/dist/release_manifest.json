@@ -2,8 +2,8 @@
   "schema_version": 1,
   "version": "0.2.0",
   "github_repo": "schaleh12/Dual-Hemisphere-Wisdom-Model",
-  "build_sha256": "3c703925a55faa016552df7fae051a795427d0da0dba3615f999e62e5079be5e",
-  "build_short_hash": "3c703925a55f",
+  "build_sha256": "4404fd87997296bf356e82020fcb2c41768983e5a73575a175b1e598c5d2d15e",
+  "build_short_hash": "4404fd879972",
   "files": {
     "src/lmft_architecture/__init__.py": {
       "sha256": "a89f56c2195e87129adbffa5065d8769ea096e13ba98783d217c4d120ee92623",
@@ -162,8 +162,8 @@
       "size_bytes": 23725
     },
     "src/lmft_architecture/installer_wizard.py": {
-      "sha256": "f599b5faac265a637cfda6995c4de8550f4f22e5f1c1cc7998fc9a2c3ee92119",
-      "size_bytes": 41373
+      "sha256": "dac3f4f4b7aec5a5f55fc88a667ad31f75ff53d492adf5ea2e6a3bb16a1b8d50",
+      "size_bytes": 43691
     },
     "src/lmft_architecture/insufficiency.py": {
       "sha256": "2f0f91b9e286ee4e2042fb23ebc89baba90cfebecdc3e9eb1bb7289c8fc8052c",

@@ -15,7 +15,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import messagebox, scrolledtext
 import webbrowser
 
 
@@ -24,6 +24,19 @@ ARCHITECT_EMAIL = "imissmydeadcat74@gmail.com"
 ANTIGRAVITY_DOWNLOAD_URL = "https://antigravity.google/"
 GITHUB_REPO_URL = "https://github.com/schaleh12/Dual-Hemisphere-Wisdom-Model"
 VIRUSTOTAL_URL = "https://www.virustotal.com/gui/home/upload"
+
+
+def _enable_windows_dpi_awareness() -> None:
+    """Enable crisp High-DPI rendering on Windows 10/11 displays."""
+    if os.name != "nt":
+        return
+    try:
+        ctypes.windll.shcore.SetProcessDpiAwareness(1)
+    except Exception:
+        try:
+            ctypes.windll.user32.SetProcessDPIAware()
+        except Exception:
+            pass
 
 
 class _MEMORYSTATUSEX(ctypes.Structure):
@@ -63,9 +76,8 @@ class _DISPLAY_DEVICEW(ctypes.Structure):
 
 
 def resolve_workspace_paths() -> tuple[Path, Path, Path, Path]:
-    """Return `(base_dir, arch_dir, train_dir, assets_dir)` for repo or extracted bundle layouts."""
+    """Return `(base_dir, arch_dir, train_dir, assets_dir)` for repo or extracted `.zip` bundle layouts."""
     here = Path(__file__).resolve()
-    # Typical layout: <base>/LMFT-Architecture/src/lmft_architecture/installer_wizard.py
     arch_candidate = here.parents[2]
     if (arch_candidate / "src" / "lmft_architecture" / "birth.py").is_file():
         if arch_candidate.name == "LMFT-Architecture":
@@ -78,7 +90,7 @@ def resolve_workspace_paths() -> tuple[Path, Path, Path, Path]:
         base_dir = Path.cwd().resolve()
         arch_dir = base_dir / "LMFT-Architecture" if (base_dir / "LMFT-Architecture").is_dir() else base_dir
 
-    train_dir = base_dir / "LMFT-Training" if (base_dir / "LMFT-Training").is_dir() else base_dir
+    train_dir = base_dir / "LMFT-Training" if (base_dir / "LMFT-Training").is_dir() else arch_dir
     assets_dir = arch_dir / "docs" / "assets"
     return base_dir, arch_dir, train_dir, assets_dir
 
@@ -107,7 +119,6 @@ def detect_system_hardware() -> dict[str, object]:
     ram_gb = 16.0
     is_laptop = False
 
-    # 1. Probe nvidia-smi for NVIDIA GPU name and dedicated VRAM
     try:
         proc = subprocess.run(
             ["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader,nounits"],
@@ -124,7 +135,6 @@ def detect_system_hardware() -> dict[str, object]:
     except Exception:
         pass
 
-    # 2. Fallback to Win32 EnumDisplayDevicesW if nvidia-smi was not found
     if gpu_name == "Standard Windows Display Adapter" and os.name == "nt":
         try:
             dd = _DISPLAY_DEVICEW()
@@ -135,7 +145,6 @@ def detect_system_hardware() -> dict[str, object]:
         except Exception:
             pass
 
-    # 3. Probe System RAM via Win32 GlobalMemoryStatusEx
     if os.name == "nt":
         try:
             mem = _MEMORYSTATUSEX()
@@ -148,7 +157,6 @@ def detect_system_hardware() -> dict[str, object]:
         try:
             pwr = _SYSTEM_POWER_STATUS()
             if ctypes.windll.kernel32.GetSystemPowerStatus(ctypes.byref(pwr)):
-                # BatteryFlag 128 == No system battery
                 if pwr.BatteryFlag != 128 and pwr.BatteryFlag != 255:
                     is_laptop = True
         except Exception:
@@ -200,17 +208,21 @@ def build_custom_antigravity_prompt(hw: dict[str, object]) -> str:
         "My detected hardware specs are:\n"
         f"- Graphics Card (GPU): {gpu_name} ({vram_str})\n"
         f"- System Memory (RAM): {ram_gb:.1f} GB RAM ({cpu_cores} logical CPU cores)\n\n"
-        "Please inspect `LMFT-Architecture/src/lmft_architecture/chess_app.py` and `three_legged_runtime.py` "
+        "Please inspect `src/lmft_architecture/chess_app.py` and `three_legged_runtime.py` "
         "and customize my local runtime settings so that:\n"
         f"1. {profile_mode}\n"
         "2. The 40-Node Right-Brain Fuzzy Tree (`birth.py`) and `<|subliminal_gap|>` comma splice remain "
         "100% intact and un-rigged.\n"
-        "3. Verify the configuration with `pytest LMFT-Architecture/tests/test_chess_app.py -q`."
+        "3. Verify the configuration with `pytest tests/test_chess_app.py -q`."
     )
 
 
 def compute_core_sha256_report(base_dir: Path, arch_dir: Path, train_dir: Path) -> str:
     """Compute SHA-256 digests of the core Python and JSON files."""
+    ruleset_path = train_dir / "outputs" / "rem_sleep_consolidated_ruleset.json"
+    if not ruleset_path.is_file():
+        ruleset_path = arch_dir / "outputs" / "rem_sleep_consolidated_ruleset.json"
+
     targets = [
         ("Launch-Setup-Wizard.bat", base_dir / "Launch-Setup-Wizard.bat"),
         ("Launch-LMFT-Chess.bat", base_dir / "Launch-LMFT-Chess.bat"),
@@ -219,7 +231,7 @@ def compute_core_sha256_report(base_dir: Path, arch_dir: Path, train_dir: Path) 
         ("chess_app.py (Chess Engine)", arch_dir / "src" / "lmft_architecture" / "chess_app.py"),
         ("three_legged_runtime.py (Subliminal Gap)", arch_dir / "src" / "lmft_architecture" / "three_legged_runtime.py"),
         ("installer_wizard.py (Setup Wizard)", arch_dir / "src" / "lmft_architecture" / "installer_wizard.py"),
-        ("rem_sleep_consolidated_ruleset.json", train_dir / "outputs" / "rem_sleep_consolidated_ruleset.json"),
+        ("rem_sleep_consolidated_ruleset.json", ruleset_path),
     ]
     lines = [
         "=== Local File SHA-256 Integrity Digests (100% Plain-Text Python — Zero Unsigned .EXEs) ===",
@@ -235,21 +247,43 @@ def compute_core_sha256_report(base_dir: Path, arch_dir: Path, train_dir: Path) 
     return "\n".join(lines)
 
 
-def check_install_folder_integrity(base_dir: Path, arch_dir: Path, train_dir: Path, assets_dir: Path) -> tuple[str, bool]:
-    """Run the 10-point install folder integrity check and return `(report_text, all_core_ok)`."""
+def find_venv_python(base_dir: Path, arch_dir: Path, *, windowless: bool = False) -> Path | None:
+    """Locate `.venv/Scripts/python.exe` (or `pythonw.exe` when `windowless=True`)."""
+    exe_name = "pythonw.exe" if windowless else "python.exe"
+    candidates = [
+        arch_dir / ".venv" / "Scripts" / exe_name,
+        base_dir / ".venv" / "Scripts" / exe_name,
+        base_dir / "LMFT-Architecture" / ".venv" / "Scripts" / exe_name,
+        arch_dir / ".venv" / "Scripts" / "python.exe",
+        base_dir / ".venv" / "Scripts" / "python.exe",
+        base_dir / "LMFT-Architecture" / ".venv" / "Scripts" / "python.exe",
+    ]
+    for c in candidates:
+        if c.is_file():
+            return c
+    return None
+
+
+def check_install_folder_integrity(
+    base_dir: Path, arch_dir: Path, train_dir: Path, assets_dir: Path
+) -> tuple[str, bool]:
+    """Run the install folder integrity check and return `(report_text, all_core_ok)`."""
+    ruleset_path = train_dir / "outputs" / "rem_sleep_consolidated_ruleset.json"
+    if not ruleset_path.is_file():
+        ruleset_path = arch_dir / "outputs" / "rem_sleep_consolidated_ruleset.json"
+
     checks = [
         ("1. Core 40-Node Seed (birth.py)", arch_dir / "src" / "lmft_architecture" / "birth.py"),
         ("2. Chess Arena Engine (chess_app.py)", arch_dir / "src" / "lmft_architecture" / "chess_app.py"),
         ("3. Subliminal Gap Runtime (three_legged_runtime.py)", arch_dir / "src" / "lmft_architecture" / "three_legged_runtime.py"),
         ("4. Virgin Baseline Lock (virgin_baseline.py)", arch_dir / "src" / "lmft_architecture" / "virgin_baseline.py"),
-        ("5. Right-Brain MiniLM Bridges", train_dir / "models" / "right_brain_bridges" / "doer_will_cultural" / "model.safetensors"),
-        ("6. Qwen3-8B Left-Brain LoRA + Callosum", train_dir / "models" / "left_brain_qwen3_8b" / "projector_weights.pt"),
-        ("7. Master Release Wisdom Seed", train_dir / "outputs" / "rem_sleep_consolidated_ruleset.json"),
-        ("8. Arecibo Reply Desktop Icon (.ico)", assets_dir / "arecibo_desktop_icon.ico"),
-        ("9. Celestriad Spirit Particle Icon (.ico)", assets_dir / "celestriad_spirit_particle.ico"),
+        ("5. Master Release Wisdom Seed (.json)", ruleset_path),
+        ("6. Arecibo Reply Desktop Icon (.ico)", assets_dir / "arecibo_desktop_icon.ico"),
+        ("7. Celestriad Spirit Particle Icon (.ico)", assets_dir / "celestriad_spirit_particle.ico"),
+        ("8. Esper Theories Alphabet Chart (.jpg)", assets_dir / "esper_theories_alphabet.jpg"),
     ]
     lines = [
-        "=== Celestriad 1.0 Install Folder Integrity Check ===",
+        "=== Celestriad 1.0 Install Folder Verification ===",
         f"Install Directory: {base_dir}",
         "",
     ]
@@ -258,35 +292,31 @@ def check_install_folder_integrity(base_dir: Path, arch_dir: Path, train_dir: Pa
         if path.exists():
             lines.append(f"✅ [OK] {label}")
         else:
-            lines.append(f"⚠️ [MISSING] {label} ({path})")
-            if idx < 4:
+            lines.append(f"⚠️ [MISSING] {label} ({path.name})")
+            if idx < 5:
                 core_ok = False
 
     venv_py = find_venv_python(base_dir, arch_dir, windowless=False)
     if venv_py is not None:
-        lines.append(f"✅ [OK] 10. Python Virtual Environment (.venv): {venv_py}")
+        lines.append(f"✅ [OK] 9. Python Virtual Environment (.venv): {venv_py}")
     else:
-        lines.append("⚠️ [ACTION NEEDED] 10. Python .venv not created yet -> Click [Install / Repair Python .venv] below!")
+        lines.append(
+            "ℹ️ [READY] 9. Python .venv not created in this folder yet\n"
+            "          (Click 'Install / Repair Python .venv' below for first-time setup)"
+        )
     return "\n".join(lines), core_ok
 
 
-def find_venv_python(base_dir: Path, arch_dir: Path, *, windowless: bool = False) -> Path | None:
-    """Locate `.venv/Scripts/python.exe` (or `pythonw.exe` when `windowless=True`)."""
-    exe_name = "pythonw.exe" if windowless else "python.exe"
-    candidates = [
-        arch_dir / ".venv" / "Scripts" / exe_name,
-        base_dir / ".venv" / "Scripts" / exe_name,
-        arch_dir / ".venv" / "Scripts" / "python.exe",
-        base_dir / ".venv" / "Scripts" / "python.exe",
-    ]
-    for c in candidates:
-        if c.is_file():
-            return c
-    return None
-
-
 class CelestriadInstallerWizardApp:
-    """5-Page Tkinter GUI Setup & Hardware Diagnostics Wizard."""
+    """Traditional 5-Step Windows Setup & Hardware Diagnostics Wizard."""
+
+    STEP_TITLES = [
+        ("Step 1 of 5 — Security & Antivirus Verification", "100% Plain-Text Python Architecture (Zero Unsigned .EXE Wrappers)"),
+        ("Step 2 of 5 — Google Antigravity IDE & GitHub Sync", "Pair-Program with Google Antigravity & Keep Rulesets Synchronized"),
+        ("Step 3 of 5 — Hardware Diagnostics & Custom Prompt", "Automatic GPU / VRAM / RAM Detection & Tailored Antigravity Prompt"),
+        ("Step 4 of 5 — Meet the Architect & Celestial Seal", "Support Independent Dual-Hemisphere AI Research"),
+        ("Step 5 of 5 — Folder Verification, Shortcut & Launch", "Verify Installation, Create Arecibo Desktop Shortcut & Play"),
+    ]
 
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
@@ -296,10 +326,10 @@ class CelestriadInstallerWizardApp:
         self.current_page = 0
         self._images: dict[str, tk.PhotoImage] = {}
 
-        self.root.title("Celestriad 1.0 — LMFT-Architecture Setup & Hardware Wizard")
-        self.root.geometry("880x640")
-        self.root.minsize(850, 610)
-        self.root.configure(bg="#141418")
+        self.root.title("Celestriad 1.0 Setup Wizard — Dual-Hemisphere Wisdom Model")
+        self._center_window(980, 680)
+        self.root.minsize(920, 640)
+        self.root.configure(bg="#0f172a")
 
         ico_path = self.assets_dir / "arecibo_desktop_icon.ico"
         if ico_path.is_file():
@@ -309,13 +339,20 @@ class CelestriadInstallerWizardApp:
                 pass
 
         self._load_preview_images()
-        self._build_shell()
+        self._build_wizard_shell()
         self._build_page1_security()
         self._build_page2_antigravity()
         self._build_page3_hardware()
         self._build_page4_architect()
         self._build_page5_integrity()
         self.show_page(0)
+
+    def _center_window(self, width: int, height: int) -> None:
+        sw = self.root.winfo_screenwidth()
+        sh = self.root.winfo_screenheight()
+        x = max(20, (sw - width) // 2)
+        y = max(20, (sh - height) // 2 - 20)
+        self.root.geometry(f"{width}x{height}+{x}+{y}")
 
     def _load_preview_images(self) -> None:
         for key, filename in [
@@ -330,272 +367,310 @@ class CelestriadInstallerWizardApp:
                 except Exception:
                     pass
 
-    def _build_shell(self) -> None:
-        # Top Navigation Bar
-        self.top_bar = tk.Frame(self.root, bg="#1c1d24", height=76)
-        self.top_bar.pack(side=tk.TOP, fill=tk.X)
-        self.top_bar.pack_propagate(False)
+    def _build_wizard_shell(self) -> None:
+        # 1. Bottom Wizard Footer Bar (Classic Windows Installer Footer)
+        footer_border = tk.Frame(self.root, bg="#334155", height=1)
+        footer_border.pack(side=tk.BOTTOM, fill=tk.X)
+
+        self.bottom_bar = tk.Frame(self.root, bg="#1e293b", padx=20, pady=12)
+        self.bottom_bar.pack(side=tk.BOTTOM, fill=tk.X)
+
+        self.btn_cancel = self._make_button(
+            self.bottom_bar, "Cancel", "#334155", self.root.destroy, padx=16, pady=6
+        )
+        self.btn_cancel.pack(side=tk.LEFT)
+
+        self.btn_next = self._make_button(
+            self.bottom_bar, "Next >", "#2563eb", self._on_next, padx=22, pady=6
+        )
+        self.btn_next.pack(side=tk.RIGHT, padx=(8, 0))
+
+        self.btn_back = self._make_button(
+            self.bottom_bar, "< Back", "#334155", self._on_back, padx=18, pady=6
+        )
+        self.btn_back.pack(side=tk.RIGHT)
+
+        # 2. Main Body Area (Left Sidebar + Right Content Pane)
+        body_area = tk.Frame(self.root, bg="#0f172a")
+        body_area.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+        # Left Wizard Sidebar (Traditional Windows Setup Sidebar)
+        self.sidebar = tk.Frame(body_area, bg="#1e293b", width=235, padx=16, pady=18)
+        self.sidebar.pack(side=tk.LEFT, fill=tk.Y)
+        self.sidebar.pack_propagate(False)
 
         tk.Label(
-            self.top_bar,
-            text="✦ CELESTRIAD 1.0 — DUAL-HEMISPHERE WISDOM MODEL SETUP WIZARD",
-            bg="#1c1d24",
+            self.sidebar,
+            text="CELESTRIAD 1.0",
+            bg="#1e293b",
             fg="#f59e0b",
-            font=("Segoe UI", 11, "bold"),
-        ).place(x=20, y=10)
+            font=("Segoe UI", 12, "bold"),
+            anchor="w",
+        ).pack(fill=tk.X)
 
-        step_names = [
-            "1. Security & AV",
+        tk.Label(
+            self.sidebar,
+            text="Setup & Diagnostics Wizard\nv0.2.0 · Windows 64-Bit",
+            bg="#1e293b",
+            fg="#94a3b8",
+            font=("Segoe UI", 8),
+            justify=tk.LEFT,
+            anchor="w",
+        ).pack(fill=tk.X, pady=(2, 16))
+
+        sidebar_steps = [
+            "1. Security & AV Check",
             "2. Antigravity & GitHub",
             "3. Hardware & Prompt",
             "4. Architect & Seal",
-            "5. Integrity & Launch",
+            "5. Verify & Launch",
         ]
         self.step_pills: list[tk.Label] = []
-        pill_x = 20
-        for idx, name in enumerate(step_names):
+        for idx, label_text in enumerate(sidebar_steps):
             lbl = tk.Label(
-                self.top_bar,
-                text=name,
-                bg="#282a34",
+                self.sidebar,
+                text=label_text,
+                bg="#0f172a",
                 fg="#94a3b8",
-                font=("Segoe UI", 8, "bold"),
-                width=18,
-                height=1,
+                font=("Segoe UI", 9, "bold"),
+                anchor="w",
+                padx=12,
+                pady=9,
                 cursor="hand2",
-                padx=4,
-                pady=3,
             )
-            lbl.place(x=pill_x, y=40)
+            lbl.pack(fill=tk.X, pady=3)
             lbl.bind("<Button-1>", lambda _e, i=idx: self.show_page(i))
             self.step_pills.append(lbl)
-            pill_x += 152
 
-        # Bottom Navigation Bar
-        self.bottom_bar = tk.Frame(self.root, bg="#1c1d24", height=58)
-        self.bottom_bar.pack(side=tk.BOTTOM, fill=tk.X)
-        self.bottom_bar.pack_propagate(False)
+        if "spirit" in self._images:
+            icon_box = tk.Frame(self.sidebar, bg="#1e293b")
+            icon_box.pack(side=tk.BOTTOM, fill=tk.X, pady=(10, 0))
+            tk.Label(icon_box, image=self._images["spirit"], bg="#0f172a", bd=1, relief=tk.SOLID).pack(pady=4)
+            tk.Label(
+                icon_box,
+                text="Signed Python Runtime\nZero Unsigned .EXEs",
+                bg="#1e293b",
+                fg="#64748b",
+                font=("Segoe UI", 8),
+                justify=tk.CENTER,
+            ).pack()
 
-        self.btn_cancel = self._make_button(
-            self.bottom_bar, "Cancel", "#373a44", self.root.destroy, width=12
+        sidebar_divider = tk.Frame(body_area, bg="#334155", width=1)
+        sidebar_divider.pack(side=tk.LEFT, fill=tk.Y)
+
+        # Right Area: Top Step Header Banner + Page Container
+        right_area = tk.Frame(body_area, bg="#0f172a")
+        right_area.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        self.header_banner = tk.Frame(right_area, bg="#1e293b", padx=24, pady=14)
+        self.header_banner.pack(side=tk.TOP, fill=tk.X)
+
+        self.lbl_step_title = tk.Label(
+            self.header_banner,
+            text="",
+            bg="#1e293b",
+            fg="#f8fafc",
+            font=("Segoe UI", 12, "bold"),
+            anchor="w",
         )
-        self.btn_cancel.place(x=20, y=13)
+        self.lbl_step_title.pack(fill=tk.X)
 
-        self.btn_back = self._make_button(
-            self.bottom_bar, "< Back", "#373a44", self._on_back, width=14
+        self.lbl_step_subtitle = tk.Label(
+            self.header_banner,
+            text="",
+            bg="#1e293b",
+            fg="#38bdf8",
+            font=("Segoe UI", 9),
+            anchor="w",
         )
-        self.btn_back.place(x=565, y=13)
+        self.lbl_step_subtitle.pack(fill=tk.X, pady=(2, 0))
 
-        self.btn_next = self._make_button(
-            self.bottom_bar, "Next >", "#537a32", self._on_next, width=18
-        )
-        self.btn_next.place(x=695, y=13)
+        header_divider = tk.Frame(right_area, bg="#334155", height=1)
+        header_divider.pack(side=tk.TOP, fill=tk.X)
 
-        # Page Container
-        self.page_container = tk.Frame(self.root, bg="#141418")
+        self.page_container = tk.Frame(right_area, bg="#0f172a", padx=24, pady=18)
         self.page_container.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
         self.pages: list[tk.Frame] = []
         for _ in range(5):
-            frame = tk.Frame(self.page_container, bg="#141418")
+            frame = tk.Frame(self.page_container, bg="#0f172a")
             self.pages.append(frame)
 
     def _build_page1_security(self) -> None:
         p = self.pages[0]
-        self._make_header(
-            p,
-            "Page 1 of 5 — Why Open-Source Python Scripts Are 100% Transparent & How to Virus-Check",
-            x=22,
-            y=14,
-        )
+
+        card = tk.Frame(p, bg="#1e293b", padx=16, pady=12, highlightbackground="#334155", highlightthickness=1)
+        card.pack(fill=tk.X, pady=(0, 12))
 
         body_text = (
-            "What This Application Is:\n"
-            "• Celestriad 1.0 (LMFT-Architecture) is an open-source Dual-Hemisphere AI research project pairing a fast "
-            "40-Node Right-Brain Fuzzy Tree (~15 ms intuition) with a local Qwen3-8B Left Brain spliced across <|subliminal_gap|>.\n\n"
-            "Why We Ship Zero Custom .EXE Files (100% Malwarebytes & Antivirus Friendly):\n"
-            "• Antivirus programs like Malwarebytes and Windows SmartScreen flag unsigned indie .exe wrappers because "
-            "commercial Extended Validation (EV) hardware certificates cost $400–$600/year.\n"
-            "• Instead of shipping opaque .exe binaries, Celestriad 1.0 runs 100% readable plain-text Python (.py) source "
-            "files inside the officially signed Python Software Foundation interpreter (pythonw.exe / python.exe).\n\n"
-            "How to Verify This Folder Yourself Right Now:\n"
-            "1. Click [Scan Folder with Windows Defender] below to run Microsoft's official antivirus engine on this directory.\n"
-            "2. Click [Compute Local SHA-256 Hashes] or inspect any .py file in Notepad / Google Antigravity."
+            "Welcome to the Celestriad 1.0 Setup Wizard.\n\n"
+            "• Dual-Hemisphere AI Architecture: Pairs a 40-Node Right-Brain Fuzzy Tree (~15 ms intuition) with a local "
+            "Qwen3-8B Left-Brain Language Model across a synthetic Corpus Callosum (<|subliminal_gap|>).\n"
+            "• Why Malwarebytes & Windows Defender Love This Release: Commercial EV code-signing certificates for custom "
+            ".exe files cost $400–$600/year. Instead of hiding behind opaque .exe wrappers, Celestriad 1.0 runs 100% "
+            "readable plain-text Python (.py) scripts inside the officially signed Python Software Foundation runtime."
         )
         tk.Label(
-            p,
+            card,
             text=body_text,
-            bg="#141418",
-            fg="#dce2ea",
+            bg="#1e293b",
+            fg="#e2e8f0",
             font=("Segoe UI", 9),
             justify=tk.LEFT,
-            wraplength=820,
-            anchor="nw",
-        ).place(x=22, y=46, width=825, height=205)
+            wraplength=660,
+            anchor="w",
+        ).pack(fill=tk.X)
 
-        b_scan = self._make_button(
-            p, "🛡️ Scan Folder with Windows Defender", "#1e6e50", self._run_defender_scan, width=32
-        )
-        b_scan.place(x=22, y=258)
+        btn_row = tk.Frame(p, bg="#0f172a")
+        btn_row.pack(fill=tk.X, pady=(0, 10))
 
-        b_hash = self._make_button(
-            p, "🔍 Compute Local SHA-256 Hashes", "#2d4c78", self._refresh_hashes, width=30
-        )
-        b_hash.place(x=285, y=258)
+        self._make_button(
+            btn_row, "🛡️ Scan Folder with Windows Defender", "#059669", self._run_defender_scan, padx=14, pady=6
+        ).pack(side=tk.LEFT, padx=(0, 8))
 
-        b_vt = self._make_button(
-            p, "🌐 Open VirusTotal.com", "#4b3869", lambda: webbrowser.open(VIRUSTOTAL_URL), width=24
-        )
-        b_vt.place(x=535, y=258)
+        self._make_button(
+            btn_row, "🔍 Refresh SHA-256 Hashes", "#2563eb", self._refresh_hashes, padx=14, pady=6
+        ).pack(side=tk.LEFT, padx=(0, 8))
 
-        self.txt_security_log = tk.Text(
-            p, bg="#0e0f12", fg="#94e2d5", font=("Consolas", 9), bd=1, relief=tk.SOLID
+        self._make_button(
+            btn_row, "🌐 Open VirusTotal.com", "#4f46e5", lambda: webbrowser.open(VIRUSTOTAL_URL), padx=14, pady=6
+        ).pack(side=tk.LEFT)
+
+        self.txt_security_log = scrolledtext.ScrolledText(
+            p, bg="#090d16", fg="#6ee7b7", font=("Consolas", 9), bd=1, relief=tk.SOLID, height=12
         )
-        self.txt_security_log.place(x=22, y=302, width=825, height=185)
+        self.txt_security_log.pack(fill=tk.BOTH, expand=True)
         self._refresh_hashes()
 
     def _build_page2_antigravity(self) -> None:
         p = self.pages[1]
-        self._make_header(
-            p,
-            "Page 2 of 5 — Google Antigravity IDE & GitHub Repository Synchronization",
-            x=22,
-            y=14,
-        )
 
-        tk.Label(
-            p,
-            text=(
-                "Celestriad 1.0 is designed so you can pair-program with Google Antigravity to customize your AI models, "
-                "inspect the 40-node Right-Brain Fuzzy Tree, and automatically pull the latest GitHub release updates."
-            ),
-            bg="#141418",
-            fg="#dce2ea",
-            font=("Segoe UI", 9),
-            justify=tk.LEFT,
-            wraplength=820,
-            anchor="nw",
-        ).place(x=22, y=46, width=825, height=44)
-
-        status_bg = "#163828" if self.antigravity_path else "#3c2e16"
-        status_fg = "#86efac" if self.antigravity_path else "#fcd34d"
+        status_bg = "#064e3b" if self.antigravity_path else "#451a03"
+        status_fg = "#6ee7b7" if self.antigravity_path else "#fde68a"
         status_text = (
-            f"✅ Google Antigravity Detected on Your System!\nLocation: {self.antigravity_path} (No download required)"
+            f"✅ Google Antigravity IDE Detected on Your PC!\nInstalled at: {self.antigravity_path}"
             if self.antigravity_path
-            else "ℹ️ Google Antigravity was not detected in default folders.\nCheck the box below or click [Get Google Antigravity] to install it."
+            else "ℹ️ Google Antigravity IDE was not detected in default folders.\nYou can install it below to pair-program with your local Dual-Hemisphere model."
         )
+        status_card = tk.Frame(p, bg=status_bg, padx=14, pady=10, highlightbackground="#334155", highlightthickness=1)
+        status_card.pack(fill=tk.X, pady=(0, 12))
         tk.Label(
-            p,
+            status_card,
             text=status_text,
             bg=status_bg,
             fg=status_fg,
             font=("Segoe UI", 9, "bold"),
             justify=tk.LEFT,
-             anchor="w",
-            padx=12,
-        ).place(x=22, y=96, width=825, height=52)
+            anchor="w",
+        ).pack(fill=tk.X)
 
-        self.var_dl_antigravity = tk.BooleanVar(value=self.antigravity_path is None)
+        opts_card = tk.Frame(p, bg="#1e293b", padx=14, pady=10, highlightbackground="#334155", highlightthickness=1)
+        opts_card.pack(fill=tk.X, pady=(0, 12))
+
+        self.var_dl_antigravity = tk.BooleanVar(value=False)
         tk.Checkbutton(
-            p,
-            text="Open Google Antigravity download page when I click Next (recommended if not installed)",
+            opts_card,
+            text="Open Google Antigravity download page in browser when I click Next",
             variable=self.var_dl_antigravity,
-            bg="#141418",
-            fg="#e2e8f0",
-            selectcolor="#1c1d24",
-            activebackground="#141418",
-            activeforeground="#e2e8f0",
+            bg="#1e293b",
+            fg="#f1f5f9",
+            selectcolor="#0f172a",
+            activebackground="#1e293b",
+            activeforeground="#f1f5f9",
             font=("Segoe UI", 9, "bold"),
-        ).place(x=22, y=160)
+            anchor="w",
+        ).pack(fill=tk.X, pady=2)
 
         self.var_sync_github = tk.BooleanVar(value=True)
         tk.Checkbutton(
-            p,
-            text="Verify & auto-sync core Python files + Master Wisdom Ruleset from GitHub (schaleh12/Dual-Hemisphere-Wisdom-Model)",
+            opts_card,
+            text="Verify & auto-sync core Python files + Master Wisdom Ruleset from GitHub",
             variable=self.var_sync_github,
-            bg="#141418",
-            fg="#e2e8f0",
-            selectcolor="#1c1d24",
-            activebackground="#141418",
-            activeforeground="#e2e8f0",
+            bg="#1e293b",
+            fg="#f1f5f9",
+            selectcolor="#0f172a",
+            activebackground="#1e293b",
+            activeforeground="#f1f5f9",
             font=("Segoe UI", 9, "bold"),
-        ).place(x=22, y=190)
+            anchor="w",
+        ).pack(fill=tk.X, pady=2)
+
+        btn_row = tk.Frame(p, bg="#0f172a")
+        btn_row.pack(fill=tk.X, pady=(0, 10))
 
         self._make_button(
-            p, "🚀 Get Google Antigravity", "#2d5284", lambda: webbrowser.open(ANTIGRAVITY_DOWNLOAD_URL), width=28
-        ).place(x=22, y=230)
+            btn_row, "🚀 Get Google Antigravity", "#2563eb", lambda: webbrowser.open(ANTIGRAVITY_DOWNLOAD_URL), padx=14, pady=6
+        ).pack(side=tk.LEFT, padx=(0, 8))
 
         self._make_button(
-            p, "📦 Open GitHub Repository", "#3a4152", lambda: webbrowser.open(GITHUB_REPO_URL), width=28
-        ).place(x=260, y=230)
+            btn_row, "📦 Open GitHub Repository", "#334155", lambda: webbrowser.open(GITHUB_REPO_URL), padx=14, pady=6
+        ).pack(side=tk.LEFT, padx=(0, 8))
 
         self._make_button(
-            p, "🔄 Sync / Verify from GitHub Now", "#537a32", self._run_github_sync_now, width=32
-        ).place(x=500, y=230)
+            btn_row, "🔄 Verify Against GitHub Now", "#059669", self._run_github_sync_now, padx=14, pady=6
+        ).pack(side=tk.LEFT)
 
-        self.txt_page2_log = tk.Text(
-            p, bg="#0e0f12", fg="#cbd5e1", font=("Consolas", 9), bd=1, relief=tk.SOLID
+        self.txt_page2_log = scrolledtext.ScrolledText(
+            p, bg="#090d16", fg="#cbd5e1", font=("Consolas", 9), bd=1, relief=tk.SOLID, height=10
         )
-        self.txt_page2_log.place(x=22, y=274, width=825, height=210)
+        self.txt_page2_log.pack(fill=tk.BOTH, expand=True)
         self.txt_page2_log.insert(
             tk.END,
             f"GitHub Repository: {GITHUB_REPO_URL}\n"
-            f"Local Workspace:   {self.base_dir}\n"
-            "Tip: Every time you launch LMFT-Chess, it also checks GitHub in the background for updated rulesets.\n",
+            f"Local Directory:   {self.base_dir}\n"
+            "Every time you launch LMFT-Chess, it also checks GitHub Releases for new ruleset updates.\n",
         )
 
     def _build_page3_hardware(self) -> None:
         p = self.pages[2]
-        self._make_header(
-            p,
-            "Page 3 of 5 — Graphics Card & System Check + Custom Antigravity Prompt",
-            x=22,
-            y=14,
-        )
 
         vram_gb = float(self.hw["vram_gb"])
         ram_gb = float(self.hw["ram_gb"])
         gpu_name = str(self.hw["gpu_name"])
         is_laptop = bool(self.hw["is_laptop"])
 
-        form_factor = "💻 Form Factor: Laptop / Notebook PC" if is_laptop else "🖥️ Form Factor: Desktop Workstation / Tower"
-        vram_label = f"{vram_gb:.1f} GB VRAM" if vram_gb > 0 else "Shared / Integrated Memory"
+        form_factor = "💻 Laptop PC" if is_laptop else "🖥️ Desktop PC"
+        vram_label = f"{vram_gb:.1f} GB VRAM" if vram_gb > 0 else "Shared Memory"
         if vram_gb >= 12.0:
-            tier_advice = "✅ Tier 1 Ready (12GB+ VRAM): Ideal for 4-bit Qwen3-8B Left Brain + Qwen3.5-9B REM Sleep Teacher + Bloodmoon 12B!"
+            tier_advice = "✅ Tier 1 Hardware (12GB+ VRAM): Ready for full 4-bit Qwen3-8B + Qwen3.5-9B REM Sleep Teacher + Bloodmoon 12B."
         elif vram_gb >= 7.5:
-            tier_advice = "✅ Tier 2 Ready (8GB–11GB VRAM): Runs 4-bit Qwen3-8B or Qwen3-4B Left Brain smoothly with sequential REM unloading."
+            tier_advice = "✅ Tier 2 Hardware (8GB–11GB VRAM): Ready for 4-bit Qwen3-8B / Qwen3-4B with sequential REM unloading."
         else:
-            tier_advice = "⚠️ Tier 3 / Low-VRAM Mode: Fast 40-Node Right Brain runs in ~15 ms on CPU, but Left-Brain LLM speech benefits from an NVIDIA GPU upgrade or Qwen3-4B 4-bit."
+            tier_advice = "ℹ️ Tier 3 / Low-VRAM Mode: 40-Node Right Brain runs in ~15 ms on CPU; Left-Brain LLM speech benefits from an NVIDIA GPU."
 
-        banner_text = f"{form_factor}   |   🎮 GPU: {gpu_name} ({vram_label})   |   🧠 System RAM: {ram_gb:.1f} GB\n{tier_advice}"
+        hw_card = tk.Frame(p, bg="#172554", padx=14, pady=10, highlightbackground="#3b82f6", highlightthickness=1)
+        hw_card.pack(fill=tk.X, pady=(0, 10))
         tk.Label(
-            p,
-            text=banner_text,
-            bg="#1a2434",
-            fg="#7dd3fc",
+            hw_card,
+            text=f"{form_factor}  |  🎮 GPU: {gpu_name} ({vram_label})  |  🧠 RAM: {ram_gb:.1f} GB\n{tier_advice}",
+            bg="#172554",
+            fg="#93c5fd",
             font=("Segoe UI", 9, "bold"),
             justify=tk.LEFT,
             anchor="w",
-            padx=12,
-        ).place(x=22, y=46, width=825, height=58)
+        ).pack(fill=tk.X)
 
         tk.Label(
             p,
-            text="Copy this custom System Prompt and paste it into Google Antigravity to tailor Celestriad 1.0 to your PC:",
-            bg="#141418",
-            fg="#dce2ea",
+            text="Custom Google Antigravity Hardware Prompt (click Copy below and paste into Antigravity):",
+            bg="#0f172a",
+            fg="#e2e8f0",
             font=("Segoe UI", 9, "bold"),
-        ).place(x=22, y=112)
+            anchor="w",
+        ).pack(fill=tk.X, pady=(0, 4))
 
-        self.txt_antigravity_prompt = tk.Text(
-            p, bg="#0e0f12", fg="#fde047", font=("Consolas", 9), bd=1, relief=tk.SOLID
+        self.txt_antigravity_prompt = scrolledtext.ScrolledText(
+            p, bg="#090d16", fg="#fde047", font=("Consolas", 9), bd=1, relief=tk.SOLID, height=9
         )
-        self.txt_antigravity_prompt.place(x=22, y=136, width=825, height=195)
+        self.txt_antigravity_prompt.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
         self.txt_antigravity_prompt.insert(tk.END, build_custom_antigravity_prompt(self.hw))
 
+        btn_row = tk.Frame(p, bg="#0f172a")
+        btn_row.pack(fill=tk.X)
+
         self._make_button(
-            p, "📋 Copy Antigravity System Prompt", "#537a32", self._copy_prompt, width=30
-        ).place(x=22, y=342)
+            btn_row, "📋 Copy Antigravity Prompt", "#059669", self._copy_prompt, padx=14, pady=6
+        ).pack(side=tk.LEFT, padx=(0, 8))
 
         rec_url = (
             "https://www.amazon.com/s?k=NVIDIA+RTX+4070+12GB+gaming+laptop"
@@ -603,198 +678,153 @@ class CelestriadInstallerWizardApp:
             else "https://www.amazon.com/s?k=NVIDIA+RTX+4070+Super+12GB+or+RTX+4060+Ti+16GB+graphics+card"
         )
         self._make_button(
-            p, "🛒 Search Amazon (Recommended for Your PC)", "#b46e14", lambda: webbrowser.open(rec_url), width=36
-        ).place(x=275, y=342)
-
-        self._make_button(
-            p,
-            "🖥️ Desktop NVIDIA GPUs (12GB–16GB VRAM)",
-            "#3a4152",
-            lambda: webbrowser.open("https://www.amazon.com/s?k=NVIDIA+GeForce+RTX+3060+12GB+RTX+4060+Ti+16GB+GPU"),
-            width=36,
-        ).place(x=22, y=384)
-
-        self._make_button(
-            p,
-            "💻 RTX 4060 / 4070 Laptops",
-            "#3a4152",
-            lambda: webbrowser.open("https://www.amazon.com/s?k=NVIDIA+RTX+4060+RTX+4070+gaming+laptop+16GB+RAM"),
-            width=30,
-        ).place(x=315, y=384)
-
-        hw_note = (
-            "💡 Hardware Upgrade Note: Because you are on a Laptop, laptop GPUs are soldered to the motherboard — "
-            "upgrading VRAM requires either an external Thunderbolt/USB4 eGPU enclosure or a gaming laptop with an NVIDIA RTX 4060 (8GB) / RTX 4070 (8GB–12GB) / RTX 4080 (12GB)."
-            if is_laptop
-            else "💡 Hardware Upgrade Note: Because you are on a Desktop PC, you can upgrade your PCIe graphics card directly! "
-            "For local 4-bit 8B–12B LLMs, the best value cards on Amazon are the NVIDIA RTX 3060 (12GB VRAM), RTX 4060 Ti (16GB VRAM), or RTX 4070 Super (12GB VRAM)."
-        )
-        tk.Label(
-            p,
-            text=hw_note,
-            bg="#141418",
-            fg="#b4bed0",
-            font=("Segoe UI", 8),
-            justify=tk.LEFT,
-            wraplength=820,
-            anchor="nw",
-        ).place(x=22, y=428, width=825, height=52)
+            btn_row, "🛒 Recommended GPU Upgrades (Amazon)", "#d97706", lambda: webbrowser.open(rec_url), padx=14, pady=6
+        ).pack(side=tk.LEFT)
 
     def _build_page4_architect(self) -> None:
         p = self.pages[3]
-        self._make_header(
-            p,
-            "Page 4 of 5 — Meet & Support the Architect of Celestriad 1.0",
-            x=22,
-            y=14,
-        )
+
+        cols = tk.Frame(p, bg="#0f172a")
+        cols.pack(fill=tk.BOTH, expand=True)
+
+        left_col = tk.Frame(cols, bg="#1e293b", padx=16, pady=16, highlightbackground="#334155", highlightthickness=1)
+        left_col.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 12))
 
         left_text = (
-            "Celestriad 1.0 (The Dual-Hemisphere Wisdom Model)\n\n"
-            "Created by the Architect to explore whether a 40-node Right-Brain Fuzzy Tree and a local Left-Brain Language Model "
-            "can share a genuine Corpus Callosum (<|subliminal_gap|>), contemplate unresolved tension during REM Sleep, "
-            "and grow wiser without rigid rules or fake scripts.\n\n"
-            "📺 YouTube Channel:\n"
-            f"   {ARCHITECT_YOUTUBE_URL}\n\n"
-            "📧 Direct Contact Email:\n"
-            f"   {ARCHITECT_EMAIL}\n\n"
-            "Every subscription, comment, or email helps support independent open-source AI research!"
+            "Celestriad 1.0 — The Dual-Hemisphere Wisdom Model\n\n"
+            "Created by the Architect to explore whether a 40-node Right-Brain Fuzzy Tree and a local Left-Brain "
+            "Language Model can share a genuine Corpus Callosum (<|subliminal_gap|>), contemplate unresolved tension "
+            "during REM Sleep, and grow wiser without rigid scripts.\n\n"
+            f"📺 YouTube Channel:\n{ARCHITECT_YOUTUBE_URL}\n\n"
+            f"📧 Direct Contact Email:\n{ARCHITECT_EMAIL}"
         )
         tk.Label(
-            p,
+            left_col,
             text=left_text,
-            bg="#141418",
-            fg="#dce2ea",
+            bg="#1e293b",
+            fg="#e2e8f0",
             font=("Segoe UI", 9),
             justify=tk.LEFT,
-            wraplength=410,
+            wraplength=310,
             anchor="nw",
-        ).place(x=22, y=50, width=415, height=280)
+        ).pack(fill=tk.X, pady=(0, 14))
 
         self._make_button(
-            p, "▶ Open YouTube: @imissmydeadcat.74", "#dc2626", lambda: webbrowser.open(ARCHITECT_YOUTUBE_URL), width=38
-        ).place(x=22, y=340)
+            left_col, "▶ Open YouTube (@imissmydeadcat.74)", "#dc2626", lambda: webbrowser.open(ARCHITECT_YOUTUBE_URL), padx=12, pady=7
+        ).pack(fill=tk.X, pady=4)
 
         self._make_button(
-            p, f"📧 Copy Email: {ARCHITECT_EMAIL}", "#2d5284", self._copy_email, width=38
-        ).place(x=22, y=384)
+            left_col, f"📋 Copy Email ({ARCHITECT_EMAIL})", "#2563eb", self._copy_email, padx=12, pady=7
+        ).pack(fill=tk.X, pady=4)
 
         self._make_button(
-            p,
-            "✉️ Open Default Mail App",
-            "#3a4152",
+            left_col,
+            "✉️ Send Feedback Email",
+            "#334155",
             lambda: webbrowser.open(f"mailto:{ARCHITECT_EMAIL}?subject=Celestriad%201.0%20Feedback"),
-            width=38,
-        ).place(x=22, y=428)
+            padx=12,
+            pady=7,
+        ).pack(fill=tk.X, pady=4)
+
+        right_col = tk.Frame(cols, bg="#1e293b", padx=12, pady=12, highlightbackground="#334155", highlightthickness=1)
+        right_col.pack(side=tk.RIGHT, fill=tk.Y)
 
         if "seal" in self._images:
-            seal_lbl = tk.Label(p, image=self._images["seal"], bg="#0e0f12", bd=1, relief=tk.SOLID)
-            seal_lbl.place(x=455, y=50, width=390, height=380)
-
+            tk.Label(right_col, image=self._images["seal"], bg="#090d16", bd=1, relief=tk.SOLID).pack()
         tk.Label(
-            p,
+            right_col,
             text="The Celestial Seal of the way towards life",
-            bg="#141418",
-            fg="#7dd3fc",
+            bg="#1e293b",
+            fg="#38bdf8",
             font=("Segoe UI", 9, "italic"),
-            justify=tk.CENTER,
-        ).place(x=455, y=436, width=390, height=24)
+        ).pack(pady=(6, 0))
 
     def _build_page5_integrity(self) -> None:
         p = self.pages[4]
-        self._make_header(
-            p,
-            "Page 5 of 5 — Install Folder Integrity, Desktop Icon & Launch",
-            x=22,
-            y=14,
-        )
 
-        self.txt_integrity = tk.Text(
-            p, bg="#0e0f12", fg="#94e2d5", font=("Consolas", 9), bd=1, relief=tk.SOLID
+        top_split = tk.Frame(p, bg="#0f172a")
+        top_split.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+
+        left_pane = tk.Frame(top_split, bg="#0f172a")
+        left_pane.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 12))
+
+        self.txt_integrity = scrolledtext.ScrolledText(
+            left_pane, bg="#090d16", fg="#6ee7b7", font=("Consolas", 9), bd=1, relief=tk.SOLID, height=11
         )
-        self.txt_integrity.place(x=22, y=48, width=500, height=265)
+        self.txt_integrity.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
+
+        act_row = tk.Frame(left_pane, bg="#0f172a")
+        act_row.pack(fill=tk.X)
 
         self._make_button(
-            p, "🔄 Re-Check Folder Integrity", "#2d4c78", self._refresh_integrity, width=28
-        ).place(x=22, y=322)
+            act_row, "🔄 Re-Check Folder", "#2563eb", self._refresh_integrity, padx=14, pady=6
+        ).pack(side=tk.LEFT, padx=(0, 8))
 
         self._make_button(
-            p, "🐍 Install / Repair Python .venv", "#8c521e", self._provision_python_venv, width=30
-        ).place(x=255, y=322)
+            act_row, "🐍 Install / Repair Python .venv", "#d97706", self._provision_python_venv, padx=14, pady=6
+        ).pack(side=tk.LEFT)
 
-        # Icon Previews on Right
+        right_pane = tk.Frame(top_split, bg="#1e293b", padx=14, pady=12, highlightbackground="#334155", highlightthickness=1)
+        right_pane.pack(side=tk.RIGHT, fill=tk.Y)
+
         tk.Label(
-            p,
-            text="Desktop Shortcut Icon\n(Arecibo Reply)",
-            bg="#141418",
+            right_pane,
+            text="Arecibo Reply Shortcut Icon",
+            bg="#1e293b",
             fg="#fcd34d",
             font=("Segoe UI", 8, "bold"),
-            justify=tk.CENTER,
-        ).place(x=540, y=48, width=145, height=34)
-
+        ).pack()
         if "arecibo" in self._images:
-            tk.Label(p, image=self._images["arecibo"], bg="#0e0f12", bd=1, relief=tk.SOLID).place(
-                x=548, y=86, width=130, height=130
-            )
+            tk.Label(right_pane, image=self._images["arecibo"], bg="#090d16", bd=1, relief=tk.SOLID).pack(pady=(4, 10))
 
         tk.Label(
-            p,
-            text="Celestriad App Icon\n(Spirit Particle)",
-            bg="#141418",
-            fg="#7dd3fc",
-            font=("Segoe UI", 8, "bold"),
-            justify=tk.CENTER,
-        ).place(x=700, y=48, width=145, height=34)
-
-        if "spirit" in self._images:
-            tk.Label(p, image=self._images["spirit"], bg="#0e0f12", bd=1, relief=tk.SOLID).place(
-                x=708, y=86, width=130, height=130
-            )
-
-        tk.Label(
-            p,
-            text=(
-                "• Desktop Shortcut Icon: The Arecibo Reply\n"
-                "• Celestriad Identity Icon: The Spirit Particle\n"
-                "• Launches via official signed pythonw.exe"
-            ),
-            bg="#141418",
-            fg="#bcc6d4",
+            right_pane,
+            text="• Zero Unsigned .EXEs\n• 100% Malwarebytes Safe",
+            bg="#1e293b",
+            fg="#94a3b8",
             font=("Segoe UI", 8),
             justify=tk.LEFT,
-            anchor="nw",
-        ).place(x=545, y=228, width=305, height=65)
+        ).pack()
+
+        finish_card = tk.Frame(p, bg="#1e293b", padx=14, pady=10, highlightbackground="#334155", highlightthickness=1)
+        finish_card.pack(fill=tk.X)
 
         self.var_create_shortcut = tk.BooleanVar(value=True)
         tk.Checkbutton(
-            p,
+            finish_card,
             text='Create Desktop Shortcut ("Celestriad 1.0 — LMFT Chess") with the Arecibo Reply icon',
             variable=self.var_create_shortcut,
-            bg="#141418",
-            fg="#e2e8f0",
-            selectcolor="#1c1d24",
-            activebackground="#141418",
-            activeforeground="#e2e8f0",
+            bg="#1e293b",
+            fg="#f1f5f9",
+            selectcolor="#0f172a",
+            activebackground="#1e293b",
+            activeforeground="#f1f5f9",
             font=("Segoe UI", 9, "bold"),
-        ).place(x=22, y=378)
+            anchor="w",
+        ).pack(fill=tk.X, pady=2)
 
         self.var_launch_on_finish = tk.BooleanVar(value=True)
         tk.Checkbutton(
-            p,
-            text="Launch Celestriad 1.0 Chess Arena immediately when I click Finish",
+            finish_card,
+            text="Launch Celestriad 1.0 Chess Arena immediately when I click Finish & Launch",
             variable=self.var_launch_on_finish,
-            bg="#141418",
-            fg="#86efac",
-            selectcolor="#1c1d24",
-            activebackground="#141418",
-            activeforeground="#86efac",
+            bg="#1e293b",
+            fg="#6ee7b7",
+            selectcolor="#0f172a",
+            activebackground="#1e293b",
+            activeforeground="#6ee7b7",
             font=("Segoe UI", 9, "bold"),
-        ).place(x=22, y=410)
+            anchor="w",
+        ).pack(fill=tk.X, pady=2)
 
         self._refresh_integrity()
 
     def show_page(self, index: int) -> None:
         self.current_page = max(0, min(4, index))
+        title, subtitle = self.STEP_TITLES[self.current_page]
+        self.lbl_step_title.configure(text=title)
+        self.lbl_step_subtitle.configure(text=subtitle)
+
         for i, frame in enumerate(self.pages):
             if i == self.current_page:
                 frame.pack(fill=tk.BOTH, expand=True)
@@ -803,18 +833,18 @@ class CelestriadInstallerWizardApp:
 
         for i, pill in enumerate(self.step_pills):
             if i == self.current_page:
-                pill.configure(bg="#537a32", fg="#ffffff")
+                pill.configure(bg="#2563eb", fg="#ffffff")
             elif i < self.current_page:
-                pill.configure(bg="#2d4828", fg="#b4e6aa")
+                pill.configure(bg="#064e3b", fg="#6ee7b7")
             else:
-                pill.configure(bg="#282a34", fg="#94a3b8")
+                pill.configure(bg="#0f172a", fg="#94a3b8")
 
         self.btn_back.configure(state=tk.NORMAL if self.current_page > 0 else tk.DISABLED)
         if self.current_page == 4:
-            self.btn_next.configure(text="Finish & Launch 🚀", bg="#eab308", fg="#111827")
+            self.btn_next.configure(text="Finish & Launch 🚀", bg="#eab308", fg="#0f172a")
             self._refresh_integrity()
         else:
-            self.btn_next.configure(text="Next >", bg="#537a32", fg="#ffffff")
+            self.btn_next.configure(text="Next >", bg="#2563eb", fg="#ffffff")
 
     def _on_back(self) -> None:
         if self.current_page > 0:
@@ -831,7 +861,6 @@ class CelestriadInstallerWizardApp:
             self.show_page(self.current_page + 1)
             return
 
-        # Page 5 Finish
         if self.var_create_shortcut.get():
             self._create_desktop_shortcut()
         if self.var_launch_on_finish.get():
@@ -917,20 +946,31 @@ class CelestriadInstallerWizardApp:
         self.txt_integrity.delete("1.0", tk.END)
         self.txt_integrity.insert(tk.END, report)
 
-    def _provision_python_venv(self) -> None:
+    def _provision_python_venv(self, *, launch_after: bool = False) -> None:
         venv_dir = self.arch_dir / ".venv"
         venv_py = venv_dir / "Scripts" / "python.exe"
+        venv_pyw = venv_dir / "Scripts" / "pythonw.exe"
+        sys_py = Path(sys.executable)
+        if sys_py.name.lower() == "pythonw.exe":
+            candidate_py = sys_py.with_name("python.exe")
+            if candidate_py.is_file():
+                sys_py = candidate_py
+        tail_cmd = (
+            f' && start "" /d "{self.arch_dir}" "{venv_pyw}" -m lmft_architecture.chess_app --single-window'
+            if launch_after
+            else " && echo. && echo [OK] Python .venv provisioned successfully! && pause"
+        )
         cmd_chain = (
-            f'python -m venv "{venv_dir}" && '
+            f'"{sys_py}" -m venv "{venv_dir}" && '
             f'"{venv_py}" -m pip install --upgrade pip && '
             f'"{venv_py}" -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124 && '
-            f'"{venv_py}" -m pip install -e "{self.arch_dir}" && '
-            "echo. && echo [OK] Python .venv provisioned successfully! && pause"
+            f'"{venv_py}" -m pip install -e "{self.arch_dir}"'
+            + tail_cmd
         )
         try:
             subprocess.Popen(
                 ["cmd.exe", "/c", cmd_chain],
-                cwd=str(self.base_dir),
+                cwd=str(self.arch_dir),
                 creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0),
             )
         except Exception as exc:
@@ -942,31 +982,46 @@ class CelestriadInstallerWizardApp:
             desktop = Path(os.environ.get("USERPROFILE", "~")).expanduser() / "Desktop"
             shortcut_path = desktop / "Celestriad 1.0 — LMFT Chess.lnk"
             launcher_bat = self.base_dir / "Launch-LMFT-Chess.bat"
+            if not launcher_bat.is_file():
+                launcher_bat = self.arch_dir / "Launch-LMFT-Chess.bat"
             icon_path = self.assets_dir / "arecibo_desktop_icon.ico"
 
             ps_cmd = (
                 "$ws = New-Object -ComObject WScript.Shell; "
                 f"$s = $ws.CreateShortcut('{shortcut_path}'); "
                 f"$s.TargetPath = '{launcher_bat}'; "
-                f"$s.WorkingDirectory = '{self.base_dir}'; "
+                f"$s.WorkingDirectory = '{launcher_bat.parent}'; "
                 f"$s.IconLocation = '{icon_path}'; "
                 "$s.Description = 'Launch Celestriad 1.0 — Dual-Hemisphere Chess Competitor & Coach'; "
                 "$s.Save()"
             )
-            subprocess.run(["powershell.exe", "-Command", ps_cmd], timeout=6, check=False)
+            subprocess.run(
+                ["powershell.exe", "-NoProfile", "-WindowStyle", "Hidden", "-Command", ps_cmd],
+                timeout=6,
+                check=False,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
         except Exception as exc:
             messagebox.showwarning("Desktop Shortcut", f"Could not create desktop shortcut:\n{exc}")
 
     def _launch_chess_app(self) -> None:
         venv_pyw = find_venv_python(self.base_dir, self.arch_dir, windowless=True)
+        if venv_pyw is None:
+            resp = messagebox.askyesno(
+                "First-Time Python Environment Setup Required",
+                "To launch the Celestriad 1.0 Chess Arena from this folder, its local Python virtual environment (.venv) needs to be installed first.\n\n"
+                "Would you like to install the Python .venv now?",
+            )
+            if resp:
+                self._provision_python_venv(launch_after=True)
+            return
         env = os.environ.copy()
         env["PYTHONPATH"] = str(self.arch_dir / "src")
         env["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
         env["TQDM_DISABLE"] = "1"
-        exe = str(venv_pyw) if venv_pyw is not None else sys.executable
         try:
             subprocess.Popen(
-                [exe, "-m", "lmft_architecture.chess_app", "--single-window"],
+                [str(venv_pyw), "-m", "lmft_architecture.chess_app", "--single-window"],
                 cwd=str(self.arch_dir),
                 env=env,
             )
@@ -974,20 +1029,8 @@ class CelestriadInstallerWizardApp:
             messagebox.showwarning("Launch Chess App", f"Could not launch Celestriad 1.0:\n{exc}")
 
     @staticmethod
-    def _make_header(parent: tk.Widget, text: str, *, x: int, y: int) -> tk.Label:
-        lbl = tk.Label(
-            parent,
-            text=text,
-            bg="#141418",
-            fg="#38bdf8",
-            font=("Segoe UI", 11, "bold"),
-        )
-        lbl.place(x=x, y=y)
-        return lbl
-
-    @staticmethod
     def _make_button(
-        parent: tk.Widget, text: str, bg: str, command, *, width: int = 20
+        parent: tk.Widget, text: str, bg: str, command, *, padx: int = 12, pady: int = 5
     ) -> tk.Button:
         return tk.Button(
             parent,
@@ -999,15 +1042,15 @@ class CelestriadInstallerWizardApp:
             font=("Segoe UI", 9, "bold"),
             relief=tk.FLAT,
             bd=0,
-            padx=8,
-            pady=5,
-            width=width,
+            padx=padx,
+            pady=pady,
             cursor="hand2",
             command=command,
         )
 
 
 def main() -> int:
+    _enable_windows_dpi_awareness()
     root = tk.Tk()
     CelestriadInstallerWizardApp(root)
     root.mainloop()
