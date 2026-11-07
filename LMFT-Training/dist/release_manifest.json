@@ -2,8 +2,8 @@
   "schema_version": 1,
   "version": "0.2.0",
   "github_repo": "schaleh12/Dual-Hemisphere-Wisdom-Model",
-  "build_sha256": "eb02a102699092fa418bc2b1b5ff94000ffe27ac5227caf62f93ff1982ef08fc",
-  "build_short_hash": "eb02a1026990",
+  "build_sha256": "050847762da9f1ea016257eaa122aae90963f8610a8b3c10caf3f15226a7cacc",
+  "build_short_hash": "050847762da9",
   "files": {
     "src/lmft_architecture/__init__.py": {
       "sha256": "a89f56c2195e87129adbffa5065d8769ea096e13ba98783d217c4d120ee92623",
@@ -66,16 +66,16 @@
       "size_bytes": 5515
     },
     "src/lmft_architecture/bloodmoon_app.py": {
-      "sha256": "23c10030416abc4b0e98d51fa7a9b2351999e801c8a3bb46098666544b90b68e",
-      "size_bytes": 94846
+      "sha256": "631d5e3a7ca5c17ef85069166e0538b50a39de32fc445a7d4c385462fbd40524",
+      "size_bytes": 112889
     },
     "src/lmft_architecture/bloodmoon_ui.py": {
-      "sha256": "4679d275d2f23e4974ffb323fb5da9ef04b2bd489776685f5682ee5cc1ded0b8",
-      "size_bytes": 19670
+      "sha256": "35dc889b58af1867c20eec0645009f59a9dd5f613942646d1373e00bad95c7a0",
+      "size_bytes": 20169
     },
     "src/lmft_architecture/branch_archives.py": {
-      "sha256": "8cdc96fd700a263ef93580a1587763249c487da2c5ca6c9e1fde1026ddb95e40",
-      "size_bytes": 43736
+      "sha256": "a4c1aebd3180a8f0a07f7ff081f72a90e7fd33180ef5a7fecde63540a45634d3",
+      "size_bytes": 45322
     },
     "src/lmft_architecture/capacity.py": {
       "sha256": "449918ce2fac765542adb456ae3eacedd004ea5c0038022fad5de3ec7f0512e2",
@@ -90,16 +90,16 @@
       "size_bytes": 3267
     },
     "src/lmft_architecture/chess_app.py": {
-      "sha256": "eb2b0da142d5150b2177d67ae4f596b376adacd868323b15ce322dd39206f0ff",
-      "size_bytes": 149215
+      "sha256": "1a58812b4a9e54744bcbdbb05b23792c6fe687e8c3585996ba0738c5beeea68b",
+      "size_bytes": 155010
     },
     "src/lmft_architecture/chess_kibitz_bridge.py": {
-      "sha256": "fdf2c29e51097b9b157c4feafe9ce0032dbc990bce7c58a7987d99800b31b811",
-      "size_bytes": 107254
+      "sha256": "b8960c2e75bb64aa01af279276487e11b852bc01294919f5c3277f148cd171de",
+      "size_bytes": 108855
     },
     "src/lmft_architecture/chess_ui.py": {
-      "sha256": "a2d72c07522882b6a4baf2e04a7d1cafd1574472d11042823c20ae4a2abca4b7",
-      "size_bytes": 74362
+      "sha256": "e96726f83f39b0ddea347f7cec13dfd51097cd1051a272f4970e78cdb5c37433",
+      "size_bytes": 75356
     },
     "src/lmft_architecture/chord_memory.py": {
       "sha256": "6714d9c6cd9e0f7ae199e92a44f7371f168f65fb32319260d4b24d0ed1c54a66",
@@ -138,8 +138,8 @@
       "size_bytes": 13442
     },
     "src/lmft_architecture/entrainment_sparring.py": {
-      "sha256": "e37f888bbc12bc463f20fec00a42c87f2731e474dfe5713a1c4062e14e37fc68",
-      "size_bytes": 30700
+      "sha256": "60d3024603fcdca301fb637050231c0dbe5940f20bff4df0d477e039114431a3",
+      "size_bytes": 30702
     },
     "src/lmft_architecture/ftl_bridge_sim.py": {
       "sha256": "05368f269d0b2245ee127bd4c5f838d1242ade8ab37b3c0a10faa964e67c1259",

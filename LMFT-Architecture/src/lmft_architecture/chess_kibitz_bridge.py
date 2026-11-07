@@ -765,6 +765,8 @@ class CandidateMoveEvaluation:
     fact: float = 0.5
     theory: float = 0.5
     intention: float = 0.5
+    vow_alignment_delta: float = 0.0
+    guided_by_vow: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -784,6 +786,8 @@ class CandidateMoveEvaluation:
             "is_blunder": bool(self.is_blunder),
             "is_repetition": bool(self.is_repetition),
             "shadow_warnings": list(self.shadow_warnings),
+            "vow_alignment_delta": round(float(self.vow_alignment_delta), 4),
+            "guided_by_vow": bool(self.guided_by_vow),
         }
 
 
@@ -1383,6 +1387,8 @@ def evaluate_candidate_moves_with_right_brain(
     learned_leaves: Sequence[LearnedLeaf] = (),
     limit: int = 6,
     bitboard_sleeve: BitboardIntuitionSleeve | None = None,
+    active_vow_leaves: Sequence[str] = (),
+    branch_archives: Any = None,
 ) -> list[CandidateMoveEvaluation]:
     """Rank legal moves via `Intention (Ply 1) -> Theory (Ply 2-3 Rollout) -> Confidence -> Execution` (`RIGHT_BRAIN_WILL_EDGES`)."""
     legal = list(board.legal_moves)
@@ -1392,6 +1398,7 @@ def evaluate_candidate_moves_with_right_brain(
     us = board.turn
     rule_tuple = tuple(rules)
     learned_tuple = tuple(learned_leaves)
+    vow_leaf_tuple = tuple(k for k in active_vow_leaves if k in FOUNDATIONAL_LEAVES)
     sleeve = bitboard_sleeve if bitboard_sleeve is not None else _DEFAULT_BITBOARD_SLEEVE
     evaluations: list[CandidateMoveEvaluation] = []
     pending_candidates: list[dict[str, Any]] = []
@@ -1623,10 +1630,32 @@ def evaluate_candidate_moves_with_right_brain(
             + 0.25 * float(coords.get("philosophical/being/agency", 0.50))
             - 0.25 * float(coords.get("philosophical/structure/chaos", 0.50))
         )
+        vow_delta = 0.0
+        if vow_leaf_tuple:
+            for vk in vow_leaf_tuple:
+                c_val = float(coords.get(vk, 0.50))
+                if vk in ("philosophical/structure/chaos", "cultural/freedom/needlessness"):
+                    if c_val > 0.50:
+                        vow_delta -= 0.35 * (c_val - 0.45)
+                    elif c_val <= 0.35 and not is_blunder:
+                        vow_delta += 0.16 * (0.45 - c_val)
+                else:
+                    if c_val >= 0.55 and not is_blunder:
+                        vow_delta += 0.25 * (c_val - 0.45)
+                    elif c_val < 0.42:
+                        vow_delta -= 0.40 * (0.48 - c_val)
+        if branch_archives is not None and hasattr(branch_archives, "recall_resonant_clauses"):
+            res = branch_archives.recall_resonant_clauses(coords, min_similarity=0.70)
+            exec_match = res.get("executive_match")
+            if exec_match is not None and not is_blunder:
+                vow_delta += 0.18 * (float(exec_match["similarity"]) - 0.65)
+        guided_by_vow = bool(vow_delta >= 0.05 and not is_blunder)
+
         execution_bid = (
             will_execution_drive
             + contemplation_drive
             + leaf_posture_score
+            + vow_delta
             - 1.35 * blunder_penalty
             - (1.80 if is_rep else 0.0)
         )
@@ -1648,6 +1677,8 @@ def evaluate_candidate_moves_with_right_brain(
                 fact=fact_val,
                 theory=theory_val,
                 intention=intention_val,
+                vow_alignment_delta=vow_delta,
+                guided_by_vow=guided_by_vow,
             )
         )
 

@@ -1112,6 +1112,14 @@ class ChessKibitzerRuntime:
             )
         return f"Right-Brain equilibrium settled ({turn.outcome}, clarity={vibe.clarity:.2f})."
 
+    def _get_active_vow_leaves(self) -> tuple[str, ...]:
+        """Return the active Founding Leaf IDs from the most recent REM Dream Chronicle vow."""
+        if not self.rem_dream_chronicles:
+            return ()
+        latest = self.rem_dream_chronicles[-1]
+        raw_leaves = latest.get("vowed_leaves") or ()
+        return tuple(str(k) for k in raw_leaves if str(k) in FOUNDATIONAL_LEAVES)
+
     def _execute_turn(
         self,
         scenario_text: str,
@@ -1142,6 +1150,11 @@ class ChessKibitzerRuntime:
             if include_conversation_history
             else ()
         )
+        if include_conversation_history and self.archives.executive.action_clauses:
+            latest_vow_clause = self.archives.executive.action_clauses[-1]
+            vow_txt = latest_vow_clause.text.strip()
+            if vow_txt and all(vow_txt != h[1] for h in conv_history):
+                conv_history = (("Recalled Archive Vow", vow_txt),) + tuple(conv_history)
 
         acquired = (
             False
@@ -1198,7 +1211,9 @@ class ChessKibitzerRuntime:
             self.sleep_queue.append(turn.unresolved_sleep_scene)
 
         vibe = turn.final_vibe
+        archive_resonance = self.archives.recall_resonant_clauses(vibe.coordinates)
         trace_info: dict[str, Any] = {}
+        stanza_trajectory: list[dict[str, Any]] = []
         if turn.spliced_traces:
             st = turn.spliced_traces[-1]
             stanza_blocks = [
@@ -1206,9 +1221,41 @@ class ChessKibitzerRuntime:
                 for p in (turn.final_conscious_note or "").split("\n\n")
                 if p.strip()
             ]
+            stanza_count_actual = max(1, len(stanza_blocks))
+            sents_per_st = max(1, len(turn.spliced_traces) // stanza_count_actual)
+            role_labels = ("Feeler (Pretext)", "Thinker (Subtext Pivot)", "Do-er (Context Vow)", "Synthesis")
+            from .three_legged_runtime import (
+                CULTURAL_FOUNDING_ORDER,
+                EXPERIENTIAL_FOUNDING_ORDER,
+                PHILOSOPHICAL_FOUNDING_ORDER,
+            )
+
+            for s_idx in range(stanza_count_actual):
+                tr_idx = min(len(turn.spliced_traces) - 1, s_idx * sents_per_st)
+                s_tr = turn.spliced_traces[tr_idx]
+                s_ch = s_tr.spliced_chord
+                leaf_vals: list[tuple[str, float]] = []
+                for lk, lv in zip(EXPERIENTIAL_FOUNDING_ORDER, s_ch.feeler_vector[:6]):
+                    leaf_vals.append((lk.split("/")[-1], float(lv)))
+                for lk, lv in zip(PHILOSOPHICAL_FOUNDING_ORDER, s_ch.thinker_vector[:6]):
+                    leaf_vals.append((lk.split("/")[-1], float(lv)))
+                for lk, lv in zip(CULTURAL_FOUNDING_ORDER, s_ch.doer_vector[:6]):
+                    leaf_vals.append((lk.split("/")[-1], float(lv)))
+                leaf_vals.sort(key=lambda kv: -kv[1])
+                stanza_trajectory.append(
+                    {
+                        "stanza_index": s_idx + 1,
+                        "role": role_labels[min(s_idx, len(role_labels) - 1)],
+                        "dissonance_pressure": round(float(s_ch.dissonance_pressure), 4),
+                        "top_leaves": [f"{k}={v:.2f}" for k, v in leaf_vals[:3]],
+                        "feeler_vector": [round(float(x), 4) for x in s_ch.feeler_vector[:8]],
+                        "thinker_vector": [round(float(x), 4) for x in s_ch.thinker_vector[:8]],
+                        "doer_vector": [round(float(x), 4) for x in s_ch.doer_vector[:8]],
+                    }
+                )
             trace_info = {
                 "sentence_count": len(turn.spliced_traces),
-                "stanza_count": max(1, len(stanza_blocks)),
+                "stanza_count": stanza_count_actual,
                 "clause_1_prefix": st.clause_1_prefix,
                 "post_gap_continuation": st.post_gap_continuation,
                 "comma_scored_live": st.comma_scored_live,
@@ -1217,6 +1264,7 @@ class ChessKibitzerRuntime:
                 "spliced_cadence_vector": [round(float(x), 4) for x in st.spliced_chord.cadence_vector],
                 "spliced_thinker_vector": [round(float(x), 4) for x in st.spliced_chord.thinker_vector[:8]],
                 "spliced_feeler_vector": [round(float(x), 4) for x in st.spliced_chord.feeler_vector[:8]],
+                "stanza_chord_trajectory": stanza_trajectory,
             }
 
         telemetry = {
@@ -1240,6 +1288,8 @@ class ChessKibitzerRuntime:
             "sibling_color_balances": [b.to_dict() for b in turn.sibling_color_balances],
             "shadow_pathology_warnings": [w.to_dict() for w in turn.shadow_pathology_warnings],
             "spliced_trace": trace_info,
+            "stanza_chord_trajectory": stanza_trajectory,
+            "archive_resonance": archive_resonance,
             "sanctuary_target_mode": sanctuary_target_mode,
             "conversation_turns_in_prompt": len(conv_history),
             "pretext_subtext_context": {
@@ -1318,6 +1368,12 @@ class ChessKibitzerRuntime:
             "savored_count": len(self.savored_turn_ids),
             "rules_count": len(self.rules),
             "ratified_chords_count": len(self.archives.judicial.ratified_chords),
+            "branch_archives_summary": {
+                "feeling_clauses_count": len(self.archives.legislative.feeling_clauses),
+                "ratified_chords_count": len(self.archives.judicial.ratified_chords),
+                "action_clauses_count": len(self.archives.executive.action_clauses),
+                "active_vow_leaves": list(self._get_active_vow_leaves()),
+            },
             "elo": {
                 "lmft_elo": round(float(self.lmft_elo), 1),
                 "opponent_target_elo": round(float(self.opponent_target_elo), 1),
@@ -1422,6 +1478,7 @@ class ChessKibitzerRuntime:
         is_human_move: bool | None = None,
         is_sparring_opponent_move: bool = False,
         move_started_at: float | None = None,
+        allow_gear_2_escalation: bool = False,
     ) -> dict[str, Any]:
         """Make a move on the chessboard in silent, fast Gear-1 Right-Brain mode and record its board posture."""
         t_move_start = float(move_started_at) if move_started_at is not None else time.perf_counter()
@@ -1523,11 +1580,42 @@ class ChessKibitzerRuntime:
             turn.final_vibe,
             learned_leaves=self.learned_leaves,
         )
-        raw_reply = (
-            f"Played {san_str} — Gear 1 Right-Brain intuition "
-            f"({mover_posture.dominant_piece} · {mover_posture.dominant_color}, "
-            f"clarity {turn.final_vibe.clarity:.2f})."
+        gear_2_board_thought: str | None = None
+        should_escalate_board_gear_2 = (
+            not is_sparring_opponent_move
+            and not getattr(self, "_in_sparring_ai_move", False)
+            and not self.rem_sleep_in_progress
+            and self._qwen_left_brain is not None
+            and not turn.settled
+            and (allow_gear_2_escalation or float(turn.final_vibe.clarity) < 0.42)
         )
+        if should_escalate_board_gear_2 and hasattr(self._qwen_left_brain, "generate_two_clause_thought"):
+            acq_g2 = self.gpu_lock.acquire(blocking=False)
+            try:
+                if acq_g2:
+                    g2_trace = self._qwen_left_brain.generate_two_clause_thought(
+                        move_desc,
+                        chord=spliced_chord,
+                        lead_with_gap=True,
+                    )
+                    gear_2_board_thought = validate_plain_english_left_brain_reply(g2_trace.full_thought)
+            except Exception:
+                gear_2_board_thought = None
+            finally:
+                if acq_g2:
+                    self.gpu_lock.release()
+
+        if gear_2_board_thought:
+            self.last_board_reflex["gear_used"] = "GEAR_2_LEFT_BRAIN_BOARD_TUG"
+            telemetry["gear_used"] = "GEAR_2_LEFT_BRAIN_BOARD_TUG"
+            telemetry["gear_2_board_tug"] = True
+            raw_reply = f"Played {san_str} — {gear_2_board_thought}"
+        else:
+            raw_reply = (
+                f"Played {san_str} — Gear 1 Right-Brain intuition "
+                f"({mover_posture.dominant_piece} · {mover_posture.dominant_color}, "
+                f"clarity {turn.final_vibe.clarity:.2f})."
+            )
         reply_text = (
             f"Stockfish 19 ({self.opponent_target_elo:.0f} Elo) played {san_str}."
             if is_sparring_opponent_move
@@ -1575,7 +1663,7 @@ class ChessKibitzerRuntime:
                 "text": reply_text,
                 "clean_reply": raw_reply,
                 "clean_pretext_prompt": move_desc,
-                "is_gear_1_fallback": True,
+                "is_gear_1_fallback": gear_2_board_thought is None,
                 "telemetry": telemetry,
                 "coached": False,
                 "savored": False,
@@ -1627,12 +1715,15 @@ class ChessKibitzerRuntime:
         t_ai_start = time.perf_counter()
         self._active_move_started_at = t_ai_start
         ai_mover_color = self.board.turn
+        active_vow_leaves = self._get_active_vow_leaves()
         all_evals = evaluate_candidate_moves_with_right_brain(
             self.board,
             self.rules,
             learned_leaves=self.learned_leaves,
             limit=max(6, self.board.legal_moves.count()),
             bitboard_sleeve=self.bitboard_sleeve,
+            active_vow_leaves=active_vow_leaves,
+            branch_archives=self.archives,
         )
         if not all_evals:
             raise ValueError("No legal moves available.")
@@ -1657,13 +1748,21 @@ class ChessKibitzerRuntime:
                 rot_idx = (self.games_completed_count + (len(self.move_history_san) // 2)) % len(near_tied_sound)
                 right_brain_choice = near_tied_sound[rot_idx]
         chosen_san = right_brain_choice.san
-        selection_mode = "gear_1_right_brain_intuition"
-
-        snap = self.handle_chess_move(
-            chosen_san,
-            is_human_move=False,
-            move_started_at=t_ai_start,
+        selection_mode = (
+            "gear_1_vow_guided_intuition"
+            if right_brain_choice.guided_by_vow
+            else "gear_1_right_brain_intuition"
         )
+
+        self._in_sparring_ai_move = bool(in_sparring_mode)
+        try:
+            snap = self.handle_chess_move(
+                chosen_san,
+                is_human_move=False,
+                move_started_at=t_ai_start,
+            )
+        finally:
+            self._in_sparring_ai_move = False
         if not in_sparring_mode:
             self._sync_active_thread_record(persist=True)
         arbitration_record = {
@@ -1673,10 +1772,15 @@ class ChessKibitzerRuntime:
             "left_brain_proposed_san": None,
             "veto_reason": None,
             "veto_queued_for_sleep": False,
+            "guided_by_vow": bool(right_brain_choice.guided_by_vow),
+            "vow_alignment_delta": round(float(right_brain_choice.vow_alignment_delta), 4),
+            "active_vow_leaves": list(active_vow_leaves),
             "top_candidates": [c.to_dict() for c in top_candidates[:5]],
         }
         self.last_hybrid_move_arbitration = arbitration_record
         if self.last_board_reflex is not None:
+            self.last_board_reflex["guided_by_vow"] = bool(right_brain_choice.guided_by_vow)
+            self.last_board_reflex["vow_alignment_delta"] = round(float(right_brain_choice.vow_alignment_delta), 4)
             self.last_board_reflex["hybrid_arbitration"] = arbitration_record
         if (
             self.player_move_accuracies

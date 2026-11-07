@@ -28,6 +28,7 @@ import json
 import math
 from pathlib import Path
 import time
+from typing import Any
 
 from .birth import BirthState
 from .chord_memory import ChordEchoReport, FeltChord, humanize_feeling_name
@@ -521,6 +522,41 @@ class ThreeBranchArchives:
                 else JudicialPhilosophicalArchive()
             ),
         )
+
+    def recall_resonant_clauses(
+        self,
+        coordinates: Mapping[str, float],
+        *,
+        min_similarity: float = 0.68,
+    ) -> dict[str, Any]:
+        """Recall the highest-resonance clauses across Legislative, Judicial, and Executive archives for `coordinates`."""
+        leg_best, leg_sim = _best_matching_clause(self.legislative.feeling_clauses, coordinates)
+        jud_best, jud_sim = _best_matching_clause(self.judicial.structural_clauses, coordinates)
+        exec_best, exec_sim = _best_matching_clause(self.executive.action_clauses, coordinates)
+
+        def _fmt(entry: BranchClauseEntry | None, sim: float) -> dict[str, Any] | None:
+            if entry is None or sim < min_similarity:
+                return None
+            return {
+                "clause_id": entry.clause_id,
+                "branch": entry.branch,
+                "text": entry.text,
+                "similarity": round(float(sim), 4),
+                "source_scene": int(entry.source_scene),
+                "concept_tag": entry.concept_tag,
+            }
+
+        leg_dict = _fmt(leg_best, leg_sim)
+        jud_dict = _fmt(jud_best, jud_sim)
+        exec_dict = _fmt(exec_best, exec_sim)
+        top_sim = round(max(float(leg_sim), float(jud_sim), float(exec_sim)), 4)
+        return {
+            "legislative_match": leg_dict,
+            "judicial_match": jud_dict,
+            "executive_match": exec_dict,
+            "top_resonance_score": top_sim,
+            "resonating_vow_text": exec_dict["text"] if exec_dict is not None else None,
+        }
 
 
 @dataclass(frozen=True)

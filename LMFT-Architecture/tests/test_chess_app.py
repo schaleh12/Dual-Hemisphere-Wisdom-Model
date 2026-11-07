@@ -1260,6 +1260,31 @@ def test_longitudinal_rem_dream_chronicles_and_coordinate_vow_keeping(tmp_path: 
     )
     assert len(reloaded.rem_dream_chronicles) == 3
     assert reloaded.rem_dream_chronicles[-1]["vow_outcome"] == "HONORED"
+    assert len(reloaded._get_active_vow_leaves()) >= 1
+
+    # Verify live 3-branch archive recall and vow-guided move selection
+    res_check = reloaded.archives.recall_resonant_clauses(
+        sound_rev["played_coordinates"],
+        min_similarity=0.40,
+    )
+    assert res_check["top_resonance_score"] >= 0.40
+    reloaded.handle_set_fen("r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 3 3")
+    ai_vow_snap = reloaded.handle_chess_ai_move()
+    arb = ai_vow_snap["last_hybrid_move_arbitration"]
+    assert "vow_alignment_delta" in arb
+    assert "guided_by_vow" in arb
+    assert len(arb["active_vow_leaves"]) >= 1
+
+    # Verify multi-stanza chat exports `stanza_chord_trajectory` and `archive_resonance` in telemetry
+    chat_stanza_snap = reloaded.handle_chat_message(
+        "How should we coordinate our pieces across the next two stanzas of play?",
+        num_sentences=20,
+    )
+    last_chat_tel = chat_stanza_snap["chat_messages"][-1]["telemetry"]
+    assert "stanza_chord_trajectory" in last_chat_tel
+    assert len(last_chat_tel["stanza_chord_trajectory"]) >= 1
+    assert "archive_resonance" in last_chat_tel
+
 
 
 
