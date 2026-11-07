@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Windows.Forms;
@@ -109,10 +110,7 @@ internal sealed class InstallerWizardForm : Form
             SizeMode = PictureBoxSizeMode.Zoom,
         };
         string spiritJpg = Path.Combine(assetsDir, "celestriad_spirit_particle.jpg");
-        if (File.Exists(spiritJpg))
-        {
-            try { picLogo.Image = Image.FromFile(spiritJpg); } catch { }
-        }
+        picLogo.Image = LoadImageUnlocked(spiritJpg);
         topBar.Controls.Add(picLogo);
 
         Label lblTitle = new Label
@@ -421,10 +419,7 @@ internal sealed class InstallerWizardForm : Form
             BorderStyle = BorderStyle.FixedSingle,
         };
         string blueScreenJpg = Path.Combine(assetsDir, "blue_screen_of_life_poem.jpg");
-        if (File.Exists(blueScreenJpg))
-        {
-            try { picPoem.Image = Image.FromFile(blueScreenJpg); } catch { }
-        }
+        picPoem.Image = LoadImageUnlocked(blueScreenJpg);
         p.Controls.Add(picPoem);
 
         Label lblInfo = new Label
@@ -512,10 +507,7 @@ internal sealed class InstallerWizardForm : Form
             BorderStyle = BorderStyle.FixedSingle,
         };
         string areciboJpg = Path.Combine(assetsDir, "arecibo_desktop_icon.jpg");
-        if (File.Exists(areciboJpg))
-        {
-            try { picArecibo.Image = Image.FromFile(areciboJpg); } catch { }
-        }
+        picArecibo.Image = LoadImageUnlocked(areciboJpg);
         iconCard.Controls.Add(picArecibo);
 
         Label lblArecibo = new Label
@@ -536,10 +528,7 @@ internal sealed class InstallerWizardForm : Form
             BorderStyle = BorderStyle.FixedSingle,
         };
         string spiritJpg = Path.Combine(assetsDir, "celestriad_spirit_particle.jpg");
-        if (File.Exists(spiritJpg))
-        {
-            try { picSpirit.Image = Image.FromFile(spiritJpg); } catch { }
-        }
+        picSpirit.Image = LoadImageUnlocked(spiritJpg);
         iconCard.Controls.Add(picSpirit);
 
         Label lblSpirit = new Label
@@ -800,29 +789,30 @@ internal sealed class InstallerWizardForm : Form
         {
             try
             {
-                ProcessStartInfo psiWmic = new ProcessStartInfo
+                ProcessStartInfo psiCim = new ProcessStartInfo
                 {
-                    FileName = "wmic",
-                    Arguments = "path win32_VideoController get Name,AdapterRAM /value",
+                    FileName = "powershell.exe",
+                    Arguments = "-NoProfile -ExecutionPolicy Bypass -Command \"(Get-CimInstance Win32_VideoController | Select-Object -First 1).Name\"",
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
                     CreateNoWindow = true,
                 };
-                using (Process p = Process.Start(psiWmic))
+                using (Process p = Process.Start(psiCim))
                 {
                     string output = p.StandardOutput.ReadToEnd();
                     p.WaitForExit(4000);
-                    foreach (string raw in output.Split('\n'))
+                    string trimmed = (output ?? "").Trim();
+                    if (!string.IsNullOrEmpty(trimmed))
                     {
-                        string ln = raw.Trim();
-                        if (ln.StartsWith("Name=") && ln.Length > 5)
-                        {
-                            detectedGpuName = ln.Substring(5).Trim();
-                        }
+                        detectedGpuName = trimmed.Split('\r', '\n')[0].Trim();
                     }
                 }
             }
             catch
+            {
+                detectedGpuName = "Standard Windows Display Adapter";
+            }
+            if (detectedGpuName == "Detecting GPU...")
             {
                 detectedGpuName = "Standard Windows Display Adapter";
             }
@@ -836,30 +826,11 @@ internal sealed class InstallerWizardForm : Form
 
         try
         {
-            ProcessStartInfo psiRam = new ProcessStartInfo
+            MEMORYSTATUSEX memStatus = new MEMORYSTATUSEX();
+            memStatus.dwLength = (uint)Marshal.SizeOf(typeof(MEMORYSTATUSEX));
+            if (GlobalMemoryStatusEx(ref memStatus) && memStatus.ullTotalPhys > 0)
             {
-                FileName = "wmic",
-                Arguments = "computersystem get TotalPhysicalMemory /value",
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                CreateNoWindow = true,
-            };
-            using (Process p = Process.Start(psiRam))
-            {
-                string output = p.StandardOutput.ReadToEnd();
-                p.WaitForExit(4000);
-                foreach (string raw in output.Split('\n'))
-                {
-                    string ln = raw.Trim();
-                    if (ln.StartsWith("TotalPhysicalMemory="))
-                    {
-                        long bytes;
-                        if (long.TryParse(ln.Substring("TotalPhysicalMemory=".Length).Trim(), out bytes))
-                        {
-                            detectedRamGb = Math.Round(bytes / (1024.0 * 1024.0 * 1024.0), 1);
-                        }
-                    }
-                }
+                detectedRamGb = Math.Round(memStatus.ullTotalPhys / (1024.0 * 1024.0 * 1024.0), 1);
             }
         }
         catch { }
@@ -918,8 +889,8 @@ internal sealed class InstallerWizardForm : Form
         CheckItem(sb, "2. Chess Arena Engine (chess_app.py)", Path.Combine(archDir, "src", "lmft_architecture", "chess_app.py"));
         CheckItem(sb, "3. Subliminal Gap Runtime (three_legged_runtime.py)", Path.Combine(archDir, "src", "lmft_architecture", "three_legged_runtime.py"));
         CheckItem(sb, "4. Virgin Baseline Lock (virgin_baseline.py)", Path.Combine(archDir, "src", "lmft_architecture", "virgin_baseline.py"));
-        CheckItem(sb, "5. Right-Brain MiniLM Bridges", Path.Combine(trainDir, "models", "right_brain_bridges", "bridge_training_report.json"));
-        CheckItem(sb, "6. Qwen3-8B Left-Brain LoRA + Callosum", Path.Combine(trainDir, "models", "left_brain_qwen3_8b", "subliminal_gap_projector.pt"));
+        CheckItem(sb, "5. Right-Brain MiniLM Bridges", Path.Combine(trainDir, "models", "right_brain_bridges", "doer_will_cultural", "model.safetensors"));
+        CheckItem(sb, "6. Qwen3-8B Left-Brain LoRA + Callosum", Path.Combine(trainDir, "models", "left_brain_qwen3_8b", "projector_weights.pt"));
         CheckItem(sb, "7. Master Release Wisdom Seed", Path.Combine(trainDir, "outputs", "rem_sleep_consolidated_ruleset.json"));
         CheckItem(sb, "8. Arecibo Reply Desktop Icon (.ico)", Path.Combine(assetsDir, "arecibo_desktop_icon.ico"));
         CheckItem(sb, "9. Celestriad Spirit Particle Icon (.ico)", Path.Combine(assetsDir, "celestriad_spirit_particle.ico"));
@@ -1071,6 +1042,38 @@ internal sealed class InstallerWizardForm : Form
         b.FlatAppearance.BorderColor = Color.FromArgb(100, 116, 139);
         b.FlatAppearance.BorderSize = 1;
         return b;
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+    private struct MEMORYSTATUSEX
+    {
+        public uint dwLength;
+        public uint dwMemoryLoad;
+        public ulong ullTotalPhys;
+        public ulong ullAvailPhys;
+        public ulong ullTotalPageFile;
+        public ulong ullAvailPageFile;
+        public ulong ullTotalVirtual;
+        public ulong ullAvailVirtual;
+        public ulong ullAvailExtendedVirtual;
+    }
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GlobalMemoryStatusEx(ref MEMORYSTATUSEX lpBuffer);
+
+    private static Image LoadImageUnlocked(string path)
+    {
+        if (!File.Exists(path)) return null;
+        try
+        {
+            byte[] bytes = File.ReadAllBytes(path);
+            return new Bitmap(new MemoryStream(bytes));
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static void OpenUrl(string url)
