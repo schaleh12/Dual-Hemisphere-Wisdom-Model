@@ -630,6 +630,8 @@ class SubliminalGapLeftBrain:
             generated_ids: list[int] = []
             step_embeds = cur_embeds
             past_kv: Any = None
+            vocab_len = len(self.tokenizer) if hasattr(self.tokenizer, "__len__") else 0
+            gen_counts: dict[int, int] = {}
 
             for step_idx in range(self.max_post_gap_tokens):
                 next_logits, past_kv = self._forward_step_with_optional_kv_cache(
@@ -643,11 +645,20 @@ class SubliminalGapLeftBrain:
                         next_logits[bad_id] = -1e9
                 if step_idx == 0 and eos_id is not None and 0 <= int(eos_id) < next_logits.size(0):
                     next_logits[int(eos_id)] = -1e9
+                if vocab_len > 1000:
+                    for seen_id, cnt in gen_counts.items():
+                        if cnt >= 2 and 0 <= seen_id < next_logits.size(0):
+                            pen = 1.25 + 0.15 * min(3, cnt - 1)
+                            if next_logits[seen_id] > 0:
+                                next_logits[seen_id] = next_logits[seen_id] / pen
+                            else:
+                                next_logits[seen_id] = next_logits[seen_id] * pen
 
                 next_id = int(torch.argmax(next_logits).item())
                 if eos_id is not None and next_id == int(eos_id):
                     break
                 generated_ids.append(next_id)
+                gen_counts[next_id] = gen_counts.get(next_id, 0) + 1
 
                 decoded_cont = self.tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
                 if (
@@ -795,6 +806,22 @@ class SubliminalGapLeftBrain:
                 chord_builder_at_comma=chord_builder_at_comma,
                 lead_with_gap=lead_with_gap,
             )
+            vocab_len = len(self.tokenizer) if hasattr(self.tokenizer, "__len__") else 0
+            if vocab_len > 1000 and completed_sentences:
+                cand_words = set(re.findall(r"[a-z0-9]+", trace.full_thought.lower()))
+                is_dup = False
+                for prev in completed_sentences:
+                    if trace.full_thought.strip().lower() == prev.strip().lower():
+                        is_dup = True
+                        break
+                    prev_words = set(re.findall(r"[a-z0-9]+", prev.lower()))
+                    if cand_words and prev_words:
+                        overlap = len(cand_words & prev_words) / max(1, min(len(cand_words), len(prev_words)))
+                        if overlap >= 0.72:
+                            is_dup = True
+                            break
+                if is_dup:
+                    break
             completed_sentences.append(trace.full_thought)
             traces.append(trace)
             if stop_condition is not None and stop_condition(len(traces), trace, " ".join(completed_sentences).strip()):

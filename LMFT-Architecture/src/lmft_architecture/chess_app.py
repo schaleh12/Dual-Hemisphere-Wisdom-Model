@@ -1861,8 +1861,6 @@ class ChessKibitzerRuntime:
                             for r in self.rules
                         ):
                             return True
-                        if sent_count < 2:
-                            return False
                         mentioned_now = inspect_chess_moves_in_reply(
                             getattr(trace, "post_gap_continuation", "") or passage_so_far,
                             self.board,
@@ -1881,13 +1879,12 @@ class ChessKibitzerRuntime:
                                 return True
                         return False
 
-                    conv_history = self._extract_clean_conversation_history()
                     with self.gpu_lock:
                         delib_text, delib_trace = self._qwen_left_brain.generate_with_subliminal_splice(
                             pre_prompt,
                             pre_chord,
                             num_sentences=max_delib_sentences,
-                            conversation_history=conv_history,
+                            conversation_history=(),
                             chord_builder_at_comma=_build_pre_move_comma_chord,
                             stop_condition=_should_stop_deliberation if max_delib_sentences > 1 else None,
                             lead_with_gap=True,
