@@ -1,8 +1,8 @@
-# Dual-Hemisphere Wisdom Model (`LMFT-Architecture` · `Celestriad 1.0`)
+# Dual-Hemisphere Wisdom Model (`LMFT-Architecture` · `Celestriad v1.2.0`)
 
 > **A Persistent 40-Node Right-Brain Fuzzy Tree Paired with Local Language Models (`Qwen3-8B` / `Qwen3-4B` / `Impish_Bloodmoon_12B`) via a Non-Verbal `<|subliminal_gap|>` Comma Splice & REM Weight-Space Circuit Sculpting.**
 >
-> **▶️ Support the Architect on YouTube:** **[`@imissmydeadcat.74`](https://www.youtube.com/@imissmydeadcat.74)** · **📦 Latest Portable Release:** **[GitHub Releases (`Celestriad 1.0`) →](https://github.com/schaleh12/Dual-Hemisphere-Wisdom-Model/releases)**
+> **▶️ Support the Architect on YouTube:** **[`@imissmydeadcat.74`](https://www.youtube.com/@imissmydeadcat.74)** · **📦 Latest Portable Release:** **[GitHub Releases (`Celestriad v1.2.0`) →](https://github.com/schaleh12/Dual-Hemisphere-Wisdom-Model/releases/tag/v0.2.0)** · **🔬 Research Inspiration (`4:30`):** **[Two Minute Papers — *Weight-Space Programming* (`youtu.be/GJ6PMUm5oTA?t=270`)](https://youtu.be/GJ6PMUm5oTA?si=ps0-qMBm3-ZQOp3c&t=270)**
 
 <p align="center">
   <img src="LMFT-Architecture/docs/assets/blue_screen_of_life_poem.jpg" alt="Blue Screen of Life — Dual-Hemisphere Wisdom Model" width="860" />
@@ -106,7 +106,7 @@ Because `LMFT-Chess.exe` and `LMFT-Bloodmoon.exe` stress-test the exact same 40-
 
 ## 4. REM Weight-Space Circuit Sculpting & Homeostatic Plasticity (`D065–D066`)
 
-Inspired by MIT CSAIL's *"Sparks of Weight-Space Programming"*, `LMFT-Architecture` does not treat its Right-Brain weights, Tier-2 leaf anchors, or Will synapses as frozen birth constants—nor does it let step-by-step updates ratchet weights to their hard ceilings (`±2.5` or `0.93+`).
+Inspired by MIT CSAIL's *"Sparks of Weight-Space Programming"* (featured in **[Two Minute Papers — *"OpenAI's Astra Just Opened The Black Box Of AI"* at `4:30`](https://youtu.be/GJ6PMUm5oTA?si=ps0-qMBm3-ZQOp3c&t=270)**), `LMFT-Architecture` does not treat its Right-Brain weights, Tier-2 leaf anchors, or Will synapses as frozen birth constants—nor does it let step-by-step updates ratchet weights to their hard ceilings (`±2.5` or `0.93+`).
 
 During every **REM Sleep** cycle, the architecture runs **Contrastive Weight-Space Sculpting** paired with gentle **Homeostatic Anchor Decay** across five named, human-readable circuit boards while keeping the **40-Node Founding Seed** ([`birth.py`](LMFT-Architecture/src/lmft_architecture/birth.py)) and **Cycle-0 Virgin Baseline** 100% immutable:
 
