@@ -27,6 +27,7 @@ from dataclasses import dataclass
 import json
 import math
 from pathlib import Path
+import re
 import time
 from typing import Any
 
@@ -68,8 +69,12 @@ ACCESS_STATES = (
 
 def _split_sentences(text: str) -> list[str]:
     cleaned = " ".join(text.strip().split())
-    parts = [p.strip() for p in cleaned.replace("!", ".").replace("?", ".").split(".") if p.strip()]
-    return [p + "." for p in parts] if parts else [cleaned]
+    parts = [
+        p.strip()
+        for p in re.split(r"(?<!\b\d)(?<!\b\d\d)[.!?]+(?:\s+|$)", cleaned)
+        if p.strip()
+    ]
+    return [p if p.endswith((".", "!", "?")) else p + "." for p in parts] if parts else [cleaned]
 
 
 def _compact_clause(text: str, limit: int = 155) -> str:
@@ -1054,9 +1059,15 @@ def harvest_into_branch_archives(
         has_left_reply = left_brain_reply is not None and bool(left_brain_reply.strip())
         clause_source_text = left_brain_reply.strip() if has_left_reply else scenario_text.strip()
         if clause_source_text:
-            sentences = _split_sentences(clause_source_text)
-            s_exec = sentences[0]
-            s_jud = sentences[1] if len(sentences) >= 2 else sentences[0]
+            if not has_left_reply and clause_source_text.startswith("Chess table"):
+                exec_label = exec_tag.replace("_", " ")
+                jud_label = jud_tag.replace("_", " ")
+                s_exec = f"Sustained {exec_label} with steady piece coordination on the board."
+                s_jud = f"Verified {jud_label} structural balance across the position."
+            else:
+                sentences = _split_sentences(clause_source_text)
+                s_exec = sentences[0]
+                s_jud = sentences[1] if len(sentences) >= 2 else sentences[0]
             s_leg = f"Felt chord of {humanize_feeling_name(leg_tag)}: {felt_chord.dominant_mood}."
 
             cult_sig = _branch_subset(raw_coords, "cultural/")

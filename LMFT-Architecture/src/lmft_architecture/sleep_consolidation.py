@@ -996,9 +996,12 @@ def consolidate_sleep_clusters_locally(
         base_name = f"{prefix}_{ckey}"
         concept_name = base_name
         human_theme = ckey.replace("_cluster", "").replace("_", " ").strip() or "board balance"
+        raw_desc_src = " ".join((rep.game_review_annotation or rep.scenario_text or "").split())
+        clean_desc_src = re.sub(r"Game Review\s*\[[^\]]+\]:\s*", "", raw_desc_src)
+        clean_desc_src = re.sub(r"\s*\([^)]*[+-]\d+\.\d+[^)]*\)", "", clean_desc_src).strip()
         description = (
             f"Consolidated REM chess wisdom rule for {human_theme}: "
-            f"{(rep.game_review_annotation or rep.scenario_text)[:140]}"
+            f"{clean_desc_src[:140]}"
         )
         new_rule = FuzzyConceptRule(
             rule_id=f"rule-sleep-{concept_name[:32]}",
@@ -1183,7 +1186,8 @@ def consolidate_sleep_clusters_locally(
         )
         exec_tag, leg_tag, jud_tag = _derive_concept_tags(avg_coords, avg_fc)
         clean_hunch = " ".join((rep.left_brain_hunch or "").split()).strip()
-        clean_scenario = " ".join((rep.scenario_text or "").split()).strip()
+        clean_scenario = re.sub(r"Game Review\s*\[[^\]]+\]:\s*", "", " ".join((rep.scenario_text or "").split()))
+        clean_scenario = re.sub(r"\s*\([^)]*[+-]\d+\.\d+[^)]*\)", "", clean_scenario).strip()
         exec_label = exec_tag.replace("_", " ")
         leg_label = leg_tag.replace("_", " ")
         jud_label = jud_tag.replace("_", " ")
