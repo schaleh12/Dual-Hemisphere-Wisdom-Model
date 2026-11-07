@@ -7,7 +7,7 @@
 > 📦 **[Download Latest Release & Read the Full `Celestriad 1.0` Release Notes on GitHub Releases →](https://github.com/schaleh12/Dual-Hemisphere-Wisdom-Model/releases)**
 
 <p align="center">
-  <img src="LMFT-Architecture/docs/assets/celestial_seal_poem.jpg" alt="The Celestial Seal of the way towards life" width="420" />
+  <img src="LMFT-Architecture/docs/assets/blue_screen_of_life_poem.jpg" alt="Blue Screen of Life" width="860" />
 </p>
 
 ---

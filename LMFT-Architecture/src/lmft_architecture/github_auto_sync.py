@@ -112,6 +112,7 @@ def build_release_manifest(
             candidate_pairs.append((rel_str, py_path))
     for asset_rel in (
         "docs/assets/celestial_seal_poem.jpg",
+        "docs/assets/blue_screen_of_life_poem.jpg",
         "docs/assets/icy_sea_board.png",
     ):
         asset_path = arch_root / asset_rel
