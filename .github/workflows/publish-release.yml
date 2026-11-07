@@ -28,6 +28,7 @@ jobs:
           TAG_NAME="v0.2.0"
           RELEASE_TITLE="Celestriad 1.0 (v0.2.0) — Dual-Hemisphere Wisdom Model"
           if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            gh release delete-asset "$TAG_NAME" Install-And-Run-LMFT-Chess.bat --yes >/dev/null 2>&1 || true
             gh release edit "$TAG_NAME" \
               --title "$RELEASE_TITLE" \
               --notes-file RELEASE_NOTES.md \
@@ -36,7 +37,6 @@ jobs:
               LMFT-Training/dist/lmft-sanctuary-club-v0.1.0-win64.zip \
               LMFT-Training/dist/release_manifest.json \
               LMFT-Installer-Wizard.exe \
-              Install-And-Run-LMFT-Chess.bat \
               LMFT-Chess.exe \
               LMFT-Bloodmoon.exe \
               --clobber
@@ -45,7 +45,6 @@ jobs:
               LMFT-Training/dist/lmft-sanctuary-club-v0.1.0-win64.zip \
               LMFT-Training/dist/release_manifest.json \
               LMFT-Installer-Wizard.exe \
-              Install-And-Run-LMFT-Chess.bat \
               LMFT-Chess.exe \
               LMFT-Bloodmoon.exe \
               --target main \

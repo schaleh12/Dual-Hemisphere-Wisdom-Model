@@ -951,20 +951,27 @@ internal sealed class InstallerWizardForm : Form
 
     private void ProvisionPythonVenv()
     {
-        string batPath = Path.Combine(baseDir, "Install-And-Run-LMFT-Chess.bat");
-        if (File.Exists(batPath))
+        try
         {
+            string venvDir = Path.Combine(archDir, ".venv");
+            string venvPy = Path.Combine(venvDir, "Scripts", "python.exe");
+            string cmdChain =
+                "python -m venv \"" + venvDir + "\" && " +
+                "\"" + venvPy + "\" -m pip install --upgrade pip && " +
+                "\"" + venvPy + "\" -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124 && " +
+                "\"" + venvPy + "\" -m pip install -e \"" + archDir + "\" && " +
+                "echo. && echo [OK] Python .venv provisioned successfully! && pause";
             Process.Start(new ProcessStartInfo
             {
-                FileName = batPath,
-                Arguments = "--venv-only",
+                FileName = "cmd.exe",
+                Arguments = "/c \"" + cmdChain + "\"",
                 WorkingDirectory = baseDir,
                 UseShellExecute = true,
             });
         }
-        else
+        catch (Exception ex)
         {
-            MessageBox.Show("Install-And-Run-LMFT-Chess.bat not found in " + baseDir, "Installer", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show("Could not launch Python .venv setup:\n" + ex.Message, "Installer", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
     }
 

@@ -153,15 +153,15 @@ Language Model Fuzzy Tree Research/      # Top-level Git repository & Desktop pr
 
 ## 6. Quickstart & 1-Click Install / Auto-Sync (Windows / CUDA GPU)
 
-### 1. 1-Click Install, Auto-Sync & Launch (`LMFT-Chess.exe` / `Install-And-Run-LMFT-Chess.bat`)
-Double-click **[`LMFT-Chess.exe`](LMFT-Chess.exe)** or **[`Install-And-Run-LMFT-Chess.bat`](Install-And-Run-LMFT-Chess.bat)** (or run from PowerShell):
+### 1. 5-Page Windows GUI Setup Wizard & Auto-Updating Launcher (`LMFT-Installer-Wizard.exe` / `LMFT-Chess.exe`)
+Double-click **[`LMFT-Installer-Wizard.exe`](LMFT-Installer-Wizard.exe)** for the 5-page graphical setup, hardware diagnostic, and Desktop shortcut wizard, or launch **[`LMFT-Chess.exe`](LMFT-Chess.exe)** directly:
 ```powershell
-.\Install-And-Run-LMFT-Chess.bat
-# or directly:
+.\LMFT-Installer-Wizard.exe
+# or launch directly (auto-updates on startup):
 .\LMFT-Chess.exe
 .\LMFT-Bloodmoon.exe
 ```
-- **Zero-Config First Launch**: If `.venv` does not exist yet on a fresh machine, `LMFT-Chess.exe` / `Install-And-Run-LMFT-Chess.bat` automatically creates `LMFT-Architecture/.venv`, installs PyTorch + package dependencies, and boots the app.
+- **5-Page Graphical Setup Wizard**: If `.venv` does not exist yet on a fresh machine, `LMFT-Chess.exe` automatically opens `LMFT-Installer-Wizard.exe` to check your GPU/RAM, generate a custom Google Antigravity prompt, verify folder integrity, create the Arecibo Reply Desktop Icon, and provision `.venv`.
 - **Pre-Trained Checkpoints Included**: The repository includes the trained **3 Right-Brain `MiniLM` Bridge Classifiers** (`LMFT-Training/models/right_brain_bridges/`) and the trained **`Qwen3-8B` & `Qwen3-4B` Left-Brain LoRA + Corpus Callosum Projectors** (`LMFT-Training/models/left_brain_qwen3_8b/` and `left_brain_lora_cycle2/`), so the full voice and 40-node tree work out of the box.
 - **Automatic GitHub Master-Seed Sync**: On startup (and whenever you click **`[Sync Updates]`** in the header), the app checks `schaleh12/Dual-Hemisphere-Wisdom-Model` (`release_manifest.json`), verifies SHA-256 digests, and non-destructively merges newly evolved rules, Tier-2 `LearnedLeaf` nodes, and bitboard sleeve weights into your local runtime without overwriting your personal games or Elo rating.
 

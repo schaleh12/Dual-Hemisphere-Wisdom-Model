@@ -35,12 +35,12 @@ internal static class Program
 
             if (exePath == null)
             {
-                string bootstrapBat = Path.Combine(baseDir, "Install-And-Run-LMFT-Chess.bat");
-                if (File.Exists(bootstrapBat))
+                string wizardExe = Path.Combine(baseDir, "LMFT-Installer-Wizard.exe");
+                if (File.Exists(wizardExe))
                 {
                     Process.Start(new ProcessStartInfo
                     {
-                        FileName = bootstrapBat,
+                        FileName = wizardExe,
                         WorkingDirectory = baseDir,
                         UseShellExecute = true,
                     });

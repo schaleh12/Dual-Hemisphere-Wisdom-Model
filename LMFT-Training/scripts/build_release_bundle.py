@@ -49,7 +49,6 @@ def build_release_zip(
         "LMFT-Installer-Wizard.exe",
         "LMFT-Chess.exe",
         "LMFT-Bloodmoon.exe",
-        "Install-And-Run-LMFT-Chess.bat",
         "README.md",
         "RELEASE_NOTES.md",
     ):
