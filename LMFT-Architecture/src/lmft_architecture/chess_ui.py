@@ -619,9 +619,10 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
     <div style="display:flex;gap:6px;align-items:center;">
       <input type="text" id="chat-input" placeholder="Talk to Celestriad 1.0: ask why a move was a blunder, ask for a plan, or chat..." style="flex:1;" onkeydown="if(event.key==='Enter')sendChatMessage()" />
       <select id="chat-sentences-select" title="How many sentences Celestriad 1.0 speaks when replying">
-        <option value="1" selected>Reply: Auto (1–3 Sentences)</option>
+        <option value="1" selected>Reply: Auto (1–4 Sentences)</option>
         <option value="2">Reply: 2 Sentences</option>
         <option value="3">Reply: 3 Sentences</option>
+        <option value="4">Reply: 4 Sentences</option>
       </select>
       <button class="btn btn-chess-green" onclick="sendChatMessage()">Send</button>
     </div>
@@ -636,7 +637,7 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
       <button class="btn" onclick="closeTutorialModal()">✕</button>
     </div>
     <p style="font-size:13px;color:var(--text-1);margin:8px 0 4px 0;">
-      <strong>Celestriad 1.0</strong> plays moves silently and fast on 1-step intuition using a <strong>40-Node Right-Brain Fuzzy Tree</strong>, and speaks with <strong>Qwen3-4B</strong> (spliced at <code>&lt;|subliminal_gap|&gt;</code>) when <strong>reflecting during REM Sleep</strong> or when <strong>you ask it a question</strong>.
+      <strong>Celestriad 1.0</strong> plays moves silently and fast on 1-step intuition using a <strong>40-Node Right-Brain Fuzzy Tree</strong>, and speaks with <strong>Qwen3-8B</strong> (spliced at <code>&lt;|subliminal_gap|&gt;</code>) when <strong>reflecting during REM Sleep</strong> or when <strong>you ask it a question</strong>.
     </p>
     <div class="tutorial-step">
       <strong>Button #1: 🎮 1. Play &amp; Chat (Default Mode)</strong><br/>

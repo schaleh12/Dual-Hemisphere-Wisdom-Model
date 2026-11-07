@@ -1165,23 +1165,23 @@ def apply_dream_reflection_to_archives(
     from dataclasses import replace
 
     new_exec_clauses = tuple(
-        replace(c, text=exec_sentence[:220]) if c.source_scene == scene_index else c
+        replace(c, text=exec_sentence[:450]) if c.source_scene == scene_index else c
         for c in archives.executive.action_clauses
     )
     new_exec_precs = tuple(
-        replace(p, action_summary=exec_sentence[:220]) if p.scene_index == scene_index else p
+        replace(p, action_summary=exec_sentence[:450]) if p.scene_index == scene_index else p
         for p in archives.executive.precedents
     )
     new_leg_clauses = tuple(
-        replace(c, text=leg_sentence[:220]) if c.source_scene == scene_index else c
+        replace(c, text=leg_sentence[:450]) if c.source_scene == scene_index else c
         for c in archives.legislative.feeling_clauses
     )
     new_leg_snaps = tuple(
-        replace(s, sensory_snapshot=leg_sentence[:220]) if s.scene_index == scene_index else s
+        replace(s, sensory_snapshot=leg_sentence[:450]) if s.scene_index == scene_index else s
         for s in archives.legislative.diary_snapshots
     )
     new_jud_clauses = tuple(
-        replace(c, text=jud_sentence[:220]) if c.source_scene == scene_index else c
+        replace(c, text=jud_sentence[:450]) if c.source_scene == scene_index else c
         for c in archives.judicial.structural_clauses
     )
     return ThreeBranchArchives(

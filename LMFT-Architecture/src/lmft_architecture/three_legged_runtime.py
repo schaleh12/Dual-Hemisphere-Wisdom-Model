@@ -96,7 +96,7 @@ from .train_left_brain_lora import (
 
 DEFAULT_QWEN_4B_HF_ID = "Qwen/Qwen3-4B"
 DEFAULT_QWEN_8B_HF_ID = "Qwen/Qwen3-8B"
-DEFAULT_MAX_CONTEXT_CHARS = 12_000
+DEFAULT_MAX_CONTEXT_CHARS = 24_000
 
 
 def format_sliding_conversation_history(
@@ -270,8 +270,8 @@ class SubliminalGapLeftBrain:
         *,
         gap_token_id: int | None = None,
         device: str | torch.device = "cpu",
-        max_clause_1_tokens: int = 14,
-        max_post_gap_tokens: int = 40,
+        max_clause_1_tokens: int = 20,
+        max_post_gap_tokens: int = 64,
         callosum_metadata: CorpusCallosumMetadata | None = None,
         lora_config: LoRAConfig | None = None,
     ) -> None:
@@ -306,8 +306,8 @@ class SubliminalGapLeftBrain:
         device: str | torch.device | None = None,
         torch_dtype: torch.dtype | None = None,
         load_in_4bit: bool | None = None,
-        max_clause_1_tokens: int = 14,
-        max_post_gap_tokens: int = 40,
+        max_clause_1_tokens: int = 20,
+        max_post_gap_tokens: int = 64,
     ) -> "SubliminalGapLeftBrain":
         """Load a HuggingFace CausalLM + trained `LoRALinear` adapters + `SubliminalGapProjector` from disk."""
         import json as _json

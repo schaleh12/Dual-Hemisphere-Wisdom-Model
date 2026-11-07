@@ -812,7 +812,7 @@ class ChessKibitzerRuntime:
         self._sync_active_thread_record(persist=True)
         return self.get_state_snapshot()
 
-    def _extract_clean_conversation_history(self, *, max_turns: int = 8) -> tuple[tuple[str, str], ...]:
+    def _extract_clean_conversation_history(self, *, max_turns: int = 20) -> tuple[tuple[str, str], ...]:
         """Extract `(user_prompt, clean_reply)` pairs from genuine human-to-companion dialogue turns."""
         pairs: list[tuple[str, str]] = []
         pending_user: str | None = None
@@ -1762,7 +1762,23 @@ class ChessKibitzerRuntime:
                 or bool(p_vibe.shadow_pathology_warnings)
             )
             if is_insightful_inquiry:
-                effective_sent_count = 3 if float(p_vibe.clarity) < 0.48 else 2
+                is_deep_philosophical_inquiry = (
+                    float(p_vibe.salience) >= 0.55
+                    or float(p_vibe.novelty) >= 0.45
+                    or (
+                        float(p_vibe.clarity) < 0.48
+                        and (
+                            bool(p_vibe.self_registry.dissonance_notes)
+                            or bool(p_vibe.shadow_pathology_warnings)
+                        )
+                    )
+                )
+                if is_deep_philosophical_inquiry:
+                    effective_sent_count = 4
+                elif float(p_vibe.clarity) < 0.48:
+                    effective_sent_count = 3
+                else:
+                    effective_sent_count = 2
 
         turn, _elapsed_ms, telemetry = self._execute_turn(
             scenario_input,
