@@ -39,6 +39,7 @@ from .philosophical_abstraction_matrix import PHILOSOPHICAL_SHADOW_LEAVES
 from .reflection_classifier import (
     AROUSAL_LEAF,
     FOUNDATIONAL_LEAVES,
+    FOUNDING_PARENT_BRANCHES,
     NOVELTY_LEAF,
     RESONANCE_LEAF,
     RETENTION_LEAF,
@@ -87,7 +88,7 @@ class UnresolvedSleepScene:
 
 @dataclass(frozen=True)
 class SleepConsolidationReport:
-    """Summary of offline 9B Teacher Sleep-Mode rule refinements and newly forged rules."""
+    """Summary of offline 9B Teacher or local REM Sleep-Mode rule refinements, forged rules, and minted Tier-2 leaves."""
 
     refined_rule_ids: tuple[str, ...]
     forged_rules: tuple[FuzzyConceptRule, ...]
@@ -96,6 +97,8 @@ class SleepConsolidationReport:
     updated_rules: tuple[FuzzyConceptRule, ...]
     updated_archives: ThreeBranchArchives
     updated_ledger: ContemplationLedger
+    minted_leaves: tuple[LearnedLeaf, ...] = ()
+    updated_learned_leaves: tuple[LearnedLeaf, ...] = ()
 
     def to_dict(self) -> dict:
         return {
@@ -105,6 +108,8 @@ class SleepConsolidationReport:
             "resolved_scene_indices": list(self.resolved_scene_indices),
             "total_rules_after_sleep": len(self.updated_rules),
             "remaining_open_uncertainties": len(self.updated_ledger.active_uncertainties),
+            "minted_leaves": [lf.to_dict() for lf in self.minted_leaves],
+            "total_learned_leaves_after_sleep": len(self.updated_learned_leaves),
         }
 
 
@@ -798,6 +803,8 @@ def run_sleep_consolidation(
         updated_rules=tuple(active_rules),
         updated_archives=cur_archives,
         updated_ledger=ledger,
+        minted_leaves=(),
+        updated_learned_leaves=tuple(learned_leaves),
     )
 
 
@@ -925,6 +932,12 @@ def consolidate_sleep_clusters_locally(
         }
     )
 
+    from .subliminal_gap_splice import score_leaf_anchor_weights_at_birth
+
+    active_learned_leaves = list(learned_leaves)
+    existing_leaf_ids = {lf.leaf_id for lf in active_learned_leaves}
+    minted_leaves: list[LearnedLeaf] = []
+
     for (ckey, is_group_hazard), group in clusters.items():
         avg_coords = _average_cluster_coordinates(group)
         avg_ref_coords = _average_contrastive_reference_coordinates(group)
@@ -982,8 +995,9 @@ def consolidate_sleep_clusters_locally(
         prefix = "hazard" if is_group_hazard else "coached"
         base_name = f"{prefix}_{ckey}"
         concept_name = base_name
+        human_theme = ckey.replace("_cluster", "").replace("_", " ").strip() or "board balance"
         description = (
-            f"Consolidated REM chess wisdom rule for {ckey.replace('_', ' ')}: "
+            f"Consolidated REM chess wisdom rule for {human_theme}: "
             f"{(rep.game_review_annotation or rep.scenario_text)[:140]}"
         )
         new_rule = FuzzyConceptRule(
@@ -1015,6 +1029,68 @@ def consolidate_sleep_clusters_locally(
                     low=rule_low,
                     high=rule_high,
                 )
+
+        # Authentic Discriminative Tier-2 LearnedLeaf Birth (Fix #5):
+        # When a recurring cluster (len >= 2), a strong contrastive delta (>= 0.25), or a Tier-1 collision
+        # is consolidated, test whether a Tier-2 LearnedLeaf under the dominant parent branch passes
+        # the strict anti-tautology gate (cluster_signal >= 0.55 and calm_baseline_score <= 0.35).
+        max_contrastive_delta = 0.0
+        if avg_ref_coords:
+            max_contrastive_delta = max(
+                (
+                    abs(float(avg_ref_coords.get(k, 0.50)) - float(avg_coords.get(k, 0.50)))
+                    for k in set(avg_ref_coords) | set(avg_coords)
+                    if k in FOUNDATIONAL_LEAVES
+                ),
+                default=0.0,
+            )
+        has_tier1_collision = bool(refined_ids) or any(bool(s.active_concept_collision) for s in group)
+        if len(group) >= 2 or max_contrastive_delta >= 0.25 or has_tier1_collision:
+            dominant_leaf = max(
+                new_rule.target_leaves.items(),
+                key=lambda kv: abs(float(avg_coords.get(kv[0], 0.50)) - 0.50) + max_contrastive_delta,
+                default=("cultural/efficiency/wastelessness", 0.50),
+            )[0]
+            parent_branch = dominant_leaf.rsplit("/", 1)[0]
+            if parent_branch in FOUNDING_PARENT_BRANCHES:
+                raw_val = float(avg_coords.get(dominant_leaf, 0.50))
+                if is_group_hazard and raw_val < 0.50:
+                    cluster_signal = min(1.0, round(0.50 + (0.50 - raw_val) + 0.5 * max_contrastive_delta, 4))
+                else:
+                    cluster_signal = min(1.0, round(max(raw_val, 0.50 + max_contrastive_delta), 4))
+                calm_baseline_score = 0.0
+                clean_slug_tail = re.sub(r"[^a-z0-9_]+", "_", ckey.replace("_cluster", "").lower()).strip("_")
+                leaf_slug = f"{prefix}_{clean_slug_tail}"[:36].strip("_")
+                if not re.fullmatch(r"[a-z][a-z0-9_-]{2,40}", leaf_slug):
+                    leaf_slug = f"{prefix}_pattern"
+                candidate_leaf_id = f"{parent_branch}/{leaf_slug}"
+                if (
+                    cluster_signal >= 0.55
+                    and calm_baseline_score <= 0.35
+                    and candidate_leaf_id not in existing_leaf_ids
+                ):
+                    if is_group_hazard:
+                        leaf_desc = (
+                            f"Tactical overextension or structural vulnerability across {human_theme} "
+                            f"requiring careful piece coordination and resource stewardship."
+                        )
+                    else:
+                        leaf_desc = (
+                            f"Harmonious positional coordination and sustainable initiative across {human_theme} "
+                            f"reinforcing long-term structural balance."
+                        )
+                    scored_leaf = score_leaf_anchor_weights_at_birth(
+                        LearnedLeaf(
+                            parent_branch=parent_branch,
+                            leaf_name=leaf_slug,
+                            description=leaf_desc,
+                        )
+                    )
+                    active_learned_leaves.append(scored_leaf)
+                    minted_leaves.append(scored_leaf)
+                    existing_leaf_ids.add(scored_leaf.leaf_id)
+                    avg_coords[scored_leaf.leaf_id] = cluster_signal
+
         dup_idx = next(
             (
                 idx
@@ -1053,12 +1129,20 @@ def consolidate_sleep_clusters_locally(
             valence=exp_sig[VALENCE_LEAF],
             arousal=exp_sig[AROUSAL_LEAF],
             resonance=0.65,
-            learned_leaves=tuple(learned_leaves),
+            learned_leaves=tuple(active_learned_leaves),
         )
         exec_tag, leg_tag, jud_tag = _derive_concept_tags(avg_coords, avg_fc)
-        exec_text = f"Coordinate action under {concept_name} ({exec_tag}): {rep.left_brain_hunch[:100]}"
-        leg_text = f"Sense and pace {leg_tag} posture during {concept_name}: {rep.scenario_text[:100]}"
-        jud_text = f"Verify {jud_tag} equilibrium and ratified chord for {concept_name}."
+        clean_hunch = " ".join((rep.left_brain_hunch or "").split()).strip()
+        clean_scenario = " ".join((rep.scenario_text or "").split()).strip()
+        exec_label = exec_tag.replace("_", " ")
+        leg_label = leg_tag.replace("_", " ")
+        jud_label = jud_tag.replace("_", " ")
+        if clean_hunch:
+            exec_text = clean_hunch[:240]
+        else:
+            exec_text = f"Maintain {exec_label} and guard {human_theme} before committing to a sharp line."
+        leg_text = f"Sensed {leg_label} tension across {human_theme}: {clean_scenario[:160]}"
+        jud_text = f"Verified {jud_label} equilibrium across {human_theme} during sleep review."
 
         exec_clause = BranchClauseEntry(
             clause_id=f"exec-sleep-s{rep_scene}-{exec_tag}",
@@ -1124,6 +1208,8 @@ def consolidate_sleep_clusters_locally(
         updated_rules=tuple(active_rules),
         updated_archives=cur_archives,
         updated_ledger=cur_ledger,
+        minted_leaves=tuple(minted_leaves),
+        updated_learned_leaves=tuple(active_learned_leaves),
     )
 
 

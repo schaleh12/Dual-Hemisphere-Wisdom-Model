@@ -358,3 +358,103 @@ def test_apply_dream_reflection_to_archives_harvests_four_sentence_poem():
         "Next time we castle first" in c.text
         for c in updated.executive.action_clauses
     )
+
+
+def test_local_rem_sleep_clean_english_archives_and_discriminative_tier2_leaf_birth() -> None:
+    """Verify Fix #4b (zero snake_case rule IDs in archives) and Fix #5 (authentic Tier-2 LearnedLeaf birth with 8-float anchor_weights)."""
+    from lmft_architecture.reflection_classifier import FOUNDATIONAL_LEAVES
+    from lmft_architecture.sleep_consolidation import consolidate_sleep_clusters_locally
+    from lmft_architecture.subliminal_gap_splice import pool_departmental_child_chord
+
+    def _base_coords(**overrides: float) -> dict[str, float]:
+        base = {k: 0.50 for k in FOUNDATIONAL_LEAVES}
+        base.update(overrides)
+        return base
+
+    scenes = (
+        UnresolvedSleepScene(
+            scene_index=14,
+            scenario_text="Move 7: Played Bxf7+ sacrificing the bishop prematurely.",
+            external_coordinates=_base_coords(
+                **{
+                    "cultural/efficiency/wastelessness": 0.20,
+                    "philosophical/structure/order": 0.32,
+                    "philosophical/structure/chaos": 0.74,
+                }
+            ),
+            felt_chord_notes={},
+            valence=0.22,
+            salience=0.84,
+            arousal=0.72,
+            left_brain_hunch="I lunged at f7 before castling our King to safety.",
+            is_hazard=True,
+            contrastive_reference_coordinates=_base_coords(
+                **{
+                    "cultural/efficiency/wastelessness": 0.78,
+                    "philosophical/structure/order": 0.82,
+                    "philosophical/structure/chaos": 0.24,
+                }
+            ),
+            game_review_annotation="Played Bxf7+ instead of best move O-O.",
+        ),
+        UnresolvedSleepScene(
+            scene_index=18,
+            scenario_text="Move 11: Played Ng5+ overextending the knight.",
+            external_coordinates=_base_coords(
+                **{
+                    "cultural/efficiency/wastelessness": 0.22,
+                    "philosophical/structure/order": 0.35,
+                    "philosophical/structure/chaos": 0.70,
+                }
+            ),
+            felt_chord_notes={},
+            valence=0.25,
+            salience=0.80,
+            arousal=0.68,
+            left_brain_hunch="We chased a premature attack with the knight alone.",
+            is_hazard=True,
+            contrastive_reference_coordinates=_base_coords(
+                **{
+                    "cultural/efficiency/wastelessness": 0.76,
+                    "philosophical/structure/order": 0.80,
+                    "philosophical/structure/chaos": 0.26,
+                }
+            ),
+            game_review_annotation="Played Ng5+ instead of developing the queenside.",
+        ),
+    )
+
+    report = consolidate_sleep_clusters_locally(
+        queued_scenes=scenes,
+        rules=(),
+        learned_leaves=(),
+        archives=ThreeBranchArchives(),
+        ledger=ContemplationLedger(),
+    )
+    # 1. Fix #4b: Zero snake_case `hazard_..._cluster` rule names inside any archive clause text
+    for c in (
+        report.updated_archives.executive.action_clauses
+        + report.updated_archives.legislative.feeling_clauses
+        + report.updated_archives.judicial.structural_clauses
+    ):
+        assert "_cluster" not in c.text
+        assert "hazard_" not in c.text
+
+    # 2. Fix #5: Authentic discriminative Tier-2 `LearnedLeaf` minted with 8-float `anchor_weights`
+    assert len(report.minted_leaves) >= 1
+    assert len(report.updated_learned_leaves) >= 1
+    minted = report.minted_leaves[0]
+    assert minted.tier == 2
+    assert minted.anchor_weights is not None
+    assert len(minted.anchor_weights) == 8
+    assert max(minted.anchor_weights) == pytest.approx(1.0)
+    # Verify `pool_departmental_child_chord` lights up the 8 departmental child chord slots!
+    dept_prefix = minted.leaf_id.split("/")[0] + "/"
+    child_vec = pool_departmental_child_chord(
+        {minted.leaf_id: 0.82},
+        department_prefix=dept_prefix,
+        learned_leaves=report.updated_learned_leaves,
+    )
+    assert len(child_vec) == 8
+    assert max(child_vec) > 0.50
+

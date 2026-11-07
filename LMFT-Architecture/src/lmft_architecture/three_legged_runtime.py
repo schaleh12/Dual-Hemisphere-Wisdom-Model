@@ -32,7 +32,7 @@ directions in the LLM prompt:
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 import re
 
@@ -271,6 +271,22 @@ class _PersistentTurnStreamState:
     cur_mask: Tensor
     pending_step_embeds: Tensor | None = None
     past_kv: Any = None
+    active_gap_spans: list[tuple[int, int]] = field(default_factory=list)
+    masked_gap_spans: list[tuple[int, int]] = field(default_factory=list)
+
+
+def _mask_prior_virtual_gaps(state: _PersistentTurnStreamState) -> None:
+    """Zero out `cur_mask` over prior sentences' 4 virtual `<|subliminal_gap|>` tokens while keeping all English words unmasked."""
+    if not state.active_gap_spans:
+        return
+    mask_len = int(state.cur_mask.size(1))
+    for g_start, g_end in state.active_gap_spans:
+        if 0 <= g_start < mask_len:
+            clamped_end = min(int(g_end), mask_len)
+            if clamped_end > g_start:
+                state.cur_mask[:, g_start:clamped_end] = 0
+        state.masked_gap_spans.append((int(g_start), int(g_end)))
+    state.active_gap_spans.clear()
 
 
 def _append_pending_embeds(state: _PersistentTurnStreamState, new_embeds: Tensor) -> None:
@@ -291,6 +307,16 @@ def _crop_stream_state(
     """Rewind `state` to `target_cached_len` cached positions when post-processing trims or normalizes tokens."""
     state.cur_embeds = state.cur_embeds[:, :target_cached_len, :]
     state.cur_mask = state.cur_mask[:, :target_cached_len]
+    state.active_gap_spans = [
+        (gs, min(ge, target_cached_len))
+        for gs, ge in state.active_gap_spans
+        if gs < target_cached_len
+    ]
+    state.masked_gap_spans = [
+        (gs, min(ge, target_cached_len))
+        for gs, ge in state.masked_gap_spans
+        if gs < target_cached_len
+    ]
     if state.past_kv is not None:
         if target_cached_len <= 0:
             state.past_kv = None
@@ -765,8 +791,18 @@ class SubliminalGapLeftBrain:
                     cur_mask=torch.ones((1, 0), dtype=torch.long, device=self.device),
                     pending_step_embeds=gap_embeds,
                     past_kv=None,
+                    active_gap_spans=[(0, int(gap_embeds.size(1)))],
                 )
             else:
+                _mask_prior_virtual_gaps(state)
+                pending_len = (
+                    int(state.pending_step_embeds.size(1))
+                    if state.pending_step_embeds is not None
+                    else 0
+                )
+                gap_start = int(state.cur_embeds.size(1)) + pending_len
+                gap_end = gap_start + int(gap_embeds.size(1))
+                state.active_gap_spans.append((gap_start, gap_end))
                 _append_pending_embeds(state, gap_embeds)
 
             post_gap_start_cached_len = int(state.cur_embeds.size(1))
@@ -1595,12 +1631,24 @@ def run_three_legged_turn(
                             mid_comma_vibe = raw_comma_vibe
                         else:
                             mid_comma_vibe = _compile_mid_sentence_comma_vibe(_base_vibe, raw_comma_vibe)
-                    chord_at_comma = SubliminalChordVector.from_right_brain_vibe(
-                        mid_comma_vibe,
-                        deliberation=deliberation,
-                        social_drift=social_drift,
-                        learned_leaves=learned_tuple,
-                    )
+                    if _pass_idx >= 3 and prev_theory_coords:
+                        chord_at_comma = compute_stanza_residual_chord(
+                            birth_state,
+                            external_coords,
+                            prev_theory_coords,
+                            mid_comma_vibe,
+                            stanza_index=_pass_idx - 2,
+                            deliberation=deliberation,
+                            social_drift=social_drift,
+                            learned_leaves=learned_tuple,
+                        )
+                    else:
+                        chord_at_comma = SubliminalChordVector.from_right_brain_vibe(
+                            mid_comma_vibe,
+                            deliberation=deliberation,
+                            social_drift=social_drift,
+                            learned_leaves=learned_tuple,
+                        )
                     if sanctuary_target_mode is not None:
                         from .chess_kibitz_bridge import apply_coregulation_lead_to_chord
 
@@ -1617,6 +1665,7 @@ def run_three_legged_turn(
                         mid_comma_vibe.self_registry.dissonance_notes,
                     )
 
+                stanza_scored_records: list[tuple[dict[str, float], dict[str, float]]] = []
                 if int(max_stanzas) > 1:
                     prev_stanza_theory_coords: dict[str, float] = {}
 
@@ -1634,6 +1683,7 @@ def run_three_legged_turn(
                             learned_leaves=learned_tuple,
                             branch_gating=branch_gating,
                         )
+                        stanza_scored_records.append((dict(st_coords), dict(st_exp)))
                         st_vibe, _ = compile_right_brain_vibe(
                             birth_state,
                             external_coords,
@@ -1703,6 +1753,15 @@ def run_three_legged_turn(
                         stanza_boundary_callback=_stanza_boundary_callback,
                         lead_with_gap=lead_with_gap,
                     )
+                    if len(stanza_scored_records) < len(_stanza_list):
+                        for extra_st in _stanza_list[len(stanza_scored_records) :]:
+                            if extra_st.strip():
+                                ex_c, ex_e, _, _ = sensors.score_text(
+                                    extra_st.strip(),
+                                    learned_leaves=learned_tuple,
+                                    branch_gating=branch_gating,
+                                )
+                                stanza_scored_records.append((dict(ex_c), dict(ex_e)))
                     if clause_1_prefix is None and multi_traces and not lead_with_gap:
                         cached_clause_1_prefix = multi_traces[0].clause_1_prefix
                     spliced_traces.extend(multi_traces)
@@ -1739,13 +1798,45 @@ def run_three_legged_turn(
                 left_calls += 1
                 latest_reply = reply_text
 
-                # Step 2d: Re-score the completed 2-clause thought through the 3 MiniLM bridges
-                # into Truth / Theory while keeping external Fact (external_coords) immutable!
-                theory_coords, theory_exp, _q_p, _s_p = sensors.score_text(
-                    reply_text,
-                    learned_leaves=learned_tuple,
-                    branch_gating=branch_gating,
-                )
+                # Step 2d: Score arrived Truth / Theory while keeping external Fact (external_coords) immutable!
+                # When multi-stanza discourse generated >= 2 stanzas, apply Culminating Synthesis Weighting
+                # (0.70 * final_stanza + 0.30 * mean_prior_stanzas) so Stanza 1's diagnostic setup never
+                # dilutes Stanza 2/3's arrived resolution.
+                if len(stanza_scored_records) >= 2:
+                    final_coords, final_exp = stanza_scored_records[-1]
+                    prior_records = stanza_scored_records[:-1]
+                    n_prior = float(len(prior_records))
+                    all_coord_keys = set(final_coords)
+                    for pr_c, _ in prior_records:
+                        all_coord_keys.update(pr_c)
+                    theory_coords = {
+                        k: round(
+                            0.70 * float(final_coords.get(k, 0.0))
+                            + 0.30 * (sum(float(pr_c.get(k, 0.0)) for pr_c, _ in prior_records) / n_prior),
+                            6,
+                        )
+                        for k in all_coord_keys
+                    }
+                    all_exp_keys = set(final_exp)
+                    for _, pr_e in prior_records:
+                        all_exp_keys.update(pr_e)
+                    theory_exp = {
+                        k: round(
+                            0.70 * float(final_exp.get(k, 0.0))
+                            + 0.30 * (sum(float(pr_e.get(k, 0.0)) for _, pr_e in prior_records) / n_prior),
+                            6,
+                        )
+                        for k in all_exp_keys
+                    }
+                elif len(stanza_scored_records) == 1:
+                    theory_coords = dict(stanza_scored_records[0][0])
+                    theory_exp = dict(stanza_scored_records[0][1])
+                else:
+                    theory_coords, theory_exp, _q_p, _s_p = sensors.score_text(
+                        reply_text,
+                        learned_leaves=learned_tuple,
+                        branch_gating=branch_gating,
+                    )
 
                 vibe_p, next_mem = compile_right_brain_vibe(
                     birth_state,

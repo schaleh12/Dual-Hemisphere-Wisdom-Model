@@ -1285,6 +1285,21 @@ def test_longitudinal_rem_dream_chronicles_and_coordinate_vow_keeping(tmp_path: 
     assert len(last_chat_tel["stanza_chord_trajectory"]) >= 1
     assert "archive_resonance" in last_chat_tel
 
+    # Verify Fix #4a & Fix #5 in `LMFT-Chess.exe`:
+    # REM Sleep harvests `ContrastiveGapPair` trajectories (`L2 >= 0.35`) to `celestriad_gap_trajectories.jsonl`
+    # and mints discriminative Tier-2 `LearnedLeaf` nodes exposed in `get_state_snapshot()`
+    traj_path = state_dir / "celestriad_gap_trajectories.jsonl"
+    assert traj_path.exists()
+    traj_lines = [ln for ln in traj_path.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    assert len(traj_lines) >= 1
+    first_pair = json.loads(traj_lines[0])
+    assert first_pair["domain"] == "chess_intuition"
+    assert first_pair["chord_l2_distance"] >= 0.35
+    assert snap_c3["harvested_gap_pairs_count"] >= 1
+    assert snap_c3["learned_leaves_count"] >= 1
+    assert len(snap_c3["learned_leaves"][0]["anchor_weights"]) == 8
+
+
 
 
 

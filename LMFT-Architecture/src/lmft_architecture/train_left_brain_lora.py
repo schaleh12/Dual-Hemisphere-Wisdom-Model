@@ -282,12 +282,13 @@ def tokenize_pre_gap_and_continuation(
     continuation_text: str,
     gap_token_id: int,
     device: str | torch.device,
+    lead_with_gap: bool = False,
 ) -> tuple[Tensor, Tensor, Tensor]:
     """Tokenize `[pre_gap_prompt]` and `[continuation_text]` separately so pre-gap IDs never vary by branch.
 
     Returns `(input_ids, attention_mask, post_gap_only_labels)` each of shape `[1, seq_len]`.
     """
-    pre_gap_str = pair.format_pre_gap_prompt()
+    pre_gap_str = pair.format_pre_gap_prompt(lead_with_gap=lead_with_gap)
     pre_ids: list[int] = list(tokenizer.encode(pre_gap_str, add_special_tokens=True))
     if not pre_ids or pre_ids[-1] != gap_token_id:
         if gap_token_id not in pre_ids:
@@ -315,6 +316,7 @@ def compute_post_gap_continuation_nll(
     continuation_text: str,
     gap_token_id: int,
     device: str | torch.device,
+    lead_with_gap: bool = False,
 ) -> Tensor:
     """Compute the mean per-token negative log-likelihood on `continuation_text` given `chord` at `<|subliminal_gap|>`."""
     input_ids, attn_mask, post_gap_labels = tokenize_pre_gap_and_continuation(
@@ -323,6 +325,7 @@ def compute_post_gap_continuation_nll(
         continuation_text=continuation_text,
         gap_token_id=gap_token_id,
         device=device,
+        lead_with_gap=lead_with_gap,
     )
     word_embed_fn = model.get_input_embeddings()
     chord_tensor = chord.to_tensor(device=device, dtype=torch.float32).unsqueeze(0)

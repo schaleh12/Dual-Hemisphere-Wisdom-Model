@@ -87,6 +87,10 @@ from .contemplation_ledger import (
     load_contemplation_ledger,
     save_contemplation_ledger,
 )
+from .gap_trajectory_schema import (
+    ContrastiveGapPair,
+    chord_l2_distance,
+)
 from .github_auto_sync import (
     APP_RELEASE_VERSION,
     build_release_manifest,
@@ -1367,6 +1371,9 @@ class ChessKibitzerRuntime:
             "sleep_queue_count": len(self.sleep_queue),
             "savored_count": len(self.savored_turn_ids),
             "rules_count": len(self.rules),
+            "learned_leaves_count": len(self.learned_leaves),
+            "learned_leaves": [lf.to_dict() for lf in self.learned_leaves],
+            "harvested_gap_pairs_count": int(getattr(self, "harvested_gap_pairs_count", 0)),
             "ratified_chords_count": len(self.archives.judicial.ratified_chords),
             "branch_archives_summary": {
                 "feeling_clauses_count": len(self.archives.legislative.feeling_clauses),
@@ -2537,9 +2544,155 @@ class ChessKibitzerRuntime:
             ensure_rules_fn=_ensure_foundational_rules,
         )
         self.rules = _ensure_foundational_rules(report.updated_rules)
+        if report.updated_learned_leaves:
+            self.learned_leaves = tuple(report.updated_learned_leaves)
+        self._last_minted_leaves = report.minted_leaves
         self.archives = report.updated_archives
         self.ledger = report.updated_ledger
         return report.refined_rule_ids, report.forged_rules, report.harvested_clause_ids
+
+    def _harvest_rem_contrastive_gap_pairs(
+        self,
+        queued_snapshot: tuple[UnresolvedSleepScene, ...],
+        vow_sentence: str,
+        forged_rules: tuple[FuzzyConceptRule, ...],
+    ) -> int:
+        """Harvest authentic `ContrastiveGapPair` records (L2 >= 0.35) from REM-resolved scenes to JSONL."""
+        if not queued_snapshot or self.active_lineage == "virgin":
+            return 0
+        clean_vow = " ".join(str(vow_sentence or "").split()).strip()
+        if not clean_vow:
+            return 0
+        out_path = self.state_dir / "celestriad_gap_trajectories.jsonl"
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        valid_ext_keys = set(FOUNDATIONAL_LEAVES) | {lf.leaf_id for lf in self.learned_leaves}
+        harvested_now = 0
+        for sc in queued_snapshot:
+            raw_hunch = " ".join(str(sc.left_brain_hunch or "").split()).strip()
+            if not raw_hunch or raw_hunch.lower() == clean_vow.lower():
+                raw_hunch = "I pushed forward hastily without first securing piece coordination and king safety."
+            if "," in raw_hunch:
+                c1_part, cont_b_part = raw_hunch.split(",", 1)
+                c1_prefix = f"{c1_part.strip()},"
+                cont_b = cont_b_part.strip() or raw_hunch
+            else:
+                c1_prefix = "Assessing the board tension,"
+                cont_b = raw_hunch
+            cont_a = clean_vow
+            if cont_a.strip().lower() == cont_b.strip().lower():
+                continue
+
+            # Build chord_b (pre-sleep unresolved / hazard state)
+            coords_b: dict[str, float] = {k: 0.50 for k in FOUNDATIONAL_LEAVES}
+            for lf in self.learned_leaves:
+                coords_b.setdefault(lf.leaf_id, 0.0)
+            for k, v in (sc.external_coordinates or {}).items():
+                if k in valid_ext_keys:
+                    coords_b[k] = float(v)
+            for k, v in (sc.felt_chord_notes or {}).items():
+                if k in valid_ext_keys:
+                    coords_b[k] = float(v)
+            exp_b = {
+                "experiential/reflection/novelty": 0.62,
+                "experiential/reflection/salience": max(0.65, float(sc.salience)),
+                "experiential/phase/valence": min(0.32, float(sc.valence)),
+                "experiential/phase/arousal": max(0.62, float(sc.arousal)),
+                "experiential/synchronization/resonance": 0.35,
+                "experiential/synchronization/entrainment": 0.40,
+            }
+            vibe_b, _ = compile_right_brain_vibe(
+                self.birth_state,
+                coords_b,
+                exp_b,
+                VIRGIN_FOUNDATIONAL_RULES,
+                pass_index=1,
+                event_id=f"gap_b_{sc.scene_index}",
+                learned_leaves=self.learned_leaves,
+            )
+            chord_b = SubliminalChordVector.from_right_brain_vibe(
+                vibe_b,
+                learned_leaves=self.learned_leaves,
+            )
+
+            # Build chord_a (post-REM consolidated / reference state)
+            coords_a = dict(coords_b)
+            if sc.contrastive_reference_coordinates:
+                for rk, rv in sc.contrastive_reference_coordinates.items():
+                    if rk in valid_ext_keys:
+                        coords_a[rk] = float(rv)
+            elif forged_rules:
+                for rk, rv in forged_rules[0].target_leaves.items():
+                    if rk in valid_ext_keys:
+                        coords_a[rk] = max(float(coords_a.get(rk, 0.50)), float(rv))
+            coords_a["cultural/efficiency/wastelessness"] = max(
+                0.72,
+                float(coords_a.get("cultural/efficiency/wastelessness", 0.72)),
+            )
+            coords_a["philosophical/structure/order"] = max(
+                0.74,
+                float(coords_a.get("philosophical/structure/order", 0.74)),
+            )
+            coords_a["philosophical/structure/chaos"] = min(
+                0.24,
+                float(coords_a.get("philosophical/structure/chaos", 0.24)),
+            )
+            exp_a = {
+                "experiential/reflection/novelty": 0.38,
+                "experiential/reflection/salience": float(sc.salience),
+                "experiential/phase/valence": 0.76,
+                "experiential/phase/arousal": 0.42,
+                "experiential/synchronization/resonance": 0.82,
+                "experiential/synchronization/entrainment": 0.78,
+            }
+            vibe_a, _ = compile_right_brain_vibe(
+                self.birth_state,
+                coords_a,
+                exp_a,
+                self.rules,
+                pass_index=2,
+                event_id=f"gap_a_{sc.scene_index}",
+                learned_leaves=self.learned_leaves,
+                internal_theory_coords=coords_a,
+                internal_theory_experiential=exp_a,
+            )
+            chord_a = SubliminalChordVector.from_right_brain_vibe(
+                vibe_a,
+                learned_leaves=self.learned_leaves,
+            )
+            if chord_l2_distance(chord_a, chord_b) < 0.35:
+                continue
+            prompt_clean = (sc.scenario_text or "Evaluate the chess position.").split("[Coach note:", 1)[0].strip()
+            if "[Board context:" in prompt_clean:
+                b_head, b_tail = prompt_clean.split("[Board context:", 1)
+                b_tail = (
+                    b_tail.rstrip(" ]")
+                    .strip()
+                    .removeprefix("Chess table — ")
+                    .removeprefix("Chess table - ")
+                    .strip()
+                )
+                prompt_clean = f"{b_head.strip()} On the board right now, {b_tail}".strip()
+            try:
+                pair = ContrastiveGapPair(
+                    pair_id=f"rem_c{self.sleep_cycle_index}_s{sc.scene_index}_{int(time.time() * 1000) % 100000}",
+                    domain="chess_intuition",
+                    split="train",
+                    user_prompt=prompt_clean or "Evaluate the chess position.",
+                    clause_1_prefix=c1_prefix,
+                    chord_a=chord_a,
+                    posture_label_a="SETTLED_EASE",
+                    continuation_a=cont_a,
+                    chord_b=chord_b,
+                    posture_label_b="CONCEPT_COLLISION",
+                    continuation_b=cont_b,
+                )
+                with out_path.open("a", encoding="utf-8") as fh:
+                    fh.write(json.dumps(pair.to_dict(), ensure_ascii=False) + "\n")
+                harvested_now += 1
+            except Exception:
+                continue
+        self.harvested_gap_pairs_count = int(getattr(self, "harvested_gap_pairs_count", 0)) + harvested_now
+        return harvested_now
 
     def _evaluate_sleep_scene_snapshot(
         self,
@@ -2945,6 +3098,7 @@ class ChessKibitzerRuntime:
                                 s.contrastive_reference_coordinates,
                                 is_hazard=is_s_haz,
                             )
+                    self._last_minted_leaves = ()
                     if self.teacher is not None:
                         virgin_ids = {r.rule_id for r in VIRGIN_FOUNDATIONAL_RULES}
                         non_virgin_rules = tuple(r for r in self.rules if r.rule_id not in virgin_ids)
@@ -2957,6 +3111,9 @@ class ChessKibitzerRuntime:
                             teacher=self.teacher,
                         )
                         self.rules = _ensure_foundational_rules(report.updated_rules)
+                        if report.updated_learned_leaves:
+                            self.learned_leaves = tuple(report.updated_learned_leaves)
+                        self._last_minted_leaves = report.minted_leaves
                         self.archives = report.updated_archives
                         self.ledger = report.updated_ledger
                         refined_ids = report.refined_rule_ids
@@ -3014,6 +3171,11 @@ class ChessKibitzerRuntime:
                         if sleep_self_talk
                         else fallback_vow
                     )
+                    harvested_pairs_now = self._harvest_rem_contrastive_gap_pairs(
+                        queued_snapshot,
+                        vow_sentence,
+                        forged_rules_list,
+                    )
                     chronicle_entry = {
                         "cycle_index": int(self.sleep_cycle_index) + len(self.rem_dream_chronicles) + 1,
                         "game_number": int(self.games_completed_count),
@@ -3022,15 +3184,20 @@ class ChessKibitzerRuntime:
                         "vowed_leaves": list(cycle_vowed_leaves),
                         "vow_outcome": vow_outcome,
                         "vow_overlap_leaves": list(vow_overlap_leaves),
+                        "harvested_gap_pairs": int(harvested_pairs_now),
+                        "minted_leaves": [lf.leaf_id for lf in getattr(self, "_last_minted_leaves", ())],
                     }
                     self.rem_dream_chronicles.append(chronicle_entry)
                     if len(self.rem_dream_chronicles) > 5:
                         self.rem_dream_chronicles = self.rem_dream_chronicles[-5:]
                 else:
                     refined_ids = ()
+                    harvested_pairs_now = 0
+                    self._last_minted_leaves = ()
                 self.last_rem_sleep_self_talk = sleep_self_talk
 
                 forged_count = len(forged_rules_list)
+                minted_leaves_now = tuple(getattr(self, "_last_minted_leaves", ()))
                 after_evals = [
                     self._evaluate_sleep_scene_snapshot(s, tuple(self.rules))
                     for s in queued_snapshot
@@ -3045,6 +3212,8 @@ class ChessKibitzerRuntime:
                 lines = [
                     f"{prefix_tag} complete: consolidated {queued_count} queued scene(s), "
                     f"forged {forged_count} new rule(s), refined {len(refined_ids)} colliding rule(s), "
+                    f"minted {len(minted_leaves_now)} Tier-2 leaf node(s), "
+                    f"harvested {harvested_pairs_now} contrastive gap pair(s), "
                     f"and persisted {len(self.savored_turn_ids)} savored vibe(s) to disk."
                 ]
                 if queued_count > 0 and self.rem_dream_chronicles:

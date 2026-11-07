@@ -833,3 +833,198 @@ def test_multi_stanza_discourse_and_residual_deficit_chord_pivot() -> None:
     assert len(turn_stanzas.spliced_traces) == 4
     assert "\n\n" in (turn_stanzas.final_conscious_note or "")
 
+
+def test_auditor_fixes_pass3_residual_pivot_stanza_synthesis_and_kv_gap_masking() -> None:
+    """Verify Fix #1 (Pass-3 comma residual pivot), Fix #2 (Culminating Synthesis Weighting), and Fix #3 (Ghost Chord masking in `past_kv`)."""
+    birth = _birth()
+    rules = (
+        FuzzyConceptRule(
+            rule_id="rule_fortress",
+            concept_name="positional_fortress",
+            description="Disciplined positional fortress and structural continuity.",
+            target_leaves={
+                "philosophical/structure/order": 0.78,
+                "cultural/efficiency/wastelessness": 0.78,
+            },
+            low=0.72,
+            high=0.84,
+        ),
+    )
+    ext_coords = _neutral_coords(
+        **{
+            "philosophical/structure/order": 0.85,
+            "cultural/efficiency/wastelessness": 0.84,
+        }
+    )
+    ext_exp = {
+        "experiential/reflection/novelty": 0.62,
+        "experiential/reflection/salience": 0.72,
+        "experiential/phase/valence": 0.45,
+        "experiential/phase/arousal": 0.55,
+        "experiential/synchronization/resonance": 0.48,
+        "experiential/synchronization/retention": 0.50,
+    }
+
+    torch.manual_seed(23)
+    tok = _WordLevelTestTokenizer()
+    gap_id = ensure_subliminal_gap_token(tok)
+    for w in ("Looking", "at", "the", "center,", "we", "consolidate", "order."):
+        tok.encode(w)
+    model = _MiniCausalLM(vocab_size=64, hidden_size=32, num_layers=2)
+    projector = SubliminalGapProjector(hidden_size=32)
+    left_brain = SubliminalGapLeftBrain(
+        model,
+        tok,
+        projector,
+        gap_token_id=gap_id,
+        device="cpu",
+        max_clause_1_tokens=5,
+        max_post_gap_tokens=6,
+    )
+
+    # 1. Fix #3: Verify `_mask_prior_virtual_gaps` masks Sentence 1's 4 virtual `<|subliminal_gap|>` tokens
+    #    (`cur_mask == 0`) before Sentence 2's `<|subliminal_gap|>` is spliced, while keeping spoken words at `1`.
+    chord_a, _ = compile_chess_posture_chords(
+        queen_volition=0.80,
+        king_safety=0.75,
+        bishop_alignment=0.72,
+        knight_disruption=0.45,
+        pawn_chain_flow=0.76,
+        rook_bastion=0.74,
+    )
+    stream_state = left_brain._init_turn_stream_state("User: Evaluate the position.\nAssistant:")
+    assert stream_state is not None
+    _ = left_brain.generate_two_clause_thought(
+        "Evaluate the position.",
+        chord_a,
+        pass_index=2,
+        lead_with_gap=True,
+        _stream_state=stream_state,
+    )
+    assert len(stream_state.active_gap_spans) == 1
+    assert len(stream_state.masked_gap_spans) == 0
+    s1_start, s1_end = stream_state.active_gap_spans[0]
+    assert s1_end - s1_start == 4
+    assert torch.all(stream_state.cur_mask[:, s1_start:s1_end] == 1)
+
+    _ = left_brain.generate_two_clause_thought(
+        "Evaluate the position.",
+        chord_a,
+        pass_index=2,
+        lead_with_gap=True,
+        _stream_state=stream_state,
+    )
+    assert len(stream_state.masked_gap_spans) == 1
+    assert stream_state.masked_gap_spans[0] == (s1_start, s1_end)
+    assert torch.all(stream_state.cur_mask[:, s1_start:s1_end] == 0)
+    assert len(stream_state.active_gap_spans) == 1
+    s2_start, s2_end = stream_state.active_gap_spans[0]
+    assert torch.all(stream_state.cur_mask[:, s2_start:s2_end] == 1)
+    # Spoken tokens between Gap 1 and Gap 2 remain unmasked (`cur_mask == 1`)!
+    if s2_start > s1_end:
+        assert torch.all(stream_state.cur_mask[:, s1_end:s2_start] == 1)
+
+    # 2. Fix #1: Verify Pass 3 comma chord pivots via `compute_stanza_residual_chord` (not identical to Pass 2!)
+    colliding_rules = (
+        FuzzyConceptRule(
+            rule_id="rule_fortress_a",
+            concept_name="positional_fortress_a",
+            description="Disciplined positional fortress A.",
+            target_leaves={"philosophical/structure/order": 0.45},
+            low=0.35,
+            high=0.55,
+        ),
+        FuzzyConceptRule(
+            rule_id="rule_fortress_b",
+            concept_name="positional_fortress_b",
+            description="Disciplined positional fortress B.",
+            target_leaves={"cultural/efficiency/wastelessness": 0.45},
+            low=0.35,
+            high=0.55,
+        ),
+    )
+
+    class _PassVaryingSensors:
+        def __init__(self) -> None:
+            self.reply_calls = 0
+
+        def score_text(self, text: str, *, learned_leaves=(), branch_gating=True):
+            if text == "How do we restore structure?":
+                return dict(_neutral_coords(**{"philosophical/structure/order": 0.85, "cultural/efficiency/wastelessness": 0.84})), dict(ext_exp), (), ()
+            if text.strip().endswith(","):
+                return dict(_neutral_coords(**{"philosophical/structure/order": 0.30, "cultural/efficiency/wastelessness": 0.32})), dict(ext_exp), (), ()
+            self.reply_calls += 1
+            if self.reply_calls <= 2:
+                # Deliberation + Pass 2 theory: leaves a residual deficit against external (0.85, 0.84)
+                return dict(_neutral_coords(**{"philosophical/structure/order": 0.30, "cultural/efficiency/wastelessness": 0.32})), dict(ext_exp), (), ()
+            # Pass 3 theory: shifts by >= 0.04 so Pass 3 runs cleanly
+            return dict(_neutral_coords(**{"philosophical/structure/order": 0.48, "cultural/efficiency/wastelessness": 0.50})), dict(ext_exp), (), ()
+
+    p3_turn = run_three_legged_turn(
+        birth,
+        "How do we restore structure?",
+        _PassVaryingSensors(),
+        colliding_rules,
+        scene_index=10,
+        subliminal_left_brain=left_brain,
+        max_passes=3,
+        clause_1_prefix="Looking at the center,",
+        force_spoken_reply=True,
+    )
+    assert len(p3_turn.spliced_traces) == 2
+    chord_p2 = p3_turn.spliced_traces[0].spliced_chord
+    chord_p3 = p3_turn.spliced_traces[1].spliced_chord
+    assert chord_p3.thinker_vector[2] > chord_p2.thinker_vector[2]
+    assert chord_p3.doer_vector[1] > chord_p2.doer_vector[1]
+
+    # 3. Fix #2: Verify Multi-Stanza Culminating Synthesis Weighting (`0.70 * Stanza 2 + 0.30 * Stanza 1`)
+    ambiguous_ext = _neutral_coords(**{"philosophical/structure/order": 0.45})
+    single_high_rule = (
+        FuzzyConceptRule(
+            rule_id="rule_high_order",
+            concept_name="high_order_fortress",
+            description="High structural order fortress.",
+            target_leaves={"philosophical/structure/order": 0.78},
+            low=0.72,
+            high=0.84,
+        ),
+    )
+
+    class _TwoStanzaSensors:
+        def __init__(self) -> None:
+            self.stanza_eval_calls = 0
+
+        def score_text(self, text: str, *, learned_leaves=(), branch_gating=True):
+            if text == "Explain the two-stanza positional plan." or "Coordinate" in text or "Sense" in text or "Verify" in text:
+                return dict(ambiguous_ext), dict(ext_exp), (), ()
+            self.stanza_eval_calls += 1
+            if self.stanza_eval_calls == 1:
+                # Stanza 1 diagnostic setup: order = 0.60 (< low=0.72, clarity=0.0), so Stanza 2 runs!
+                return dict(_neutral_coords(**{"philosophical/structure/order": 0.60})), dict(ext_exp), (), ()
+            # Stanza 2 culminating resolution: order = 0.90 -> 0.70*0.90 + 0.30*0.60 = 0.81!
+            return (
+                dict(_neutral_coords(**{"philosophical/structure/order": 0.90})),
+                {**ext_exp, "experiential/phase/valence": 0.65},
+                (),
+                (),
+            )
+
+    synth_turn = run_three_legged_turn(
+        birth,
+        "Explain the two-stanza positional plan.",
+        _TwoStanzaSensors(),
+        single_high_rule,
+        scene_index=11,
+        subliminal_left_brain=left_brain,
+        max_passes=2,
+        max_stanzas=2,
+        sentences_per_stanza=1,
+        force_spoken_reply=True,
+        lead_with_gap=True,
+    )
+    # Culminating synthesis of Stanza 1 (0.60) and Stanza 2 (0.90) = 0.70 * 0.90 + 0.30 * 0.60 = 0.81,
+    # yielding `max_theory_delta = |0.81 - 0.45| = 0.36` (whereas 50/50 averaging = 0.75 would yield `0.30`)!
+    assert len(synth_turn.spliced_traces) == 2
+    assert synth_turn.equilibrium.passes[-1].max_theory_delta == pytest.approx(0.36, abs=0.01)
+
+

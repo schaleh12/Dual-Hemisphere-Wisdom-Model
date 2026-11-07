@@ -969,7 +969,9 @@ function renderState(s) {
       if (pEloEl) pEloEl.textContent = hpEloText;
     }
   }
-  document.getElementById("rules-count-pill").textContent = "Rules: " + (s.rules_count || 0);
+  const llCount = Number(s.learned_leaves_count || 0);
+  document.getElementById("rules-count-pill").textContent =
+    llCount > 0 ? `Rules: ${s.rules_count || 0} · Tier-2 Leaves: ${llCount}` : `Rules: ${s.rules_count || 0}`;
   document.getElementById("sleep-queue-pill").textContent = "Sleep Queue: " + (s.sleep_queue_count || 0);
 
   if (s.board) {

@@ -158,11 +158,14 @@ class ContrastiveGapPair:
     def chord_distance(self) -> float:
         return chord_l2_distance(self.chord_a, self.chord_b)
 
-    def format_pre_gap_prompt(self) -> str:
+    def format_pre_gap_prompt(self, *, lead_with_gap: bool = False) -> str:
         """Return the shared text up to and including `<|subliminal_gap|>` (identical for A and B)."""
-        return f"User: {self.user_prompt.strip()}\nAssistant: {self.clause_1_prefix.strip()} {SUBLIMINAL_GAP_TOKEN}"
+        c1 = self.clause_1_prefix.strip()
+        if lead_with_gap or not c1:
+            return f"User: {self.user_prompt.strip()}\nAssistant: {SUBLIMINAL_GAP_TOKEN}"
+        return f"User: {self.user_prompt.strip()}\nAssistant: {c1} {SUBLIMINAL_GAP_TOKEN}"
 
-    def format_full_text(self, branch: str) -> str:
+    def format_full_text(self, branch: str, *, lead_with_gap: bool = False) -> str:
         """Return the full text for branch `'A'` or `'B'` with `<|subliminal_gap|>` between Clause 1 and Clause 2."""
         if branch == "A":
             cont = self.continuation_a.strip()
@@ -170,7 +173,7 @@ class ContrastiveGapPair:
             cont = self.continuation_b.strip()
         else:
             raise ValueError(f"branch must be 'A' or 'B', got {branch!r}")
-        return f"{self.format_pre_gap_prompt()} {cont}"
+        return f"{self.format_pre_gap_prompt(lead_with_gap=lead_with_gap)} {cont}"
 
     def to_dict(self) -> dict:
         return {
