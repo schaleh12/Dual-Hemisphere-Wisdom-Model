@@ -794,17 +794,18 @@ class SubliminalGapLeftBrain:
                     break
 
             raw_post_gap = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
-            post_gap_text = clean_post_gap_continuation(raw_post_gap)
-            if not prefix and post_gap_text:
-                post_gap_text = post_gap_text.lstrip(",;:-–— ").strip()
-                if post_gap_text and post_gap_text[0].islower():
-                    post_gap_text = post_gap_text[0].upper() + post_gap_text[1:]
+            cleaned_post_gap = clean_post_gap_continuation(raw_post_gap)
+            if not prefix and cleaned_post_gap:
+                cleaned_post_gap = cleaned_post_gap.lstrip(",;:-–— ").strip()
+            post_gap_text = cleaned_post_gap
+            if not prefix and post_gap_text and post_gap_text[0].islower():
+                post_gap_text = post_gap_text[0].upper() + post_gap_text[1:]
 
             if not owns_stream and state is not None:
                 raw_post_compact = " ".join(raw_post_gap.replace("\n", " ").split()).strip()
-                if raw_post_compact != post_gap_text:
+                if raw_post_compact != cleaned_post_gap:
                     _crop_stream_state(state, post_gap_start_cached_len, None)
-                    _append_pending_embeds(state, self._encode_continuation_embeds(post_gap_text))
+                    _append_pending_embeds(state, self._encode_continuation_embeds(cleaned_post_gap))
 
             full_thought = f"{prefix} {post_gap_text}".strip()
             trace = SplicedThoughtTrace(
