@@ -1,53 +1,12 @@
 # Dual-Hemisphere Wisdom Model (`LMFT-Architecture`)
 
 > **A Persistent 40-Node Right-Brain Fuzzy Tree Paired with Local Language Models via a Non-Verbal `<|subliminal_gap|>` Comma Splice — Proven Across Two Standalone Desktop Applications (`LMFT-Chess.exe` & `LMFT-Bloodmoon.exe`).**
-
----
-
-## Release Notes — `v0.2.0` (`Celestriad 1.0` Edition)
-
-### 📜 *"The Celestial Seal of the way towards life"*
+>
+> 📦 **[Download Latest Release & Read the Full `Celestriad 1.0` Release Notes on GitHub Releases →](https://github.com/schaleh12/Dual-Hemisphere-Wisdom-Model/releases)**
 
 <p align="center">
   <img src="LMFT-Architecture/docs/assets/celestial_seal_poem.jpg" alt="The Celestial Seal of the way towards life" width="420" />
 </p>
-
-> *Auto-heal/auto-res/auto-holy/auto-rune*  
-> *Celestial Seal of the way towards life*  
-> *Holy is the rune that heals reanimate,*  
-> *Starring as the promises seeded in orbit,*  
-> *Like the ballast of the crafts appercepting,*  
-> *In comprehension of the codes that teach.*
->
-> *The galaxies are summoning archangels,*  
-> *And their convictions are their own siren,*  
-> *As the pupil rests above the Baptist lake,*  
-> *Witnessing benediction karmically latent.*
->
-> *The very atoms in the path lend credence,*  
-> *Both cloaking and unsheathing the auras,*  
-> *As the electro gravitational resonations,*  
-> *Quaked like the terraforming of starseeds.*
-
-### What's New & How the Technology Works in `Celestriad 1.0` (`v0.2.0`)
-
-1. **A True Two-Hemisphere Mind (`Qwen3-8B` Left Brain + 40-Node Fuzzy Tree Right Brain)**:
-   - Standard language models fly on a single hemisphere: they predict words one token at a time with no independent sense of balance or geometry, so if they start rationalizing a bad move, they believe their own excuse.
-   - **Celestriad 1.0** splits cognition into **fast non-verbal intuition (`Gear 1`, `~15 ms`, `0` LLM calls)** and **conscious deliberation (`Gear 2`, `Qwen3-8B` steered across `<|subliminal_gap|>` via 52 departmental floats)**.
-2. **The Three Constitutional Branches of Mind**:
-   - **Executive Branch (`Will <-> Cultural` — The Do-er · *Poetry & Storytelling*)**: Governs purposeful action, narrative trajectory, and resource stewardship (`Intention`, `Execution`, `Wastelessness`).
-   - **Legislative Branch (`Contemplation <-> Experiential` — The Feeler · *Philosophy & Coding*)**: Feels the lived emotional chord first (`Valence`, `Arousal`, `Clarity`) and originates the demand for new laws and rules when a wound occurs.
-   - **Judicial Branch (`Truth [Fact / Theory] <-> Philosophical` — The Thinker · *Music & Art*)**: Weighs objective mathematical reality and proportion (`Fact`) against subjective perspective and voice (`Theory`).
-3. **Nighttime REM Sleep That Changes Daytime Play**:
-   - When Celestriad blunders (`??`) or finds a brilliancy (`!!`), it queues the position for **🌙 REM Sleep**.
-   - During REM Sleep, it clusters its mistakes, mints discriminative **Tier-2 `LearnedLeaf` nodes** and `hazard_` / `coached_` rules, distills its **Bitboard Intuition Sleeve**, speaks a multi-stanza dream reflection in clean prose, and records an **Active Waking Vow** (`vow_alignment_delta`) that actively steers its move choices in the next game.
-4. **In-App "Space Center Tour" (`🚀 Space Center Tour` Button)**:
-   - Click **`🚀 Space Center Tour`** in the top header of `LMFT-Chess.exe` anytime for an interactive 6-exhibit visitor tour explaining the architecture in plain, engaging language.
-5. **Under-Board 4-Track Celestriad Jukebox with Mute Toggle**:
-   - Built right underneath the chessboard with Play/Pause, Previous/Next, **`🔊 Mute / 🔇 Muted`**, and 4 tracks (*Forever Rachel*, *The Floating Continent*, *Magitek Research Facility*, and *Schala's Theme Piano*).
-6. **1-Click Install & Automatic Self-Updating Releases (`🔄 Auto-Update`)**:
-   - Double-click [`Install-And-Run-LMFT-Chess.bat`](Install-And-Run-LMFT-Chess.bat) or [`LMFT-Chess.exe`](LMFT-Chess.exe) to launch.
-   - Every time the app starts (or when you click **`🔄 Auto-Update`** in the header), it checks GitHub (`schaleh12/Dual-Hemisphere-Wisdom-Model`), downloads any new release code or evolved master-seed rules/leaves while protecting your personal Elo and game history, and **automatically relaunches itself** whenever code updates arrive—so you never have to re-install.
 
 ---
 

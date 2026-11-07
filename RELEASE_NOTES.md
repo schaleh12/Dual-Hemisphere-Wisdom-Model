@@ -1,9 +1,9 @@
-# Release Notes — `v0.2.0` (`Celestriad 1.0` Edition)
+# `Celestriad 1.0` (`v0.2.0`) — Dual-Hemisphere Wisdom Model Release
 
 ## 📜 *"The Celestial Seal of the way towards life"*
 
 <p align="center">
-  <img src="LMFT-Architecture/docs/assets/celestial_seal_poem.jpg" alt="The Celestial Seal of the way towards life" width="440" />
+  <img src="https://raw.githubusercontent.com/schaleh12/Dual-Hemisphere-Wisdom-Model/main/LMFT-Architecture/docs/assets/celestial_seal_poem.jpg" alt="The Celestial Seal of the way towards life" width="440" />
 </p>
 
 > *Auto-heal/auto-res/auto-holy/auto-rune*  
@@ -25,20 +25,20 @@
 
 ---
 
-## Welcome to the `Celestriad 1.0` Observatory
+## 🛰️ Welcome to the `Celestriad 1.0` Observatory — How the Technology Works
 
 Most AI models today operate like a spacecraft autopilot that only has a microphone: they generate words one token at a time (**a Left Hemisphere**) with no gyroscope, no sense of balance, and no persistent memory of yesterday's mistakes. If a standard LLM starts rationalizing a bad move, its own words become its context, and it believes its own excuse.
 
 **`Celestriad 1.0` (`LMFT-Architecture`)** pairs a local language model (**`Qwen3-8B`**, the conscious **Left Brain**) with a fast, mathematical **40-Node Language Model Fuzzy Tree** (the intuitive **Right Brain**) connected across a synthetic **Corpus Callosum (`<|subliminal_gap|>`)**:
 
 ### 1. Fast 60-FPS Intuition (`Gear 1`) vs. Conscious Deliberation (`Gear 2`)
-- **Gear 1 (`~15 ms`, `0` LLM calls)**: On every move, the Right Brain scores the live chessboard across **24 Founding Leaves** and its **Bitboard Intuition Sleeve**. When the position is familiar and clear, it plays immediately by reflex without waking the language model.
+- **Gear 1 (`~15 ms`, `0` LLM calls)**: On every move, the Right Brain scores the live chessboard across **24 Founding Leaves** and its **Bitboard Intuition Sleeve** (`Intention -> Theory -> Confidence -> Execution`). When the position is familiar and clear, it plays immediately by reflex without waking the language model.
 - **Gear 2 (`<|subliminal_gap|>` Vector Splice)**: When a position is conflicted (`settled = False` and low clarity), when you ask a question in chat, or when reflecting during **🌙 REM Sleep**, the Right Brain compiles a **52-float Subliminal Chord** (`17 Do-er + 16 Thinker + 16 Feeler + 3 Cadence` floats) and splices `K = 4` virtual token embeddings directly into `Qwen3-8B` at `<|subliminal_gap|>`.
 - **KV-Cache Ghost-Chord Masking & Stanza Rotation**: At each sentence comma and stanza boundary, old virtual chord tokens are masked out in the KV cache while all spoken English words remain visible, allowing Stanza 2 and Stanza 3 to pivot cleanly toward a `70/30` culminating synthesis.
 
 ### 2. The Three Constitutional Branches of Mind
 Every scene is weighed by three independent branches before settling:
-- **Executive Branch (`Will <-> Cultural` — The Do-er · *Poetry & Storytelling*)**: Purposeful action, narrative trajectory, and resource stewardship (`Intention`, `Execution`, `Wastelessness`).
+- **Executive Branch (`Will <-> Cultural` — The Do-er · *Poetry & Storytelling*)**: Governs purposeful action, narrative trajectory, and resource stewardship (`Intention`, `Execution`, `Wastelessness`).
 - **Legislative Branch (`Contemplation <-> Experiential` — The Feeler · *Philosophy & Coding*)**: Feels the lived emotional chord first (`Valence`, `Arousal`, `Clarity`) and originates the demand for new laws and rules when a wound occurs.
 - **Judicial Branch (`Truth [Fact / Theory] <-> Philosophical` — The Thinker · *Music & Art*)**: The supreme court of proportion and harmony, weighing objective mathematical reality (`Fact`) against subjective perspective and voice (`Theory`).
 
@@ -51,4 +51,6 @@ When Celestriad blunders (`??`) or finds a brilliancy (`!!`) against you or its 
 ### 4. Visitor-Friendly Quality of Life in This Release
 - **🚀 In-App Space Center Tour**: Click **`🚀 Space Center Tour`** in the top header anytime to explore 6 interactive exhibits explaining how the technology works.
 - **🎵 Under-Board 4-Track Celestriad Jukebox**: Built right below the chessboard with Play/Pause, Prev/Next, and a **`🔊 Mute / 🔇 Muted`** toggle featuring 4 classic tracks (*Forever Rachel*, *The Floating Continent*, *Magitek Research Facility*, and *Schala's Theme Piano*).
-- **🔄 Auto-Update & Self-Relaunch**: Future releases pushed to GitHub are automatically downloaded, verified by SHA-256, and **automatically relaunched** on startup or when you click **`🔄 Auto-Update`**—without ever touching your personal Elo rating or saved games.
+- **🔄 1-Click Launch, Auto-Update & Self-Relaunch**:
+  - Run `Install-And-Run-LMFT-Chess.bat` or `LMFT-Chess.exe` to start.
+  - Future releases pushed to GitHub are automatically downloaded, verified by SHA-256, and **automatically relaunched** on startup or when you click **`🔄 Auto-Update`**—without ever overwriting your personal Elo rating or saved games.

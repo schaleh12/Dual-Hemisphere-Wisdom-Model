@@ -1,0 +1,53 @@
+name: Publish GitHub Release (Celestriad 1.0)
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "RELEASE_NOTES.md"
+      - "LMFT-Training/dist/release_manifest.json"
+      - "LMFT-Training/dist/lmft-sanctuary-club-v0.1.0-win64.zip"
+      - ".github/workflows/publish-release.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create or Update GitHub Release v0.2.0
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG_NAME="v0.2.0"
+          RELEASE_TITLE="Celestriad 1.0 (v0.2.0) — Dual-Hemisphere Wisdom Model"
+          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            gh release edit "$TAG_NAME" \
+              --title "$RELEASE_TITLE" \
+              --notes-file RELEASE_NOTES.md \
+              --latest
+            gh release upload "$TAG_NAME" \
+              LMFT-Training/dist/lmft-sanctuary-club-v0.1.0-win64.zip \
+              LMFT-Training/dist/release_manifest.json \
+              Install-And-Run-LMFT-Chess.bat \
+              LMFT-Chess.exe \
+              LMFT-Bloodmoon.exe \
+              --clobber
+          else
+            gh release create "$TAG_NAME" \
+              LMFT-Training/dist/lmft-sanctuary-club-v0.1.0-win64.zip \
+              LMFT-Training/dist/release_manifest.json \
+              Install-And-Run-LMFT-Chess.bat \
+              LMFT-Chess.exe \
+              LMFT-Bloodmoon.exe \
+              --target main \
+              --title "$RELEASE_TITLE" \
+              --notes-file RELEASE_NOTES.md \
+              --latest
+          fi
