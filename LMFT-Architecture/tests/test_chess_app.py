@@ -755,18 +755,28 @@ def test_master_seed_sync_and_human_player_rating_coaching(tmp_path: Path) -> No
     assert snap_e5["elo"]["last_player_coaching"]["played_san"] == "e5"
     assert snap_e5["elo"]["last_player_coaching"]["classification"] == "SOLID"
 
-    # 6. Verify Chess.com-style 3-column UI, Eval Bar, 2-Button workflow, and New User Guide modal exist in HTML
+    # 6. Verify Chess.com-style 3-column UI, Eval Bar, 2-Button workflow, Jukebox, Space Center Tour, and Auto-Update exist in HTML
     for required_ui_token in (
         'id="eval-bar-container"',
         'id="mode-play-vs-ai-btn"',
         'id="auto-self-play-btn"',
         'id="new-user-tutorial-btn"',
         'id="tutorial-modal-overlay"',
+        'id="space-center-tour-btn"',
+        'id="space-center-modal-overlay"',
+        'id="celestriad-jukebox"',
+        'id="jukebox-mute-btn"',
         'id="game-review-tally-box"',
         "playHumanMoveAndAutoReply",
+        "syncAndAutoUpdate",
         'isDest ? "legal-dest" : ""',
         "Celestriad 1.0",
         "Stockfish 19 (",
+        "88CuKNXFAq8",
+        "kpZFlSJS9ZI",
+        "Ys-oKc88tXY",
+        "oDEpcYBu7eU",
+        "/assets/celestial_seal_poem.jpg",
     ):
         assert required_ui_token in CHESS_SINGLE_PAGE_HTML
     assert "LMFT_Grandmaster" not in CHESS_SINGLE_PAGE_HTML

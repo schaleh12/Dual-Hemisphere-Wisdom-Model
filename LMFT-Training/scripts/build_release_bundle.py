@@ -42,12 +42,22 @@ def build_release_zip(
     zip_path = out_dir / BUNDLE_NAME
 
     include_pairs: list[tuple[str, Path]] = []
-    for root_file in ("LMFT-Chess.exe", "LMFT-Bloodmoon.exe", "Install-And-Run-LMFT-Chess.bat", "README.md"):
+    for root_file in (
+        "LMFT-Chess.exe",
+        "LMFT-Bloodmoon.exe",
+        "Install-And-Run-LMFT-Chess.bat",
+        "README.md",
+        "RELEASE_NOTES.md",
+    ):
         for base in (ws_root, arch_root):
             p = base / root_file
             if p.exists():
                 include_pairs.append((root_file, p))
                 break
+
+    poem_asset = arch_root / "docs" / "assets" / "celestial_seal_poem.jpg"
+    if poem_asset.exists():
+        include_pairs.append(("docs/assets/celestial_seal_poem.jpg", poem_asset))
 
     for py_file in sorted((arch_root / "src" / "lmft_architecture").rglob("*")):
         if py_file.is_file() and py_file.suffix in (".py", ".enc"):

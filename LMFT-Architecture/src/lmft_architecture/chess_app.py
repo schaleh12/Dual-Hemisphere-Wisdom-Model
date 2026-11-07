@@ -2519,6 +2519,7 @@ class ChessKibitzerRuntime:
         *,
         remote_manifest: dict[str, Any] | None = None,
         apply_sync: bool = False,
+        relaunch_if_updated: bool = False,
     ) -> dict[str, Any]:
         manifest = remote_manifest
         if manifest is None:
@@ -2536,7 +2537,48 @@ class ChessKibitzerRuntime:
         if apply_sync and self.active_lineage != "virgin":
             merge_info = self.merge_master_seed_rules()
             self.last_sync_status["merged_rules_count"] = merge_info["merged_rules_count"]
+        synced_code = any(
+            str(f).endswith(".py") for f in self.last_sync_status.get("synced_files", [])
+        )
+        self.last_sync_status["code_updated"] = synced_code
+        self.last_sync_status["relaunching"] = bool(apply_sync and relaunch_if_updated and synced_code)
+        if self.last_sync_status["relaunching"]:
+            self.trigger_self_relaunch()
         return self.get_state_snapshot()
+
+    def trigger_self_relaunch(self) -> None:
+        """Spawn a fresh updated server process and shut down the current HTTP server."""
+        srv = getattr(self, "_active_http_server", None)
+        if srv is None:
+            return
+        host, port = srv.server_address[:2]
+
+        def _relaunch_worker() -> None:
+            time.sleep(0.55)
+            try:
+                srv.shutdown()
+                srv.server_close()
+            except Exception:
+                pass
+            env = dict(os.environ)
+            env["PYTHONPATH"] = str(self.repo_root / "src")
+            subprocess.Popen(
+                [
+                    sys.executable,
+                    "-m",
+                    "lmft_architecture.chess_app",
+                    "--host",
+                    str(host),
+                    "--port",
+                    str(port),
+                    "--no-browser",
+                    "--restarted-after-update",
+                ],
+                cwd=str(self.repo_root),
+                env=env,
+            )
+
+        threading.Thread(target=_relaunch_worker, daemon=True).start()
 
     def _consolidate_sleep_clusters_locally(
         self,
@@ -3306,6 +3348,17 @@ def create_chess_http_server(
                 self.end_headers()
                 self.wfile.write(body)
                 return
+            if self.path.startswith("/assets/celestial_seal_poem.jpg"):
+                poem_img = runtime.repo_root / "docs" / "assets" / "celestial_seal_poem.jpg"
+                if poem_img.exists():
+                    img_bytes = poem_img.read_bytes()
+                    self.send_response(int(HTTPStatus.OK))
+                    self.send_header("Content-Type", "image/jpeg")
+                    self.send_header("Cache-Control", "public, max-age=3600")
+                    self.send_header("Content-Length", str(len(img_bytes)))
+                    self.end_headers()
+                    self.wfile.write(img_bytes)
+                    return
             if self.path == "/api/state":
                 self._send_json(runtime.get_state_snapshot())
                 return
@@ -3359,6 +3412,7 @@ def create_chess_http_server(
                         runtime.handle_check_github_sync(
                             remote_manifest=data.get("remote_manifest"),
                             apply_sync=bool(data.get("apply_sync", False)),
+                            relaunch_if_updated=bool(data.get("relaunch_if_updated", False)),
                         )
                     )
                     return
@@ -3494,13 +3548,40 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-browser", action="store_true", help="Do not automatically open the desktop window")
     parser.add_argument("--no-gpu", action="store_true", help="Run in fast Gear-1 Right-Brain mode without loading Qwen3-4B")
     parser.add_argument("--single-window", action="store_true", help="Exit the server automatically when the desktop window is closed")
+    parser.add_argument("--restarted-after-update", action="store_true", help="Internal flag set after automatic self-update relaunch")
     args = parser.parse_args(argv)
+
+    if not args.restarted_after_update:
+        try:
+            from lmft_architecture.workspace_paths import resolve_arch_root
+
+            arch_root = resolve_arch_root()
+            remote_m = fetch_remote_github_manifest(timeout_sec=3.0)
+            sync_res = verify_or_sync_against_manifest(arch_root, remote_m, apply_sync=True)
+            if any(str(f).endswith(".py") for f in sync_res.get("synced_files", [])):
+                env = dict(os.environ)
+                env["PYTHONPATH"] = str(arch_root / "src")
+                subprocess.Popen(
+                    [
+                        sys.executable,
+                        "-m",
+                        "lmft_architecture.chess_app",
+                        *(argv if argv is not None else sys.argv[1:]),
+                        "--restarted-after-update",
+                    ],
+                    cwd=str(arch_root),
+                    env=env,
+                )
+                return 0
+        except Exception:
+            pass
 
     runtime = ChessKibitzerRuntime(lazy_load_gpu=not args.no_gpu)
     try:
         server = create_chess_http_server(runtime, host=args.host, port=args.port)
     except OSError:
         server = create_chess_http_server(runtime, host=args.host, port=0)
+    runtime._active_http_server = server  # type: ignore[attr-defined]
     actual_port = server.server_port
     url = f"http://{args.host}:{actual_port}"
     if sys.stdout is not None:

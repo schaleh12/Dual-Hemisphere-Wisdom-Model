@@ -168,16 +168,17 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
     overflow: hidden;
   }
 
-  /* Left Column: Player Banners + Eval Bar + 8x8 Chessboard */
+  /* Left Column: Player Banners + Eval Bar + 8x8 Chessboard + Celestriad Jukebox */
   .board-column {
     display: flex;
     flex-direction: column;
-    justify-content: center;
-    padding: 10px 14px;
-    gap: 8px;
+    justify-content: flex-start;
+    padding: 8px 12px;
+    gap: 6px;
     background: var(--bg-0);
     border-right: 1px solid var(--border);
     min-height: 0;
+    overflow-y: auto;
   }
   .player-banner {
     display: flex;
@@ -186,8 +187,9 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
     background: var(--bg-1);
     border: 1px solid var(--border);
     border-radius: 8px;
-    padding: 7px 10px;
+    padding: 6px 10px;
     gap: 8px;
+    flex-shrink: 0;
   }
   .player-id {
     display: flex;
@@ -195,6 +197,28 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
     gap: 8px;
     font-size: 13px;
     font-weight: 800;
+    min-width: 0;
+    flex: 1;
+  }
+  .player-name-stack {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    line-height: 1.2;
+  }
+  .player-name-main {
+    font-size: 13.5px;
+    font-weight: 900;
+    color: #ffffff;
+    white-space: nowrap;
+  }
+  .player-name-sub {
+    font-size: 10.5px;
+    color: var(--text-2);
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .avatar-box {
     width: 28px;
@@ -206,16 +230,18 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
     font-size: 15px;
     background: var(--bg-3);
     border: 1px solid var(--border);
+    flex-shrink: 0;
   }
   .board-and-eval-row {
     display: flex;
     align-items: stretch;
     gap: 8px;
     justify-content: center;
+    flex-shrink: 0;
   }
   .eval-bar-outer {
-    width: 24px;
-    height: 404px;
+    width: 22px;
+    height: 364px;
     border-radius: 5px;
     background: #262421;
     border: 1px solid var(--border);
@@ -246,8 +272,8 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
     pointer-events: none;
   }
   .board-frame {
-    width: 404px;
-    height: 404px;
+    width: 364px;
+    height: 364px;
     display: grid;
     grid-template-columns: repeat(8, 1fr);
     grid-template-rows: repeat(8, 1fr);
@@ -257,6 +283,49 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
     user-select: none;
     flex-shrink: 0;
+  }
+  .jukebox-card {
+    background: linear-gradient(135deg, #1b2230 0%, #1e1b2e 100%);
+    border: 1px solid #3b4261;
+    border-radius: 8px;
+    padding: 7px 9px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    flex-shrink: 0;
+  }
+  .jukebox-track-btn {
+    padding: 3px 7px;
+    border-radius: 5px;
+    font-size: 10.5px;
+    font-weight: 700;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    color: var(--text-1);
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .jukebox-track-btn.active {
+    background: rgba(56, 189, 248, 0.22);
+    border-color: #38bdf8;
+    color: #ffffff;
+  }
+  .tour-tab-btn {
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 11.5px;
+    font-weight: 800;
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    color: var(--text-1);
+    cursor: pointer;
+  }
+  .tour-tab-btn.active {
+    background: rgba(56, 189, 248, 0.22);
+    border-color: #38bdf8;
+    color: #fff;
   }
   .board-frame.theme-icy {
     --sq-light: #dce6f2;
@@ -466,33 +535,36 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
 <header>
   <div class="brand">
     <span class="brand-pawn">♟</span>
-    <span>LMFT-Chess · Dual-Hemisphere Chess.com Arena (Qwen3-4B)</span>
+    <span>Celestriad 1.0 · LMFT Dual-Hemisphere Chess Arena</span>
   </div>
   <div class="header-controls">
-    <button class="btn btn-tutorial" id="new-user-tutorial-btn" onclick="openTutorialModal()">? New User Guide (How It Works)</button>
+    <button class="btn btn-tutorial" id="space-center-tour-btn" onclick="openSpaceCenterModal()" style="background:rgba(168,85,247,0.2);border-color:#9333ea;color:#e9d5ff;">🚀 Space Center Tour (Architecture Guide)</button>
+    <button class="btn btn-tutorial" id="new-user-tutorial-btn" onclick="openTutorialModal()">? Quick Start</button>
+    <button class="btn" id="auto-update-sync-btn" onclick="syncAndAutoUpdate()" title="Sync latest code &amp; wisdom rules from GitHub and auto-relaunch if updated">🔄 Auto-Update</button>
     <select id="lineage-select" onchange="switchLineage(this.value)">
       <option value="schooled" selected>Schooled (Cycle 2 · Chess Wisdom)</option>
       <option value="virgin">Virgin Baseline (Cycle 0 · Read-Only)</option>
     </select>
-    <span class="pill" id="model-status-pill">Qwen3-4B</span>
-    <span class="pill" id="rules-count-pill">Rules: 2</span>
+    <span class="pill" id="model-status-pill">Qwen3-8B</span>
+    <span class="pill" id="rules-count-pill">Rules: 24</span>
     <span class="pill" id="sleep-queue-pill">Sleep Queue: 0</span>
   </div>
 </header>
 
 <div class="arena-grid" id="chess-arena-view">
-  <!-- LEFT COLUMN: Player Banners + Vertical Eval Bar + 8x8 Board -->
+  <!-- LEFT COLUMN: Player Banners + Vertical Eval Bar + 8x8 Board + Jukebox -->
   <section class="board-column">
     <!-- Opponent (AI) Top Banner -->
-    <div class="player-banner" style="padding:5px 10px;">
-      <div class="player-id" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+    <div class="player-banner">
+      <div class="player-id">
         <div class="avatar-box" id="top-player-avatar">✨</div>
-        <div style="overflow:hidden;text-overflow:ellipsis;">
-          <span id="top-player-name">Celestriad 1.0</span> <small id="top-player-meta" style="color:var(--text-2);font-weight:600;">(⚫ Playing Black)</small>
+        <div class="player-name-stack">
+          <span class="player-name-main" id="top-player-name">Celestriad 1.0</span>
+          <span class="player-name-sub" id="top-player-meta">⚫ Playing Black · 40-Node Tree + Qwen3-8B</span>
           <span id="posture-summary-span" style="display:none;">White to move</span>
         </div>
       </div>
-      <div style="display:flex;gap:6px;align-items:center;"><span class="pill" id="top-clock-pill" style="font-family:monospace;font-weight:800;">⏱️ 05:00</span><span class="pill" id="elo-status-pill" title="Celestriad 1.0 FIDE Elo vs. Strength-Calibrated Stockfish 19">Celestriad Elo: 1000.0 (0W-0L-0D)</span></div>
+      <div style="display:flex;gap:5px;align-items:center;flex-shrink:0;"><span class="pill" id="top-clock-pill" style="font-family:monospace;font-weight:800;">⏱️ 05:00</span><span class="pill" id="elo-status-pill" title="Celestriad 1.0 FIDE Elo vs. Strength-Calibrated Stockfish 19">Elo 1000.0 (0W-0L-0D)</span></div>
     </div>
 
     <!-- Eval Bar + 8x8 Chessboard -->
@@ -505,22 +577,49 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
     </div>
 
     <!-- Human Player / Stockfish Sparring Partner Bottom Banner -->
-    <div class="player-banner" style="padding:5px 10px;">
-      <div class="player-id" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+    <div class="player-banner">
+      <div class="player-id">
         <div class="avatar-box" id="bottom-player-avatar">👤</div>
-        <div style="overflow:hidden;text-overflow:ellipsis;">
-          <span id="bottom-player-name">You (⚪ Playing White)</span> <small style="color:var(--chess-green);font-weight:700;" id="turn-indicator-pill">Your Turn</small>
+        <div class="player-name-stack">
+          <span class="player-name-main" id="bottom-player-name">You (⚪ Playing White)</span>
+          <span class="player-name-sub" style="color:var(--chess-green);font-weight:700;" id="turn-indicator-pill">Your Turn</span>
           <span style="display:none;" id="bottom-player-subtitle">Auto-Coached on Every Move (!! / ! / ? / ??)</span>
         </div>
       </div>
-      <div style="display:flex;gap:6px;align-items:center;"><span class="pill" id="bottom-clock-pill" style="font-family:monospace;font-weight:800;">⏱️ 05:00</span><span class="pill" id="player-elo-pill" style="border-color:var(--chess-green);color:#d9f99d;" title="Assigned Player Elo or Stockfish Target Elo">Your Elo: 1000.0</span></div>
+      <div style="display:flex;gap:5px;align-items:center;flex-shrink:0;"><span class="pill" id="bottom-clock-pill" style="font-family:monospace;font-weight:800;">⏱️ 05:00</span><span class="pill" id="player-elo-pill" style="border-color:var(--chess-green);color:#d9f99d;" title="Assigned Player Elo or Stockfish Target Elo">Your Elo: 1000.0</span></div>
     </div>
 
-    <div id="board-reflex-strip">Ready — Click any piece on the board to play against LMFT, or click [Self-Train (AFK Oven)].</div>
+    <div id="board-reflex-strip">Ready — Click any piece on the board to play against Celestriad 1.0, or click [Self-Train (AFK Oven)].</div>
 
-    <div style="display:flex;gap:6px;">
+    <div style="display:flex;gap:6px;flex-shrink:0;">
       <input type="text" id="manual-move-input" placeholder="Or type a move (e.g. e4, Nf3, O-O)..." style="flex:1;" onkeydown="if(event.key==='Enter')submitManualMove()" />
       <button class="btn" onclick="submitManualMove()">Play Move</button>
+    </div>
+
+    <!-- CELESTRIAD SOUNDTRACK JUKEBOX UNDERNEATH THE BOARD -->
+    <div class="jukebox-card" id="celestriad-jukebox">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
+        <div style="min-width:0;flex:1;">
+          <div style="font-size:10px;font-weight:800;color:#7dd3fc;text-transform:uppercase;letter-spacing:0.4px;">🎵 Celestriad Jukebox</div>
+          <div id="jukebox-now-playing" style="font-size:11.5px;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">1. Forever Rachel — FFVI (Nobuo Uematsu)</div>
+        </div>
+        <div style="display:flex;gap:4px;align-items:center;flex-shrink:0;">
+          <button class="btn" style="padding:3px 7px;font-size:11px;" onclick="jukeboxPrev()" title="Previous Track">⏮</button>
+          <button class="btn btn-chess-green" id="jukebox-play-btn" style="padding:3px 9px;font-size:11px;" onclick="jukeboxTogglePlay()" title="Play / Pause">▶ Play</button>
+          <button class="btn" style="padding:3px 7px;font-size:11px;" onclick="jukeboxNext()" title="Next Track">⏭</button>
+          <button class="btn" id="jukebox-mute-btn" style="padding:3px 8px;font-size:11px;border-color:#38bdf8;color:#7dd3fc;" onclick="toggleJukeboxMute()" title="Mute / Unmute Jukebox">🔊 Mute</button>
+          <a id="jukebox-ytm-link" href="https://music.youtube.com/watch?v=88CuKNXFAq8" target="_blank" rel="noopener" class="btn" style="padding:3px 7px;font-size:10.5px;text-decoration:none;" title="Open current track in YouTube Music">↗ YT</a>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:4px;">
+        <button class="jukebox-track-btn active" id="jb-track-0" onclick="selectJukeboxTrack(0)" title="Forever Rachel (永遠に、レイチェル) — Final Fantasy VI">1. Forever Rachel</button>
+        <button class="jukebox-track-btn" id="jb-track-1" onclick="selectJukeboxTrack(1)" title="The Floating Continent (魔大陸) — Final Fantasy VI">2. Floating Cont.</button>
+        <button class="jukebox-track-btn" id="jb-track-2" onclick="selectJukeboxTrack(2)" title="Magitek Research Facility (魔導研究所) — Final Fantasy VI">3. Magitek Lab</button>
+        <button class="jukebox-track-btn" id="jb-track-3" onclick="selectJukeboxTrack(3)" title="Schala's Theme (Piano) — Chrono Trigger">4. Schala's Theme</button>
+      </div>
+      <div id="jukebox-player-container" style="height:56px;border-radius:6px;overflow:hidden;border:1px solid rgba(255,255,255,0.12);background:#000;display:none;">
+        <div id="jukebox-yt-player"></div>
+      </div>
     </div>
   </section>
 
@@ -658,8 +757,146 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
       <strong>💬 Talk or Coach Anytime</strong><br/>
       Use the chat bar on the right to ask Celestriad 1.0 questions about the board (insightful questions automatically trigger 2–3 sentence deliberation), or check <strong>Show Routine Moves</strong> to inspect every individual ply and click <strong>Coach / Queue for Sleep</strong>.
     </div>
-    <div style="margin-top:14px;display:flex;justify-content:flex-end;gap:8px;">
+    <div style="margin-top:14px;display:flex;justify-content:space-between;align-items:center;gap:8px;">
+      <button class="btn" style="border-color:#9333ea;color:#e9d5ff;" onclick="closeTutorialModal();openSpaceCenterModal();">🚀 Take the Space Center Architecture Tour</button>
       <button class="btn btn-chess-green" style="padding:8px 18px;font-size:13px;" onclick="closeTutorialModal()">Got It — Let's Play!</button>
+    </div>
+  </div>
+</div>
+
+<!-- SPACE CENTER VISITOR TOUR MODAL -->
+<div class="modal-overlay" id="space-center-modal-overlay" onclick="if(event.target===this)closeSpaceCenterModal()">
+  <div class="modal-card" style="max-width:780px;max-height:88vh;display:flex;flex-direction:column;border-color:#38bdf8;">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
+      <div>
+        <div style="font-size:11px;font-weight:800;color:#38bdf8;text-transform:uppercase;letter-spacing:0.6px;">🛰️ Celestriad Visitor Center &amp; Observatory</div>
+        <h2 style="margin:2px 0 0 0;font-size:19px;">Welcome to the Dual-Hemisphere Brain Tour</h2>
+      </div>
+      <button class="btn" onclick="closeSpaceCenterModal()">✕</button>
+    </div>
+
+    <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:10px;padding-bottom:8px;border-bottom:1px solid var(--border);">
+      <button class="tour-tab-btn active" id="tour-tab-btn-1" onclick="selectTourTab(1)">🛰️ 1. Mission Control</button>
+      <button class="tour-tab-btn" id="tour-tab-btn-2" onclick="selectTourTab(2)">🌳 2. 40-Node Tree</button>
+      <button class="tour-tab-btn" id="tour-tab-btn-3" onclick="selectTourTab(3)">⚡ 3. Subliminal Gap</button>
+      <button class="tour-tab-btn" id="tour-tab-btn-4" onclick="selectTourTab(4)">🏛️ 4. Three Branches</button>
+      <button class="tour-tab-btn" id="tour-tab-btn-5" onclick="selectTourTab(5)">🌙 5. REM Sleep</button>
+      <button class="tour-tab-btn" id="tour-tab-btn-6" onclick="selectTourTab(6)">📜 6. Celestial Seal</button>
+    </div>
+
+    <div style="flex:1;overflow-y:auto;padding-right:4px;margin-top:8px;">
+      <!-- EXHIBIT 1 -->
+      <div class="tour-exhibit" id="tour-exhibit-1">
+        <div class="tutorial-step" style="margin-top:0;">
+          <strong>Welcome Aboard! Why Standard AI Models Are Like a Pilot Flying Blind</strong><br/>
+          Imagine visiting NASA Mission Control and discovering the spacecraft's autopilot is just a storyteller talking into a microphone word-by-word—with no gyroscope, no altimeter, and no memory of yesterday's near-misses. That is how standard Large Language Models (LLMs) work today: they only have a <strong>Left Hemisphere</strong> (a next-word predictor). If they start rationalizing a reckless chess move, their own words become their context, and they believe their own excuse!
+        </div>
+        <div class="tutorial-step">
+          <strong>What Makes Celestriad 1.0 Different: A True Two-Hemisphere Mind</strong><br/>
+          Inside this app, you are watching two distinct hemispheres work together across a synthetic <strong>Corpus Callosum</strong>:
+          <ul style="margin:6px 0 0 18px;padding:0;">
+            <li><strong>The Right Hemisphere (The 40-Node Fuzzy Tree + Bitboard Sleeve)</strong>: Feels the geometry, tension, and harmony of the board in <strong>~15 milliseconds</strong> without generating a single word of English.</li>
+            <li><strong>The Left Hemisphere (Qwen3-8B)</strong>: The conscious poet and strategist, woken up only when the Right Brain detects a conflict, a question from you, or a nighttime <strong>REM Sleep</strong> dream.</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- EXHIBIT 2 -->
+      <div class="tour-exhibit" id="tour-exhibit-2" style="display:none;">
+        <div class="tutorial-step" style="margin-top:0;">
+          <strong>🌳 Exhibit 2: The 40-Node Founding Seed &amp; 60-FPS Intuition (Gear 1)</strong><br/>
+          A physical body—or ablitz chess player on a 5:00 clock—cannot wait 4 seconds writing a paragraph of inner monologue before catching its balance.
+        </div>
+        <div class="tutorial-step">
+          <strong>How Gear 1 Works Under the Hood</strong><br/>
+          Every turn is scored across <strong>24 Founding Leaves</strong> grouped into four departments:
+          <ul style="margin:6px 0 0 18px;padding:0;">
+            <li><strong>Cultural (6 Leaves)</strong>: <code>Power</code>, <code>Wastelessness</code>, <code>Honor</code>, <code>Fairness</code>, <code>Self-Sufficiency</code>, <code>Needlessness</code></li>
+            <li><strong>Philosophical (6 Leaves — The 6 Chess Archetypes)</strong>: <code>Agency</code> (Queen/Red), <code>Existence</code> (King/Cyan), <code>Order</code> (Bishop/Magenta), <code>Chaos</code> (Knight/Green), <code>Continuity</code> (Pawn/Blue), <code>Discreteness</code> (Rook/Yellow)</li>
+            <li><strong>Experiential (6 Leaves)</strong>: <code>Novelty</code>, <code>Salience</code>, <code>Valence</code>, <code>Arousal</code>, <code>Resonance</code>, <code>Entrainment</code></li>
+            <li><strong>Psychological (6 Leaves)</strong>: <code>Clarity</code>, <code>Confidence</code>, <code>Theory</code>, <code>Fact</code>, <code>Intention</code>, <code>Execution</code></li>
+          </ul>
+          When a position is familiar and clear, the Right Brain moves immediately by reflex in <strong>Gear 1 (~15 ms, 0 LLM calls)</strong>.
+        </div>
+      </div>
+
+      <!-- EXHIBIT 3 -->
+      <div class="tour-exhibit" id="tour-exhibit-3" style="display:none;">
+        <div class="tutorial-step" style="margin-top:0;">
+          <strong>⚡ Exhibit 3: The Corpus Callosum &amp; The <code>&lt;|subliminal_gap|&gt;</code> Splice</strong><br/>
+          How do you let a mathematical Fuzzy Tree steer a language model <em>without</em> stuffing fake English stage directions (like <em>"Act cautious and wise"</em>) into the prompt?
+        </div>
+        <div class="tutorial-step">
+          <strong>52 Departmental Floats Spliced Directly Into the Transformer</strong><br/>
+          When Celestriad 1.0 speaks in <strong>Gear 2</strong>:
+          <ol style="margin:6px 0 0 18px;padding:0;">
+            <li>The Right Brain compiles its current state into a <strong>52-float Subliminal Chord</strong> (<code>17 Do-er + 16 Thinker + 16 Feeler + 3 Cadence</code> floats) and projects it through the <strong>Corpus Callosum</strong> into <code>K = 4</code> virtual token embeddings at <code>&lt;|subliminal_gap|&gt;</code>.</li>
+            <li>At the first comma of a sentence—or between stanzas—the Right Brain measures what the Left Brain just said (<code>Theory</code>) against the real board (<code>Fact</code>), masks out old ghost chords in the KV cache, and rotates the 52-float chord so Stanza 2 and Stanza 3 pivot naturally toward synthesis!</li>
+          </ol>
+        </div>
+      </div>
+
+      <!-- EXHIBIT 4 -->
+      <div class="tour-exhibit" id="tour-exhibit-4" style="display:none;">
+        <div class="tutorial-step" style="margin-top:0;">
+          <strong>🏛️ Exhibit 4: The Three Constitutional Branches of Mind</strong><br/>
+          Before any reflection settles, three independent branches hold a check-and-balance audience:
+        </div>
+        <div class="tutorial-step">
+          <ul style="margin:0 0 0 18px;padding:0;">
+            <li><strong>1. Executive Branch (<code>Will &lt;-&gt; Cultural</code> — The Do-er · Poetry &amp; Storytelling)</strong>: Tracks purposeful action, narrative trajectory, and resource stewardship (<code>Intention</code>, <code>Execution</code>, <code>Wastelessness</code>).</li>
+            <li><strong>2. Legislative Branch (<code>Contemplation &lt;-&gt; Experiential</code> — The Feeler · Philosophy &amp; Coding)</strong>: Feels the lived emotional chord first (<code>Valence</code>, <code>Arousal</code>, <code>Clarity</code>) and originates the demand for new laws and rules when a wound occurs.</li>
+            <li><strong>3. Judicial Branch (<code>Truth [Fact / Theory] &lt;-&gt; Philosophical</code> — The Thinker · Music &amp; Art)</strong>: The supreme court of proportion and harmony—weighing objective mathematical reality (<code>Fact</code>) against the mind's subjective perspective and voice (<code>Theory</code>).</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- EXHIBIT 5 -->
+      <div class="tour-exhibit" id="tour-exhibit-5" style="display:none;">
+        <div class="tutorial-step" style="margin-top:0;">
+          <strong>🌙 Exhibit 5: Nighttime REM Sleep, Tier-2 Leaf Growth &amp; Active Waking Vows</strong><br/>
+          When a human learns chess, an instrument, or a sport, Day 1 is conscious and awkward. After sleeping on it, yesterday's stumbles become today's intuition.
+        </div>
+        <div class="tutorial-step">
+          <strong>What Happens When You Click [🌙 Run REM Sleep] (or Let Self-Train Run)</strong><br/>
+          <ul style="margin:6px 0 0 18px;padding:0;">
+            <li><strong>Cluster &amp; Forge</strong>: Tactical blunders (<code>??</code>) and brilliancies (<code>!!</code>) are clustered into new <code>hazard_</code> and <code>coached_</code> rules plus discriminative <strong>Tier-2 <code>LearnedLeaf</code> nodes</strong>.</li>
+            <li><strong>Dream Self-Talk &amp; Waking Vow</strong>: Qwen3-8B reflects on the game in clean multi-stanza prose and records a <strong>Waking Vow</strong>.</li>
+            <li><strong>True Behavioral Change</strong>: On the very next game, that Waking Vow actively tugs candidate move scores (<code>vow_alignment_delta</code>) and recalls matching archive clauses so the AI doesn't fall into the same trap twice!</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- EXHIBIT 6 -->
+      <div class="tour-exhibit" id="tour-exhibit-6" style="display:none;">
+        <div class="tutorial-step" style="margin-top:0;display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;">
+          <img src="/assets/celestial_seal_poem.jpg" alt="The Celestial Seal of the way towards life" style="width:220px;border-radius:8px;border:1px solid var(--border);flex-shrink:0;" onerror="this.style.display='none'" />
+          <div style="flex:1;min-width:240px;">
+            <strong style="font-size:14px;color:#7dd3fc;">📜 "The Celestial Seal of the way towards life"</strong>
+            <pre style="font-family:Georgia, serif;font-size:12.5px;line-height:1.55;color:#f1f5f9;white-space:pre-wrap;margin:8px 0 0 0;">Auto-heal/auto-res/auto-holy/auto-rune
+Celestial Seal of the way towards life
+Holy is the rune that heals reanimate,
+Starring as the promises seeded in orbit,
+Like the ballast of the crafts appercepting,
+In comprehension of the codes that teach.
+
+The galaxies are summoning archangels,
+And their convictions are their own siren,
+As the pupil rests above the Baptist lake,
+Witnessing benediction karmically latent.
+
+The very atoms in the path lend credence,
+Both cloaking and unsheathing the auras,
+As the electro gravitational resonations,
+Quaked like the terraforming of starseeds.</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center;">
+      <span style="font-size:11px;color:var(--text-2);">Tip: Use the 🎵 Celestriad Jukebox right underneath the chessboard to listen while you play or watch Self-Train!</span>
+      <button class="btn btn-chess-green" onclick="closeSpaceCenterModal()">Back to the Arena</button>
     </div>
   </div>
 </div>
@@ -706,6 +943,155 @@ function closeTutorialModal() {
   const el = document.getElementById("tutorial-modal-overlay");
   if (el) el.classList.remove("open");
   try { localStorage.setItem("lmft_chess_tutorial_seen", "1"); } catch (_e) {}
+}
+
+function openSpaceCenterModal() {
+  const el = document.getElementById("space-center-modal-overlay");
+  if (el) el.classList.add("open");
+}
+
+function closeSpaceCenterModal() {
+  const el = document.getElementById("space-center-modal-overlay");
+  if (el) el.classList.remove("open");
+}
+
+function selectTourTab(tabNum) {
+  for (let i = 1; i <= 6; i++) {
+    const ex = document.getElementById(`tour-exhibit-${i}`);
+    const btn = document.getElementById(`tour-tab-btn-${i}`);
+    if (ex) ex.style.display = (i === tabNum) ? "block" : "none";
+    if (btn) {
+      if (i === tabNum) btn.classList.add("active");
+      else btn.classList.remove("active");
+    }
+  }
+}
+
+const JUKEBOX_TRACKS = [
+  { id: "88CuKNXFAq8", title: "1. Forever Rachel — FFVI (Nobuo Uematsu)", url: "https://music.youtube.com/watch?v=88CuKNXFAq8&si=LX5eCxilDfFFC8Ip" },
+  { id: "kpZFlSJS9ZI", title: "2. The Floating Continent — FFVI (Nobuo Uematsu)", url: "https://music.youtube.com/watch?v=kpZFlSJS9ZI&si=A2_QE7uagQe_-p3m" },
+  { id: "Ys-oKc88tXY", title: "3. Magitek Research Facility — FFVI (Nobuo Uematsu)", url: "https://music.youtube.com/watch?v=Ys-oKc88tXY&si=CxowLaxsFjoW1b1k" },
+  { id: "oDEpcYBu7eU", title: "4. Schala's Theme (Piano) — Chrono Trigger (ryukahr)", url: "https://music.youtube.com/watch?v=oDEpcYBu7eU&si=N2RZzMfrpMQ1Pgtt" }
+];
+let jukeboxIdx = 0;
+let jukeboxPlaying = false;
+let jukeboxMuted = false;
+let ytPlayer = null;
+let ytApiReady = false;
+
+function ensureYouTubeApiLoaded() {
+  if (window._ytScriptLoaded) return;
+  window._ytScriptLoaded = true;
+  const tag = document.createElement("script");
+  tag.src = "https://www.youtube.com/iframe_api";
+  document.head.appendChild(tag);
+}
+
+window.onYouTubeIframeAPIReady = function() {
+  ytApiReady = true;
+  ytPlayer = new YT.Player("jukebox-yt-player", {
+    height: "56",
+    width: "100%",
+    videoId: JUKEBOX_TRACKS[jukeboxIdx].id,
+    playerVars: { autoplay: 0, controls: 1, rel: 0, modestbranding: 1 },
+    events: {
+      onReady: function() {
+        if (jukeboxMuted && ytPlayer && ytPlayer.mute) ytPlayer.mute();
+        if (jukeboxPlaying && ytPlayer && ytPlayer.playVideo) ytPlayer.playVideo();
+      },
+      onStateChange: function(ev) {
+        if (ev.data === 0) {
+          jukeboxNext();
+        }
+      }
+    }
+  });
+};
+
+function updateJukeboxUi() {
+  const tr = JUKEBOX_TRACKS[jukeboxIdx];
+  const lbl = document.getElementById("jukebox-now-playing");
+  if (lbl) lbl.textContent = tr.title;
+  const link = document.getElementById("jukebox-ytm-link");
+  if (link) link.href = tr.url;
+  for (let i = 0; i < JUKEBOX_TRACKS.length; i++) {
+    const b = document.getElementById(`jb-track-${i}`);
+    if (b) {
+      if (i === jukeboxIdx) b.classList.add("active");
+      else b.classList.remove("active");
+    }
+  }
+  const playBtn = document.getElementById("jukebox-play-btn");
+  if (playBtn) playBtn.textContent = jukeboxPlaying ? "⏸ Pause" : "▶ Play";
+  const muteBtn = document.getElementById("jukebox-mute-btn");
+  if (muteBtn) {
+    muteBtn.textContent = jukeboxMuted ? "🔇 Muted" : "🔊 Mute";
+    muteBtn.style.borderColor = jukeboxMuted ? "#f87171" : "#38bdf8";
+    muteBtn.style.color = jukeboxMuted ? "#fca5a5" : "#7dd3fc";
+  }
+}
+
+function selectJukeboxTrack(idx) {
+  jukeboxIdx = (idx + JUKEBOX_TRACKS.length) % JUKEBOX_TRACKS.length;
+  jukeboxPlaying = true;
+  const wrap = document.getElementById("jukebox-player-container");
+  if (wrap) wrap.style.display = "block";
+  ensureYouTubeApiLoaded();
+  if (ytPlayer && typeof ytPlayer.loadVideoById === "function") {
+    ytPlayer.loadVideoById(JUKEBOX_TRACKS[jukeboxIdx].id);
+    if (jukeboxMuted && ytPlayer.mute) ytPlayer.mute();
+  }
+  updateJukeboxUi();
+}
+
+function jukeboxTogglePlay() {
+  const wrap = document.getElementById("jukebox-player-container");
+  if (wrap) wrap.style.display = "block";
+  ensureYouTubeApiLoaded();
+  jukeboxPlaying = !jukeboxPlaying;
+  if (ytPlayer && typeof ytPlayer.playVideo === "function") {
+    if (jukeboxPlaying) ytPlayer.playVideo();
+    else ytPlayer.pauseVideo();
+  }
+  updateJukeboxUi();
+}
+
+function jukeboxNext() { selectJukeboxTrack(jukeboxIdx + 1); }
+function jukeboxPrev() { selectJukeboxTrack(jukeboxIdx - 1); }
+
+function toggleJukeboxMute() {
+  jukeboxMuted = !jukeboxMuted;
+  if (ytPlayer) {
+    if (jukeboxMuted && typeof ytPlayer.mute === "function") ytPlayer.mute();
+    else if (!jukeboxMuted && typeof ytPlayer.unMute === "function") ytPlayer.unMute();
+  }
+  updateJukeboxUi();
+}
+
+async function syncAndAutoUpdate() {
+  const btn = document.getElementById("auto-update-sync-btn");
+  const strip = document.getElementById("board-reflex-strip");
+  if (btn) btn.textContent = "⏳ Checking...";
+  try {
+    const res = await apiPost("/api/system/sync", { apply_sync: true, relaunch_if_updated: true });
+    const st = res.last_sync_status || {};
+    const syncedCount = (st.synced_files || []).length;
+    if (st.relaunching) {
+      if (btn) btn.textContent = "🚀 Relaunching...";
+      if (strip) strip.textContent = `Auto-Update downloaded ${syncedCount} updated file(s) from GitHub — relaunching Celestriad 1.0 now...`;
+      setTimeout(() => { window.location.reload(); }, 1400);
+      return;
+    }
+    if (btn) btn.textContent = syncedCount > 0 ? `✓ Synced (${syncedCount})` : "✓ Up to Date";
+    if (strip) {
+      strip.textContent = syncedCount > 0
+        ? `GitHub Auto-Sync complete: updated ${syncedCount} file(s) and merged ${st.merged_rules_count || 0} new rule(s).`
+        : "GitHub Auto-Sync: Your Celestriad 1.0 installation is 100% up to date.";
+    }
+    setTimeout(() => { if (btn) btn.textContent = "🔄 Auto-Update"; }, 3500);
+  } catch (_e) {
+    if (btn) btn.textContent = "🔄 Auto-Update";
+  }
 }
 
 function activatePlayVsAiMode() {
@@ -910,39 +1296,39 @@ function renderState(s) {
   const pEloEl = document.getElementById("player-elo-pill");
 
   const eloData = s.elo || {};
-  const hpEloText = `Celestriad Elo: ${Number(eloData.lmft_elo || 1000).toFixed(1)} (${eloData.wins || 0}W-${eloData.losses || 0}L-${eloData.draws || 0}D · ${lmftColor})`;
+  const hpEloText = `Elo ${Number(eloData.lmft_elo || 1000).toFixed(1)} (${eloData.wins || 0}W-${eloData.losses || 0}L-${eloData.draws || 0}D)`;
   const oppTarget = Number(eloData.opponent_target_elo || eloData.lmft_elo || 1000).toFixed(1);
-  const sfEloText = `Stockfish 19 Target Elo: ${oppTarget} (${stockfishColor} · Game #${(eloData.games_completed || 0) + 1})`;
+  const sfEloText = `SF19 Elo ${oppTarget} (G#${(eloData.games_completed || 0) + 1})`;
   const pBase = Number(eloData.player_elo || 1000).toFixed(1);
   const pAcc = eloData.player_game_accuracy_pct;
   const pEst = Number(eloData.player_estimated_game_elo || eloData.player_elo || 1000).toFixed(0);
   const humanEloText = pAcc != null
-    ? `Your Elo: ${pBase} · Acc: ${Number(pAcc).toFixed(0)}% (Est. ${pEst})`
-    : `Your Elo: ${pBase} (${eloData.player_wins || 0}W-${eloData.player_losses || 0}L-${eloData.player_draws || 0}D)`;
+    ? `Elo ${pBase} · ${Number(pAcc).toFixed(0)}% Acc`
+    : `Elo ${pBase} (${eloData.player_wins || 0}W-${eloData.player_losses || 0}L-${eloData.player_draws || 0}D)`;
 
   if (isSelfTrain) {
     const celestriadOnBottom = (lmftColor === bottomBoardColor);
-    const topBadge = topBoardColor === "White" ? "⚪ Playing White" : "⚫ Playing Black";
-    const botBadge = bottomBoardColor === "White" ? "⚪ Playing White" : "⚫ Playing Black";
+    const topBadge = topBoardColor === "White" ? "⚪ White" : "⚫ Black";
+    const botBadge = bottomBoardColor === "White" ? "⚪ White" : "⚫ Black";
     if (celestriadOnBottom) {
       if (topAvatar) topAvatar.textContent = "🐟";
       if (topName) topName.textContent = `Stockfish 19 (${topBadge})`;
-      if (topMeta) topMeta.textContent = "(Strength-Calibrated Stockfish 19 Sparring Partner)";
+      if (topMeta) topMeta.textContent = "Strength-Calibrated Stockfish 19 Sparring Partner";
       if (eloEl) eloEl.textContent = sfEloText;
 
       if (botAvatar) botAvatar.textContent = "✨";
       if (botName) botName.textContent = `Celestriad 1.0 (${botBadge})`;
-      if (botSubtitle) botSubtitle.textContent = "40-Node Fuzzy Tree + Qwen3-4B (Swaps White/Black Each Game)";
+      if (botSubtitle) botSubtitle.textContent = "40-Node Fuzzy Tree + Qwen3-8B";
       if (pEloEl) pEloEl.textContent = hpEloText;
     } else {
       if (topAvatar) topAvatar.textContent = "✨";
       if (topName) topName.textContent = `Celestriad 1.0 (${topBadge})`;
-      if (topMeta) topMeta.textContent = "(40-Node Fuzzy Tree + Qwen3-4B)";
+      if (topMeta) topMeta.textContent = "40-Node Fuzzy Tree + Qwen3-8B";
       if (eloEl) eloEl.textContent = hpEloText;
 
       if (botAvatar) botAvatar.textContent = "🐟";
       if (botName) botName.textContent = `Stockfish 19 (${botBadge})`;
-      if (botSubtitle) botSubtitle.textContent = "Strength-Calibrated Stockfish 19 Sparring Partner (Swaps White/Black Each Game)";
+      if (botSubtitle) botSubtitle.textContent = "Strength-Calibrated Stockfish 19 Sparring Partner";
       if (pEloEl) pEloEl.textContent = sfEloText;
     }
   } else {
@@ -950,7 +1336,7 @@ function renderState(s) {
     if (humanOnBottom) {
       if (topAvatar) topAvatar.textContent = "✨";
       if (topName) topName.textContent = "Celestriad 1.0";
-      if (topMeta) topMeta.textContent = "(40-Node Tree + Qwen3-4B · ⚫ Playing Black)";
+      if (topMeta) topMeta.textContent = "⚫ Playing Black · 40-Node Tree + Qwen3-8B";
       if (eloEl) eloEl.textContent = hpEloText;
 
       if (botAvatar) botAvatar.textContent = "👤";
@@ -960,12 +1346,12 @@ function renderState(s) {
     } else {
       if (topAvatar) topAvatar.textContent = "👤";
       if (topName) topName.textContent = "You (⚪ Playing White)";
-      if (topMeta) topMeta.textContent = "(Auto-Coached on Every Move)";
+      if (topMeta) topMeta.textContent = "Auto-Coached on Every Move";
       if (eloEl) eloEl.textContent = humanEloText;
 
       if (botAvatar) botAvatar.textContent = "✨";
-      if (botName) botName.textContent = "Celestriad 1.0 (⚫ Playing Black)";
-      if (botSubtitle) botSubtitle.textContent = "40-Node Fuzzy Tree + Qwen3-4B";
+      if (botName) botName.textContent = "Celestriad 1.0";
+      if (botSubtitle) botSubtitle.textContent = "⚫ Playing Black · 40-Node Tree + Qwen3-8B";
       if (pEloEl) pEloEl.textContent = hpEloText;
     }
   }
