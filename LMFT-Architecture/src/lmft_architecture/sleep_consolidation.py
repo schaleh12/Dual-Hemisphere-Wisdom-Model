@@ -84,6 +84,8 @@ class UnresolvedSleepScene:
     is_hazard: bool = False
     contrastive_reference_coordinates: dict[str, float] | None = None
     game_review_annotation: str | None = None
+    played_bitboard_features: dict[str, float] | None = None
+    reference_bitboard_features: dict[str, float] | None = None
 
 
 @dataclass(frozen=True)
@@ -128,12 +130,12 @@ def _cluster_key_for_unresolved(scene: UnresolvedSleepScene) -> str | None:
     cult = {
         k: float(v)
         for k, v in coords.items()
-        if k.startswith("cultural/") and is_valid_leaf_id(k)
+        if k in FOUNDATIONAL_LEAVES and k.startswith("cultural/")
     }
     phil = {
         k: float(v)
         for k, v in coords.items()
-        if k.startswith("philosophical/") and is_valid_leaf_id(k)
+        if k in FOUNDATIONAL_LEAVES and k.startswith("philosophical/")
     }
 
     low_cult = sorted(
@@ -285,11 +287,22 @@ def normalize_contrastive_target_leaves_and_thresholds(
             continue
         if not k.startswith(("cultural/", "philosophical/", "experiential/")):
             continue
+        leaf_short = k.split("/")[-1]
+        if any(
+            rec_tag in leaf_short
+            for rec_tag in (
+                "hazard_high_hazard_",
+                "hazard_low_hazard_",
+                "coached_high_coached_",
+                "coached_low_coached_",
+            )
+        ):
+            continue
         v_act = float(raw_v)
         v_ref = float(avg_ref_coords.get(k, v_act))
         if explicit_coached:
-            # A `coached_` rule must never target shadow pathologies or low virtue leaves
-            if k in shadow_leaf_set:
+            # A `coached_` rule must never target shadow pathologies, hazard_* leaves, or low virtue leaves
+            if k in shadow_leaf_set or leaf_short.startswith("hazard_"):
                 continue
             if k in virtue_leaf_set and (v_act < 0.55 or v_act < v_ref):
                 continue
@@ -298,7 +311,11 @@ def normalize_contrastive_target_leaves_and_thresholds(
             if k == "philosophical/structure/chaos" and v_act > 0.45:
                 continue
         elif explicit_hazard:
-            # A `hazard_` rule must never target high virtue leaves, low needlessness, or low shadow/chaos leaves
+            # A `hazard_` rule must never target coached_* leaves, high virtue leaves, low needlessness, or low shadow/chaos/hazard leaves
+            if leaf_short.startswith("coached_"):
+                continue
+            if leaf_short.startswith("hazard_") and (v_act < 0.50 or v_act <= v_ref):
+                continue
             if k in virtue_leaf_set and (v_act >= 0.58 or v_act >= v_ref):
                 continue
             if k in shadow_leaf_set and (v_act < 0.50 or v_act <= v_ref):
@@ -325,10 +342,29 @@ def normalize_contrastive_target_leaves_and_thresholds(
 
     if len(target_leaves) < 2:
         for k, t_val in base_targets.items():
-            if k not in target_leaves:
-                target_leaves[k] = t_val
-                if len(target_leaves) >= 2:
-                    break
+            if k in target_leaves:
+                continue
+            leaf_short = k.split("/")[-1]
+            if any(
+                rec_tag in leaf_short
+                for rec_tag in (
+                    "hazard_high_hazard_",
+                    "hazard_low_hazard_",
+                    "coached_high_coached_",
+                    "coached_low_coached_",
+                )
+            ):
+                continue
+            if explicit_coached and (k in shadow_leaf_set or leaf_short.startswith("hazard_")):
+                continue
+            if explicit_hazard and (
+                leaf_short.startswith("coached_")
+                or (leaf_short.startswith("hazard_") and float(t_val) < 0.50)
+            ):
+                continue
+            target_leaves[k] = t_val
+            if len(target_leaves) >= 2:
+                break
 
     sim_target = _raw_rule_min_similarity(target_leaves, avg_coords)
     sim_ref = _raw_rule_min_similarity(target_leaves, avg_ref_coords)
@@ -809,12 +845,27 @@ def run_sleep_consolidation(
 
 
 def canonical_cluster_concept_name(concept_name: str) -> str:
-    """Strip `_s<scene>` suffixes from auto-generated `hazard_*_cluster_sN` / `coached_*_cluster_sN` rules."""
-    if concept_name.startswith(("hazard_", "coached_")) and "_cluster_s" in concept_name:
-        head, tail = concept_name.rsplit("_cluster_s", 1)
+    """Strip `_s<scene>` suffixes and any stacked recursive `hazard_` / `coached_` prefixes from cluster rules."""
+    name = concept_name
+    if name.startswith(("hazard_", "coached_")) and "_cluster_s" in name:
+        head, tail = name.rsplit("_cluster_s", 1)
         if tail.isdigit():
-            return f"{head}_cluster"
-    return concept_name
+            name = f"{head}_cluster"
+    if name.startswith(("hazard_", "coached_")) and name.endswith("_cluster"):
+        prefix = "hazard" if name.startswith("hazard_") else "coached"
+        body = name[len(prefix) + 1 : -len("_cluster")]
+        # Strip any stacked `(high|low)_(hazard|coached)_` recursive prefixes
+        body = re.sub(r"^(?:(?:high|low)_(?:hazard|coached)_)+", "", body)
+        # Collapse duplicate trailing philosophical tags like `_chaos_chaos` -> `_chaos`
+        body = re.sub(r"_([a-z]+)_(\1)$", r"_\1", body)
+        # If a truncated recursive leaf left only `(high|low)_<phil_tag>` without a cultural leaf noun, restore a default cultural noun
+        m_missing = re.fullmatch(r"(high|low)_(chaos|order|agency|continuity|discreteness|structure)", body)
+        if m_missing:
+            dir_tag, phil_tag = m_missing.group(1), m_missing.group(2)
+            cult_noun = "power" if dir_tag == "high" else "wastelessness"
+            body = f"{dir_tag}_{cult_noun}_{phil_tag}"
+        name = f"{prefix}_{body}_cluster"
+    return name
 
 
 def entrain_existing_cluster_rule(

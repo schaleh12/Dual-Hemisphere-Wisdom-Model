@@ -240,7 +240,7 @@ def _ensure_foundational_rules(rules: tuple[FuzzyConceptRule, ...]) -> tuple[Fuz
         ):
             continue
         if r.concept_name.startswith("hazard_"):
-            # Strip inverted virtue, low-needlessness, or low-shadow leaves that contradict hazard polarity
+            # Strip inverted virtue, low-needlessness, cross-polarity coached_*, recursive, or low-shadow/hazard leaves
             shadow_ids = {l.leaf_id for l in PHILOSOPHICAL_SHADOW_LEAVES}
             cleaned_haz_leaves = {
                 k: float(v)
@@ -249,6 +249,12 @@ def _ensure_foundational_rules(rules: tuple[FuzzyConceptRule, ...]) -> tuple[Fuz
                     (k == "cultural/freedom/needlessness" and float(v) <= 0.30)
                     or (k in shadow_ids and float(v) < 0.50)
                     or (k in ("philosophical/being/existence", "cultural/freedom/self-sufficiency", "philosophical/structure/order") and float(v) >= 0.58)
+                    or k.split("/")[-1].startswith("coached_")
+                    or (k.split("/")[-1].startswith("hazard_") and float(v) < 0.50)
+                    or any(
+                        rec_tag in k.split("/")[-1]
+                        for rec_tag in ("hazard_high_hazard_", "hazard_low_hazard_", "coached_high_coached_", "coached_low_coached_")
+                    )
                 )
             }
             if len(cleaned_haz_leaves) < 2:
@@ -276,6 +282,11 @@ def _ensure_foundational_rules(rules: tuple[FuzzyConceptRule, ...]) -> tuple[Fuz
                 k: float(v)
                 for k, v in r.target_leaves.items()
                 if k not in shadow_ids
+                and not k.split("/")[-1].startswith("hazard_")
+                and not any(
+                    rec_tag in k.split("/")[-1]
+                    for rec_tag in ("hazard_high_hazard_", "hazard_low_hazard_", "coached_high_coached_", "coached_low_coached_")
+                )
                 and not (k == "philosophical/structure/chaos" and float(v) >= 0.48)
                 and not (k == "cultural/freedom/needlessness" and float(v) > 0.20)
                 and not (k in virtue_ids and float(v) < 0.55)
@@ -516,7 +527,18 @@ class ChessKibitzerRuntime:
         for p in candidates:
             if p.exists():
                 try:
-                    base.extend(load_learned_leaves(p))
+                    for lf in load_learned_leaves(p):
+                        if any(
+                            rec_tag in lf.leaf_name
+                            for rec_tag in (
+                                "hazard_high_hazard_",
+                                "hazard_low_hazard_",
+                                "coached_high_coached_",
+                                "coached_low_coached_",
+                            )
+                        ):
+                            continue
+                        base.append(lf)
                     break
                 except Exception:
                     pass
@@ -1695,6 +1717,8 @@ class ChessKibitzerRuntime:
                 override_coordinates=human_review.get("played_coordinates"),
                 contrastive_reference_coordinates=human_review.get("contrastive_reference_coordinates"),
                 game_review_annotation=human_review.get("annotation_summary"),
+                played_bitboard_features=human_review.get("played_bitboard_features"),
+                reference_bitboard_features=human_review.get("reference_bitboard_features"),
             )
 
         if (
@@ -1996,6 +2020,8 @@ class ChessKibitzerRuntime:
         override_coordinates: dict[str, float] | None = None,
         contrastive_reference_coordinates: dict[str, float] | None = None,
         game_review_annotation: str | None = None,
+        played_bitboard_features: dict[str, float] | None = None,
+        reference_bitboard_features: dict[str, float] | None = None,
     ) -> dict[str, Any]:
         rec = self._turn_records_by_id.get(int(scene_index))
         if rec is None:
@@ -2031,6 +2057,16 @@ class ChessKibitzerRuntime:
                 else None
             ),
             game_review_annotation=game_review_annotation or (user_note.strip() if user_note.strip() else None),
+            played_bitboard_features=(
+                dict(played_bitboard_features)
+                if played_bitboard_features is not None
+                else None
+            ),
+            reference_bitboard_features=(
+                dict(reference_bitboard_features)
+                if reference_bitboard_features is not None
+                else None
+            ),
         )
         self.sleep_queue = [s for s in self.sleep_queue if s.scene_index != int(scene_index)]
         self.sleep_queue.append(sleep_scene)
@@ -2448,6 +2484,8 @@ class ChessKibitzerRuntime:
                         override_coordinates=review["played_coordinates"],
                         contrastive_reference_coordinates=review["contrastive_reference_coordinates"],
                         game_review_annotation=review["annotation_summary"],
+                        played_bitboard_features=review.get("played_bitboard_features"),
+                        reference_bitboard_features=review.get("reference_bitboard_features"),
                     )
                 elif not veto_queued:
                     self._hazard_scene_indices.discard(last_scene_id)
@@ -3151,6 +3189,8 @@ class ChessKibitzerRuntime:
                                 s.external_coordinates,
                                 s.contrastive_reference_coordinates,
                                 is_hazard=is_s_haz,
+                                played_bitboard_features=s.played_bitboard_features,
+                                reference_bitboard_features=s.reference_bitboard_features,
                             )
                     self._last_minted_leaves = ()
                     if self.teacher is not None:

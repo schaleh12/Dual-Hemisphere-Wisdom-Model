@@ -1399,18 +1399,144 @@ def test_pure_python_installer_wizard_and_zero_unsigned_exes() -> None:
             assert "Launch-LMFT-Chess.bat" in names
 
 
+def test_weight_space_circuit_sculpting_homeostatic_decay_and_clean_cluster_naming() -> None:
+    """Verify 24-circuit REM sculpting, homeostatic rail unsticking, and zero recursive `hazard_high_hazard_` prefixing."""
+    from lmft_architecture.chess_app import _ensure_foundational_rules
+    from lmft_architecture.chess_kibitz_bridge import (
+        DEFAULT_SLEEVE_VALUE_WEIGHTS,
+        BitboardIntuitionSleeve,
+        ObjectiveCalibratedSparringEngine,
+    )
+    from lmft_architecture.sleep_consolidation import (
+        UnresolvedSleepScene,
+        _cluster_key_for_unresolved,
+        canonical_cluster_concept_name,
+        normalize_contrastive_target_leaves_and_thresholds,
+    )
 
+    # 1. `audit_played_move_for_game_review` computes `played_bitboard_features`, `reference_bitboard_features`, and `bitboard_feature_delta`
+    board = chess.Board("r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 3 3")
+    referee = ObjectiveCalibratedSparringEngine(use_stockfish_uci=False)
+    rev = referee.audit_played_move_for_game_review(board, "Bxf7+", perspective=chess.WHITE)
+    assert "played_bitboard_features" in rev
+    assert "reference_bitboard_features" in rev
+    assert "bitboard_feature_delta" in rev
+    assert set(rev["played_bitboard_features"].keys()) == set(DEFAULT_SLEEVE_VALUE_WEIGHTS.keys())
 
+    # 2. `BitboardIntuitionSleeve.distill_post_mortem_scene` sculpts all 8 named bitboard circuits and applies homeostatic decay
+    sleeve = BitboardIntuitionSleeve()
+    sleeve.leaf_weights["philosophical/structure/order"] = 2.5
+    sleeve.leaf_weights["philosophical/structure/chaos"] = -2.5
+    orig_king_shield_v = sleeve.value_weights["king_shield_safety"]
+    orig_center_p = sleeve.policy_weights["center_bitboard_control"]
 
+    receipt = sleeve.distill_post_mortem_scene(
+        {"philosophical/being/existence": 0.40, "psychological/truth/fact": 0.40},
+        {"philosophical/being/existence": 0.40, "psychological/truth/fact": 0.70},
+        is_hazard=True,
+        learning_rate=0.10,
+        played_bitboard_features={
+            "material_balance_norm": 0.0,
+            "attack_control_share": 0.45,
+            "center_bitboard_control": 0.10,
+            "king_shield_safety": 0.32,
+            "piece_coordination_ratio": 0.40,
+            "development_progress": 0.25,
+            "move_net_safety": -0.20,
+            "move_positional_gain": 0.0,
+        },
+        reference_bitboard_features={
+            "material_balance_norm": 0.25,
+            "attack_control_share": 0.55,
+            "center_bitboard_control": 0.50,
+            "king_shield_safety": 0.85,
+            "piece_coordination_ratio": 0.75,
+            "development_progress": 0.65,
+            "move_net_safety": 0.60,
+            "move_positional_gain": 0.45,
+        },
+    )
+    assert "king_shield_safety" in receipt["updated_circuit_keys"]
+    assert "center_bitboard_control" in receipt["updated_circuit_keys"]
+    assert "piece_coordination_ratio" in receipt["updated_circuit_keys"]
+    assert "development_progress" in receipt["updated_circuit_keys"]
+    assert sleeve.value_weights["king_shield_safety"] > orig_king_shield_v
+    assert sleeve.policy_weights["center_bitboard_control"] > orig_center_p
+    # Homeostatic decay pulls saturated `±2.5` rails gently back toward default when leaf delta is 0
+    assert sleeve.leaf_weights["philosophical/structure/order"] < 2.5
+    assert sleeve.leaf_weights["philosophical/structure/chaos"] > -2.5
 
+    # 3. `_cluster_key_for_unresolved` and `canonical_cluster_concept_name` never stack `hazard_high_hazard_` prefixes
+    sc_with_tier2 = UnresolvedSleepScene(
+        scene_index=999,
+        scenario_text="Chess table — blunder test",
+        external_coordinates={
+            "cultural/efficiency/power": 0.62,
+            "cultural/efficiency/wastelessness": 0.42,
+            "cultural/freedom/hazard_low_self_sufficiency_chaos": 0.95,
+            "philosophical/structure/hazard_high_power_chaos": 0.92,
+            "philosophical/structure/order": 0.58,
+            "philosophical/structure/chaos": 0.20,
+        },
+        felt_chord_notes={},
+        valence=0.35,
+        salience=0.80,
+        arousal=0.65,
+        left_brain_hunch="Test",
+        is_hazard=True,
+    )
+    ckey = _cluster_key_for_unresolved(sc_with_tier2)
+    assert ckey == "high_power_order_cluster"
+    assert "hazard_" not in ckey
 
+    assert (
+        canonical_cluster_concept_name("hazard_high_hazard_high_power_chaos_chaos_cluster")
+        == "hazard_high_power_chaos_cluster"
+    )
+    assert (
+        canonical_cluster_concept_name("hazard_high_hazard_low_self_sufficiency_chaos_chaos_cluster")
+        == "hazard_low_self_sufficiency_chaos_cluster"
+    )
+    assert (
+        canonical_cluster_concept_name("hazard_high_hazard_high_hazard_high_hazard_high_chaos_cluster")
+        == "hazard_high_power_chaos_cluster"
+    )
 
+    # 4. `coached_*` rules never attach `hazard_*` Tier-2 leaves in `normalize_contrastive_target_leaves_and_thresholds` or `_ensure_foundational_rules`
+    c_targets, _, _ = normalize_contrastive_target_leaves_and_thresholds(
+        "low_needlessness_continuity_cluster",
+        {
+            "cultural/efficiency/wastelessness": 0.85,
+            "cultural/freedom/needlessness": 0.08,
+            "cultural/efficiency/hazard_high_power_chaos": 0.88,
+            "philosophical/persistence/continuity": 0.78,
+        },
+        {
+            "cultural/efficiency/wastelessness": 0.30,
+            "cultural/freedom/needlessness": 0.55,
+            "cultural/efficiency/hazard_high_power_chaos": 0.15,
+            "philosophical/persistence/continuity": 0.40,
+        },
+    )
+    assert "cultural/efficiency/hazard_high_power_chaos" not in c_targets
+    assert "philosophical/persistence/continuity" in c_targets
 
-
-
-
-
-
-
+    tangled_coached = FuzzyConceptRule(
+        rule_id="rule-sleep-coached_tangled",
+        concept_name="coached_low_needlessness_order_cluster",
+        description="Found Rg1.",
+        target_leaves={
+            "cultural/efficiency/wastelessness": 0.75,
+            "cultural/freedom/needlessness": 0.08,
+            "cultural/efficiency/hazard_high_power_chaos": 0.25,
+        },
+        low=0.60,
+        high=0.85,
+    )
+    cleaned_tangled = [
+        r for r in _ensure_foundational_rules((tangled_coached,)) if r.concept_name == "coached_low_needlessness_order_cluster"
+    ]
+    assert len(cleaned_tangled) == 1
+    assert "cultural/efficiency/hazard_high_power_chaos" not in cleaned_tangled[0].target_leaves
 
 

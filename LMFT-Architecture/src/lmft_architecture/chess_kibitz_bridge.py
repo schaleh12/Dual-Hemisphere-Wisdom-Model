@@ -635,15 +635,42 @@ class BitboardIntuitionSleeve:
         *,
         is_hazard: bool = True,
         learning_rate: float = 0.08,
+        played_bitboard_features: Mapping[str, float] | None = None,
+        reference_bitboard_features: Mapping[str, float] | None = None,
     ) -> dict[str, Any]:
         """Distill a post-mortem Game Review critique (`played` vs `best_alternative`) into the sleeve weights.
 
         Preserves foundational leaf polarity so tactical blunders (`is_hazard=True`) reinforce safety and
         virtue leaves where `best_alternative` exceeded `played` without ever training `order`, `continuity`,
         `discreteness`, or `agency` in reverse when a developing move overlooked a tactical threat.
+        Also applies gentle homeostatic anchor decay toward birth defaults and sculpts all 8 named bitboard
+        circuits when `played_bitboard_features` and `reference_bitboard_features` are provided.
         """
         lr = max(0.005, min(0.25, float(learning_rate)))
+        decay = 0.015 * lr
+        for vk, def_v in DEFAULT_SLEEVE_VALUE_WEIGHTS.items():
+            cur_v = float(self.value_weights.get(vk, def_v))
+            self.value_weights[vk] = round(
+                max(0.20, min(3.0, cur_v + decay * (float(def_v) - cur_v))),
+                4,
+            )
+        for pk, def_p in DEFAULT_SLEEVE_POLICY_WEIGHTS.items():
+            cur_p = float(self.policy_weights.get(pk, def_p))
+            self.policy_weights[pk] = round(
+                max(0.20, min(3.0, cur_p + decay * (float(def_p) - cur_p))),
+                4,
+            )
+        for lk, def_l in DEFAULT_SLEEVE_LEAF_WEIGHTS.items():
+            cur_l = float(self.leaf_weights.get(lk, def_l))
+            blended_l = cur_l + decay * (float(def_l) - cur_l)
+            if lk == "philosophical/structure/chaos":
+                self.leaf_weights[lk] = round(max(-2.5, min(-0.20, blended_l)), 4)
+            else:
+                floor_w = max(0.25, float(def_l) * 0.75)
+                self.leaf_weights[lk] = round(max(floor_w, min(2.5, blended_l)), 4)
+
         updated_keys: list[str] = []
+        updated_circuit_keys: list[str] = []
         ref_map = reference_coordinates or {}
         for lk in list(self.leaf_weights.keys()):
             if lk in played_coordinates and lk in ref_map:
@@ -665,6 +692,23 @@ class BitboardIntuitionSleeve:
                         self.leaf_weights[lk] = round(new_w, 4)
                         updated_keys.append(lk)
 
+        if played_bitboard_features and reference_bitboard_features:
+            for fk in DEFAULT_SLEEVE_VALUE_WEIGHTS:
+                if fk in played_bitboard_features and fk in reference_bitboard_features:
+                    p_feat = float(played_bitboard_features[fk])
+                    r_feat = float(reference_bitboard_features[fk])
+                    feat_deficit = max(0.0, (r_feat - p_feat) if is_hazard else (p_feat - r_feat))
+                    if feat_deficit >= 0.01:
+                        self.value_weights[fk] = round(
+                            max(0.20, min(3.0, float(self.value_weights.get(fk, DEFAULT_SLEEVE_VALUE_WEIGHTS[fk])) + 0.45 * lr * feat_deficit)),
+                            4,
+                        )
+                        self.policy_weights[fk] = round(
+                            max(0.20, min(3.0, float(self.policy_weights.get(fk, DEFAULT_SLEEVE_POLICY_WEIGHTS[fk])) + 0.55 * lr * feat_deficit)),
+                            4,
+                        )
+                        updated_circuit_keys.append(fk)
+
         fact_p = float(played_coordinates.get("psychological/truth/fact", 0.50))
         fact_r = float(ref_map.get("psychological/truth/fact", 0.70))
         if is_hazard and fact_r > fact_p:
@@ -676,15 +720,20 @@ class BitboardIntuitionSleeve:
                 min(3.0, float(self.policy_weights.get("move_net_safety", 1.15)) + 0.5 * lr * (fact_r - fact_p)),
                 4,
             )
+            if "move_net_safety" not in updated_circuit_keys:
+                updated_circuit_keys.append("move_net_safety")
         elif not is_hazard:
             self.policy_weights["move_positional_gain"] = round(
                 min(3.0, float(self.policy_weights.get("move_positional_gain", 1.45)) + 0.25 * lr),
                 4,
             )
+            if "move_positional_gain" not in updated_circuit_keys:
+                updated_circuit_keys.append("move_positional_gain")
         self.steps_distilled += 1
         return {
             "steps_distilled": self.steps_distilled,
             "updated_leaf_keys": updated_keys,
+            "updated_circuit_keys": updated_circuit_keys,
         }
 
     def to_dict(self) -> dict[str, Any]:
@@ -2506,6 +2555,24 @@ class ObjectiveCalibratedSparringEngine:
             )
             ref_coords = best_coords
 
+        played_bitboard_features = extract_bitboard_features(
+            board_before,
+            played_move,
+            perspective=us,
+            blunder_penalty=played_b_pen,
+        )
+        reference_bitboard_features = extract_bitboard_features(
+            board_before,
+            best_move if is_hazard else alt_move,
+            perspective=us,
+            blunder_penalty=_best_pen if is_hazard else _alt_pen,
+        )
+        bitboard_feature_delta: dict[str, float] = {}
+        for fk, fv in played_bitboard_features.items():
+            f_diff = round(float(fv) - float(reference_bitboard_features.get(fk, fv)), 4)
+            if abs(f_diff) >= 0.02:
+                bitboard_feature_delta[fk] = f_diff
+
         coord_delta: dict[str, float] = {}
         for k, v in played_coords.items():
             diff = round(float(v) - float(ref_coords.get(k, v)), 4)
@@ -2546,6 +2613,9 @@ class ObjectiveCalibratedSparringEngine:
             "best_move_coordinates": best_coords,
             "contrastive_reference_coordinates": ref_coords,
             "coordinate_delta": coord_delta,
+            "played_bitboard_features": played_bitboard_features,
+            "reference_bitboard_features": reference_bitboard_features,
+            "bitboard_feature_delta": bitboard_feature_delta,
             "annotation_summary": summary,
         }
 
