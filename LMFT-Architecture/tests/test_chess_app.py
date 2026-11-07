@@ -1370,7 +1370,13 @@ def test_pure_python_installer_wizard_and_zero_unsigned_exes() -> None:
     hw = detect_system_hardware()
     assert "gpu_name" in hw and "ram_gb" in hw and float(hw["ram_gb"]) > 0.0
     prompt = build_custom_antigravity_prompt(hw)
+    from lmft_architecture.chess_kibitz_bridge import ObjectiveCalibratedSparringEngine
+
     assert "Google Antigravity" in prompt and "birth.py" in prompt
+    assert "onSquarePointerDown" in CHESS_SINGLE_PAGE_HTML
+    assert "drag-piece-ghost" in CHESS_SINGLE_PAGE_HTML
+    assert "Sf905k89AsY" in CHESS_SINGLE_PAGE_HTML
+    assert hasattr(ObjectiveCalibratedSparringEngine, "_popen_stockfish")
 
     sha_report = compute_core_sha256_report(base_dir, arch_dir, train_dir)
     assert "[SHA-256] birth.py" in sha_report

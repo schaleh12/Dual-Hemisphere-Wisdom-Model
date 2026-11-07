@@ -32,7 +32,9 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 import json
 import math
+import os
 from pathlib import Path
+import subprocess
 import re
 from typing import Any, Mapping
 import chess
@@ -2185,6 +2187,18 @@ class ObjectiveCalibratedSparringEngine:
             return "Stockfish 19 UCI (Strength-Calibrated)"
         return "Calibrated Tactical Engine (Built-In)"
 
+    def _popen_stockfish(self):
+        """Spawn Stockfish UCI silently with `CREATE_NO_WINDOW` on Windows so no console window flashes."""
+        popen_kwargs: dict[str, Any] = {}
+        if os.name == "nt":
+            popen_kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+        try:
+            return self._chess_engine_mod.SimpleEngine.popen_uci(
+                str(self.stockfish_path), **popen_kwargs
+            )
+        except TypeError:
+            return self._chess_engine_mod.SimpleEngine.popen_uci(str(self.stockfish_path))
+
     def evaluate_position_centipawns(
         self,
         board: chess.Board,
@@ -2195,7 +2209,7 @@ class ObjectiveCalibratedSparringEngine:
         self.post_move_audits_run += 1
         if self.use_stockfish_uci and self.stockfish_path.exists():
             try:
-                with self._chess_engine_mod.SimpleEngine.popen_uci(str(self.stockfish_path)) as eng:
+                with self._popen_stockfish() as eng:
                     info = eng.analyse(board, self._chess_engine_mod.Limit(depth=6, time=0.04))
                     pov_score = info["score"].pov(perspective)
                     cp = pov_score.score(mate_score=9999)
@@ -2221,7 +2235,7 @@ class ObjectiveCalibratedSparringEngine:
 
         if self.use_stockfish_uci and self.stockfish_path.exists():
             try:
-                with self._chess_engine_mod.SimpleEngine.popen_uci(str(self.stockfish_path)) as eng:
+                with self._popen_stockfish() as eng:
                     if clamped_elo >= 1320.0:
                         eng.configure(
                             {
@@ -2377,7 +2391,7 @@ class ObjectiveCalibratedSparringEngine:
         best_cp, best_move, best_san, best_is_blunder = scored_alternatives[0]
         if self.use_stockfish_uci and self.stockfish_path.exists():
             try:
-                with self._chess_engine_mod.SimpleEngine.popen_uci(str(self.stockfish_path)) as eng:
+                with self._popen_stockfish() as eng:
                     info_before = eng.analyse(board_before, self._chess_engine_mod.Limit(depth=6, time=0.04))
                     pv_moves = info_before.get("pv") or []
                     if pv_moves and pv_moves[0] in board_before.legal_moves:

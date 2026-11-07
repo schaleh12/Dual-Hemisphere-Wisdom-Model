@@ -357,12 +357,35 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
     display: flex;
     align-items: center;
     justify-content: center;
-    cursor: pointer;
+    cursor: grab;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+  }
+  .sq:active {
+    cursor: grabbing;
   }
   . chess-piece-svg, .chess-piece-svg {
     width: 96%;
     height: 96%;
     pointer-events: none;
+    -webkit-user-drag: none;
+  }
+  .sq.drag-origin .chess-piece-svg {
+    opacity: 0.25;
+  }
+  .sq.drag-hover {
+    box-shadow: inset 0 0 0 3px #38bdf8, inset 0 0 0 999px rgba(56, 189, 248, 0.28);
+  }
+  #drag-piece-ghost {
+    position: fixed;
+    pointer-events: none;
+    z-index: 9999;
+    width: 64px;
+    height: 64px;
+    display: none;
+    transform: translate(-50%, -50%);
+    filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.65));
   }
   .sq.light { background: var(--sq-light); color: #312e2b; }
   .sq.dark { background: var(--sq-dark); color: #f8fafc; }
@@ -633,11 +656,12 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
           <a id="jukebox-ytm-link" href="https://music.youtube.com/watch?v=88CuKNXFAq8" target="_blank" rel="noopener" class="btn" style="padding:3px 7px;font-size:10.5px;text-decoration:none;" title="Open current track in YouTube Music">↗ YT</a>
         </div>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:4px;">
-        <button class="jukebox-track-btn active" id="jb-track-0" onclick="selectJukeboxTrack(0)" title="Forever Rachel (永遠に、レイチェル) — Final Fantasy VI">1. Forever Rachel</button>
-        <button class="jukebox-track-btn" id="jb-track-1" onclick="selectJukeboxTrack(1)" title="The Floating Continent (魔大陸) — Final Fantasy VI">2. Floating Cont.</button>
-        <button class="jukebox-track-btn" id="jb-track-2" onclick="selectJukeboxTrack(2)" title="Magitek Research Facility (魔導研究所) — Final Fantasy VI">3. Magitek Lab</button>
-        <button class="jukebox-track-btn" id="jb-track-3" onclick="selectJukeboxTrack(3)" title="Schala's Theme (Piano) — Chrono Trigger">4. Schala's Theme</button>
+      <div style="display:grid;grid-template-columns:repeat(5, 1fr);gap:4px;">
+        <button class="jukebox-track-btn active" id="jb-track-0" onclick="selectJukeboxTrack(0)" title="Forever Rachel (永遠に、レイチェル) — Final Fantasy VI">1. Rachel</button>
+        <button class="jukebox-track-btn" id="jb-track-1" onclick="selectJukeboxTrack(1)" title="The Floating Continent (魔大陸) — Final Fantasy VI">2. Continent</button>
+        <button class="jukebox-track-btn" id="jb-track-2" onclick="selectJukeboxTrack(2)" title="Magitek Research Facility (魔導研究所) — Final Fantasy VI">3. Magitek</button>
+        <button class="jukebox-track-btn" id="jb-track-3" onclick="selectJukeboxTrack(3)" title="Schala's Theme (Piano) — Chrono Trigger">4. Schala</button>
+        <button class="jukebox-track-btn" id="jb-track-4" onclick="selectJukeboxTrack(4)" title="Esper World / Another World of Beasts (幻獣界) — Final Fantasy VI">5. Esper World</button>
       </div>
       <div id="jukebox-player-container" style="height:56px;border-radius:6px;overflow:hidden;border:1px solid rgba(255,255,255,0.12);background:#000;display:none;">
         <div id="jukebox-yt-player"></div>
@@ -996,7 +1020,8 @@ const JUKEBOX_TRACKS = [
   { id: "88CuKNXFAq8", title: "1. Forever Rachel — FFVI (Nobuo Uematsu)", url: "https://music.youtube.com/watch?v=88CuKNXFAq8&si=LX5eCxilDfFFC8Ip" },
   { id: "kpZFlSJS9ZI", title: "2. The Floating Continent — FFVI (Nobuo Uematsu)", url: "https://music.youtube.com/watch?v=kpZFlSJS9ZI&si=A2_QE7uagQe_-p3m" },
   { id: "Ys-oKc88tXY", title: "3. Magitek Research Facility — FFVI (Nobuo Uematsu)", url: "https://music.youtube.com/watch?v=Ys-oKc88tXY&si=CxowLaxsFjoW1b1k" },
-  { id: "oDEpcYBu7eU", title: "4. Schala's Theme (Piano) — Chrono Trigger (ryukahr)", url: "https://music.youtube.com/watch?v=oDEpcYBu7eU&si=N2RZzMfrpMQ1Pgtt" }
+  { id: "oDEpcYBu7eU", title: "4. Schala's Theme (Piano) — Chrono Trigger (ryukahr)", url: "https://music.youtube.com/watch?v=oDEpcYBu7eU&si=N2RZzMfrpMQ1Pgtt" },
+  { id: "Sf905k89AsY", title: "5. Esper World (幻獣界) — FFVI (Nobuo Uematsu)", url: "https://music.youtube.com/watch?v=Sf905k89AsY&si=QQ4FWo_PQZoEbMEt" }
 ];
 let jukeboxIdx = 0;
 let jukeboxPlaying = false;
@@ -1208,8 +1233,23 @@ function renderEvalBar(evalWhiteCp) {
   }
 }
 
+let lastBoardState = null;
+let dragPieceState = null;
+let suppressNextSquareClick = false;
+
+function ensureDragGhostElement() {
+  let g = document.getElementById("drag-piece-ghost");
+  if (!g) {
+    g = document.createElement("div");
+    g.id = "drag-piece-ghost";
+    document.body.appendChild(g);
+  }
+  return g;
+}
+
 function renderBoard(boardState) {
   if (!boardState) return;
+  lastBoardState = boardState;
   currentLegalMovesUci = boardState.legal_moves_uci || [];
   renderEvalBar(boardState.eval_white_cp);
   const sig = JSON.stringify([boardState.fen, selectedSquare, boardState.last_move_uci, boardFlipped]);
@@ -1247,7 +1287,7 @@ function renderBoard(boardState) {
       const rankLabel = dc === 0 ? `<span class="coord-rank">${rankNum}</span>` : "";
       const fileLabel = dr === 7 ? `<span class="coord-file">${files[c]}</span>` : "";
       const glyph = piece ? (STAUNTON_SVG_PIECES[piece] || "") : "";
-      html += `<div class="${cls}" onclick="onSquareClick('${sqName}')">${rankLabel}${glyph}${fileLabel}</div>`;
+      html += `<div class="${cls}" data-sq="${sqName}" data-piece="${piece}" onpointerdown="onSquarePointerDown(event, '${sqName}')" onclick="onSquareClick('${sqName}')">${rankLabel}${glyph}${fileLabel}</div>`;
     }
   }
   document.getElementById("chessboard-grid").innerHTML = html;
@@ -1263,15 +1303,108 @@ async function playHumanMoveAndAutoReply(moveStr) {
         await playAiMove();
       } finally {
         if (turnPill && (!lastBoardClockSnap || !lastBoardClockSnap.isGameOver)) {
-          turnPill.textContent = "Your Turn — Click a Piece to Play";
+          turnPill.textContent = "Your Turn — Drag or Click a Piece";
         }
       }
     }, 180);
   }
 }
 
+function onSquarePointerDown(ev, sqName) {
+  if (ev.button !== undefined && ev.button !== 0) return;
+  const hasMoves = currentLegalMovesUci.some(m => m.startsWith(sqName));
+  if (!hasMoves) return;
+  ev.preventDefault();
+  selectedSquare = sqName;
+  lastRenderedBoardSig = "";
+  if (lastBoardState) renderBoard(lastBoardState);
+
+  const sqEl = document.querySelector(`#chessboard-grid .sq[data-sq="${sqName}"]`);
+  const pieceCode = sqEl ? (sqEl.getAttribute("data-piece") || "") : "";
+  const glyph = pieceCode ? (STAUNTON_SVG_PIECES[pieceCode] || "") : "";
+  if (!glyph) return;
+
+  dragPieceState = {
+    fromSq: sqName,
+    glyph: glyph,
+    startX: ev.clientX,
+    startY: ev.clientY,
+    dragging: false,
+    hoverSq: null
+  };
+}
+
+window.addEventListener("pointermove", function(ev) {
+  if (!dragPieceState) return;
+  const dx = ev.clientX - dragPieceState.startX;
+  const dy = ev.clientY - dragPieceState.startY;
+  if (!dragPieceState.dragging && (dx * dx + dy * dy) >= 9) {
+    dragPieceState.dragging = true;
+    const ghost = ensureDragGhostElement();
+    ghost.innerHTML = dragPieceState.glyph;
+    ghost.style.display = "block";
+    const origEl = document.querySelector(`#chessboard-grid .sq[data-sq="${dragPieceState.fromSq}"]`);
+    if (origEl) origEl.classList.add("drag-origin");
+  }
+  if (dragPieceState.dragging) {
+    const ghost = ensureDragGhostElement();
+    ghost.style.left = ev.clientX + "px";
+    ghost.style.top = ev.clientY + "px";
+    const under = document.elementFromPoint(ev.clientX, ev.clientY);
+    const sqEl = under && under.closest ? under.closest("#chessboard-grid .sq[data-sq]") : null;
+    const newHover = sqEl ? sqEl.getAttribute("data-sq") : null;
+    if (newHover !== dragPieceState.hoverSq) {
+      if (dragPieceState.hoverSq) {
+        const prevEl = document.querySelector(`#chessboard-grid .sq[data-sq="${dragPieceState.hoverSq}"]`);
+        if (prevEl) prevEl.classList.remove("drag-hover");
+      }
+      dragPieceState.hoverSq = newHover;
+      if (sqEl) sqEl.classList.add("drag-hover");
+    }
+  }
+});
+
+window.addEventListener("pointerup", async function(ev) {
+  if (!dragPieceState) return;
+  const state = dragPieceState;
+  dragPieceState = null;
+
+  const ghost = document.getElementById("drag-piece-ghost");
+  if (ghost) {
+    ghost.style.display = "none";
+    ghost.innerHTML = "";
+  }
+  document.querySelectorAll("#chessboard-grid .sq.drag-origin, #chessboard-grid .sq.drag-hover").forEach(el => {
+    el.classList.remove("drag-origin");
+    el.classList.remove("drag-hover");
+  });
+
+  if (!state.dragging) return;
+  suppressNextSquareClick = true;
+  setTimeout(() => { suppressNextSquareClick = false; }, 80);
+
+  const under = document.elementFromPoint(ev.clientX, ev.clientY);
+  const sqEl = under && under.closest ? under.closest("#chessboard-grid .sq[data-sq]") : null;
+  const targetSq = sqEl ? sqEl.getAttribute("data-sq") : null;
+  if (targetSq && targetSq !== state.fromSq) {
+    const cand = state.fromSq + targetSq;
+    const match = currentLegalMovesUci.find(m => m === cand || m === cand + "q");
+    if (match) {
+      selectedSquare = null;
+      await playHumanMoveAndAutoReply(match);
+      return;
+    }
+  }
+  lastRenderedBoardSig = "";
+  if (lastBoardState) renderBoard(lastBoardState);
+});
+
 async function onSquareClick(sqName) {
-  if (selectedSquare) {
+  if (suppressNextSquareClick) {
+    suppressNextSquareClick = false;
+    return;
+  }
+  if (selectedSquare && selectedSquare !== sqName) {
     const cand = selectedSquare + sqName;
     const match = currentLegalMovesUci.find(m => m === cand || m === cand + "q");
     if (match) {
@@ -1283,7 +1416,7 @@ async function onSquareClick(sqName) {
   const hasMoves = currentLegalMovesUci.some(m => m.startsWith(sqName));
   selectedSquare = hasMoves ? sqName : null;
   lastRenderedBoardSig = "";
-  pollState();
+  if (lastBoardState) renderBoard(lastBoardState);
 }
 
 function renderColorBars(posture) {
