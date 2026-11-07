@@ -259,6 +259,59 @@ def validate_pytorch_hf_model_source(hf_model_id_or_path: str | Path) -> str:
     return raw_str
 
 
+@dataclass
+class _PersistentTurnStreamState:
+    """Persistent KV-cache & embedding stream state across Clause 1, `<|subliminal_gap|>`, and multi-sentence chaining."""
+
+    cur_embeds: Tensor
+    cur_mask: Tensor
+    pending_step_embeds: Tensor | None = None
+    past_kv: Any = None
+
+
+def _append_pending_embeds(state: _PersistentTurnStreamState, new_embeds: Tensor) -> None:
+    """Queue newly accepted token or virtual-gap embeddings `[1, K, H]` for the next forward step."""
+    if new_embeds.size(1) == 0:
+        return
+    if state.pending_step_embeds is None:
+        state.pending_step_embeds = new_embeds
+    else:
+        state.pending_step_embeds = torch.cat([state.pending_step_embeds, new_embeds], dim=1)
+
+
+def _crop_stream_state(
+    state: _PersistentTurnStreamState,
+    target_cached_len: int,
+    restored_pending: Tensor | None,
+) -> None:
+    """Rewind `state` to `target_cached_len` cached positions when post-processing trims or normalizes tokens."""
+    state.cur_embeds = state.cur_embeds[:, :target_cached_len, :]
+    state.cur_mask = state.cur_mask[:, :target_cached_len]
+    if state.past_kv is not None:
+        if target_cached_len <= 0:
+            state.past_kv = None
+        elif hasattr(state.past_kv, "crop"):
+            try:
+                state.past_kv.crop(target_cached_len)
+            except Exception:
+                state.past_kv = None
+        elif isinstance(state.past_kv, tuple):
+            try:
+                state.past_kv = tuple(
+                    (
+                        layer_kv[0][..., :target_cached_len, :],
+                        layer_kv[1][..., :target_cached_len, :],
+                    )
+                    + tuple(layer_kv[2:])
+                    for layer_kv in state.past_kv
+                )
+            except Exception:
+                state.past_kv = None
+        else:
+            state.past_kv = None
+    state.pending_step_embeds = restored_pending
+
+
 class SubliminalGapLeftBrain:
     """PyTorch Left Brain (CausalLM + LoRA + `SubliminalGapProjector`) steered strictly via `<|subliminal_gap|>`."""
 
@@ -454,6 +507,70 @@ class SubliminalGapLeftBrain:
             )
         return out.logits[0, -1, :].clone(), getattr(out, "past_key_values", None)
 
+    def _encode_continuation_embeds(self, text: str) -> Tensor:
+        """Encode continuation text (`' ' + text.strip()`) without duplicate BOS tokens and return `[1, K, H]` embeddings."""
+        embed_layer = self.model.get_input_embeddings()
+        embed_dtype = next(embed_layer.parameters()).dtype
+        hidden_size = int(embed_layer.weight.shape[1])
+        cleaned = text.strip()
+        if not cleaned:
+            return torch.empty((1, 0, hidden_size), dtype=embed_dtype, device=self.device)
+        tok_ids = self.tokenizer.encode(" " + cleaned, add_special_tokens=False)
+        if not tok_ids:
+            tok_ids = self.tokenizer.encode(cleaned, add_special_tokens=False)
+        if not tok_ids:
+            return torch.empty((1, 0, hidden_size), dtype=embed_dtype, device=self.device)
+        num_emb = int(embed_layer.weight.shape[0])
+        safe_ids = [int(t) if 0 <= int(t) < num_emb else 0 for t in tok_ids]
+        id_tensor = torch.tensor([safe_ids], dtype=torch.long, device=self.device)
+        return embed_layer(id_tensor).to(dtype=embed_dtype)
+
+    def _init_turn_stream_state(
+        self,
+        base_prompt: str,
+        *,
+        prior_assistant_text: str = "",
+    ) -> _PersistentTurnStreamState | None:
+        """Initialize a persistent KV-cache stream state by encoding `base_prompt` once at turn start."""
+        prior_clean = prior_assistant_text.strip()
+        full_prompt = f"{base_prompt} {prior_clean}" if prior_clean else base_prompt
+        prompt_ids = self.tokenizer.encode(full_prompt, add_special_tokens=True)
+        if not prompt_ids:
+            return None
+        embed_layer = self.model.get_input_embeddings()
+        embed_dtype = next(embed_layer.parameters()).dtype
+        cur_ids = torch.tensor([prompt_ids], dtype=torch.long, device=self.device)
+        prompt_embeds = embed_layer(cur_ids).to(dtype=embed_dtype)
+        return _PersistentTurnStreamState(
+            cur_embeds=prompt_embeds[:, :0, :],
+            cur_mask=torch.ones((1, 0), dtype=torch.long, device=self.device),
+            pending_step_embeds=prompt_embeds,
+            past_kv=None,
+        )
+
+    def _step_stream_state(self, state: _PersistentTurnStreamState) -> Tensor:
+        """Advance `state` by consuming `state.pending_step_embeds` and updating `state.past_kv`."""
+        step_embeds = state.pending_step_embeds
+        if step_embeds is None or step_embeds.size(1) == 0:
+            step_embeds = state.cur_embeds[:, -1:, :]
+        else:
+            state.cur_embeds = torch.cat([state.cur_embeds, step_embeds], dim=1)
+            state.cur_mask = torch.cat(
+                [
+                    state.cur_mask,
+                    torch.ones((1, step_embeds.size(1)), dtype=torch.long, device=self.device),
+                ],
+                dim=1,
+            )
+            state.pending_step_embeds = None
+        next_logits, state.past_kv = self._forward_step_with_optional_kv_cache(
+            cur_embeds=state.cur_embeds,
+            step_embeds=step_embeds,
+            cur_mask=state.cur_mask,
+            past_key_values=state.past_kv,
+        )
+        return next_logits
+
     @torch.no_grad()
     def generate_clause_1_prefix(
         self,
@@ -463,45 +580,46 @@ class SubliminalGapLeftBrain:
         prior_assistant_text: str = "",
         conversation_history: Sequence[tuple[str, str]] = (),
         max_context_chars: int = DEFAULT_MAX_CONTEXT_CHARS,
+        _stream_state: _PersistentTurnStreamState | None = None,
     ) -> str:
         """Step 2a: Generate Clause 1 from `"User: {scenario_text}\\nAssistant:"` and stop at the first comma."""
         if clause_1_override is not None and clause_1_override.strip():
-            return normalize_clause_1_prefix(clause_1_override)
+            norm_override = normalize_clause_1_prefix(clause_1_override)
+            if _stream_state is not None:
+                _append_pending_embeds(_stream_state, self._encode_continuation_embeds(norm_override))
+            return norm_override
 
+        owns_stream = _stream_state is None
         was_training = self.model.training
         self.model.eval()
-        past_kv: Any = None
+        state = _stream_state
         try:
-            history_prefix = format_sliding_conversation_history(
-                conversation_history,
-                max_context_chars=max_context_chars,
-            )
-            history_block = f"{history_prefix}\n" if history_prefix else ""
-            prior_clean = prior_assistant_text.strip()
-            prior_suffix = f" {prior_clean}" if prior_clean else ""
-            prompt = f"{history_block}User: {scenario_text.strip()}\nAssistant:{prior_suffix}"
-            prompt_ids = self.tokenizer.encode(prompt, add_special_tokens=True)
-            if not prompt_ids:
-                return "Weighing the situation before us,"
+            if state is None:
+                history_prefix = format_sliding_conversation_history(
+                    conversation_history,
+                    max_context_chars=max_context_chars,
+                )
+                history_block = f"{history_prefix}\n" if history_prefix else ""
+                base_prompt = f"{history_block}User: {scenario_text.strip()}\nAssistant:"
+                state = self._init_turn_stream_state(
+                    base_prompt,
+                    prior_assistant_text=prior_assistant_text,
+                )
+                if state is None:
+                    return "Weighing the situation before us,"
+
+            c1_start_cached_len = int(state.cur_embeds.size(1))
 
             embed_layer = self.model.get_input_embeddings()
             embed_dtype = next(embed_layer.parameters()).dtype
-            cur_ids = torch.tensor([prompt_ids], dtype=torch.long, device=self.device)
-            cur_embeds = embed_layer(cur_ids).to(dtype=embed_dtype)
-            cur_mask = torch.ones((1, cur_embeds.size(1)), dtype=torch.long, device=self.device)
-
             eos_id = getattr(self.tokenizer, "eos_token_id", None)
             suppressed_ids = self._suppressed_token_ids()
             generated_ids: list[int] = []
-            step_embeds = cur_embeds
 
             for step_idx in range(self.max_clause_1_tokens):
-                next_logits, past_kv = self._forward_step_with_optional_kv_cache(
-                    cur_embeds=cur_embeds,
-                    step_embeds=step_embeds,
-                    cur_mask=cur_mask,
-                    past_key_values=past_kv,
-                )
+                next_logits = self._step_stream_state(state)
+                if step_idx == 0:
+                    c1_start_cached_len = int(state.cur_embeds.size(1))
                 for bad_id in suppressed_ids:
                     if 0 <= bad_id < next_logits.size(0):
                         next_logits[bad_id] = -1e9
@@ -512,26 +630,26 @@ class SubliminalGapLeftBrain:
                 if eos_id is not None and next_id == int(eos_id):
                     break
                 generated_ids.append(next_id)
+                next_tok_tensor = torch.tensor([[next_id]], dtype=torch.long, device=self.device)
+                next_embed = embed_layer(next_tok_tensor).to(dtype=embed_dtype)
+                _append_pending_embeds(state, next_embed)
 
                 decoded_so_far = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
                 # Stop as soon as a comma or semicolon appears after at least 3 generated tokens
                 if step_idx >= 2 and ("," in decoded_so_far or ";" in decoded_so_far):
                     break
 
-                next_tok_tensor = torch.tensor([[next_id]], dtype=torch.long, device=self.device)
-                next_embed = embed_layer(next_tok_tensor).to(dtype=embed_dtype)
-                step_embeds = next_embed
-                if past_kv is None:
-                    cur_embeds = torch.cat([cur_embeds, next_embed], dim=1)
-                cur_mask = torch.cat(
-                    [cur_mask, torch.ones((1, 1), dtype=torch.long, device=self.device)],
-                    dim=1,
-                )
-
             raw_clause_1 = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
-            return normalize_clause_1_prefix(raw_clause_1)
+            norm_clause_1 = normalize_clause_1_prefix(raw_clause_1)
+            if not owns_stream:
+                raw_compact = " ".join(raw_clause_1.replace("\n", " ").split()).strip()
+                if raw_compact != norm_clause_1:
+                    _crop_stream_state(state, c1_start_cached_len, None)
+                    _append_pending_embeds(state, self._encode_continuation_embeds(norm_clause_1))
+            return norm_clause_1
         finally:
-            past_kv = None
+            if owns_stream and state is not None:
+                state.past_kv = None
             if was_training:
                 self.model.train()
 
@@ -552,14 +670,17 @@ class SubliminalGapLeftBrain:
         ]
         | None = None,
         lead_with_gap: bool = False,
+        _stream_state: _PersistentTurnStreamState | None = None,
     ) -> SplicedThoughtTrace:
         """Step 2a-2c: Generate Clause 1 (or lead directly with `<|subliminal_gap|>`), splice 52-float `chord`, and generate continuation."""
         if chord is None and chord_builder_at_comma is None:
             raise ValueError("Either chord or chord_builder_at_comma must be provided")
+        owns_stream = _stream_state is None
         was_model_training = self.model.training
         was_proj_training = self.projector.training
         self.model.eval()
         self.projector.eval()
+        state = _stream_state
         try:
             history_prefix = format_sliding_conversation_history(
                 conversation_history,
@@ -567,6 +688,13 @@ class SubliminalGapLeftBrain:
             )
             history_block = f"{history_prefix}\n" if history_prefix else ""
             prior_clean = prior_assistant_text.strip()
+            base_prompt = f"{history_block}User: {scenario_text.strip()}\nAssistant:"
+            if state is None:
+                state = self._init_turn_stream_state(
+                    base_prompt,
+                    prior_assistant_text=prior_clean,
+                )
+
             if lead_with_gap and not (clause_1_prefix is not None and clause_1_prefix.strip()):
                 prefix = ""
             else:
@@ -576,6 +704,7 @@ class SubliminalGapLeftBrain:
                     prior_assistant_text=prior_clean,
                     conversation_history=conversation_history,
                     max_context_chars=max_context_chars,
+                    _stream_state=state,
                 )
             comma_vibe_posture: str | None = None
             comma_dissonance_notes: tuple[str, ...] = ()
@@ -604,43 +733,35 @@ class SubliminalGapLeftBrain:
                 )
             assert_zero_stage_directions_in_prompt(prompt_before_gap)
 
-            pre_ids_list = self.tokenizer.encode(prompt_before_gap, add_special_tokens=True)
-            if int(self.gap_token_id) not in pre_ids_list:
-                pre_ids_list.append(int(self.gap_token_id))
-            pre_ids = torch.tensor([pre_ids_list], dtype=torch.long, device=self.device)
-            pre_mask = torch.ones_like(pre_ids)
-
             embed_layer = self.model.get_input_embeddings()
             embed_dtype = next(embed_layer.parameters()).dtype
-            chord_batch = active_chord.to_tensor(device=self.device, dtype=torch.float32).unsqueeze(0)
+            proj_param = next(self.projector.parameters(), None)
+            proj_dtype = proj_param.dtype if proj_param is not None else torch.float32
+            chord_batch = active_chord.to_tensor(device=self.device, dtype=proj_dtype).unsqueeze(0)
+            gap_embeds = self.projector(chord_batch).to(dtype=embed_dtype)  # [1, 4, hidden_size]
 
-            spliced = splice_subliminal_gaps_into_embeds(
-                pre_ids,
-                embed_layer,
-                self.projector,
-                chord_batch,
-                gap_token_id=self.gap_token_id,
-                attention_mask=pre_mask,
-                labels=None,
-            )
-            cur_embeds = spliced.inputs_embeds.to(dtype=embed_dtype)
-            cur_mask = spliced.attention_mask
+            if state is None:
+                state = _PersistentTurnStreamState(
+                    cur_embeds=gap_embeds[:, :0, :],
+                    cur_mask=torch.ones((1, 0), dtype=torch.long, device=self.device),
+                    pending_step_embeds=gap_embeds,
+                    past_kv=None,
+                )
+            else:
+                _append_pending_embeds(state, gap_embeds)
+
+            post_gap_start_cached_len = int(state.cur_embeds.size(1))
 
             eos_id = getattr(self.tokenizer, "eos_token_id", None)
             suppressed_ids = self._suppressed_token_ids()
             generated_ids: list[int] = []
-            step_embeds = cur_embeds
-            past_kv: Any = None
             vocab_len = len(self.tokenizer) if hasattr(self.tokenizer, "__len__") else 0
             gen_counts: dict[int, int] = {}
 
             for step_idx in range(self.max_post_gap_tokens):
-                next_logits, past_kv = self._forward_step_with_optional_kv_cache(
-                    cur_embeds=cur_embeds,
-                    step_embeds=step_embeds,
-                    cur_mask=cur_mask,
-                    past_key_values=past_kv,
-                )
+                next_logits = self._step_stream_state(state)
+                if step_idx == 0:
+                    post_gap_start_cached_len = int(state.cur_embeds.size(1))
                 for bad_id in suppressed_ids:
                     if 0 <= bad_id < next_logits.size(0):
                         next_logits[bad_id] = -1e9
@@ -660,6 +781,9 @@ class SubliminalGapLeftBrain:
                     break
                 generated_ids.append(next_id)
                 gen_counts[next_id] = gen_counts.get(next_id, 0) + 1
+                next_tok_tensor = torch.tensor([[next_id]], dtype=torch.long, device=self.device)
+                next_embed = embed_layer(next_tok_tensor).to(dtype=embed_dtype)
+                _append_pending_embeds(state, next_embed)
 
                 decoded_cont = self.tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
                 if (
@@ -669,22 +793,18 @@ class SubliminalGapLeftBrain:
                 ):
                     break
 
-                next_tok_tensor = torch.tensor([[next_id]], dtype=torch.long, device=self.device)
-                next_embed = embed_layer(next_tok_tensor).to(dtype=embed_dtype)
-                step_embeds = next_embed
-                if past_kv is None:
-                    cur_embeds = torch.cat([cur_embeds, next_embed], dim=1)
-                cur_mask = torch.cat(
-                    [cur_mask, torch.ones((1, 1), dtype=torch.long, device=self.device)],
-                    dim=1,
-                )
-
             raw_post_gap = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
             post_gap_text = clean_post_gap_continuation(raw_post_gap)
             if not prefix and post_gap_text:
                 post_gap_text = post_gap_text.lstrip(",;:-–— ").strip()
                 if post_gap_text and post_gap_text[0].islower():
                     post_gap_text = post_gap_text[0].upper() + post_gap_text[1:]
+
+            if not owns_stream and state is not None:
+                raw_post_compact = " ".join(raw_post_gap.replace("\n", " ").split()).strip()
+                if raw_post_compact != post_gap_text:
+                    _crop_stream_state(state, post_gap_start_cached_len, None)
+                    _append_pending_embeds(state, self._encode_continuation_embeds(post_gap_text))
 
             full_thought = f"{prefix} {post_gap_text}".strip()
             trace = SplicedThoughtTrace(
@@ -703,13 +823,15 @@ class SubliminalGapLeftBrain:
                 del self.last_traces[:-50]
             return trace
         finally:
-            past_kv = None
-            if self.device.type == "cuda" and torch.cuda.is_available():
-                try:
-                    if torch.cuda.memory_reserved(self.device) > 11 * (1024**3):
-                        torch.cuda.empty_cache()
-                except Exception:
-                    pass
+            if owns_stream:
+                if state is not None:
+                    state.past_kv = None
+                if self.device.type == "cuda" and torch.cuda.is_available():
+                    try:
+                        if torch.cuda.memory_reserved(self.device) > 11 * (1024**3):
+                            torch.cuda.empty_cache()
+                    except Exception:
+                        pass
             if was_model_training:
                 self.model.train()
             if was_proj_training:
@@ -783,51 +905,69 @@ class SubliminalGapLeftBrain:
         stop_condition: Callable[[int, SplicedThoughtTrace, str], bool] | None = None,
         lead_with_gap: bool = False,
     ) -> tuple[str, tuple[SplicedThoughtTrace, ...]]:
-        """Chain up to `num_sentences` (`1..6`) `<|subliminal_gap|>` sentences into a continuous passage."""
+        """Chain up to `num_sentences` (`1..6`) `<|subliminal_gap|>` sentences into a continuous passage with a single persistent KV-cache."""
         count = int(num_sentences)
         if not (1 <= count <= 6):
             raise ValueError(f"num_sentences must be in [1, 6], got {num_sentences!r}")
+        history_prefix = format_sliding_conversation_history(
+            conversation_history,
+            max_context_chars=max_context_chars,
+        )
+        history_block = f"{history_prefix}\n" if history_prefix else ""
+        base_prompt = f"{history_block}User: {scenario_text.strip()}\nAssistant:"
+        stream_state = self._init_turn_stream_state(base_prompt)
         completed_sentences: list[str] = []
         traces: list[SplicedThoughtTrace] = []
-        for sent_idx in range(count):
-            prior_text = " ".join(completed_sentences).strip()
-            override_c1: str | None = None
-            if clause_1_overrides is not None and sent_idx < len(clause_1_overrides):
-                override_c1 = clause_1_overrides[sent_idx]
-            elif sent_idx == 0:
-                override_c1 = clause_1_prefix
-            trace = self.generate_two_clause_thought(
-                scenario_text,
-                chord=chord,
-                pass_index=pass_index,
-                clause_1_prefix=override_c1,
-                prior_assistant_text=prior_text,
-                conversation_history=conversation_history,
-                max_context_chars=max_context_chars,
-                chord_builder_at_comma=chord_builder_at_comma,
-                lead_with_gap=lead_with_gap,
-            )
-            vocab_len = len(self.tokenizer) if hasattr(self.tokenizer, "__len__") else 0
-            if vocab_len > 1000 and completed_sentences:
-                cand_words = set(re.findall(r"[a-z0-9]+", trace.full_thought.lower()))
-                is_dup = False
-                for prev in completed_sentences:
-                    if trace.full_thought.strip().lower() == prev.strip().lower():
-                        is_dup = True
-                        break
-                    prev_words = set(re.findall(r"[a-z0-9]+", prev.lower()))
-                    if cand_words and prev_words:
-                        overlap = len(cand_words & prev_words) / max(1, min(len(cand_words), len(prev_words)))
-                        if overlap >= 0.72:
+        try:
+            for sent_idx in range(count):
+                prior_text = " ".join(completed_sentences).strip()
+                override_c1: str | None = None
+                if clause_1_overrides is not None and sent_idx < len(clause_1_overrides):
+                    override_c1 = clause_1_overrides[sent_idx]
+                elif sent_idx == 0:
+                    override_c1 = clause_1_prefix
+                trace = self.generate_two_clause_thought(
+                    scenario_text,
+                    chord=chord,
+                    pass_index=pass_index,
+                    clause_1_prefix=override_c1,
+                    prior_assistant_text=prior_text,
+                    conversation_history=conversation_history,
+                    max_context_chars=max_context_chars,
+                    chord_builder_at_comma=chord_builder_at_comma,
+                    lead_with_gap=lead_with_gap,
+                    _stream_state=stream_state,
+                )
+                vocab_len = len(self.tokenizer) if hasattr(self.tokenizer, "__len__") else 0
+                if vocab_len > 1000 and completed_sentences:
+                    cand_words = set(re.findall(r"[a-z0-9]+", trace.full_thought.lower()))
+                    is_dup = False
+                    for prev in completed_sentences:
+                        if trace.full_thought.strip().lower() == prev.strip().lower():
                             is_dup = True
                             break
-                if is_dup:
+                        prev_words = set(re.findall(r"[a-z0-9]+", prev.lower()))
+                        if cand_words and prev_words:
+                            overlap = len(cand_words & prev_words) / max(1, min(len(cand_words), len(prev_words)))
+                            if overlap >= 0.72:
+                                is_dup = True
+                                break
+                    if is_dup:
+                        break
+                completed_sentences.append(trace.full_thought)
+                traces.append(trace)
+                if stop_condition is not None and stop_condition(len(traces), trace, " ".join(completed_sentences).strip()):
                     break
-            completed_sentences.append(trace.full_thought)
-            traces.append(trace)
-            if stop_condition is not None and stop_condition(len(traces), trace, " ".join(completed_sentences).strip()):
-                break
-        return " ".join(completed_sentences).strip(), tuple(traces)
+            return " ".join(completed_sentences).strip(), tuple(traces)
+        finally:
+            if stream_state is not None:
+                stream_state.past_kv = None
+            if self.device.type == "cuda" and torch.cuda.is_available():
+                try:
+                    if torch.cuda.memory_reserved(self.device) > 11 * (1024**3):
+                        torch.cuda.empty_cache()
+                except Exception:
+                    pass
 
 
 @dataclass(frozen=True)

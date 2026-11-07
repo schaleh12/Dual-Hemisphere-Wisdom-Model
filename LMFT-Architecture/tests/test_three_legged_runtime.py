@@ -561,3 +561,120 @@ def test_mid_sentence_comma_scoring_catches_bad_start_and_injects_dissonance_int
     assert any(abs(v) > 0.01 for v in trace.spliced_chord.thinker_vector[8:16])
 
 
+
+def test_persistent_past_kv_cache_across_clauses_and_sentences() -> None:
+    """Verify `SubliminalGapLeftBrain` prefills the prompt once and keeps `past_kv` alive across clauses and sentences."""
+    torch.manual_seed(17)
+    tok = _WordLevelTestTokenizer()
+    gap_id = ensure_subliminal_gap_token(tok)
+    for w in (
+        "User:",
+        "Assistant:",
+        "Reading",
+        "the",
+        "board,",
+        "we",
+        "develop",
+        "calmly",
+        "and",
+        "castle",
+        "early.",
+    ):
+        tok.encode(w)
+
+    class _KVCacheTrackingCausalLM(torch.nn.Module):
+        def __init__(self, base: _MiniCausalLM) -> None:
+            super().__init__()
+            self.base = base
+            self.step_embed_lengths: list[int] = []
+            self.past_kv_present_flags: list[bool] = []
+
+        def get_input_embeddings(self) -> torch.nn.Module:
+            return self.base.get_input_embeddings()
+
+        def forward(
+            self,
+            inputs_embeds: torch.Tensor,
+            attention_mask: torch.Tensor | None = None,
+            past_key_values: tuple[tuple[torch.Tensor, torch.Tensor], ...] | None = None,
+            use_cache: bool = False,
+            **kwargs,
+        ):
+            self.step_embed_lengths.append(int(inputs_embeds.size(1)))
+            self.past_kv_present_flags.append(past_key_values is not None)
+            if past_key_values is not None:
+                prev_embeds = past_key_values[0][0]
+                full_embeds = torch.cat([prev_embeds, inputs_embeds], dim=1)
+            else:
+                full_embeds = inputs_embeds
+            out = self.base(full_embeds, attention_mask=attention_mask, use_cache=use_cache)
+            out.past_key_values = ((full_embeds, full_embeds),)
+            return out
+
+    history = (
+        ("How should we open the game?", "We control the center and protect the King."),
+        ("What about the dark-squared bishop?", "We fianchetto or develop it before locking the pawn chain."),
+    )
+    for u_txt, a_txt in history:
+        tok.encode(u_txt)
+        tok.encode(a_txt)
+    tok.encode("The center is tense after Move 8.")
+
+    import copy
+
+    base_model = _MiniCausalLM(vocab_size=128, hidden_size=32, num_layers=2)
+    kv_model = _KVCacheTrackingCausalLM(base_model)
+    projector = SubliminalGapProjector(hidden_size=32)
+    chord_a, _ = compile_chess_posture_chords(
+        queen_volition=0.75,
+        king_safety=0.80,
+        bishop_alignment=0.70,
+        knight_disruption=0.45,
+        pawn_chain_flow=0.78,
+        rook_bastion=0.76,
+    )
+    lb_kv = SubliminalGapLeftBrain(
+        kv_model,
+        copy.deepcopy(tok),
+        projector,
+        gap_token_id=gap_id,
+        device="cpu",
+        max_clause_1_tokens=5,
+        max_post_gap_tokens=7,
+    )
+    lb_nokv = SubliminalGapLeftBrain(
+        base_model,
+        copy.deepcopy(tok),
+        projector,
+        gap_token_id=gap_id,
+        device="cpu",
+        max_clause_1_tokens=5,
+        max_post_gap_tokens=7,
+    )
+
+    passage_kv, traces_kv = lb_kv.generate_multi_sentence_script(
+        "The center is tense after Move 8.",
+        chord=chord_a,
+        num_sentences=3,
+        clause_1_overrides=("Reading the board,", "Reading the board,", "Reading the board,"),
+        conversation_history=history,
+        lead_with_gap=False,
+    )
+    passage_nokv, traces_nokv = lb_nokv.generate_multi_sentence_script(
+        "The center is tense after Move 8.",
+        chord=chord_a,
+        num_sentences=3,
+        clause_1_overrides=("Reading the board,", "Reading the board,", "Reading the board,"),
+        conversation_history=history,
+        lead_with_gap=False,
+    )
+
+    assert len(traces_kv) == 3
+    assert passage_kv == passage_nokv
+    # Step 0 prefills the full conversation history + prompt (> 20 tokens) with past_kv=None;
+    # EVERY subsequent forward step across all 3 sentences (Clause 1, <|subliminal_gap|>, and Clause 2)
+    # reuses past_kv (`past_kv_present_flags[1:]` all True) and feeds only the incremental delta!
+    assert kv_model.past_kv_present_flags[0] is False
+    assert kv_model.step_embed_lengths[0] >= 20
+    assert all(flag is True for flag in kv_model.past_kv_present_flags[1:])
+    assert all(length <= 16 for length in kv_model.step_embed_lengths[1:])
