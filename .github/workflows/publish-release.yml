@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - "RELEASE_NOTES.md"
+      - "LMFT-Installer-Wizard.exe"
       - "LMFT-Training/dist/release_manifest.json"
       - "LMFT-Training/dist/lmft-sanctuary-club-v0.1.0-win64.zip"
       - ".github/workflows/publish-release.yml"

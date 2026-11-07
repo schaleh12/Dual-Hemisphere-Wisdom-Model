@@ -3,6 +3,9 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.IO.Compression;
+using System.Net;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
@@ -60,7 +63,27 @@ internal sealed class InstallerWizardForm : Form
 
     public InstallerWizardForm()
     {
-        baseDir = AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\', '/');
+        ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072; // TLS 1.2
+        string exeDir = AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\', '/');
+        bool isExistingRepoOrBundle =
+            Directory.Exists(Path.Combine(exeDir, "LMFT-Architecture")) ||
+            File.Exists(Path.Combine(exeDir, "LMFT-Chess.exe")) ||
+            File.Exists(Path.Combine(exeDir, "src", "lmft_architecture", "chess_app.py"));
+
+        if (isExistingRepoOrBundle)
+        {
+            baseDir = exeDir;
+        }
+        else
+        {
+            baseDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "Programs",
+                "Celestriad-1.0"
+            );
+            try { Directory.CreateDirectory(baseDir); } catch { }
+        }
+
         archDir = Directory.Exists(Path.Combine(baseDir, "LMFT-Architecture"))
             ? Path.Combine(baseDir, "LMFT-Architecture")
             : baseDir;
@@ -68,6 +91,7 @@ internal sealed class InstallerWizardForm : Form
             ? Path.Combine(baseDir, "LMFT-Training")
             : baseDir;
         assetsDir = Path.Combine(archDir, "docs", "assets");
+        ExtractEmbeddedAssetsIfNeeded();
 
         Text = "Celestriad 1.0 — LMFT-Architecture Setup & Hardware Wizard";
         Size = new Size(860, 620);
@@ -110,7 +134,7 @@ internal sealed class InstallerWizardForm : Form
             SizeMode = PictureBoxSizeMode.Zoom,
         };
         string spiritJpg = Path.Combine(assetsDir, "celestriad_spirit_particle.jpg");
-        picLogo.Image = LoadImageUnlocked(spiritJpg);
+        picLogo.Image = LoadImageUnlocked(spiritJpg, "celestriad_spirit_particle.jpg");
         topBar.Controls.Add(picLogo);
 
         Label lblTitle = new Label
@@ -419,7 +443,7 @@ internal sealed class InstallerWizardForm : Form
             BorderStyle = BorderStyle.FixedSingle,
         };
         string blueScreenJpg = Path.Combine(assetsDir, "blue_screen_of_life_poem.jpg");
-        picPoem.Image = LoadImageUnlocked(blueScreenJpg);
+        picPoem.Image = LoadImageUnlocked(blueScreenJpg, "blue_screen_of_life_poem.jpg");
         p.Controls.Add(picPoem);
 
         Label lblInfo = new Label
@@ -507,7 +531,7 @@ internal sealed class InstallerWizardForm : Form
             BorderStyle = BorderStyle.FixedSingle,
         };
         string areciboJpg = Path.Combine(assetsDir, "arecibo_desktop_icon.jpg");
-        picArecibo.Image = LoadImageUnlocked(areciboJpg);
+        picArecibo.Image = LoadImageUnlocked(areciboJpg, "arecibo_desktop_icon.jpg");
         iconCard.Controls.Add(picArecibo);
 
         Label lblArecibo = new Label
@@ -528,7 +552,7 @@ internal sealed class InstallerWizardForm : Form
             BorderStyle = BorderStyle.FixedSingle,
         };
         string spiritJpg = Path.Combine(assetsDir, "celestriad_spirit_particle.jpg");
-        picSpirit.Image = LoadImageUnlocked(spiritJpg);
+        picSpirit.Image = LoadImageUnlocked(spiritJpg, "celestriad_spirit_particle.jpg");
         iconCard.Controls.Add(picSpirit);
 
         Label lblSpirit = new Label
@@ -717,8 +741,145 @@ internal sealed class InstallerWizardForm : Form
         return null;
     }
 
+    private void ExtractEmbeddedAssetsIfNeeded()
+    {
+        try
+        {
+            Directory.CreateDirectory(assetsDir);
+            string[] embeddedNames = new string[]
+            {
+                "arecibo_desktop_icon.ico",
+                "arecibo_desktop_icon.jpg",
+                "celestriad_spirit_particle.ico",
+                "celestriad_spirit_particle.jpg",
+                "blue_screen_of_life_poem.jpg",
+            };
+            Assembly asm = Assembly.GetExecutingAssembly();
+            foreach (string name in embeddedNames)
+            {
+                string dest = Path.Combine(assetsDir, name);
+                if (!File.Exists(dest))
+                {
+                    using (Stream s = asm.GetManifestResourceStream(name))
+                    {
+                        if (s != null)
+                        {
+                            using (FileStream fs = new FileStream(dest, FileMode.Create, FileAccess.Write))
+                            {
+                                s.CopyTo(fs);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        catch { }
+    }
+
+    private void BootstrapStandaloneBundleIfNeeded()
+    {
+        try { ServicePointManager.SecurityProtocol |= (SecurityProtocolType)3072; } catch { }
+        string birthPy = Path.Combine(archDir, "src", "lmft_architecture", "birth.py");
+        string pyprojectToml = Path.Combine(archDir, "pyproject.toml");
+        string bridgesFile = Path.Combine(trainDir, "models", "right_brain_bridges", "doer_will_cultural", "model.safetensors");
+        string qwenProjFile = Path.Combine(trainDir, "models", "left_brain_qwen3_8b", "projector_weights.pt");
+
+        using (WebClient wc = new WebClient())
+        {
+            wc.Headers.Add("User-Agent", "Celestriad-Standalone-Installer/0.2.0");
+            if (!File.Exists(birthPy) || !File.Exists(Path.Combine(baseDir, "LMFT-Chess.exe")))
+            {
+                txtPage2Log.AppendText("\r\n[Standalone Mode] Downloading Celestriad 1.0 release bundle from GitHub...\r\n");
+                Application.DoEvents();
+                string zipUrl = "https://github.com/schaleh12/Dual-Hemisphere-Wisdom-Model/releases/download/v0.2.0/lmft-sanctuary-club-v0.1.0-win64.zip";
+                string tmpZip = Path.Combine(baseDir, "celestriad_release_bundle.zip");
+                try
+                {
+                    Directory.CreateDirectory(baseDir);
+                    wc.DownloadFile(zipUrl, tmpZip);
+                    using (ZipArchive archive = ZipFile.OpenRead(tmpZip))
+                    {
+                        foreach (ZipArchiveEntry entry in archive.Entries)
+                        {
+                            if (string.IsNullOrEmpty(entry.Name)) continue;
+                            string fullDest = Path.Combine(baseDir, entry.FullName.Replace('/', '\\'));
+                            string parent = Path.GetDirectoryName(fullDest);
+                            if (!string.IsNullOrEmpty(parent)) Directory.CreateDirectory(parent);
+                            entry.ExtractToFile(fullDest, true);
+                        }
+                    }
+                    try { File.Delete(tmpZip); } catch { }
+                    txtPage2Log.AppendText("✅ Extracted Celestriad 1.0 core bundle to: " + baseDir + "\r\n");
+                }
+                catch (Exception ex)
+                {
+                    txtPage2Log.AppendText("⚠️ Release bundle download notice: " + ex.Message + "\r\n");
+                }
+            }
+
+            if (!File.Exists(pyprojectToml))
+            {
+                try
+                {
+                    Directory.CreateDirectory(archDir);
+                    wc.DownloadFile("https://raw.githubusercontent.com/schaleh12/Dual-Hemisphere-Wisdom-Model/main/LMFT-Architecture/pyproject.toml", pyprojectToml);
+                }
+                catch { }
+            }
+
+            string rawBase = "https://raw.githubusercontent.com/schaleh12/Dual-Hemisphere-Wisdom-Model/main/LMFT-Training/";
+            string[] modelRelFiles = new string[]
+            {
+                "models/left_brain_qwen3_8b/corpus_callosum_meta.json",
+                "models/left_brain_qwen3_8b/lora_config.json",
+                "models/left_brain_qwen3_8b/projector_weights.pt",
+                "models/left_brain_qwen3_8b/lora_adapters.pt",
+                "models/right_brain_bridges/doer_will_cultural/bridge_metadata.json",
+                "models/right_brain_bridges/doer_will_cultural/config.json",
+                "models/right_brain_bridges/doer_will_cultural/tokenizer_config.json",
+                "models/right_brain_bridges/doer_will_cultural/tokenizer.json",
+                "models/right_brain_bridges/doer_will_cultural/model.safetensors",
+                "models/right_brain_bridges/feeler_contemplation_experiential/bridge_metadata.json",
+                "models/right_brain_bridges/feeler_contemplation_experiential/config.json",
+                "models/right_brain_bridges/feeler_contemplation_experiential/tokenizer_config.json",
+                "models/right_brain_bridges/feeler_contemplation_experiential/tokenizer.json",
+                "models/right_brain_bridges/feeler_contemplation_experiential/model.safetensors",
+                "models/right_brain_bridges/thinker_truth_philosophical/bridge_metadata.json",
+                "models/right_brain_bridges/thinker_truth_philosophical/config.json",
+                "models/right_brain_bridges/thinker_truth_philosophical/tokenizer_config.json",
+                "models/right_brain_bridges/thinker_truth_philosophical/tokenizer.json",
+                "models/right_brain_bridges/thinker_truth_philosophical/model.safetensors",
+            };
+
+            if (!File.Exists(bridgesFile) || !File.Exists(qwenProjFile))
+            {
+                txtPage2Log.AppendText("\r\nDownloading pre-trained Right-Brain MiniLM Bridges & Qwen3-8B Callosum weights...\r\n");
+                Application.DoEvents();
+                foreach (string rel in modelRelFiles)
+                {
+                    string localTarget = Path.Combine(trainDir, rel.Replace('/', '\\'));
+                    if (!File.Exists(localTarget))
+                    {
+                        try
+                        {
+                            string dir = Path.GetDirectoryName(localTarget);
+                            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+                            wc.DownloadFile(rawBase + rel, localTarget);
+                            Application.DoEvents();
+                        }
+                        catch { }
+                    }
+                }
+                txtPage2Log.AppendText("✅ Pre-trained neural bridge & Callosum checkpoints ready.\r\n");
+            }
+        }
+        ComputeLocalHashes();
+        RunInstallFolderIntegrityCheck();
+    }
+
     private void RunGithubSyncNow()
     {
+        BootstrapStandaloneBundleIfNeeded();
         string pyExe = FindPythonExe();
         if (pyExe == null)
         {
@@ -924,6 +1085,7 @@ internal sealed class InstallerWizardForm : Form
     {
         try
         {
+            BootstrapStandaloneBundleIfNeeded();
             string venvDir = Path.Combine(archDir, ".venv");
             string venvPy = Path.Combine(venvDir, "Scripts", "python.exe");
             string cmdChain =
@@ -950,6 +1112,7 @@ internal sealed class InstallerWizardForm : Form
     {
         try
         {
+            BootstrapStandaloneBundleIfNeeded();
             string desktopDir = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
             string shortcutPath = Path.Combine(desktopDir, "Celestriad 1.0 — LMFT Chess.lnk");
             string targetExe = Path.Combine(baseDir, "LMFT-Chess.exe");
@@ -988,6 +1151,7 @@ internal sealed class InstallerWizardForm : Form
 
     private void LaunchChessApp()
     {
+        BootstrapStandaloneBundleIfNeeded();
         string targetExe = Path.Combine(baseDir, "LMFT-Chess.exe");
         if (File.Exists(targetExe))
         {
@@ -1062,18 +1226,36 @@ internal sealed class InstallerWizardForm : Form
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GlobalMemoryStatusEx(ref MEMORYSTATUSEX lpBuffer);
 
-    private static Image LoadImageUnlocked(string path)
+    private static Image LoadImageUnlocked(string path, string embeddedName = null)
     {
-        if (!File.Exists(path)) return null;
-        try
+        if (File.Exists(path))
         {
-            byte[] bytes = File.ReadAllBytes(path);
-            return new Bitmap(new MemoryStream(bytes));
+            try
+            {
+                byte[] bytes = File.ReadAllBytes(path);
+                return new Bitmap(new MemoryStream(bytes));
+            }
+            catch { }
         }
-        catch
+        if (!string.IsNullOrEmpty(embeddedName))
         {
-            return null;
+            try
+            {
+                using (Stream s = Assembly.GetExecutingAssembly().GetManifestResourceStream(embeddedName))
+                {
+                    if (s != null)
+                    {
+                        using (MemoryStream ms = new MemoryStream())
+                        {
+                            s.CopyTo(ms);
+                            return new Bitmap(new MemoryStream(ms.ToArray()));
+                        }
+                    }
+                }
+            }
+            catch { }
         }
+        return null;
     }
 
     private static void OpenUrl(string url)

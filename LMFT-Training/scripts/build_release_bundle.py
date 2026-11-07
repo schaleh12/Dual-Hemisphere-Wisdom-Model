@@ -49,6 +49,7 @@ def build_release_zip(
         "LMFT-Installer-Wizard.exe",
         "LMFT-Chess.exe",
         "LMFT-Bloodmoon.exe",
+        "pyproject.toml",
         "README.md",
         "RELEASE_NOTES.md",
     ):
