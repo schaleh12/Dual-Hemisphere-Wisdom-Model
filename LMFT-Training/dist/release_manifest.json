@@ -2,8 +2,8 @@
   "schema_version": 1,
   "version": "0.2.0",
   "github_repo": "schaleh12/Dual-Hemisphere-Wisdom-Model",
-  "build_sha256": "a2287fa4289eefaf8dc44a2060f12f7c159164b872058519aeb09ab2e75457f6",
-  "build_short_hash": "a2287fa4289e",
+  "build_sha256": "44f04ec83b48db3bf9a3b1a1d1bbff5f6c1db9384d3f6ee58d9d2c1dd3c83c32",
+  "build_short_hash": "44f04ec83b48",
   "files": {
     "src/lmft_architecture/__init__.py": {
       "sha256": "a89f56c2195e87129adbffa5065d8769ea096e13ba98783d217c4d120ee92623",
@@ -90,16 +90,16 @@
       "size_bytes": 3267
     },
     "src/lmft_architecture/chess_app.py": {
-      "sha256": "afb0e52afa5b58e6bc4440e315446309be86f1a2dfdcae1c23828cadc99944f4",
-      "size_bytes": 168969
+      "sha256": "14819dff72910f9ef04962573e909f356daf046fd14f2aee8ab84973122d78ac",
+      "size_bytes": 169034
     },
     "src/lmft_architecture/chess_kibitz_bridge.py": {
       "sha256": "ffb2b20531ce54f583a2be442035c596948f06aa41a6765c40e72aea34606b3e",
       "size_bytes": 111189
     },
     "src/lmft_architecture/chess_ui.py": {
-      "sha256": "34302daf2a20a49c0bdecfdf668a2a262e08ead668a8d34d7bbf52a75db1be4f",
-      "size_bytes": 103754
+      "sha256": "972141f3c974970da22b8ef8a9176ea1b5bb9a029a28fa8f0147107dd8e45d79",
+      "size_bytes": 109147
     },
     "src/lmft_architecture/chord_memory.py": {
       "sha256": "6714d9c6cd9e0f7ae199e92a44f7371f168f65fb32319260d4b24d0ed1c54a66",
@@ -154,8 +154,8 @@
       "size_bytes": 23245
     },
     "src/lmft_architecture/github_auto_sync.py": {
-      "sha256": "8f61a61abf10801bd112cdd007c2a99049aba6041051b40ef8f8de13675921ea",
-      "size_bytes": 10636
+      "sha256": "e6d4f95a2a51c63a7b2c7385e6d3e59b114406af6efd90cfc2e7f6342016d123",
+      "size_bytes": 10687
     },
     "src/lmft_architecture/impish_bloodmoon_adapter.py": {
       "sha256": "4b311691626d4c0e2bc59877bcfde460ae8c382c02532ab31b09450bda943b86",
@@ -345,6 +345,10 @@
       "sha256": "b07921ca997ae19fa485a67f1e631ec73706ca8e01ae41d0012ad2502a56d1e8",
       "size_bytes": 228883
     },
+    "docs/assets/esper_theories_alphabet.jpg": {
+      "sha256": "b202f385a59fb8616c305848c8fcac11b09dba19326e1c9a91631c7049499bc7",
+      "size_bytes": 142126
+    },
     "outputs/rem_sleep_consolidated_ruleset.json": {
       "sha256": "57f4a7b0212d894332b039da067294ec5d0b7a06688eeaf0aca269040b242f94",
       "size_bytes": 21795
@@ -362,12 +366,12 @@
       "size_bytes": 1130
     },
     "outputs/branch_archives/cultural_history.json": {
-      "sha256": "dd58a6ae846264b102b6014df307906eb8723f7493d0c35a04527efe5ed5e0e5",
-      "size_bytes": 74661
+      "sha256": "67b407f31462df643d9539c867144e1c6f4493cc17163f43de47719e8dfa6679",
+      "size_bytes": 74573
     },
     "outputs/branch_archives/experiential_felt_diary.json": {
-      "sha256": "c3175dddcb3bbef402a2e3449a559e82ba54edc32b5b9c6736658a6b51b4b317",
-      "size_bytes": 34281
+      "sha256": "d7bfa60a4f417531a1be7ba944e81e5540ffc38a4715413a9e0a3b77482111bb",
+      "size_bytes": 34161
     },
     "outputs/branch_archives/philosophical_lexicon.json": {
       "sha256": "1f2665d57580da7b0780bc9d05bcff3ebe721f7e4b46f432b45a23ae165f2da3",

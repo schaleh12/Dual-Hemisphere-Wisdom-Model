@@ -1374,8 +1374,12 @@ def test_pure_python_installer_wizard_and_zero_unsigned_exes() -> None:
 
     assert "Google Antigravity" in prompt and "birth.py" in prompt
     assert "onSquarePointerDown" in CHESS_SINGLE_PAGE_HTML
+    assert "optimisticallySnapMoveInDom" in CHESS_SINGLE_PAGE_HTML
     assert "drag-piece-ghost" in CHESS_SINGLE_PAGE_HTML
     assert "Sf905k89AsY" in CHESS_SINGLE_PAGE_HTML
+    assert "poetry-portfolio-alias-schaleh-marcus-auron-YU73erI" in CHESS_SINGLE_PAGE_HTML
+    assert "esper_theories_alphabet.jpg" in CHESS_SINGLE_PAGE_HTML
+    assert (assets_dir / "esper_theories_alphabet.jpg").is_file()
     assert hasattr(ObjectiveCalibratedSparringEngine, "_popen_stockfish")
 
     sha_report = compute_core_sha256_report(base_dir, arch_dir, train_dir)

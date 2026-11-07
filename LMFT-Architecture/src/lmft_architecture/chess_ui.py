@@ -667,6 +667,16 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
         <div id="jukebox-yt-player"></div>
       </div>
     </div>
+
+    <!-- ARCHITECT'S POETRY PORTFOLIO & ESPER THEORIES LINKS UNDERNEATH JUKEBOX -->
+    <div style="display:flex;flex-direction:column;gap:5px;flex-shrink:0;">
+      <a href="https://imgur.com/gallery/poetry-portfolio-alias-schaleh-marcus-auron-YU73erI" target="_blank" rel="noopener" class="btn" style="display:flex;justify-content:center;align-items:center;gap:6px;padding:6px 10px;font-size:11.5px;font-weight:800;text-decoration:none;background:linear-gradient(135deg, rgba(168,85,247,0.22), rgba(56,189,248,0.18));border-color:#a855f7;color:#f3e8ff;">
+        📜 Poetry Portfolio (Schaleh / Marcus Auron on Imgur) ↗
+      </a>
+      <button class="btn" onclick="openEsperTheoriesModal()" style="display:flex;justify-content:center;align-items:center;gap:6px;padding:6px 10px;font-size:11.5px;font-weight:800;background:linear-gradient(135deg, rgba(56,189,248,0.22), rgba(234,179,8,0.18));border-color:#38bdf8;color:#e0f2fe;">
+        ✧ Esper Theories (Electro-Gravitational Alphabet of Espers)
+      </button>
+    </div>
   </section>
 
   <!-- CENTER COLUMN: The 2 Primary Buttons + Move Table + Chess.com Game Review Hub -->
@@ -950,6 +960,25 @@ Quaked like the terraforming of starseeds.</pre>
   </div>
 </div>
 
+<!-- ESPER THEORIES MODAL OVERLAY -->
+<div class="modal-overlay" id="esper-theories-modal-overlay" onclick="if(event.target===this)closeEsperTheoriesModal()">
+  <div class="modal-card" style="max-width:1120px;max-height:92vh;display:flex;flex-direction:column;">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;">
+      <div>
+        <h2 style="margin:0;color:#7dd3fc;">✧ Esper Theories — The Electro-Gravitational Alphabet of Espers</h2>
+        <div style="font-size:11.5px;color:var(--text-2);">(Twenty-six horizons of contemplation, one for every petal circling the crop-glyph's heart)</div>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <a href="/assets/esper_theories_alphabet.jpg" target="_blank" rel="noopener" class="btn" style="text-decoration:none;border-color:#38bdf8;color:#7dd3fc;">🔍 Open Full-Size Image ↗</a>
+        <button class="btn" onclick="closeEsperTheoriesModal()">✕ Close</button>
+      </div>
+    </div>
+    <div style="overflow-y:auto;padding:8px;background:var(--bg-0);border:1px solid var(--border);border-radius:8px;flex:1;text-align:center;">
+      <img src="/assets/esper_theories_alphabet.jpg" alt="The Electro-Gravitational Alphabet of Espers" style="max-width:100%;height:auto;border-radius:6px;border:1px solid rgba(255,255,255,0.12);" />
+    </div>
+  </div>
+</div>
+
 <script>
 const STAUNTON_SVG_PIECES = {
   P: `<svg class="chess-piece-svg" viewBox="0 0 45 45"><image width="45" height="45" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJYAAACWCAMAAAAL34HQAAAABGdBTUEAALGPC/xhBQAAAAFzUkdCAK7OHOkAAAA8UExURUxpcUFBQUNDQ0REREREREVFRUVFRUVFRf////j4+O/v7+Li4tPT08TExK+vr5SUlICAgGtra1VVVUZGRh1ZfCsAAAAIdFJOUwAgPF19qsrhYMPqTAAAA6lJREFUeNrtmw1y4yAMRmub2BbgP7j/XTd4mH671YRkUix1trzpAd5IQgjF/Wg0Go1Go9FoNBqNRqPRaDQaP5auv9P9KKXejDEzmv6HhMlM8R8m86GPiZxp0E7fFBNhXxd3Z1n3nEvVKhti4lhonilj1yMmeuUEhmU+pcAa4p1B1WqjbEXAHopefbyzzrACdlPLYzfBiuGS16RR9zdYEcenI3nTOYT7Qyty/lBJY7puLKwYftUIV59TSI9wZxo7+coKtqy1xBiNsFbqWCUrsj5V1ySfQ1/UIu83ZFGwwVPRivyZxUG6tI65rOW8D9LFNZ5Ni0r4s7hu0lrbS1qjqNb0ktauokUlLKIlXFtUwqG2ZE/iMy2cRNm+Vc4h+pZsl1/KwUKXF74Ty8HCnSg9QRS7AyYI6XmrmMJz3uoVptPgSlYLplPpWf5xBj1meVlGpJFXu8fLR5guZi+WwATeifJphBekYBV71R0E0ud8BjsIpec+6t66T46IFCrtAXdLjBQt9FJR+jEvt4g4bgvYCcqHarPzgytxQcDkQ1XYjHj5gJnI9oC8pyJgkgcw+DlRGiH8KhmwIYeKafG+uuxoqyKT6V0o/RGDtXtJLU9P8JlVbHDuSnM8Sh7Rknu77lTm79txFNwxu2dWyKERnOP3shWChdISCRdY/CcIEbiJPnuA/8oSAYIlHK7gGRGIXtadyYwxHp4RYhxNhgVLqlc4plVYIAmuIpjXzpcPCosb5oVVjQ4mN1bHO8SgqJUqnoh7BdXi6vBOdF+LK+rm0BPz0s7ilHPIvVLn0vw4YyXmhZWbWrACGxxwLY56lbXOzAvhGrSOYeCzcmYJSsuR8XwAPfTadLaBJuafFLkXBlOjcQqDhRb3WhQWgn1kv6Ezr1Xcq5/41xnca4eXXKy2GVrqXtiNFDYjVmO1a5gVxyFeMuexG2EFrbLX2MksApdnVkjkFhODQKiCg1VZDCvBW3dprWMRCK2yWN6hTv3Vn5m+aIXfW7aARF5jtduXrWCWAzZclsG1IFUyc+isF3T2YgLLrNdsb6aIWNE7bJij6xbWBqt3SHk09SfkgyD1DjYgjRX3bP59K5SXqR2sHVbvktpE9Vc9rN4FnyjVe9XD6n2wAxD4gPl1sI+rlUNbwYpc1SyOZw6pAtjHVVrc1tGquezt2LP+W62rqzg7OGh9t0X0Ap9NatQ8tMJMdcD9U+XbV6pE+A1aYatEVa2K/P9aU1VM+7fqRqPRaDQal/AHIBXUlyHpytIAAAAASUVORK5CYII="/></svg>`,
@@ -1001,6 +1030,16 @@ function openSpaceCenterModal() {
 
 function closeSpaceCenterModal() {
   const el = document.getElementById("space-center-modal-overlay");
+  if (el) el.classList.remove("open");
+}
+
+function openEsperTheoriesModal() {
+  const el = document.getElementById("esper-theories-modal-overlay");
+  if (el) el.classList.add("open");
+}
+
+function closeEsperTheoriesModal() {
+  const el = document.getElementById("esper-theories-modal-overlay");
   if (el) el.classList.remove("open");
 }
 
@@ -1236,6 +1275,7 @@ function renderEvalBar(evalWhiteCp) {
 let lastBoardState = null;
 let dragPieceState = null;
 let suppressNextSquareClick = false;
+let moveRequestInFlight = false;
 
 function ensureDragGhostElement() {
   let g = document.getElementById("drag-piece-ghost");
@@ -1247,13 +1287,63 @@ function ensureDragGhostElement() {
   return g;
 }
 
+function updateSelectionHighlightsInDom() {
+  const legalDests = new Set(
+    selectedSquare
+      ? currentLegalMovesUci.filter(m => m.startsWith(selectedSquare)).map(m => m.slice(2, 4))
+      : []
+  );
+  document.querySelectorAll("#chessboard-grid .sq[data-sq]").forEach(el => {
+    const sq = el.getAttribute("data-sq");
+    if (sq === selectedSquare) el.classList.add("selected");
+    else el.classList.remove("selected");
+    if (legalDests.has(sq)) el.classList.add("legal-dest");
+    else el.classList.remove("legal-dest");
+  });
+}
+
+function optimisticallySnapMoveInDom(fromSq, toSq) {
+  const fromEl = document.querySelector(`#chessboard-grid .sq[data-sq="${fromSq}"]`);
+  const toEl = document.querySelector(`#chessboard-grid .sq[data-sq="${toSq}"]`);
+  if (!fromEl || !toEl) return;
+  const pieceCode = fromEl.getAttribute("data-piece") || "";
+  if (!pieceCode) return;
+
+  // Handle pawn promotion to Queen visually on rank 8 / rank 1
+  let targetPiece = pieceCode;
+  if (pieceCode === "P" && toSq.endsWith("8")) targetPiece = "Q";
+  if (pieceCode === "p" && toSq.endsWith("1")) targetPiece = "q";
+
+  const fromSvg = fromEl.querySelector(".chess-piece-svg");
+  if (fromSvg) fromSvg.remove();
+  fromEl.setAttribute("data-piece", "");
+
+  const oldToSvg = toEl.querySelector(".chess-piece-svg");
+  if (oldToSvg) oldToSvg.remove();
+  toEl.setAttribute("data-piece", targetPiece);
+  const glyph = STAUNTON_SVG_PIECES[targetPiece] || "";
+  if (glyph) {
+    toEl.insertAdjacentHTML("beforeend", glyph);
+  }
+
+  document.querySelectorAll("#chessboard-grid .sq").forEach(el => {
+    const sq = el.getAttribute("data-sq");
+    el.classList.remove("selected", "legal-dest", "drag-origin", "drag-hover");
+    if (sq === fromSq || sq === toSq) el.classList.add("last-move");
+    else el.classList.remove("last-move");
+  });
+}
+
 function renderBoard(boardState) {
   if (!boardState) return;
   lastBoardState = boardState;
   currentLegalMovesUci = boardState.legal_moves_uci || [];
   renderEvalBar(boardState.eval_white_cp);
-  const sig = JSON.stringify([boardState.fen, selectedSquare, boardState.last_move_uci, boardFlipped]);
-  if (sig === lastRenderedBoardSig) return;
+  const sig = JSON.stringify([boardState.fen, boardState.last_move_uci, boardFlipped]);
+  if (sig === lastRenderedBoardSig) {
+    updateSelectionHighlightsInDom();
+    return;
+  }
   lastRenderedBoardSig = sig;
 
   const grid = parseFenBoard(boardState.fen);
@@ -1294,11 +1384,17 @@ function renderBoard(boardState) {
 }
 
 async function playHumanMoveAndAutoReply(moveStr) {
+  if (moveRequestInFlight) return;
+  moveRequestInFlight = true;
   const turnPill = document.getElementById("turn-indicator-pill");
-  const snap = await apiPost("/api/chess/move", { move: moveStr });
-  if (playVsAiAutoReply && !autoSelfPlayTimer && snap && snap.board && !snap.board.is_game_over) {
-    if (turnPill) turnPill.textContent = "Celestriad 1.0 Moving (Right-Brain Intuition)...";
-    setTimeout(async () => {
+  try {
+    if (moveStr && moveStr.length >= 4) {
+      optimisticallySnapMoveInDom(moveStr.slice(0, 2), moveStr.slice(2, 4));
+    }
+    const snap = await apiPost("/api/chess/move", { move: moveStr });
+    if (playVsAiAutoReply && !autoSelfPlayTimer && snap && snap.board && !snap.board.is_game_over) {
+      if (turnPill) turnPill.textContent = "Celestriad 1.0 Moving (Right-Brain Intuition)...";
+      await new Promise(r => setTimeout(r, 120));
       try {
         await playAiMove();
       } finally {
@@ -1306,61 +1402,78 @@ async function playHumanMoveAndAutoReply(moveStr) {
           turnPill.textContent = "Your Turn — Drag or Click a Piece";
         }
       }
-    }, 180);
+    }
+  } finally {
+    moveRequestInFlight = false;
   }
 }
 
 function onSquarePointerDown(ev, sqName) {
   if (ev.button !== undefined && ev.button !== 0) return;
+  if (moveRequestInFlight) return;
+
+  // If a piece is already selected and the user presses down on a legal destination square, snap immediately!
+  if (selectedSquare && selectedSquare !== sqName) {
+    const cand = selectedSquare + sqName;
+    const match = currentLegalMovesUci.find(m => m === cand || m === cand + "q");
+    if (match) {
+      ev.preventDefault();
+      selectedSquare = null;
+      suppressNextSquareClick = true;
+      setTimeout(() => { suppressNextSquareClick = false; }, 120);
+      playHumanMoveAndAutoReply(match);
+      return;
+    }
+  }
+
   const hasMoves = currentLegalMovesUci.some(m => m.startsWith(sqName));
-  if (!hasMoves) return;
+  if (!hasMoves) {
+    selectedSquare = null;
+    updateSelectionHighlightsInDom();
+    return;
+  }
   ev.preventDefault();
   selectedSquare = sqName;
-  lastRenderedBoardSig = "";
-  if (lastBoardState) renderBoard(lastBoardState);
+  updateSelectionHighlightsInDom();
 
   const sqEl = document.querySelector(`#chessboard-grid .sq[data-sq="${sqName}"]`);
   const pieceCode = sqEl ? (sqEl.getAttribute("data-piece") || "") : "";
   const glyph = pieceCode ? (STAUNTON_SVG_PIECES[pieceCode] || "") : "";
   if (!glyph) return;
 
+  // Immediately show floating piece ghost under cursor on pointerdown so dragging has zero deadzone
+  const ghost = ensureDragGhostElement();
+  ghost.innerHTML = glyph;
+  ghost.style.left = ev.clientX + "px";
+  ghost.style.top = ev.clientY + "px";
+  ghost.style.display = "block";
+  if (sqEl) sqEl.classList.add("drag-origin");
+
   dragPieceState = {
     fromSq: sqName,
     glyph: glyph,
     startX: ev.clientX,
     startY: ev.clientY,
-    dragging: false,
-    hoverSq: null
+    dragging: true,
+    hoverSq: sqName
   };
 }
 
 window.addEventListener("pointermove", function(ev) {
   if (!dragPieceState) return;
-  const dx = ev.clientX - dragPieceState.startX;
-  const dy = ev.clientY - dragPieceState.startY;
-  if (!dragPieceState.dragging && (dx * dx + dy * dy) >= 9) {
-    dragPieceState.dragging = true;
-    const ghost = ensureDragGhostElement();
-    ghost.innerHTML = dragPieceState.glyph;
-    ghost.style.display = "block";
-    const origEl = document.querySelector(`#chessboard-grid .sq[data-sq="${dragPieceState.fromSq}"]`);
-    if (origEl) origEl.classList.add("drag-origin");
-  }
-  if (dragPieceState.dragging) {
-    const ghost = ensureDragGhostElement();
-    ghost.style.left = ev.clientX + "px";
-    ghost.style.top = ev.clientY + "px";
-    const under = document.elementFromPoint(ev.clientX, ev.clientY);
-    const sqEl = under && under.closest ? under.closest("#chessboard-grid .sq[data-sq]") : null;
-    const newHover = sqEl ? sqEl.getAttribute("data-sq") : null;
-    if (newHover !== dragPieceState.hoverSq) {
-      if (dragPieceState.hoverSq) {
-        const prevEl = document.querySelector(`#chessboard-grid .sq[data-sq="${dragPieceState.hoverSq}"]`);
-        if (prevEl) prevEl.classList.remove("drag-hover");
-      }
-      dragPieceState.hoverSq = newHover;
-      if (sqEl) sqEl.classList.add("drag-hover");
+  const ghost = ensureDragGhostElement();
+  ghost.style.left = ev.clientX + "px";
+  ghost.style.top = ev.clientY + "px";
+  const under = document.elementFromPoint(ev.clientX, ev.clientY);
+  const sqEl = under && under.closest ? under.closest("#chessboard-grid .sq[data-sq]") : null;
+  const newHover = sqEl ? sqEl.getAttribute("data-sq") : null;
+  if (newHover !== dragPieceState.hoverSq) {
+    if (dragPieceState.hoverSq) {
+      const prevEl = document.querySelector(`#chessboard-grid .sq[data-sq="${dragPieceState.hoverSq}"]`);
+      if (prevEl) prevEl.classList.remove("drag-hover");
     }
+    dragPieceState.hoverSq = newHover;
+    if (sqEl) sqEl.classList.add("drag-hover");
   }
 });
 
@@ -1379,9 +1492,8 @@ window.addEventListener("pointerup", async function(ev) {
     el.classList.remove("drag-hover");
   });
 
-  if (!state.dragging) return;
   suppressNextSquareClick = true;
-  setTimeout(() => { suppressNextSquareClick = false; }, 80);
+  setTimeout(() => { suppressNextSquareClick = false; }, 100);
 
   const under = document.elementFromPoint(ev.clientX, ev.clientY);
   const sqEl = under && under.closest ? under.closest("#chessboard-grid .sq[data-sq]") : null;
@@ -1395,8 +1507,8 @@ window.addEventListener("pointerup", async function(ev) {
       return;
     }
   }
-  lastRenderedBoardSig = "";
-  if (lastBoardState) renderBoard(lastBoardState);
+  // If released back on the same square (or off-board), keep `selectedSquare` highlighted for click-to-move
+  updateSelectionHighlightsInDom();
 });
 
 async function onSquareClick(sqName) {
@@ -1404,6 +1516,7 @@ async function onSquareClick(sqName) {
     suppressNextSquareClick = false;
     return;
   }
+  if (moveRequestInFlight) return;
   if (selectedSquare && selectedSquare !== sqName) {
     const cand = selectedSquare + sqName;
     const match = currentLegalMovesUci.find(m => m === cand || m === cand + "q");
@@ -1415,8 +1528,7 @@ async function onSquareClick(sqName) {
   }
   const hasMoves = currentLegalMovesUci.some(m => m.startsWith(sqName));
   selectedSquare = hasMoves ? sqName : null;
-  lastRenderedBoardSig = "";
-  if (lastBoardState) renderBoard(lastBoardState);
+  updateSelectionHighlightsInDom();
 }
 
 function renderColorBars(posture) {
@@ -1758,9 +1870,10 @@ async function resetCleanSlateRules() { await apiPost("/api/rules/reset_clean_sl
 async function toggleAutoSleep(enabled) { await apiPost("/api/sleep/auto", { enabled: !!enabled }); }
 
 async function pollState() {
+  if (moveRequestInFlight || dragPieceState) return;
   try {
     const res = await fetch("/api/state");
-    if (res.ok) renderState(await res.json());
+    if (res.ok && !moveRequestInFlight && !dragPieceState) renderState(await res.json());
   } catch (_e) {}
 }
 try {

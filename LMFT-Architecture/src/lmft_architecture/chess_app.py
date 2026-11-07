@@ -3373,6 +3373,7 @@ def create_chess_http_server(
                     "arecibo_desktop_icon.jpg": "image/jpeg",
                     "arecibo_desktop_icon.ico": "image/x-icon",
                     "icy_sea_board.png": "image/png",
+                    "esper_theories_alphabet.jpg": "image/jpeg",
                 }
                 if asset_name in allowed_assets:
                     asset_file = runtime.repo_root / "docs" / "assets" / asset_name

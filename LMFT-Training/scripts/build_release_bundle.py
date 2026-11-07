@@ -70,6 +70,7 @@ def build_release_zip(
         "docs/assets/spirit_particle_preview.png",
         "docs/assets/celestial_seal_preview.png",
         "docs/assets/icy_sea_board.png",
+        "docs/assets/esper_theories_alphabet.jpg",
     ):
         asset_path = arch_root / asset_rel
         if asset_path.exists():
