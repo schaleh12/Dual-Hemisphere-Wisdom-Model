@@ -1034,7 +1034,6 @@ class SubliminalGapLeftBrain:
                     override_c1 = clause_1_prefix if (stanza_idx == 0 and sent_idx == 0) else None
                     use_rotated_chord = (
                         stanza_idx > 0
-                        and sent_idx == 0
                         and chord_rotated_for_stanza
                         and active_stanza_chord is not None
                     )

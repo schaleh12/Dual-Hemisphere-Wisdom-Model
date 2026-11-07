@@ -2572,28 +2572,54 @@ class ChessKibitzerRuntime:
             raw_sorted = sorted(queued_snapshot, key=lambda s: float(s.salience), reverse=True)
             rep_sorted = [s for s in raw_sorted if s.scene_index in archive_scene_ids]
             sorted_scenes = rep_sorted + [s for s in raw_sorted if s.scene_index not in archive_scene_ids] if rep_sorted else raw_sorted
+            def _clean_rem_moment_text(sc: UnresolvedSleepScene, max_len: int = 240) -> str:
+                raw_scen = sc.scenario_text.split("[Coach note:", 1)[0].strip()
+                if "[Board context:" in raw_scen:
+                    before_bc, after_bc = raw_scen.split("[Board context:", 1)
+                    after_bc = (
+                        after_bc.rstrip(" ]")
+                        .strip()
+                        .removeprefix("Chess table — ")
+                        .removeprefix("Chess table - ")
+                        .strip()
+                    )
+                    raw_scen = f"{before_bc.strip()} On the board right now, {after_bc}".strip()
+                raw_rev = (sc.game_review_annotation or "").strip()
+                if raw_rev:
+                    if "]:" in raw_rev:
+                        raw_rev = raw_rev.split("]:", 1)[1].strip()
+                    cleaned_parts: list[str] = []
+                    for seg in raw_rev.split("("):
+                        if ")" in seg:
+                            inside, after = seg.split(")", 1)
+                            if "pawns" in inside or "+" in inside or "-" in inside or "best:" in inside:
+                                cleaned_parts.append(after)
+                            else:
+                                cleaned_parts.append(f"({seg}")
+                        else:
+                            cleaned_parts.append(seg)
+                    raw_rev = " ".join(" ".join(cleaned_parts).split()).strip().rstrip(".")
+                if raw_rev and raw_rev not in raw_scen:
+                    combined = f"{raw_scen[:170].rstrip('.')} — {raw_rev[:150]}"
+                else:
+                    combined = raw_rev or raw_scen
+                return combined[:max_len].rstrip(".")
+
             rep = sorted_scenes[0]
-            clean_scenario = rep.scenario_text.split("[Coach note:", 1)[0].strip()
-            review_note = (rep.game_review_annotation or "").strip()
-            rule_summary = (
-                f" Consolidated rule: {forged_rules[0].concept_name}."
-                if forged_rules
-                else ""
-            )
-            moment_desc = (
-                f"{clean_scenario[:180]} ({review_note[:160]})"
-                if review_note and review_note not in clean_scenario
-                else (review_note or clean_scenario)[:240]
-            )
+            moment_desc = _clean_rem_moment_text(rep, max_len=240)
             vow_context_clause = ""
             conv_hist: list[tuple[str, str]] = []
             if prev_chronicle and prev_chronicle.get("vow_sentence"):
                 prev_vow_str = str(prev_chronicle["vow_sentence"]).strip()
                 conv_hist.append(("Previous REM Sleep Vow", prev_vow_str))
                 if vow_outcome == "BROKEN" and vow_overlap_leaves:
-                    short_leaves = ", ".join(k.split("/")[-1] for k in vow_overlap_leaves[:3])
+                    leaf_words = [k.split("/")[-1].replace("-", " ") for k in vow_overlap_leaves[:3]]
+                    if len(leaf_words) > 1:
+                        short_leaves = ", ".join(leaf_words[:-1]) + f" and {leaf_words[-1]}"
+                    else:
+                        short_leaves = leaf_words[0]
                     vow_context_clause = (
-                        f" Our previous vow was tested and broken on [{short_leaves}]."
+                        f" Our previous vow was tested and faltered around {short_leaves}."
                     )
                 elif vow_outcome == "HONORED":
                     vow_context_clause = " Our previous positional vow held firm."
@@ -2602,22 +2628,22 @@ class ChessKibitzerRuntime:
             stanza_limit = max(1, min(3, int(max_stanzas)))
             if target_sents >= 4 or stanza_limit >= 2:
                 extra_moments = [
-                    (s.game_review_annotation or s.scenario_text.split("[Coach note:", 1)[0]).strip()[:110]
+                    _clean_rem_moment_text(s, max_len=110)
                     for s in sorted_scenes[1:3]
                 ]
                 extra_clause = (
-                    f" Other queued moments: {'; '.join(extra_moments)}."
+                    f" Related moments across the cycle: {'; '.join(extra_moments)}."
                     if extra_moments
                     else ""
                 )
                 sleep_prompt = (
-                    f"{moment_desc}.{extra_clause}{rule_summary}{vow_context_clause} "
+                    f"{moment_desc}.{extra_clause}{vow_context_clause} "
                     f"Reflect deeply on why the played move diverged from the best continuation, "
                     f"how the board's structural balance shifted, and the lasting vow to carry into future games."
                 )
             else:
                 sleep_prompt = (
-                    f"{moment_desc}.{rule_summary}{vow_context_clause} "
+                    f"{moment_desc}.{vow_context_clause} "
                     f"What is the key positional lesson to carry forward from this moment?"
                 )
             valid_ext_keys = set(FOUNDATIONAL_LEAVES) | {lf.leaf_id for lf in self.learned_leaves}

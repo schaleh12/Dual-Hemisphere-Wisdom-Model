@@ -807,6 +807,7 @@ def test_multi_stanza_discourse_and_residual_deficit_chord_pivot() -> None:
     assert len(traces) == 4
     assert "\n\n" in discourse
     assert traces[2].spliced_chord == residual_chord
+    assert traces[3].spliced_chord == residual_chord
 
     # Verify `run_three_legged_turn` with `max_stanzas=3` stops early on diminishing returns (`max_theory_delta < 0.04`)
     sensors_converge = _DeterministicBridgeSensors(

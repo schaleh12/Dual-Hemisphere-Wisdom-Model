@@ -1703,7 +1703,8 @@ def build_natural_chess_scenario_prompt(
         )
 
     if user_note and user_note.strip():
-        return f"{user_note.strip()} [Board context: {base}]"
+        conversational_board = base.removeprefix("Chess table — ")
+        return f"{user_note.strip()} On the board right now, {conversational_board}"
     return base
 
 
@@ -1903,7 +1904,12 @@ class BoardAnchoredBridgeSensors:
     ) -> tuple[dict[str, float], dict[str, float], tuple[str, ...], tuple[str, ...]]:
         self.call_count += 1
         # If board context was appended for the Left-Brain LLM, score the clean user/clause text via MiniLM
-        clean_for_minilm = text.split(" [Board context:")[0].strip() or text
+        clean_for_minilm = (
+            text.split(" On the board right now, ")[0]
+            .split(" [Board context:")[0]
+            .strip()
+            or text
+        )
         coords, exp_raw, queried, skipped = self.base_sensors.score_text(
             clean_for_minilm,
             learned_leaves=learned_leaves,
