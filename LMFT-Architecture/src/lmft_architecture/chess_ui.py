@@ -23,6 +23,7 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="icon" type="image/jpeg" href="/assets/celestriad_spirit_particle.jpg" />
 <title>LMFT-Chess — Dual-Hemisphere Chess Wisdom &amp; Self-Kibitzer Arena</title>
 <style>
   :root {
@@ -554,7 +555,7 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
 <body>
 <header>
   <div class="brand">
-    <span class="brand-pawn">♟</span>
+    <img src="/assets/celestriad_spirit_particle.jpg" alt="Celestriad Spirit Particle" style="width:26px;height:26px;border-radius:6px;object-fit:cover;border:1px solid #38bdf8;" onerror="this.style.display='none'" />
     <span>Celestriad 1.0 · LMFT Dual-Hemisphere Chess Arena</span>
   </div>
   <div class="header-controls">
@@ -578,7 +579,7 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
     <!-- Opponent (AI) Top Banner -->
     <div class="player-banner">
       <div class="player-id">
-        <div class="avatar-box" id="top-player-avatar">✨</div>
+        <div class="avatar-box" id="top-player-avatar" style="overflow:hidden;padding:0;"><img src="/assets/celestriad_spirit_particle.jpg" alt="Celestriad 1.0" style="width:100%;height:100%;object-fit:cover;" /></div>
         <div class="player-name-stack">
           <span class="player-name-main" id="top-player-name">Celestriad 1.0</span>
           <span class="player-name-sub" id="top-player-meta">⚫ Playing Black · 40-Node Tree + Qwen3-8B</span>
@@ -600,7 +601,7 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
     <!-- Human Player / Stockfish Sparring Partner Bottom Banner -->
     <div class="player-banner">
       <div class="player-id">
-        <div class="avatar-box" id="bottom-player-avatar">👤</div>
+        <div class="avatar-box" id="bottom-player-avatar" style="overflow:hidden;padding:0;">👤</div>
         <div class="player-name-stack">
           <span class="player-name-main" id="bottom-player-name">You (⚪ Playing White)</span>
           <span class="player-name-sub" style="color:var(--chess-green);font-weight:700;" id="turn-indicator-pill">Your Turn</span>
@@ -1335,6 +1336,7 @@ function renderState(s) {
     ? `Elo ${pBase} · ${Number(pAcc).toFixed(0)}% Acc`
     : `Elo ${pBase} (${eloData.player_wins || 0}W-${eloData.player_losses || 0}L-${eloData.player_draws || 0}D)`;
 
+  const CELESTRIAD_SPIRIT_AVATAR_HTML = '<img src="/assets/celestriad_spirit_particle.jpg" alt="Celestriad 1.0" style="width:100%;height:100%;object-fit:cover;border-radius:6px;" />';
   if (isSelfTrain) {
     const celestriadOnBottom = (lmftColor === bottomBoardColor);
     const topBadge = topBoardColor === "White" ? "⚪ White" : "⚫ Black";
@@ -1345,12 +1347,12 @@ function renderState(s) {
       if (topMeta) topMeta.textContent = "Strength-Calibrated Stockfish 19 Sparring Partner";
       if (eloEl) eloEl.textContent = sfEloText;
 
-      if (botAvatar) botAvatar.textContent = "✨";
+      if (botAvatar) botAvatar.innerHTML = CELESTRIAD_SPIRIT_AVATAR_HTML;
       if (botName) botName.textContent = `Celestriad 1.0 (${botBadge})`;
       if (botSubtitle) botSubtitle.textContent = "40-Node Fuzzy Tree + Qwen3-8B";
       if (pEloEl) pEloEl.textContent = hpEloText;
     } else {
-      if (topAvatar) topAvatar.textContent = "✨";
+      if (topAvatar) topAvatar.innerHTML = CELESTRIAD_SPIRIT_AVATAR_HTML;
       if (topName) topName.textContent = `Celestriad 1.0 (${topBadge})`;
       if (topMeta) topMeta.textContent = "40-Node Fuzzy Tree + Qwen3-8B";
       if (eloEl) eloEl.textContent = hpEloText;
@@ -1363,7 +1365,7 @@ function renderState(s) {
   } else {
     const humanOnBottom = !boardFlipped;
     if (humanOnBottom) {
-      if (topAvatar) topAvatar.textContent = "✨";
+      if (topAvatar) topAvatar.innerHTML = CELESTRIAD_SPIRIT_AVATAR_HTML;
       if (topName) topName.textContent = "Celestriad 1.0";
       if (topMeta) topMeta.textContent = "⚫ Playing Black · 40-Node Tree + Qwen3-8B";
       if (eloEl) eloEl.textContent = hpEloText;
@@ -1378,7 +1380,7 @@ function renderState(s) {
       if (topMeta) topMeta.textContent = "Auto-Coached on Every Move";
       if (eloEl) eloEl.textContent = humanEloText;
 
-      if (botAvatar) botAvatar.textContent = "✨";
+      if (botAvatar) botAvatar.innerHTML = CELESTRIAD_SPIRIT_AVATAR_HTML;
       if (botName) botName.textContent = "Celestriad 1.0";
       if (botSubtitle) botSubtitle.textContent = "⚫ Playing Black · 40-Node Tree + Qwen3-8B";
       if (pEloEl) pEloEl.textContent = hpEloText;

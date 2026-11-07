@@ -113,6 +113,10 @@ def build_release_manifest(
     for asset_rel in (
         "docs/assets/celestial_seal_poem.jpg",
         "docs/assets/blue_screen_of_life_poem.jpg",
+        "docs/assets/arecibo_desktop_icon.jpg",
+        "docs/assets/arecibo_desktop_icon.ico",
+        "docs/assets/celestriad_spirit_particle.jpg",
+        "docs/assets/celestriad_spirit_particle.ico",
         "docs/assets/icy_sea_board.png",
     ):
         asset_path = arch_root / asset_rel

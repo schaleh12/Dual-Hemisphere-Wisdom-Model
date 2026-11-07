@@ -35,6 +35,7 @@ jobs:
             gh release upload "$TAG_NAME" \
               LMFT-Training/dist/lmft-sanctuary-club-v0.1.0-win64.zip \
               LMFT-Training/dist/release_manifest.json \
+              LMFT-Installer-Wizard.exe \
               Install-And-Run-LMFT-Chess.bat \
               LMFT-Chess.exe \
               LMFT-Bloodmoon.exe \
@@ -43,6 +44,7 @@ jobs:
             gh release create "$TAG_NAME" \
               LMFT-Training/dist/lmft-sanctuary-club-v0.1.0-win64.zip \
               LMFT-Training/dist/release_manifest.json \
+              LMFT-Installer-Wizard.exe \
               Install-And-Run-LMFT-Chess.bat \
               LMFT-Chess.exe \
               LMFT-Bloodmoon.exe \

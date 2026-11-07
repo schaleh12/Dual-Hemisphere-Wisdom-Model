@@ -2,8 +2,8 @@
   "schema_version": 1,
   "version": "0.2.0",
   "github_repo": "schaleh12/Dual-Hemisphere-Wisdom-Model",
-  "build_sha256": "cd83db27dfdc9af5e013f76fb4d4cbde825c95acf24a8ae4e723e945ebbbf357",
-  "build_short_hash": "cd83db27dfdc",
+  "build_sha256": "86343ab674aa894d9cf8f4426619bad53d324b00e0636d0652153dc18ecda474",
+  "build_short_hash": "86343ab674aa",
   "files": {
     "src/lmft_architecture/__init__.py": {
       "sha256": "a89f56c2195e87129adbffa5065d8769ea096e13ba98783d217c4d120ee92623",
@@ -90,16 +90,16 @@
       "size_bytes": 3267
     },
     "src/lmft_architecture/chess_app.py": {
-      "sha256": "e0111029fd7ad751a01414537d802b7af251b0118c5b435a141a0a8dfcf3bc20",
-      "size_bytes": 168322
+      "sha256": "e5149739ccbee63b18cfda32e9b73e77c011578037689e7b82e606ca5b686dc2",
+      "size_bytes": 168121
     },
     "src/lmft_architecture/chess_kibitz_bridge.py": {
       "sha256": "34049903ca933e1a4eb152196a668316b25381fdc23c47912bde76a406ea5dbf",
       "size_bytes": 110731
     },
     "src/lmft_architecture/chess_ui.py": {
-      "sha256": "eac563ba36d824ee583209dc44300e58ca9a425d207d4e316e58d32d596dc10b",
-      "size_bytes": 98283
+      "sha256": "c4d4a33de48d59b795ab8e73320378a756ae3264fb0d97625d8bd9c90fcfbfb0",
+      "size_bytes": 99006
     },
     "src/lmft_architecture/chord_memory.py": {
       "sha256": "6714d9c6cd9e0f7ae199e92a44f7371f168f65fb32319260d4b24d0ed1c54a66",
@@ -154,8 +154,8 @@
       "size_bytes": 23245
     },
     "src/lmft_architecture/github_auto_sync.py": {
-      "sha256": "202734a31ec499fff8b54a0e76cd332fc361148eca12e4dad02e234c36a94b04",
-      "size_bytes": 10288
+      "sha256": "52b2af1990f6a3e35fa531312e79a715bb2b9526b2670eb321c20921a33a9d72",
+      "size_bytes": 10492
     },
     "src/lmft_architecture/impish_bloodmoon_adapter.py": {
       "sha256": "4b311691626d4c0e2bc59877bcfde460ae8c382c02532ab31b09450bda943b86",
@@ -308,6 +308,22 @@
     "docs/assets/blue_screen_of_life_poem.jpg": {
       "sha256": "4838a6846c6436f28668ca5ad9676974358f899caa5017da1a89152520334e0a",
       "size_bytes": 90273
+    },
+    "docs/assets/arecibo_desktop_icon.jpg": {
+      "sha256": "c2d67be6541dc92d7b0de0edb0169e97b8f656affe4c4d5c442b104bee31cd9c",
+      "size_bytes": 134981
+    },
+    "docs/assets/arecibo_desktop_icon.ico": {
+      "sha256": "60214c05305cf6148444128d7b30bbe0071d02102783212e3222bb5198ccd403",
+      "size_bytes": 222130
+    },
+    "docs/assets/celestriad_spirit_particle.jpg": {
+      "sha256": "9184970f6b85563ef587e9560c7ce9ccfb03fc4e890b7ac16142a95ff0ee4a10",
+      "size_bytes": 505528
+    },
+    "docs/assets/celestriad_spirit_particle.ico": {
+      "sha256": "306c6888b49efe35e6a19c6d7e20174ca19b69cc921d7826f702eab078506617",
+      "size_bytes": 219931
     },
     "docs/assets/icy_sea_board.png": {
       "sha256": "b07921ca997ae19fa485a67f1e631ec73706ca8e01ae41d0012ad2502a56d1e8",

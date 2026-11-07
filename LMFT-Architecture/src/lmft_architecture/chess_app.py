@@ -3348,36 +3348,32 @@ def create_chess_http_server(
                 self.end_headers()
                 self.wfile.write(body)
                 return
-            if self.path.startswith("/assets/celestial_seal_poem.jpg"):
-                poem_img = runtime.repo_root / "docs" / "assets" / "celestial_seal_poem.jpg"
-                if not poem_img.exists():
-                    from lmft_architecture.workspace_paths import resolve_arch_root
+            if self.path.startswith("/assets/"):
+                asset_name = self.path.split("?", 1)[0].removeprefix("/assets/").strip("/")
+                allowed_assets = {
+                    "celestial_seal_poem.jpg": "image/jpeg",
+                    "blue_screen_of_life_poem.jpg": "image/jpeg",
+                    "celestriad_spirit_particle.jpg": "image/jpeg",
+                    "celestriad_spirit_particle.ico": "image/x-icon",
+                    "arecibo_desktop_icon.jpg": "image/jpeg",
+                    "arecibo_desktop_icon.ico": "image/x-icon",
+                    "icy_sea_board.png": "image/png",
+                }
+                if asset_name in allowed_assets:
+                    asset_file = runtime.repo_root / "docs" / "assets" / asset_name
+                    if not asset_file.exists():
+                        from lmft_architecture.workspace_paths import resolve_arch_root
 
-                    poem_img = resolve_arch_root() / "docs" / "assets" / "celestial_seal_poem.jpg"
-                if poem_img.exists():
-                    img_bytes = poem_img.read_bytes()
-                    self.send_response(int(HTTPStatus.OK))
-                    self.send_header("Content-Type", "image/jpeg")
-                    self.send_header("Cache-Control", "public, max-age=3600")
-                    self.send_header("Content-Length", str(len(img_bytes)))
-                    self.end_headers()
-                    self.wfile.write(img_bytes)
-                    return
-            if self.path.startswith("/assets/icy_sea_board.png"):
-                board_img = runtime.repo_root / "docs" / "assets" / "icy_sea_board.png"
-                if not board_img.exists():
-                    from lmft_architecture.workspace_paths import resolve_arch_root
-
-                    board_img = resolve_arch_root() / "docs" / "assets" / "icy_sea_board.png"
-                if board_img.exists():
-                    img_bytes = board_img.read_bytes()
-                    self.send_response(int(HTTPStatus.OK))
-                    self.send_header("Content-Type", "image/png")
-                    self.send_header("Cache-Control", "public, max-age=3600")
-                    self.send_header("Content-Length", str(len(img_bytes)))
-                    self.end_headers()
-                    self.wfile.write(img_bytes)
-                    return
+                        asset_file = resolve_arch_root() / "docs" / "assets" / asset_name
+                    if asset_file.exists():
+                        img_bytes = asset_file.read_bytes()
+                        self.send_response(int(HTTPStatus.OK))
+                        self.send_header("Content-Type", allowed_assets[asset_name])
+                        self.send_header("Cache-Control", "public, max-age=3600")
+                        self.send_header("Content-Length", str(len(img_bytes)))
+                        self.end_headers()
+                        self.wfile.write(img_bytes)
+                        return
             if self.path == "/api/state":
                 self._send_json(runtime.get_state_snapshot())
                 return
