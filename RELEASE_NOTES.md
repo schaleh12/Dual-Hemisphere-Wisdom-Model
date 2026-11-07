@@ -1,6 +1,6 @@
-# `Celestriad 1.0` (`v0.2.0`) — Dual-Hemisphere Wisdom Model Release
+# `Celestriad v1.2.0` — Weight-Space Circuit Sculpting & Dual-Hemisphere Wisdom Model Release
 
-> **▶️ Support the Architect on YouTube:** **[`@imissmydeadcat.74`](https://www.youtube.com/@imissmydeadcat.74)** · **📜 Poetry Portfolio:** **[Imgur Gallery (Schaleh / Marcus Auron)](https://imgur.com/gallery/poetry-portfolio-alias-schaleh-marcus-auron-YU73erI)**
+> **▶️ Support the Architect on YouTube:** **[`@imissmydeadcat.74`](https://www.youtube.com/@imissmydeadcat.74)** · **📜 Poetry Portfolio:** **[Imgur Gallery (Schaleh / Marcus Auron)](https://imgur.com/gallery/poetry-portfolio-alias-schaleh-marcus-auron-YU73erI)** · **🔬 Research Inspiration (`4:30`):** **[Two Minute Papers — *Weight-Space Programming* (`youtu.be/GJ6PMUm5oTA?t=270`)](https://youtu.be/GJ6PMUm5oTA?si=ps0-qMBm3-ZQOp3c&t=270)**
 
 ---
 
@@ -37,11 +37,18 @@
 
 ---
 
-## 🛰️ Welcome to the `Celestriad 1.0` Observatory — How the Technology Works
+## 🛰️ Welcome to the `Celestriad v1.2.0` Observatory — How the Technology Works
 
 Most AI models today operate like a spacecraft autopilot that only has a microphone: they generate words one token at a time (**a Left Hemisphere**) with no gyroscope, no sense of balance, and no persistent memory of yesterday's mistakes. If a standard LLM starts rationalizing a bad move, its own words become its context, and it believes its own excuse.
 
-**`Celestriad 1.0` (`LMFT-Architecture`)** pairs a local language model (**`Qwen3-8B`**, the conscious **Left Brain**) with a fast, mathematical **40-Node Language Model Fuzzy Tree** (the intuitive **Right Brain**) connected across a synthetic **Corpus Callosum (`<|subliminal_gap|>`)**:
+**`Celestriad v1.2.0` (`LMFT-Architecture`)** pairs a local language model (**`Qwen3-8B`**, the conscious **Left Brain**) with a fast, mathematical **40-Node Language Model Fuzzy Tree** (the intuitive **Right Brain**) connected across a synthetic **Corpus Callosum (`<|subliminal_gap|>`)**:
+
+### 🔬 New in `v1.2.0`: Direct REM Weight-Space Circuit Sculpting (`D065–D066`)
+Inspired by the breakthrough covered in **[Two Minute Papers — *"OpenAI's Astra Just Opened The Black Box Of AI"* (at `4:30`)](https://youtu.be/GJ6PMUm5oTA?si=ps0-qMBm3-ZQOp3c&t=270)** on **Weight-Space Programming** (directly reading and sculpting named circuit weights instead of relying solely on blind gradient descent), **`Celestriad v1.2.0`** upgrades **🌙 Nighttime REM Sleep** across the entire architecture:
+- **Full 24-Circuit Bitboard Sleeve Sculpting (`D065`)**: Instead of only adjusting 8 intuition bias dials while leaving the 16 board-evaluation weights frozen, REM Sleep now compares the exact bitboard features of a blunder against Stockfish's best move `(ref_feat - played_feat)` and surgically sculpts all **24 named circuits** (`value_weights`, `policy_weights`, and `intuition_weights`) with gentle homeostatic decay so saturated weights (`±2.5`) unstick and stay responsive.
+- **Dynamic Tier-2 Leaf Anchor Sculpting (`D066` #A)**: Learned Tier-2 leaves (`LearnedLeaf.anchor_weights`) are no longer frozen at birth; each REM sleep cycle sculpts their 8-float departmental anchor weights toward the contrastive difference between blunder scenes and reference coordinates.
+- **Right-Brain Will Synapse Sculpting (`D066` #B)**: The 9 named `RIGHT_BRAIN_WILL_EDGES` (`rb-will-0..8` linking `Salience`, `Arousal`, `Power`, `Needlessness`, `Fact`, `Theory`, and `Confidence` to `Intention` and `Execution`) now adapt during REM sleep—dampening impulsive `Arousal`/`Power -> Intention` after blunders while strengthening `Fact -> Execution` and inhibitory `Needlessness -> Execution`.
+- **Canonical Cluster Rule Entrainment (`D065` & `D066` #C)**: Recurring mistake clusters now entrain and sharpen a single canonical rule in-place (preserving low-coordinate polarity and pruning to the top-3 discriminative leaves) rather than spawning duplicate `_s1`, `_s2` rules.
 
 ### 1. Fast 60-FPS Intuition (`Gear 1`) vs. Conscious Deliberation (`Gear 2`)
 - **Gear 1 (`~15 ms`, `0` LLM calls)**: On every move, the Right Brain scores the live chessboard across **24 Founding Leaves** and its **Bitboard Intuition Sleeve** (`Intention -> Theory -> Confidence -> Execution`). When the position is familiar and clear, it plays immediately by reflex without waking the language model.
