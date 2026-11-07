@@ -228,32 +228,33 @@ def test_continuous_pretext_subtext_context_self_kibitzing_and_rem_sleep(tmp_pat
     )
     initial_rules_count = len(runtime.rules)
 
-    # 1. Play 1. e4 -> settles in Gear 1 AND spontaneously kibitzes to `chat_messages` (`Pretext -> Subtext -> Context`)
+    # 1. Play 1. e4 -> settles silently in Gear 1 (`is_gear_1_fallback=True`, 0 Left-Brain calls)
     snap_e4 = runtime.handle_chess_move("e2e4")
     assert snap_e4["board"]["move_history_san"] == ["e4"]
     assert snap_e4["sleep_queue_count"] == 0
     assert snap_e4["board"]["last_board_reflex"]["gear_used"] == "GEAR_1_FAST_RIGHT_BRAIN"
     assert len(snap_e4["chat_messages"]) == 1
     kibitz_1 = snap_e4["chat_messages"][-1]
+    assert kibitz_1["is_gear_1_fallback"] is True
     assert "pretext_subtext_context" in kibitz_1["telemetry"]
     assert kibitz_1["telemetry"]["pretext_subtext_context"]["pretext_turns"] == 0
 
-    # 2. Step AI Move (`1... e5`) -> Pretext now contains Move 1's kibitz (`pretext_turns == 1`)!
+    # 2. Step AI Move (`1... e5`) -> also plays silently in Gear 1 without polluting conversation history
     snap_ai = runtime.handle_chess_ai_move()
     assert snap_ai["board"]["move_history_san"] == ["e4", "e5"]
     assert snap_ai["sleep_queue_count"] == 0
     kibitz_2 = snap_ai["chat_messages"][-1]
-    assert kibitz_2["telemetry"]["pretext_subtext_context"]["pretext_turns"] == 1
-    assert kibitz_2["telemetry"]["conversation_turns_in_prompt"] == 1
+    assert kibitz_2["is_gear_1_fallback"] is True
+    assert kibitz_2["telemetry"]["pretext_subtext_context"]["pretext_turns"] == 0
 
-    # 3. Play 2. Nf3 Bc5 (Italian Game) -> every move settles in Gear 1 and appends to the continuous kibitz stream
+    # 3. Play 2. Nf3 Bc5 (Italian Game) -> every move settles in Gear 1 and board receipts stay out of chat history
     for uci_mv in ("g1f3", "f8c5"):
         snap_mv = runtime.handle_chess_move(uci_mv)
         assert snap_mv["board"]["last_board_reflex"]["gear_used"] == "GEAR_1_FAST_RIGHT_BRAIN"
         assert snap_mv["board"]["last_board_reflex"]["clarity"] >= 0.60
         assert snap_mv["board"]["last_board_reflex"]["confidence"] == 1.0
         assert snap_mv["sleep_queue_count"] == 0
-    assert len(runtime._extract_clean_conversation_history()) == 4
+    assert len(runtime._extract_clean_conversation_history()) == 0
 
     # 4. Verify `[Board Fact-Check]` grounds illegal moves (`Bf5+` on Move 1) without flagging past moves or occupied squares
     msg_italian = (
@@ -272,6 +273,8 @@ def test_continuous_pretext_subtext_context_self_kibitzing_and_rem_sleep(tmp_pat
 
     snap_after_sleep = runtime.handle_run_rem_sleep()
     assert snap_after_sleep["sleep_queue_count"] == 0
+    assert snap_after_sleep["last_rem_sleep_self_talk"] is not None
+    assert "REM Dream Self-Reflection:" in snap_after_sleep["last_rem_sleep_receipt"]
     assert len(runtime.rules) >= initial_rules_count + 1
     assert (state_dir / "club_ruleset.json").exists()
 
@@ -381,7 +384,9 @@ def test_hybrid_move_selection_and_blunder_veto_sleep_queue(tmp_path: Path) -> N
     assert eval_by_san["O-O"].is_blunder is False
     assert eval_by_san["O-O"].composite_score > eval_by_san["Bxf7+"].composite_score
 
-    # Verify that when the Left Brain proposes a sound move (`O-O`), the hybrid plays it (`left_brain_kibitz_commit`)
+    # Verify that during chess play (`handle_chess_ai_move`), Celestriad selects moves silently via
+    # Gear-1 Right-Brain intuition (`0` Left-Brain calls) and only wakes the Left Brain during REM Sleep (A)
+    # or when asked a question by a human (B).
     class _StubLeftBrain:
         def __init__(self, reply_text: str) -> None:
             self.reply_text = reply_text
@@ -393,16 +398,16 @@ def test_hybrid_move_selection_and_blunder_veto_sleep_queue(tmp_path: Path) -> N
             self.call_count += 1
 
             class _Trace:
-                clause_1_prefix = "Securing the King,"
+                clause_1_prefix = ""
                 post_gap_continuation = self.reply_text
                 comma_scored_live = True
                 comma_vibe_posture = "settled"
                 comma_dissonance_notes: tuple[str, ...] = ()
                 spliced_chord = chord
 
-            return f"Securing the King, {self.reply_text}", _Trace()
+            return self.reply_text, _Trace()
 
-    stub_commit = _StubLeftBrain("we castle with O-O to connect the rooks.")
+    stub_commit = _StubLeftBrain("During sleep we see that premature f7 sacrifices leave our King exposed.")
     runtime_commit = ChessKibitzerRuntime(
         state_dir=tmp_path / "hybrid_commit_state",
         left_brain=stub_commit,  # type: ignore[arg-type]
@@ -412,15 +417,14 @@ def test_hybrid_move_selection_and_blunder_veto_sleep_queue(tmp_path: Path) -> N
     runtime_commit.handle_set_fen("r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 3 3")
     snap_commit = runtime_commit.handle_chess_ai_move()
     arb_commit = snap_commit["last_hybrid_move_arbitration"]
-    assert arb_commit["selection_mode"] == "left_brain_kibitz_commit"
-    assert arb_commit["chosen_move_san"] == "O-O"
-    assert snap_commit["board"]["move_history_san"][-1] == "O-O"
-    # Verify pre-move deliberation was reused (only 1 LLM call per AI move, not 2)
-    assert stub_commit.call_count == 1
+    assert arb_commit["selection_mode"] == "gear_1_right_brain_intuition"
+    assert arb_commit["chosen_move_san"] != "Bxf7+"
+    assert stub_commit.call_count == 0
 
-    # Verify that when the Left Brain proposes a 1-ply blunder (`Bxf7+`), the Right Brain vetoes it,
-    # queues the blunder's coordinates for REM sleep, and consolidates a cautionary `hazard_` rule
-    stub_veto = _StubLeftBrain("we sacrifice immediately with Bxf7+ for chaos.")
+    # Verify that when a 1-ply blunder (`Bxf7+`) is audited and queued for REM sleep,
+    # `handle_run_rem_sleep()` wakes the Left Brain to talk to itself (`call_count == 1`)
+    # and consolidates a cautionary `hazard_` rule that lowers `Bxf7+`'s Right-Brain score.
+    stub_veto = _StubLeftBrain("Reflecting in REM sleep, sacrificing on f7 without support hangs the bishop.")
     runtime_veto = ChessKibitzerRuntime(
         state_dir=tmp_path / "hybrid_veto_state",
         left_brain=stub_veto,  # type: ignore[arg-type]
@@ -432,15 +436,27 @@ def test_hybrid_move_selection_and_blunder_veto_sleep_queue(tmp_path: Path) -> N
         e.san: e.composite_score
         for e in evaluate_candidate_moves_with_right_brain(board, runtime_veto.rules, limit=30)
     }["Bxf7+"]
-    snap_veto = runtime_veto.handle_chess_ai_move()
-    arb_veto = snap_veto["last_hybrid_move_arbitration"]
-    assert arb_veto["selection_mode"] == "right_brain_blunder_veto_queued_for_sleep"
-    assert arb_veto["left_brain_proposed_san"] == "Bxf7+"
-    assert arb_veto["chosen_move_san"] != "Bxf7+"
-    assert snap_veto["sleep_queue_count"] >= 1
+    blunder_rev = runtime_veto.sparring_engine.audit_played_move_for_game_review(
+        board,
+        "Bxf7+",
+        perspective=chess.WHITE,
+    )
+    runtime_veto.handle_chess_move("Bxf7+")
+    assert stub_veto.call_count == 0
+    last_id = int(runtime_veto.chat_messages[-1]["id"])
+    runtime_veto.flag_turn_for_coaching(
+        last_id,
+        user_note=blunder_rev["annotation_summary"],
+        check_auto_sleep=False,
+        is_hazard=True,
+        override_coordinates=blunder_rev["played_coordinates"],
+        contrastive_reference_coordinates=blunder_rev["contrastive_reference_coordinates"],
+        game_review_annotation=blunder_rev["annotation_summary"],
+    )
+    assert runtime_veto.sleep_queue
+    sleep_snap = runtime_veto.handle_run_rem_sleep()
     assert stub_veto.call_count == 1
-
-    runtime_veto.handle_run_rem_sleep()
+    assert sleep_snap["last_rem_sleep_self_talk"] == stub_veto.reply_text
     assert any(r.concept_name.startswith("hazard_") for r in runtime_veto.rules)
     after_bxf7_score = {
         e.san: e.composite_score
@@ -1055,26 +1071,38 @@ def test_speaker_attribution_and_clean_slate_reset(tmp_path: Path) -> None:
     assert "sparring_referee_review" in msg_sf["telemetry"]
     assert runtime._extract_clean_conversation_history() == ()
 
-    # 3. On a Move 3+ contested tactical crossroads, Gear 2/3 wakes the Left Brain and keeps thinking while stumped
+    # 3. Even on a Move 3+ contested tactical crossroads, board moves (`handle_microwave_step`) stay in
+    #    silent, fast Gear-1 Right-Brain mode without per-move Left-Brain chatter; when an actual human
+    #    asks an insightful question (`handle_chat_message`), Gear 2/3 wakes up with multi-sentence `<|subliminal_gap|>` self-talk.
     runtime.handle_set_fen("r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 3 3")
     assert runtime.white_clock_sec == 300.0 and runtime.black_clock_sec == 300.0
     s3 = runtime.handle_microwave_step()
-    msg_delib = s3["chat_messages"][-1]
+    msg_move = s3["chat_messages"][-1]
+    assert msg_move["sender"] == "companion"
+    assert msg_move["is_gear_1_fallback"] is True
+    assert runtime.last_hybrid_move_arbitration["selection_mode"] == "gear_1_right_brain_intuition"
+    assert "White to move" in msg_move["clean_pretext_prompt"] or "Black to move" in msg_move["clean_pretext_prompt"]
+    assert "FEN" not in msg_move["clean_pretext_prompt"]
+    assert s3["board"]["white_clock_sec"] <= 300.0
+    assert runtime._extract_clean_conversation_history() == ()
+
+    s_human = runtime.handle_chat_message(
+        "Why does sacrificing the bishop on f7 fail to break the king's shelter in this position?",
+        room="chess",
+        anchor_to_board=True,
+    )
+    msg_delib = s_human["chat_messages"][-1]
     assert msg_delib["sender"] == "companion"
-    assert "White to move" in msg_delib["clean_pretext_prompt"]
-    assert "FEN" not in msg_delib["clean_pretext_prompt"]
-    assert "Position anchored on " not in msg_delib["text"]
-    assert "[Right-Brain Intuition Override:" not in msg_delib["text"]
+    assert msg_delib["telemetry"]["insightful_inquiry_deliberation"] is True
     assert msg_delib["telemetry"]["spliced_trace"].get("clause_1_prefix") == ""
     assert msg_delib["telemetry"]["spliced_trace"].get("sentence_count", 0) >= 2
     assert msg_delib["telemetry"]["spliced_trace"].get("comma_scored_live") is True
-    assert s3["board"]["white_clock_sec"] <= 300.0
     hist_pairs = runtime._extract_clean_conversation_history()
     assert len(hist_pairs) == 1
 
     # 4. If Celestriad's 5:00 clock runs out (0:00), no hardcoded instinct bailout saves it;
-    #    it forfeits on time, queues the time-forfeit turn into `sleep_queue`, and consolidates
-    #    a permanent clock-persistence hazard rule during REM sleep
+    #    it forfeits on time, queues the time-forfeit turn into `sleep_queue`, talks to itself
+    #    during REM sleep, and consolidates a permanent clock-persistence hazard rule.
     sleep_q_before = len(runtime.sleep_queue)
     runtime.white_clock_sec = 0.0
     runtime.clock_flagged_loser = chess.WHITE
@@ -1089,7 +1117,9 @@ def test_speaker_attribution_and_clean_slate_reset(tmp_path: Path) -> None:
     assert "psychological/will/hesitation" not in flagged_fork.external_coordinates
     assert "psychological/will/hesitation" not in flagged_fork.contrastive_reference_coordinates
 
-    runtime.handle_run_rem_sleep()
+    rem_snap = runtime.handle_run_rem_sleep()
+    assert rem_snap["last_rem_sleep_self_talk"] is not None
+    assert "REM Dream Self-Reflection:" in rem_snap["last_rem_sleep_receipt"]
     assert any(
         r.concept_name.startswith("hazard_")
         and "philosophical/persistence/continuity" in r.target_leaves

@@ -1234,7 +1234,10 @@ def run_three_legged_turn(
                             social_drift=social_drift,
                             ratified_chords=pass_ratified_chords,
                         )
-                        mid_comma_vibe = _compile_mid_sentence_comma_vibe(_base_vibe, raw_comma_vibe)
+                        if comma_prefix.rstrip().endswith((".", "!", "?")):
+                            mid_comma_vibe = raw_comma_vibe
+                        else:
+                            mid_comma_vibe = _compile_mid_sentence_comma_vibe(_base_vibe, raw_comma_vibe)
                     chord_at_comma = SubliminalChordVector.from_right_brain_vibe(
                         mid_comma_vibe,
                         deliberation=deliberation,
