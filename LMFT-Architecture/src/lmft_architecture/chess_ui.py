@@ -42,9 +42,9 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
     --danger: #ef4444;
     --brilliant: #1baca6;
     --great: #5c8bb0;
-    --sq-light: #eeeed2;
-    --sq-dark: #769656;
-    --sq-hl: rgba(255, 255, 51, 0.48);
+    --sq-light: #dce6f2;
+    --sq-dark: #4b7399;
+    --sq-hl: rgba(56, 189, 248, 0.44);
   }
   * { box-sizing: border-box; }
   body {
@@ -330,6 +330,12 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
   .board-frame.theme-icy {
     --sq-light: #dce6f2;
     --sq-dark: #4b7399;
+    --sq-hl: rgba(56, 189, 248, 0.44);
+  }
+  .board-frame.theme-green {
+    --sq-light: #eeeed2;
+    --sq-dark: #769656;
+    --sq-hl: rgba(255, 255, 51, 0.48);
   }
   .sq {
     position: relative;
@@ -573,7 +579,7 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
         <div class="eval-bar-white" id="eval-bar-white-fill" style="height:50%;"></div>
         <div class="eval-bar-score" id="eval-bar-label">0.0</div>
       </div>
-      <div class="board-frame" id="chessboard-grid"></div>
+      <div class="board-frame theme-icy" id="chessboard-grid"></div>
     </div>
 
     <!-- Human Player / Stockfish Sparring Partner Bottom Banner -->
@@ -654,8 +660,8 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
         <option value="rook_seventh_bastion">Preset: 7th-Rank Rook Bastion Endgame</option>
       </select>
       <select id="board-theme-select" onchange="setBoardTheme(this.value)" style="font-size:11px;">
-        <option value="green" selected>Chess.com Green</option>
-        <option value="icy">Icy Sea</option>
+        <option value="icy" selected>Icy Sea</option>
+        <option value="green">Chess.com Green</option>
       </select>
     </div>
 
@@ -1115,8 +1121,13 @@ function flipChessBoard() {
 function setBoardTheme(theme) {
   const el = document.getElementById("chessboard-grid");
   if (!el) return;
-  if (theme === "icy") el.classList.add("theme-icy");
-  else el.classList.remove("theme-icy");
+  if (theme === "green") {
+    el.classList.remove("theme-icy");
+    el.classList.add("theme-green");
+  } else {
+    el.classList.remove("theme-green");
+    el.classList.add("theme-icy");
+  }
 }
 
 function escapeHtml(str) {
