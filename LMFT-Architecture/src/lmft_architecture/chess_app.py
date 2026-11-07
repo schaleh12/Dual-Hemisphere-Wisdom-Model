@@ -3350,6 +3350,10 @@ def create_chess_http_server(
                 return
             if self.path.startswith("/assets/celestial_seal_poem.jpg"):
                 poem_img = runtime.repo_root / "docs" / "assets" / "celestial_seal_poem.jpg"
+                if not poem_img.exists():
+                    from lmft_architecture.workspace_paths import resolve_arch_root
+
+                    poem_img = resolve_arch_root() / "docs" / "assets" / "celestial_seal_poem.jpg"
                 if poem_img.exists():
                     img_bytes = poem_img.read_bytes()
                     self.send_response(int(HTTPStatus.OK))

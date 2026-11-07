@@ -36,12 +36,15 @@ def build_release_zip(
 
     out_dir = Path(output_dir).resolve() if output_dir is not None else (train_root / "dist")
     out_dir.mkdir(parents=True, exist_ok=True)
-    manifest = build_release_manifest(arch_root)
+    is_default_dist = out_dir == (train_root / "dist").resolve()
+    manifest = build_release_manifest(arch_root, write_to_disk=is_default_dist)
     manifest_path = out_dir / "release_manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     zip_path = out_dir / BUNDLE_NAME
 
-    include_pairs: list[tuple[str, Path]] = []
+    include_pairs: list[tuple[str, Path]] = [
+        ("dist/release_manifest.json", manifest_path),
+    ]
     for root_file in (
         "LMFT-Chess.exe",
         "LMFT-Bloodmoon.exe",
@@ -98,7 +101,6 @@ def build_release_zip(
         for arcname, file_path in include_pairs:
             zf.write(file_path, arcname=arcname)
 
-    manifest = build_release_manifest(arch_root, write_to_disk=True)
     return zip_path
 
 

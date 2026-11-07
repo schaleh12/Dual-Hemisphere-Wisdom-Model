@@ -2,8 +2,8 @@
   "schema_version": 1,
   "version": "0.2.0",
   "github_repo": "schaleh12/Dual-Hemisphere-Wisdom-Model",
-  "build_sha256": "7c7d063ccd841de4757718c7d2fbcf3409ad969e0cc4a8de10b6fd11c3025b85",
-  "build_short_hash": "7c7d063ccd84",
+  "build_sha256": "9cb9534935e361097d126d04ee6c438f5630888c07a0498acd2003b6d704ae5e",
+  "build_short_hash": "9cb9534935e3",
   "files": {
     "src/lmft_architecture/__init__.py": {
       "sha256": "a89f56c2195e87129adbffa5065d8769ea096e13ba98783d217c4d120ee92623",
@@ -90,8 +90,8 @@
       "size_bytes": 3267
     },
     "src/lmft_architecture/chess_app.py": {
-      "sha256": "47e59ca8fa889109ecccaab31b9c3390c6d5eb415cfc6287dcdfe77b6a6be363",
-      "size_bytes": 167233
+      "sha256": "a9ada8bcc764621483f595f2ac306f5fbcf72de2be06ab88c0748fb4621fa329",
+      "size_bytes": 167459
     },
     "src/lmft_architecture/chess_kibitz_bridge.py": {
       "sha256": "34049903ca933e1a4eb152196a668316b25381fdc23c47912bde76a406ea5dbf",
@@ -154,8 +154,8 @@
       "size_bytes": 23245
     },
     "src/lmft_architecture/github_auto_sync.py": {
-      "sha256": "4c3b8dac84c8a6fe498fc0c78cb9a3b923536df88dfff9262e6bfdf81d4c16ee",
-      "size_bytes": 10286
+      "sha256": "ac62205d4f7e0202036b9b84a4177d143a4e837bdb10beaf210e4b31c86d109d",
+      "size_bytes": 10170
     },
     "src/lmft_architecture/impish_bloodmoon_adapter.py": {
       "sha256": "4b311691626d4c0e2bc59877bcfde460ae8c382c02532ab31b09450bda943b86",
@@ -304,14 +304,6 @@
     "docs/assets/celestial_seal_poem.jpg": {
       "sha256": "a2d98ba6b0adffd354c56e7f4d7ca574332c6d3683e407c7351463f7b69de113",
       "size_bytes": 96030
-    },
-    "dist/lmft-sanctuary-club-v0.1.0-win64.zip": {
-      "sha256": "852822f4f9ea3d0da815fc38e637b5ab8ea718ad0dffdd17426ca49cf3a3cae1",
-      "size_bytes": 557201
-    },
-    "dist/impish_bloodmoon_patreon.enc": {
-      "sha256": "30ee2d3b94331e70fba3afa30dd3aed006e007167e924b4a27afab9ee7a4c065",
-      "size_bytes": 93649374
     },
     "outputs/rem_sleep_consolidated_ruleset.json": {
       "sha256": "7c27ad395cf32d53e8c771cf263477111fc55e9834b00dc7c2f4358d189c7c71",

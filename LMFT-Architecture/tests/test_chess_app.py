@@ -333,6 +333,11 @@ def test_http_server_threads_sync_and_release_bundle(tmp_path: Path) -> None:
     assert snap_back["active_thread_id"] == t1_id
     assert len(runtime._extract_clean_conversation_history()) == 1
 
+    assert 'id="celestriad-jukebox"' in CHESS_SINGLE_PAGE_HTML
+    assert "toggleJukeboxMute()" in CHESS_SINGLE_PAGE_HTML
+    assert 'id="space-center-modal-overlay"' in CHESS_SINGLE_PAGE_HTML
+    assert "syncAndAutoUpdate()" in CHESS_SINGLE_PAGE_HTML
+
     server = create_chess_http_server(runtime, host="127.0.0.1", port=0)
     port = server.server_port
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -342,12 +347,20 @@ def test_http_server_threads_sync_and_release_bundle(tmp_path: Path) -> None:
             state = json.loads(resp.read().decode("utf-8"))
             assert state["app_name"] == "LMFT-Chess"
             assert state["board"]["turn"] == "w"
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/assets/celestial_seal_poem.jpg", timeout=5) as img_resp:
+            img_bytes = img_resp.read()
+            assert img_resp.status == 200
+            assert img_resp.headers.get("Content-Type") == "image/jpeg"
+            assert len(img_bytes) > 50_000
     finally:
         server.shutdown()
         server.server_close()
 
     real_repo_root = Path(__file__).resolve().parents[1]
-    manifest = build_release_manifest(real_repo_root)
+    manifest = build_release_manifest(real_repo_root, write_to_disk=False)
+    assert "docs/assets/celestial_seal_poem.jpg" in manifest["files"]
+    assert "dist/impish_bloodmoon_patreon.enc" not in manifest["files"]
+    assert "dist/lmft-sanctuary-club-v0.1.0-win64.zip" not in manifest["files"]
     manifest["files"]["outputs/chess_kibitzer_state/threads.json"] = {"sha256": "deadbeef", "size_bytes": 42}
     sync_status = verify_or_sync_against_manifest(real_repo_root, manifest, apply_sync=False)
     assert sync_status["status"] == "up_to_date"

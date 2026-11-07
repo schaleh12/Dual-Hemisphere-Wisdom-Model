@@ -113,11 +113,7 @@ def build_release_manifest(
     poem_asset = arch_root / "docs" / "assets" / "celestial_seal_poem.jpg"
     if poem_asset.exists():
         candidate_pairs.append(("docs/assets/celestial_seal_poem.jpg", poem_asset))
-    for rel_extra in (
-        "dist/lmft-sanctuary-club-v0.1.0-win64.zip",
-        "dist/impish_bloodmoon_patreon.enc",
-        *SHARED_RELEASE_SEED_PATHS,
-    ):
+    for rel_extra in SHARED_RELEASE_SEED_PATHS:
         extra = train_root / rel_extra
         if extra.exists():
             candidate_pairs.append((rel_extra, extra))
