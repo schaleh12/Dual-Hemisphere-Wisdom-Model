@@ -637,36 +637,55 @@ class ChessKibitzerRuntime:
         except Exception:
             return None
 
-    def _prune_ephemeral_history(self, *, max_messages: int = 160, max_turn_records: int = 200) -> None:
+    def _prune_ephemeral_history(
+        self,
+        *,
+        max_routine_moves: int = 36,
+        max_messages: int = 120,
+        max_turn_records: int = 200,
+    ) -> None:
         """Keep `chat_messages` and `_turn_records_by_id` bounded during multi-hour AFK sparring."""
         protected_ids = {s.scene_index for s in self.sleep_queue} | set(self.savored_turn_ids)
-        if len(self.chat_messages) > max_messages:
-            excess = len(self.chat_messages) - max_messages
-            kept: list[dict[str, Any]] = []
-            dropped = 0
-            for m in self.chat_messages:
-                mid = m.get("id")
-                is_routine_move = (
-                    dropped < excess
-                    and bool(m.get("is_gear_1_fallback"))
-                    and not m.get("coached")
-                    and not m.get("savored")
-                    and not m.get("auto_rem_sleep_receipt")
-                    and mid not in protected_ids
-                )
-                if is_routine_move:
-                    dropped += 1
-                    continue
-                kept.append(m)
-            if len(kept) > max_messages:
-                kept = kept[-max_messages:]
-            self.chat_messages = kept
 
+        def _is_routine_solid_card(m: dict[str, Any]) -> bool:
+            mid = m.get("id")
+            if (
+                not m.get("is_gear_1_fallback")
+                or m.get("coached")
+                or m.get("savored")
+                or m.get("auto_rem_sleep_receipt")
+                or mid in protected_ids
+            ):
+                return False
+            t = m.get("telemetry") or {}
+            for rev_key in ("player_coaching", "game_review"):
+                rev = t.get(rev_key)
+                if isinstance(rev, dict) and (
+                    rev.get("is_hazard")
+                    or rev.get("glyph")
+                    or rev.get("should_queue_for_sleep")
+                    or (rev.get("classification") and not str(rev.get("classification")).startswith("SOLID"))
+                ):
+                    return False
+            return True
+
+        routine_indices = [idx for idx, m in enumerate(self.chat_messages) if _is_routine_solid_card(m)]
+        if len(routine_indices) > max_routine_moves:
+            drop_set = set(routine_indices[: len(routine_indices) - max_routine_moves])
+            self.chat_messages = [m for idx, m in enumerate(self.chat_messages) if idx not in drop_set]
+
+        if len(self.chat_messages) > max_messages:
+            self.chat_messages = self.chat_messages[-max_messages:]
+
+        active_msg_ids = {
+            int(m["id"]) for m in self.chat_messages if isinstance(m.get("id"), int)
+        }
+        protected_turn_ids = protected_ids | active_msg_ids
         if len(self._turn_records_by_id) > max_turn_records:
             for k in sorted(self._turn_records_by_id.keys()):
                 if len(self._turn_records_by_id) <= max_turn_records:
                     break
-                if k not in protected_ids:
+                if k not in protected_turn_ids:
                     self._turn_records_by_id.pop(k, None)
 
     def _sync_active_thread_record(self, *, persist: bool = True) -> None:
@@ -1337,7 +1356,7 @@ class ChessKibitzerRuntime:
                 "posture": self.board_posture.to_dict(),
                 "presets": PRESET_CHESS_POSITIONS,
             },
-            "chat_messages": list(self.chat_messages[-60:]),
+            "chat_messages": list(self.chat_messages[-120:]),
             "gemini_api_configured": bool(os.environ.get("GEMINI_API_KEY", "").strip()),
         }
 
