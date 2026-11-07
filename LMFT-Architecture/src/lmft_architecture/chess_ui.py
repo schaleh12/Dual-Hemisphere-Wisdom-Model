@@ -602,18 +602,24 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
 
   <!-- RIGHT COLUMN: Live Kibitz, Custom Coach Cards & Chat Stream -->
   <section class="right-column">
-    <div style="display:flex;justify-content:space-between;align-items:center;">
-      <strong style="font-size:13px;">💬 Live Kibitz, Game Review &amp; Custom Coach Stream</strong>
-      <label style="font-size:11px;display:flex;align-items:center;gap:5px;color:var(--text-1);">
-        <input type="checkbox" id="anchor-board-toggle" checked />
-        Anchor Chat to Board Fact
-      </label>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+      <strong style="font-size:13px;">💬 Coach, REM Sleep &amp; Chat Stream</strong>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <label style="font-size:11px;display:flex;align-items:center;gap:5px;color:var(--text-1);" title="Show every routine SOLID Gear-1 move receipt in the stream">
+          <input type="checkbox" id="show-routine-moves-toggle" onchange="lastRenderedChatSig='';pollState();" />
+          Show Routine Moves
+        </label>
+        <label style="font-size:11px;display:flex;align-items:center;gap:5px;color:var(--text-1);">
+          <input type="checkbox" id="anchor-board-toggle" checked />
+          Anchor Chat to Board Fact
+        </label>
+      </div>
     </div>
     <div id="chat-messages"></div>
     <div style="display:flex;gap:6px;align-items:center;">
       <input type="text" id="chat-input" placeholder="Talk to Celestriad 1.0: ask why a move was a blunder, ask for a plan, or chat..." style="flex:1;" onkeydown="if(event.key==='Enter')sendChatMessage()" />
       <select id="chat-sentences-select" title="How many sentences Celestriad 1.0 speaks when replying">
-        <option value="1" selected>Reply: 1 Sentence</option>
+        <option value="1" selected>Reply: Auto (1–3 Sentences)</option>
         <option value="2">Reply: 2 Sentences</option>
         <option value="3">Reply: 3 Sentences</option>
       </select>
@@ -630,7 +636,7 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
       <button class="btn" onclick="closeTutorialModal()">✕</button>
     </div>
     <p style="font-size:13px;color:var(--text-1);margin:8px 0 4px 0;">
-      Unlike standard chess bots that brute-force millions of moves in silence, <strong>LMFT-Chess</strong> plays on 1-step intuition using a <strong>40-Node Fuzzy Tree</strong> wired directly into <strong>Qwen3-4B</strong> at the comma (<code>&lt;|subliminal_gap|&gt;</code>)—and learns permanent rules during <strong>REM Sleep</strong>.
+      <strong>Celestriad 1.0</strong> plays moves silently and fast on 1-step intuition using a <strong>40-Node Right-Brain Fuzzy Tree</strong>, and speaks with <strong>Qwen3-4B</strong> (spliced at <code>&lt;|subliminal_gap|&gt;</code>) when <strong>reflecting during REM Sleep</strong> or when <strong>you ask it a question</strong>.
     </p>
     <div class="tutorial-step">
       <strong>Button #1: 🎮 1. Play &amp; Chat (Default Mode)</strong><br/>
@@ -638,16 +644,16 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
       <ul style="margin:5px 0 0 18px;padding:0;">
         <li>Grade your move Chess.com-style (<code>!! Brilliant</code>, <code>! Great</code>, <code>✓ Solid</code>, <code>? Mistake</code>, or <code>?? Blunder</code>),</li>
         <li>Update your personal <strong>Your Elo</strong> rating and live <strong>Accuracy %</strong> at the bottom of the board,</li>
-        <li>Automatically play its own reply move and explain its thinking in the chat window!</li>
+        <li>Reply silently on the board via fast Right-Brain intuition—and deliberate with you whenever you ask a question in chat!</li>
       </ul>
     </div>
     <div class="tutorial-step">
       <strong>Button #2: 🔥 2. Self-Train (AFK Oven Mode)</strong><br/>
-      Click <strong>🔥 2. Self-Train</strong> whenever you want the AI to train itself hands-free (even overnight while you sleep). It spars against a strength-calibrated Stockfish referee, flags its own blunders (<code>??</code>) and brilliancies (<code>!!</code>), and runs <strong>🌙 REM Sleep</strong> to forge permanent <code>hazard_</code> and <code>coached_</code> fuzzy rules that automatically sync to the GitHub release seed.
+      Click <strong>🔥 2. Self-Train</strong> whenever you want the AI to train itself hands-free (even overnight while you sleep). It spars silently at high speed against a strength-calibrated Stockfish referee, flags its own blunders (<code>??</code>) and brilliancies (<code>!!</code>), and talks to itself during <strong>🌙 REM Sleep</strong> while forging permanent <code>hazard_</code> and <code>coached_</code> fuzzy rules.
     </div>
     <div class="tutorial-step">
       <strong>💬 Talk or Coach Anytime</strong><br/>
-      Use the chat bar on the right to talk to the AI about the board, or click <strong>Coach / Queue for Sleep</strong> under any move to tell the AI to study that exact position during its next sleep cycle.
+      Use the chat bar on the right to ask Celestriad 1.0 questions about the board (insightful questions automatically trigger 2–3 sentence deliberation), or check <strong>Show Routine Moves</strong> to inspect every individual ply and click <strong>Coach / Queue for Sleep</strong>.
     </div>
     <div style="margin-top:14px;display:flex;justify-content:flex-end;gap:8px;">
       <button class="btn btn-chess-green" style="padding:8px 18px;font-size:13px;" onclick="closeTutorialModal()">Got It — Let's Play!</button>
@@ -832,7 +838,7 @@ async function playHumanMoveAndAutoReply(moveStr) {
   const turnPill = document.getElementById("turn-indicator-pill");
   const snap = await apiPost("/api/chess/move", { move: moveStr });
   if (playVsAiAutoReply && !autoSelfPlayTimer && snap && snap.board && !snap.board.is_game_over) {
-    if (turnPill) turnPill.textContent = "LMFT Thinking & Kibitzing...";
+    if (turnPill) turnPill.textContent = "Celestriad 1.0 Moving (Right-Brain Intuition)...";
     setTimeout(async () => {
       try {
         await playAiMove();
@@ -964,7 +970,7 @@ function renderState(s) {
   if (s.board) {
     renderBoard(s.board); lastBoardClockSnap = { w: Number(s.board.white_clock_sec ?? 300), b: Number(s.board.black_clock_sec ?? 300), turn: s.board.turn || "w", isGameOver: !!s.board.is_game_over, hasMoves: (s.board.move_history_san || []).length > 0, snapAtMs: performance.now() }; refreshClockPills();
     const turnPill = document.getElementById("turn-indicator-pill");
-    if (turnPill && turnPill.textContent !== "LMFT Thinking & Kibitzing...") {
+    if (turnPill && turnPill.textContent !== "Celestriad 1.0 Moving (Right-Brain Intuition)...") {
       if (s.board.is_game_over) {
         turnPill.textContent = "Game Over — Click New Game";
       } else if (isSelfTrain) {
@@ -1049,50 +1055,67 @@ function renderState(s) {
   if (elMistake) elMistake.textContent = String(cMistake);
   if (elBlund) elBlund.textContent = String(cBlund);
 
-  const sig = JSON.stringify(msgs.map(m => [m.id, m.role_label, m.text, m.coached, m.savored, !!m.auto_rem_sleep_receipt, !!(m.telemetry && (m.telemetry.game_review || m.telemetry.sparring_referee_review || m.telemetry.intuition_override_note))]));
+  const showRoutineMoves = !!(document.getElementById("show-routine-moves-toggle") && document.getElementById("show-routine-moves-toggle").checked);
+  const visibleMsgs = showRoutineMoves ? msgs : msgs.filter(m => {
+    if (m.sender === "user" || m.sender === "system") return true;
+    if (!m.is_gear_1_fallback) return true;
+    if (m.coached || m.savored || m.auto_rem_sleep_receipt) return true;
+    const t = m.telemetry || {};
+    if (t.intuition_override_note) return true;
+    const pc = t.player_coaching;
+    if (pc && (pc.is_hazard || pc.glyph || (pc.classification && !String(pc.classification).startsWith("SOLID")))) return true;
+    const gr = m.sender === "sparring_opponent" ? (t.sparring_referee_review || t.game_review) : t.game_review;
+    if (gr && (gr.is_hazard || gr.glyph || gr.should_queue_for_sleep || (gr.classification && !String(gr.classification).startsWith("SOLID")))) return true;
+    return false;
+  });
+  const sig = JSON.stringify([showRoutineMoves, visibleMsgs.map(m => [m.id, m.role_label, m.text, m.coached, m.savored, !!m.auto_rem_sleep_receipt, !!(m.telemetry && (m.telemetry.game_review || m.telemetry.sparring_referee_review || m.telemetry.intuition_override_note))])]);
   if (sig !== lastRenderedChatSig) {
     lastRenderedChatSig = sig;
     const box = document.getElementById("chat-messages");
-    box.innerHTML = msgs.map(m => {
-      const t = m.telemetry || {};
-      const gearLabel = t.gear_used === "GEAR_3_UNRESOLVED_QUEUED_FOR_SLEEP"
-        ? "GEAR 3 · QUEUED FOR SLEEP"
-        : (t.gear_used || "");
-      const sub = m.sender === "sparring_opponent" ? null : t.pretext_subtext_context;
-      const subHtml = sub
-        ? `<div class="subtext-strip"><span>Pretext turns: ${sub.pretext_turns || 0}</span><span>Subtext Dominant: ${escapeHtml(sub.dominant_piece || "")} (${escapeHtml(sub.dominant_color || "")})</span><span>${escapeHtml(gearLabel)}</span></div>`
-        : "";
-      const pc = t.player_coaching;
-      const gr = m.sender === "sparring_opponent" ? (t.sparring_referee_review || t.game_review) : null;
-      const bannerCls = (pc && pc.is_hazard) || (gr && gr.is_hazard)
-        ? "coach-banner haz"
-        : ((pc && pc.glyph) || (gr && gr.glyph) ? "coach-banner brill" : "coach-banner");
-      const coachStripHtml = pc
-        ? `<div class="${bannerCls}"><strong>Custom Coach (${escapeHtml(pc.classification || "SOLID")} · ${Number(pc.move_accuracy_pct || 0).toFixed(0)}% Acc · Est. ${Number(pc.estimated_performance_elo || 1000).toFixed(0)} Elo):</strong> ${escapeHtml(pc.coaching_advice || "")}</div>`
-        : (gr ? `<div class="${bannerCls}"><strong>🐟 Stockfish 19 Post-Move Referee:</strong> ${escapeHtml(gr.annotation_summary || "")}</div>` : (t.intuition_override_note ? `<div class="coach-banner">${escapeHtml(t.intuition_override_note)}</div>` : ""));
-      const autoSleepHtml = m.auto_rem_sleep_receipt
-        ? `<div class="coach-banner brill" style="white-space:pre-wrap;margin-top:6px;"><strong>🌙 Auto-REM Sleep Dream &amp; Consolidation:</strong>\n${escapeHtml(m.auto_rem_sleep_receipt)}</div>`
-        : "";
-      const actionsHtml = (m.sender === "companion" && typeof m.id === "number")
-        ? `<div style="margin-top:6px;display:flex;gap:6px;">
-             <button class="btn" style="padding:3px 8px;font-size:10px;" onclick="coachTurn(${m.id})">${m.coached ? "Queued for Sleep" : "Coach / Queue for Sleep"}</button>
-             <button class="btn" style="padding:3px 8px;font-size:10px;" onclick="savorTurn(${m.id})">${m.savored ? "Savored" : "Savor Vibe"}</button>
-           </div>`
-        : "";
-      return `
-        <div class="msg-card">
-          <div class="msg-header">
-            <span>${escapeHtml(m.role_label || m.sender)}</span>
-            <span>#${escapeHtml(m.id)}</span>
+    if (visibleMsgs.length === 0) {
+      box.innerHTML = `<div style="padding:14px;color:var(--text-2);font-size:12px;text-align:center;">Silent Gear-1 Right-Brain mode active — routine SOLID move cards are hidden so only <strong>Chat</strong>, <strong>Non-Solid Coach Reviews (?? / ? / ! / !!)</strong>, and <strong>🌙 REM Sleep Dreams</strong> appear here. (Check <em>Show Routine Moves</em> above to view every ply.)</div>`;
+    } else {
+      box.innerHTML = visibleMsgs.map(m => {
+        const t = m.telemetry || {};
+        const gearLabel = t.gear_used === "GEAR_3_UNRESOLVED_QUEUED_FOR_SLEEP"
+          ? "GEAR 3 · QUEUED FOR SLEEP"
+          : (t.gear_used || "");
+        const sub = m.sender === "sparring_opponent" ? null : t.pretext_subtext_context;
+        const subHtml = sub
+          ? `<div class="subtext-strip"><span>Pretext turns: ${sub.pretext_turns || 0}</span><span>Subtext Dominant: ${escapeHtml(sub.dominant_piece || "")} (${escapeHtml(sub.dominant_color || "")})</span><span>${escapeHtml(gearLabel)}</span></div>`
+          : "";
+        const pc = t.player_coaching;
+        const gr = m.sender === "sparring_opponent" ? (t.sparring_referee_review || t.game_review) : null;
+        const bannerCls = (pc && pc.is_hazard) || (gr && gr.is_hazard)
+          ? "coach-banner haz"
+          : ((pc && pc.glyph) || (gr && gr.glyph) ? "coach-banner brill" : "coach-banner");
+        const coachStripHtml = pc
+          ? `<div class="${bannerCls}"><strong>Custom Coach (${escapeHtml(pc.classification || "SOLID")} · ${Number(pc.move_accuracy_pct || 0).toFixed(0)}% Acc · Est. ${Number(pc.estimated_performance_elo || 1000).toFixed(0)} Elo):</strong> ${escapeHtml(pc.coaching_advice || "")}</div>`
+          : (gr ? `<div class="${bannerCls}"><strong>🐟 Stockfish 19 Post-Move Referee:</strong> ${escapeHtml(gr.annotation_summary || "")}</div>` : (t.intuition_override_note ? `<div class="coach-banner">${escapeHtml(t.intuition_override_note)}</div>` : ""));
+        const autoSleepHtml = m.auto_rem_sleep_receipt
+          ? `<div class="coach-banner brill" style="white-space:pre-wrap;margin-top:6px;"><strong>🌙 Auto-REM Sleep Dream &amp; Consolidation:</strong>\n${escapeHtml(m.auto_rem_sleep_receipt)}</div>`
+          : "";
+        const actionsHtml = (m.sender === "companion" && typeof m.id === "number")
+          ? `<div style="margin-top:6px;display:flex;gap:6px;">
+               <button class="btn" style="padding:3px 8px;font-size:10px;" onclick="coachTurn(${m.id})">${m.coached ? "Queued for Sleep" : "Coach / Queue for Sleep"}</button>
+               <button class="btn" style="padding:3px 8px;font-size:10px;" onclick="savorTurn(${m.id})">${m.savored ? "Savored" : "Savor Vibe"}</button>
+             </div>`
+          : "";
+        return `
+          <div class="msg-card">
+            <div class="msg-header">
+              <span>${escapeHtml(m.role_label || m.sender)}</span>
+              <span>#${escapeHtml(m.id)}</span>
+            </div>
+            <div class="msg-text">${escapeHtml(m.text)}</div>
+            ${subHtml}
+            ${coachStripHtml}
+            ${autoSleepHtml}
+            ${actionsHtml}
           </div>
-          <div class="msg-text">${escapeHtml(m.text)}</div>
-          ${subHtml}
-          ${coachStripHtml}
-          ${autoSleepHtml}
-          ${actionsHtml}
-        </div>
-      `;
-    }).join("");
+        `;
+      }).join("");
+    }
     box.scrollTop = box.scrollHeight;
   }
 }

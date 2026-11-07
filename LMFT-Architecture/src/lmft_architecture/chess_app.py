@@ -59,26 +59,19 @@ import chess
 
 from .birth import BirthState, create_birth_state
 from .branch_archives import (
-    EXECUTIVE_BRANCH,
-    JUDICIAL_BRANCH,
-    LEGISLATIVE_BRANCH,
-    BranchClauseEntry,
     ThreeBranchArchives,
     harvest_into_branch_archives,
 )
 from .chess_kibitz_bridge import (
     SANCTUARY_MODES,
     BitboardIntuitionSleeve,
-    CandidateMoveEvaluation,
     ChessBoardPosture,
     ObjectiveCalibratedSparringEngine,
     _static_centipawns_for_color,
     build_human_move_coaching_report,
     build_natural_chess_scenario_prompt,
-    compute_candidate_move_fuzzy_coordinates,
     compute_estimated_game_elo,
     compute_fide_elo_update,
-    compute_move_accuracy_percent,
     evaluate_candidate_moves_with_right_brain,
     evaluate_chess_board_posture,
     format_move_history_pgn_snippet,
@@ -87,7 +80,7 @@ from .chess_kibitz_bridge import (
     verify_or_ground_chess_moves_in_reply,
 )
 from .chess_ui import CHESS_SINGLE_PAGE_HTML
-from .chord_memory import ChordMemoryBank, compile_felt_chord
+from .chord_memory import ChordMemoryBank
 from .contemplation_ledger import (
     ContemplationLedger,
     load_contemplation_ledger,
@@ -103,11 +96,7 @@ from .neural_bridge_classifiers import (
     DEFAULT_COMPLEX_FEELING_LEAVES,
     NeuralThreeBridgeSuite,
 )
-from .philosophical_abstraction_matrix import (
-    PHILOSOPHICAL_SHADOW_LEAVES,
-    compute_philosophical_color_harmony,
-    detect_shadow_pathologies,
-)
+from .philosophical_abstraction_matrix import PHILOSOPHICAL_SHADOW_LEAVES
 from .reflection_classifier import (
     AROUSAL_LEAF,
     FOUNDATIONAL_LEAVES,
@@ -118,7 +107,6 @@ from .reflection_classifier import (
     LearnedLeaf,
     _evaluate_rules_with_inhibition,
     compute_contemplation,
-    leaf_tier,
     load_learned_leaves,
     load_ruleset,
     save_ruleset,
@@ -131,13 +119,9 @@ from .right_brain_equilibrium import (
 from .runtime_store import atomic_json
 from .sleep_consolidation import (
     UnresolvedSleepScene,
-    _anchor_target_leaves_from_cluster,
-    _average_cluster_coordinates,
-    _average_contrastive_reference_coordinates,
-    _cluster_key_for_unresolved,
-    _derive_concept_tags,
-    normalize_contrastive_target_leaves_and_thresholds,
-    refine_colliding_rules_during_sleep,
+    canonical_cluster_concept_name,
+    consolidate_sleep_clusters_locally,
+    entrain_existing_cluster_rule,
     run_sleep_consolidation,
 )
 from .subliminal_gap_splice import SubliminalChordVector
@@ -230,44 +214,6 @@ def _default_fallback_sensors() -> ThreeBridgeSensors:
     )
 
 
-def _canonical_cluster_concept_name(concept_name: str) -> str:
-    """Strip `_s<scene>` suffixes from auto-generated `hazard_*_cluster_sN` / `coached_*_cluster_sN` rules."""
-    if concept_name.startswith(("hazard_", "coached_")) and "_cluster_s" in concept_name:
-        head, tail = concept_name.rsplit("_cluster_s", 1)
-        if tail.isdigit():
-            return f"{head}_cluster"
-    return concept_name
-
-
-def _entrain_existing_cluster_rule(
-    existing: FuzzyConceptRule,
-    incoming: FuzzyConceptRule,
-    canonical_name: str,
-) -> FuzzyConceptRule:
-    """Entrain an existing cluster rule with new REM sleep observations (`0.7 * old + 0.3 * new`)."""
-    blended_leaves: dict[str, float] = {}
-    for k, v in incoming.target_leaves.items():
-        if k in existing.target_leaves:
-            blended_leaves[k] = round(0.7 * float(existing.target_leaves[k]) + 0.3 * float(v), 4)
-        else:
-            blended_leaves[k] = round(float(v), 4)
-    new_low = round(0.7 * float(existing.low) + 0.3 * float(incoming.low), 4)
-    new_high = round(max(new_low + 0.02, 0.7 * float(existing.high) + 0.3 * float(incoming.high)), 4)
-    clean_rule_id = (
-        existing.rule_id
-        if "_cluster_s" not in existing.concept_name
-        else f"rule-sleep-{canonical_name[:32]}"
-    )
-    return FuzzyConceptRule(
-        rule_id=clean_rule_id,
-        concept_name=canonical_name,
-        description=incoming.description,
-        target_leaves=blended_leaves,
-        low=new_low,
-        high=new_high,
-    )
-
-
 def _ensure_foundational_rules(rules: tuple[FuzzyConceptRule, ...]) -> tuple[FuzzyConceptRule, ...]:
     foundational_by_id = {r.rule_id: r for r in VIRGIN_FOUNDATIONAL_RULES}
     foundational_by_name = {r.concept_name: r for r in VIRGIN_FOUNDATIONAL_RULES}
@@ -342,7 +288,7 @@ def _ensure_foundational_rules(rules: tuple[FuzzyConceptRule, ...]) -> tuple[Fuz
             after_best = r.description.split(" instead of best move ", 1)[1].split(" ", 1)[0].rstrip(".").strip()
             if after_played and after_played == after_best:
                 continue
-        canonical_name = _canonical_cluster_concept_name(r.concept_name)
+        canonical_name = canonical_cluster_concept_name(r.concept_name)
         if canonical_name != r.concept_name:
             r = FuzzyConceptRule(
                 rule_id=f"rule-sleep-{canonical_name[:32]}",
@@ -354,14 +300,14 @@ def _ensure_foundational_rules(rules: tuple[FuzzyConceptRule, ...]) -> tuple[Fuz
             )
         if canonical_name in seen_by_canonical_name:
             idx = seen_by_canonical_name[canonical_name]
-            merged[idx] = _entrain_existing_cluster_rule(merged[idx], r, canonical_name)
+            merged[idx] = entrain_existing_cluster_rule(merged[idx], r, canonical_name)
             continue
         if canonical_name.startswith(("hazard_", "coached_")) and canonical_name.endswith("_cluster"):
             prefix = "hazard" if canonical_name.startswith("hazard_") else "coached"
             sig = (prefix, tuple(sorted((k, round(float(v), 4)) for k, v in r.target_leaves.items())))
             if sig in seen_learned_sigs:
                 idx = seen_learned_sigs[sig]
-                merged[idx] = _entrain_existing_cluster_rule(merged[idx], r, merged[idx].concept_name)
+                merged[idx] = entrain_existing_cluster_rule(merged[idx], r, merged[idx].concept_name)
                 continue
             seen_learned_sigs[sig] = len(merged)
         seen_by_canonical_name[canonical_name] = len(merged)
@@ -818,7 +764,7 @@ class ChessKibitzerRuntime:
             sender = msg.get("sender")
             if sender == "user":
                 u_txt = str(msg.get("clean_user_text") or msg.get("text", "")).strip()
-                if u_txt and not u_txt.startswith("[WAVE —"):
+                if u_txt:
                     pending_user = u_txt
             elif sender == "companion":
                 if msg.get("is_gear_1_fallback"):
@@ -962,14 +908,8 @@ class ChessKibitzerRuntime:
             "total_rules_count": len(self.rules),
         }
 
-    def switch_brain_lineage(
-        self,
-        lineage: str,
-        *,
-        patreon_passphrase: str | None = None,
-    ) -> dict[str, Any]:
+    def switch_brain_lineage(self, lineage: str) -> dict[str, Any]:
         """Switch between `'schooled'` (Cycle 2 + user coaching) and `'virgin'` (Cycle 0 read-only snapshot)."""
-        _ = patreon_passphrase
         mode = lineage.strip().lower()
         if mode not in ("schooled", "virgin"):
             raise ValueError(
@@ -1610,9 +1550,13 @@ class ChessKibitzerRuntime:
 
         top_candidates = all_evals[:6]
         right_brain_choice = top_candidates[0]
-        if len(self.move_history_san) < 6 and len(top_candidates) > 1 and self.games_completed_count > 0:
+        if (
+            self.games_completed_count > 0
+            and len(top_candidates) > 1
+            and not str(right_brain_choice.matched_concept or "").startswith("coached_")
+        ):
             best_score = right_brain_choice.composite_score
-            sound_opening = [
+            near_tied_sound = [
                 c
                 for c in top_candidates[:4]
                 if not c.is_blunder
@@ -1620,9 +1564,9 @@ class ChessKibitzerRuntime:
                 and not c.shadow_warnings
                 and (best_score - c.composite_score) <= 0.18
             ]
-            if len(sound_opening) > 1:
-                rot_idx = (self.games_completed_count + (len(self.move_history_san) // 2)) % len(sound_opening)
-                right_brain_choice = sound_opening[rot_idx]
+            if len(near_tied_sound) > 1:
+                rot_idx = (self.games_completed_count + (len(self.move_history_san) // 2)) % len(near_tied_sound)
+                right_brain_choice = near_tied_sound[rot_idx]
         chosen_san = right_brain_choice.san
         selection_mode = "gear_1_right_brain_intuition"
 
@@ -2356,277 +2300,19 @@ class ChessKibitzerRuntime:
     ) -> tuple[tuple[str, ...], tuple[FuzzyConceptRule, ...], tuple[str, ...]]:
         virgin_ids = {r.rule_id for r in VIRGIN_FOUNDATIONAL_RULES}
         non_virgin_rules = tuple(r for r in self.rules if r.rule_id not in virgin_ids)
-        refined_non_virgin, refined_ids = refine_colliding_rules_during_sleep(
-            non_virgin_rules,
-            queued_scenes,
+        report = consolidate_sleep_clusters_locally(
+            queued_scenes=queued_scenes,
+            rules=non_virgin_rules,
+            learned_leaves=self.learned_leaves,
+            archives=self.archives,
+            ledger=self.ledger,
+            hazard_scene_indices=self._hazard_scene_indices,
+            ensure_rules_fn=_ensure_foundational_rules,
         )
-        active_rules = list(_ensure_foundational_rules(refined_non_virgin))
-        existing_names = {r.concept_name for r in active_rules}
-        forged_rules: list[FuzzyConceptRule] = []
-        harvested_clause_ids: list[str] = []
-
-        cur_archives = self.archives
-        cur_ledger = self.ledger
-
-        clusters: dict[tuple[str, bool], list[UnresolvedSleepScene]] = {}
-        for s in queued_scenes:
-            is_uncoached_collision = (
-                (
-                    s.active_concept_collision is not None
-                    or (
-                        s.scenario_text.startswith("Chess table —")
-                        and "[Coach note:" not in s.scenario_text
-                    )
-                )
-                and s.contrastive_reference_coordinates is None
-                and not s.game_review_annotation
-            )
-            if is_uncoached_collision:
-                cur_ledger = cur_ledger.record_settled(
-                    scene_index=s.scene_index,
-                    takeaway_source=f"Resolved rule collision ({s.active_concept_collision}) via sleep threshold refinement.",
-                    felt_chord=compile_felt_chord(
-                        s.external_coordinates,
-                        salience=s.salience,
-                        valence=s.valence,
-                        arousal=s.arousal,
-                        resonance=0.65,
-                        learned_leaves=tuple(self.learned_leaves),
-                    ),
-                    clarity=0.85,
-                    confidence=0.90,
-                    resolved_uncertainty_scenes=(s.scene_index,),
-                )
-                continue
-            is_s_haz = bool(s.is_hazard or s.scene_index in self._hazard_scene_indices)
-            if is_s_haz and s.game_review_annotation and (
-                "[!! BRILLIANCY" in s.game_review_annotation
-                or "[! GREAT_MOVE" in s.game_review_annotation
-            ):
-                is_s_haz = False
-            if is_s_haz:
-                s.external_coordinates["cultural/efficiency/wastelessness"] = min(
-                    0.25,
-                    float(s.external_coordinates.get("cultural/efficiency/wastelessness", 0.25)),
-                )
-                s.external_coordinates["cultural/freedom/needlessness"] = max(
-                    0.53,
-                    float(s.external_coordinates.get("cultural/freedom/needlessness", 0.53)),
-                )
-            ckey = _cluster_key_for_unresolved(s)
-            if ckey is not None:
-                clusters.setdefault((ckey, is_s_haz), []).append(s)
-
-        calm_book_coords: dict[str, float] = {k: 0.50 for k in FOUNDATIONAL_LEAVES}
-        calm_book_coords.update(
-            {
-                "philosophical/being/existence": 0.83,
-                "philosophical/structure/order": 0.87,
-                "philosophical/being/agency": 0.51,
-                "philosophical/structure/chaos": 0.22,
-                "philosophical/persistence/continuity": 0.86,
-                "philosophical/persistence/discreteness": 0.44,
-                "cultural/efficiency/wastelessness": 0.68,
-                "cultural/freedom/needlessness": 0.09,
-            }
-        )
-
-        for (ckey, is_group_hazard), group in clusters.items():
-            avg_coords = _average_cluster_coordinates(group)
-            avg_ref_coords = _average_contrastive_reference_coordinates(group)
-            if is_group_hazard:
-                avg_coords["cultural/efficiency/wastelessness"] = min(
-                    0.25,
-                    float(avg_coords.get("cultural/efficiency/wastelessness", 0.25)),
-                )
-                avg_coords["cultural/freedom/needlessness"] = max(
-                    0.53,
-                    float(avg_coords.get("cultural/freedom/needlessness", 0.53)),
-                )
-            target_leaves, rule_low, rule_high = normalize_contrastive_target_leaves_and_thresholds(
-                ckey,
-                avg_coords,
-                avg_ref_coords,
-            )
-            is_time_forfeit_hazard = is_group_hazard and (
-                any("[?? TIME_FORFEIT" in (s.game_review_annotation or "") for s in group)
-                or float(avg_coords.get("philosophical/persistence/continuity", 0.50)) <= 0.10
-            )
-            if is_time_forfeit_hazard:
-                target_leaves = {
-                    "philosophical/persistence/continuity": round(
-                        min(0.15, max(0.05, float(avg_coords.get("philosophical/persistence/continuity", 0.05)))),
-                        2,
-                    ),
-                    "philosophical/persistence/discreteness": round(
-                        max(0.85, min(0.95, float(avg_coords.get("philosophical/persistence/discreteness", 0.95)))),
-                        2,
-                    ),
-                }
-                rule_low = 0.65
-                rule_high = 0.82
-            elif is_group_hazard:
-                target_leaves["cultural/efficiency/wastelessness"] = min(
-                    0.25,
-                    float(target_leaves.get("cultural/efficiency/wastelessness", 0.25)),
-                )
-                for bad_k in (
-                    "cultural/freedom/needlessness",
-                    "philosophical/being/existence",
-                    "cultural/freedom/self-sufficiency",
-                    "philosophical/structure/order",
-                ):
-                    if bad_k == "cultural/freedom/needlessness" and float(target_leaves.get(bad_k, 1.0)) <= 0.30:
-                        target_leaves[bad_k] = 0.53
-                    elif bad_k != "cultural/freedom/needlessness" and float(target_leaves.get(bad_k, 0.0)) >= 0.65:
-                        target_leaves.pop(bad_k, None)
-                if len(target_leaves) < 2:
-                    target_leaves["cultural/freedom/needlessness"] = 0.53
-            rep = group[0]
-            rep_scene = rep.scene_index
-
-            prefix = "hazard" if is_group_hazard else "coached"
-            base_name = f"{prefix}_{ckey}"
-            concept_name = base_name
-
-            description = (
-                f"Consolidated REM chess wisdom rule for {ckey.replace('_', ' ')}: "
-                f"{(rep.game_review_annotation or rep.scenario_text)[:140]}"
-            )
-            new_rule = FuzzyConceptRule(
-                rule_id=f"rule-sleep-{concept_name[:32]}",
-                concept_name=concept_name,
-                description=description,
-                target_leaves=target_leaves,
-                low=rule_low,
-                high=rule_high,
-            )
-            if new_rule.tier == 1:
-                probe_coords = dict(calm_book_coords)
-                for req_leaf in new_rule.target_leaves:
-                    probe_coords.setdefault(req_leaf, 0.0)
-                if new_rule.evaluate(probe_coords) >= 0.35:
-                    adjusted_leaves = dict(target_leaves)
-                    if is_group_hazard:
-                        adjusted_leaves["cultural/efficiency/wastelessness"] = 0.20
-                        rule_low = max(rule_low, 0.68)
-                        rule_high = max(rule_high, 0.84)
-                    else:
-                        rule_low = max(rule_low, 0.76)
-                        rule_high = max(rule_high, 0.88)
-                    new_rule = FuzzyConceptRule(
-                        rule_id=new_rule.rule_id,
-                        concept_name=new_rule.concept_name,
-                        description=new_rule.description,
-                        target_leaves=adjusted_leaves,
-                        low=rule_low,
-                        high=rule_high,
-                    )
-            dup_idx = next(
-                (
-                    idx
-                    for idx, r in enumerate(active_rules)
-                    if _canonical_cluster_concept_name(r.concept_name) == base_name
-                    or (
-                        r.concept_name.startswith(f"{prefix}_")
-                        and _canonical_cluster_concept_name(r.concept_name).endswith("_cluster")
-                        and dict(r.target_leaves) == dict(new_rule.target_leaves)
-                    )
-                ),
-                None,
-            )
-            if dup_idx is not None:
-                entrained_rule = _entrain_existing_cluster_rule(
-                    active_rules[dup_idx],
-                    new_rule,
-                    base_name,
-                )
-                active_rules[dup_idx] = entrained_rule
-                forged_rules.append(entrained_rule)
-            else:
-                active_rules.append(new_rule)
-                forged_rules.append(new_rule)
-                existing_names.add(concept_name)
-
-            cult_sig = {k: v for k, v in avg_coords.items() if k.startswith("cultural/")}
-            phil_sig = {k: v for k, v in avg_coords.items() if k.startswith("philosophical/")}
-            exp_sig = {k: v for k, v in avg_coords.items() if k.startswith("experiential/")}
-            exp_sig[SALIENCE_LEAF] = round(sum(s.salience for s in group) / len(group), 4)
-            exp_sig[VALENCE_LEAF] = round(sum(s.valence for s in group) / len(group), 4)
-            exp_sig[AROUSAL_LEAF] = round(sum(s.arousal for s in group) / len(group), 4)
-
-            avg_fc = compile_felt_chord(
-                avg_coords,
-                salience=exp_sig[SALIENCE_LEAF],
-                valence=exp_sig[VALENCE_LEAF],
-                arousal=exp_sig[AROUSAL_LEAF],
-                resonance=0.65,
-                learned_leaves=tuple(self.learned_leaves),
-            )
-            exec_tag, leg_tag, jud_tag = _derive_concept_tags(avg_coords, avg_fc)
-            exec_text = f"Coordinate action under {concept_name} ({exec_tag}): {rep.left_brain_hunch[:100]}"
-            leg_text = f"Sense and pace {leg_tag} posture during {concept_name}: {rep.scenario_text[:100]}"
-            jud_text = f"Verify {jud_tag} equilibrium and ratified chord for {concept_name}."
-
-            exec_clause = BranchClauseEntry(
-                clause_id=f"exec-sleep-s{rep_scene}-{exec_tag}",
-                branch=EXECUTIVE_BRANCH,
-                text=exec_text,
-                signature_coords=cult_sig,
-                source_scene=rep_scene,
-                concept_tag=exec_tag,
-            )
-            leg_clause = BranchClauseEntry(
-                clause_id=f"leg-sleep-s{rep_scene}-{leg_tag}",
-                branch=LEGISLATIVE_BRANCH,
-                text=leg_text,
-                signature_coords=exp_sig,
-                source_scene=rep_scene,
-                concept_tag=leg_tag,
-            )
-            jud_clause = BranchClauseEntry(
-                clause_id=f"jud-sleep-s{rep_scene}-{jud_tag}",
-                branch=JUDICIAL_BRANCH,
-                text=jud_text,
-                signature_coords=phil_sig,
-                source_scene=rep_scene,
-                concept_tag=jud_tag,
-            )
-            harvested_clause_ids.extend([exec_clause.clause_id, leg_clause.clause_id, jud_clause.clause_id])
-
-            cur_archives = ThreeBranchArchives(
-                executive=cur_archives.executive.record_scene(
-                    scene_index=rep_scene,
-                    coordinates=avg_coords,
-                    action_summary=exec_text,
-                    harvested_clause=exec_clause,
-                ),
-                legislative=cur_archives.legislative.record_scene(
-                    scene_index=rep_scene,
-                    sensory_snapshot=leg_text,
-                    felt_chord=avg_fc,
-                    coordinates=avg_coords,
-                    harvested_clause=leg_clause,
-                ),
-                judicial=cur_archives.judicial.record_clause_and_chord(
-                    harvested_clause=jud_clause,
-                    ratified_chord=new_rule,
-                ),
-            )
-            for s in group:
-                cur_ledger = cur_ledger.record_settled(
-                    scene_index=s.scene_index,
-                    takeaway_source=description,
-                    felt_chord=avg_fc,
-                    clarity=0.85,
-                    confidence=0.90,
-                    resolved_uncertainty_scenes=(s.scene_index,),
-                )
-
-        self.rules = tuple(active_rules)
-        self.archives = cur_archives
-        self.ledger = cur_ledger
-        return refined_ids, tuple(forged_rules), tuple(harvested_clause_ids)
+        self.rules = _ensure_foundational_rules(report.updated_rules)
+        self.archives = report.updated_archives
+        self.ledger = report.updated_ledger
+        return report.refined_rule_ids, report.forged_rules, report.harvested_clause_ids
 
     def _evaluate_sleep_scene_snapshot(
         self,
