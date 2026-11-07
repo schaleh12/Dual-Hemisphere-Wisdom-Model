@@ -2,8 +2,8 @@
   "schema_version": 1,
   "version": "0.2.0",
   "github_repo": "schaleh12/Dual-Hemisphere-Wisdom-Model",
-  "build_sha256": "310d0810aa0ae0d7553139ccd146310f5da7c9e5d1012839929a948c88450310",
-  "build_short_hash": "310d0810aa0a",
+  "build_sha256": "8233edf03aa5813d607a138b110b3d427f84674200a28ae0c4fa9cdc16f42c98",
+  "build_short_hash": "8233edf03aa5",
   "files": {
     "src/lmft_architecture/__init__.py": {
       "sha256": "a89f56c2195e87129adbffa5065d8769ea096e13ba98783d217c4d120ee92623",
@@ -286,8 +286,8 @@
       "size_bytes": 2802
     },
     "src/lmft_architecture/three_legged_runtime.py": {
-      "sha256": "f0b0f1f589bbd9b124c17d896407b2045a0fe47599f6fc70be0975c3dc096ab2",
-      "size_bytes": 87408
+      "sha256": "b6fc2165699c3ec45e6305dea5e1111047583b98ed0381a2e48b67077a86c4fd",
+      "size_bytes": 86440
     },
     "src/lmft_architecture/train_left_brain_lora.py": {
       "sha256": "2769e1ef0007d184a9331874285cc0cb6689a5445a9093a3fadf3c19d7c53622",

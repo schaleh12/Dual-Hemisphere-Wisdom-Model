@@ -774,8 +774,6 @@ class SubliminalGapLeftBrain:
             eos_id = getattr(self.tokenizer, "eos_token_id", None)
             suppressed_ids = self._suppressed_token_ids()
             generated_ids: list[int] = []
-            vocab_len = len(self.tokenizer) if hasattr(self.tokenizer, "__len__") else 0
-            gen_counts: dict[int, int] = {}
 
             for step_idx in range(self.max_post_gap_tokens):
                 next_logits = self._step_stream_state(state)
@@ -786,24 +784,11 @@ class SubliminalGapLeftBrain:
                         next_logits[bad_id] = -1e9
                 if step_idx == 0 and eos_id is not None and 0 <= int(eos_id) < next_logits.size(0):
                     next_logits[int(eos_id)] = -1e9
-                if vocab_len > 1000:
-                    for seen_id, cnt in gen_counts.items():
-                        if cnt >= 2 and 0 <= seen_id < next_logits.size(0):
-                            tok_piece = self.tokenizer.decode([seen_id], skip_special_tokens=True).strip()
-                            min_cnt = 4 if len(tok_piece) <= 3 else 2
-                            if cnt < min_cnt:
-                                continue
-                            pen = 1.12 + 0.08 * min(3, cnt - min_cnt + 1)
-                            if next_logits[seen_id] > 0:
-                                next_logits[seen_id] = next_logits[seen_id] / pen
-                            else:
-                                next_logits[seen_id] = next_logits[seen_id] * pen
 
                 next_id = int(torch.argmax(next_logits).item())
                 if eos_id is not None and next_id == int(eos_id):
                     break
                 generated_ids.append(next_id)
-                gen_counts[next_id] = gen_counts.get(next_id, 0) + 1
                 next_tok_tensor = torch.tensor([[next_id]], dtype=torch.long, device=self.device)
                 next_embed = embed_layer(next_tok_tensor).to(dtype=embed_dtype)
                 _append_pending_embeds(state, next_embed)
