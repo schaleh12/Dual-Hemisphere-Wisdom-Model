@@ -2,8 +2,8 @@
   "schema_version": 1,
   "version": "0.2.0",
   "github_repo": "schaleh12/Dual-Hemisphere-Wisdom-Model",
-  "build_sha256": "3c350e93c2f0178b5e6bb1312fec4ff33ab6bb725d06e50bd59a73516353162c",
-  "build_short_hash": "3c350e93c2f0",
+  "build_sha256": "87dbc68ebbb35da8b3aa7a47fe2eabc7590edb5306365c41747f9ab03b9f70b7",
+  "build_short_hash": "87dbc68ebbb3",
   "files": {
     "src/lmft_architecture/__init__.py": {
       "sha256": "a89f56c2195e87129adbffa5065d8769ea096e13ba98783d217c4d120ee92623",
@@ -98,8 +98,8 @@
       "size_bytes": 110731
     },
     "src/lmft_architecture/chess_ui.py": {
-      "sha256": "b6b96afce4056ca8389506f89be0aba7524b8ea4ffa4dcdba16a0ec60140f90d",
-      "size_bytes": 97643
+      "sha256": "eac563ba36d824ee583209dc44300e58ca9a425d207d4e316e58d32d596dc10b",
+      "size_bytes": 98283
     },
     "src/lmft_architecture/chord_memory.py": {
       "sha256": "6714d9c6cd9e0f7ae199e92a44f7371f168f65fb32319260d4b24d0ed1c54a66",

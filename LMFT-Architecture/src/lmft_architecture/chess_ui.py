@@ -558,7 +558,8 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
     <span>Celestriad 1.0 · LMFT Dual-Hemisphere Chess Arena</span>
   </div>
   <div class="header-controls">
-    <button class="btn btn-tutorial" id="space-center-tour-btn" onclick="openSpaceCenterModal()" style="background:rgba(168,85,247,0.2);border-color:#9333ea;color:#e9d5ff;">🚀 Space Center Tour (Architecture Guide)</button>
+    <a class="btn" id="support-architect-btn" href="https://www.youtube.com/@imissmydeadcat.74" target="_blank" rel="noopener" style="background:rgba(239,68,68,0.18);border-color:#ef4444;color:#fecaca;text-decoration:none;" title="Visit the Architect's YouTube Channel (@imissmydeadcat.74)">▶ Support the Architect</a>
+    <button class="btn btn-tutorial" id="space-center-tour-btn" onclick="openSpaceCenterModal()" style="background:rgba(168,85,247,0.2);border-color:#9333ea;color:#e9d5ff;">🚀 Space Center Tour</button>
     <button class="btn btn-tutorial" id="new-user-tutorial-btn" onclick="openTutorialModal()">? Quick Start</button>
     <button class="btn" id="auto-update-sync-btn" onclick="syncAndAutoUpdate()" title="Sync latest code &amp; wisdom rules from GitHub and auto-relaunch if updated">🔄 Auto-Update</button>
     <select id="lineage-select" onchange="switchLineage(this.value)">
@@ -914,9 +915,12 @@ Quaked like the terraforming of starseeds.</pre>
       </div>
     </div>
 
-    <div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center;">
+    <div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
       <span style="font-size:11px;color:var(--text-2);">Tip: Use the 🎵 Celestriad Jukebox right underneath the chessboard to listen while you play or watch Self-Train!</span>
-      <button class="btn btn-chess-green" onclick="closeSpaceCenterModal()">Back to the Arena</button>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <a class="btn" href="https://www.youtube.com/@imissmydeadcat.74" target="_blank" rel="noopener" style="background:rgba(239,68,68,0.18);border-color:#ef4444;color:#fecaca;text-decoration:none;">▶ Support the Architect (YouTube)</a>
+        <button class="btn btn-chess-green" onclick="closeSpaceCenterModal()">Back to the Arena</button>
+      </div>
     </div>
   </div>
 </div>

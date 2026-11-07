@@ -2,6 +2,8 @@
 
 > **A Persistent 40-Node Right-Brain Fuzzy Tree Paired with Local Language Models via a Non-Verbal `<|subliminal_gap|>` Comma Splice — Proven Across Two Standalone Desktop Applications (`LMFT-Chess.exe` & `LMFT-Bloodmoon.exe`).**
 >
+> **▶️ Support the Architect on YouTube:** **[`@imissmydeadcat.74`](https://www.youtube.com/@imissmydeadcat.74)**
+>
 > 📦 **[Download Latest Release & Read the Full `Celestriad 1.0` Release Notes on GitHub Releases →](https://github.com/schaleh12/Dual-Hemisphere-Wisdom-Model/releases)**
 
 <p align="center">

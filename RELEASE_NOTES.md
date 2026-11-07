@@ -1,5 +1,7 @@
 # `Celestriad 1.0` (`v0.2.0`) — Dual-Hemisphere Wisdom Model Release
 
+> **▶️ Support the Architect on YouTube:** **[`@imissmydeadcat.74`](https://www.youtube.com/@imissmydeadcat.74)**
+
 ## 📜 *"The Celestial Seal of the way towards life"*
 
 <p align="center">
