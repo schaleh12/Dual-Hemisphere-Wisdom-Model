@@ -870,13 +870,6 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
             <li><strong>The Left Hemisphere (Qwen3-8B)</strong>: The conscious poet and strategist, woken up only when the Right Brain detects a conflict, a question from you, or a nighttime <strong>REM Sleep</strong> dream.</li>
           </ul>
         </div>
-        <div class="tutorial-step" style="border-color:#38bdf8;background:rgba(15,23,42,0.75);">
-          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;">
-            <strong style="color:#7dd3fc;font-size:13px;">🌌 Philosophical Seed Coordinates, 6 Materia / Chess Archetypes, Shadow Pathologies &amp; Architect Identity</strong>
-            <span style="font-size:11px;color:#fde68a;font-weight:700;">Tier 1–5 Ontology · Spirit Animals · Life1/White Wind · Life2/Null-All · Life3/Esuna</span>
-          </div>
-          <img src="/assets/materia_chess_archetypes_identity.jpg" alt="Philosophical Seed Coordinates, 6 Materia &amp; Chess Archetypes, Shadow Pathologies, Kingdom Environments, and Architect Identity" style="width:100%;max-height:440px;object-fit:contain;border-radius:8px;border:1px solid rgba(56,189,248,0.35);background:#0c0b09;display:block;" onerror="this.style.display='none'" />
-        </div>
       </div>
 
       <!-- EXHIBIT 2 -->
@@ -895,10 +888,6 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
             <li><strong>Psychological (6 Leaves)</strong>: <code>Clarity</code>, <code>Confidence</code>, <code>Theory</code>, <code>Fact</code>, <code>Intention</code>, <code>Execution</code></li>
           </ul>
           When a position is familiar and clear, the Right Brain moves immediately by reflex in <strong>Gear 1 (~15 ms, 0 LLM calls)</strong>.
-        </div>
-        <div class="tutorial-step" style="border-color:#a855f7;background:rgba(15,23,42,0.75);">
-          <strong style="color:#e9d5ff;font-size:13px;display:block;margin-bottom:6px;">♟️ The 6 Philosophical Coordinates: Materia, Chess Archetypes, Shadow Pathologies &amp; Kingdoms</strong>
-          <img src="/assets/materia_chess_archetypes_identity.jpg" alt="6 Philosophical Seed Coordinates and Architect Identity" style="width:100%;max-height:440px;object-fit:contain;border-radius:8px;border:1px solid rgba(168,85,247,0.38);background:#0c0b09;display:block;" onerror="this.style.display='none'" />
         </div>
       </div>
 
@@ -1089,6 +1078,9 @@ function selectTourTab(tabNum) {
       else btn.classList.remove("active");
     }
   }
+  if (tabNum === 6) {
+    playHiddenSecretJukeboxTrack();
+  }
 }
 
 const JUKEBOX_TRACKS = [
@@ -1099,7 +1091,13 @@ const JUKEBOX_TRACKS = [
   { id: "Sf905k89AsY", title: "5. Esper World (幻獣界) — FFVI (Nobuo Uematsu)", url: "https://music.youtube.com/watch?v=Sf905k89AsY&si=QQ4FWo_PQZoEbMEt" },
   { id: "5-5b08omYag", title: "6. The Phantom of the Opera", url: "https://music.youtube.com/watch?v=5-5b08omYag&si=Y_m_ofAPzKdkLEgi" }
 ];
+const HIDDEN_SEAL_TRACK = {
+  id: "o4yHVMMHPJQ",
+  title: "✦ Secret Seal Track — Celestial Seal & Ontology",
+  url: "https://music.youtube.com/watch?v=o4yHVMMHPJQ&si=KuKSZ-NPy_iRFBe_"
+};
 let jukeboxIdx = 0;
+let jukeboxSecretActive = false;
 let jukeboxPlaying = false;
 let jukeboxMuted = false;
 let ytPlayer = null;
@@ -1115,10 +1113,11 @@ function ensureYouTubeApiLoaded() {
 
 window.onYouTubeIframeAPIReady = function() {
   ytApiReady = true;
+  const activeTrack = jukeboxSecretActive ? HIDDEN_SEAL_TRACK : JUKEBOX_TRACKS[jukeboxIdx];
   ytPlayer = new YT.Player("jukebox-yt-player", {
     height: "56",
     width: "100%",
-    videoId: JUKEBOX_TRACKS[jukeboxIdx].id,
+    videoId: activeTrack.id,
     playerVars: { autoplay: 0, controls: 1, rel: 0, modestbranding: 1 },
     events: {
       onReady: function() {
@@ -1135,7 +1134,7 @@ window.onYouTubeIframeAPIReady = function() {
 };
 
 function updateJukeboxUi() {
-  const tr = JUKEBOX_TRACKS[jukeboxIdx];
+  const tr = jukeboxSecretActive ? HIDDEN_SEAL_TRACK : JUKEBOX_TRACKS[jukeboxIdx];
   const lbl = document.getElementById("jukebox-now-playing");
   if (lbl) lbl.textContent = tr.title;
   const link = document.getElementById("jukebox-ytm-link");
@@ -1143,7 +1142,7 @@ function updateJukeboxUi() {
   for (let i = 0; i < JUKEBOX_TRACKS.length; i++) {
     const b = document.getElementById(`jb-track-${i}`);
     if (b) {
-      if (i === jukeboxIdx) b.classList.add("active");
+      if (!jukeboxSecretActive && i === jukeboxIdx) b.classList.add("active");
       else b.classList.remove("active");
     }
   }
@@ -1158,6 +1157,7 @@ function updateJukeboxUi() {
 }
 
 function selectJukeboxTrack(idx) {
+  jukeboxSecretActive = false;
   jukeboxIdx = (idx + JUKEBOX_TRACKS.length) % JUKEBOX_TRACKS.length;
   jukeboxPlaying = true;
   const wrap = document.getElementById("jukebox-player-container");
@@ -1165,6 +1165,19 @@ function selectJukeboxTrack(idx) {
   ensureYouTubeApiLoaded();
   if (ytPlayer && typeof ytPlayer.loadVideoById === "function") {
     ytPlayer.loadVideoById(JUKEBOX_TRACKS[jukeboxIdx].id);
+    if (jukeboxMuted && ytPlayer.mute) ytPlayer.mute();
+  }
+  updateJukeboxUi();
+}
+
+function playHiddenSecretJukeboxTrack() {
+  jukeboxSecretActive = true;
+  jukeboxPlaying = true;
+  const wrap = document.getElementById("jukebox-player-container");
+  if (wrap) wrap.style.display = "block";
+  ensureYouTubeApiLoaded();
+  if (ytPlayer && typeof ytPlayer.loadVideoById === "function") {
+    ytPlayer.loadVideoById(HIDDEN_SEAL_TRACK.id);
     if (jukeboxMuted && ytPlayer.mute) ytPlayer.mute();
   }
   updateJukeboxUi();
