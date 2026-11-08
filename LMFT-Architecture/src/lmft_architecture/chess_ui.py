@@ -1083,8 +1083,8 @@ function openSpaceCenterModal() {
   const el = document.getElementById("space-center-modal-overlay");
   if (el) el.classList.add("open");
   JUKEBOX_TRACKS[0] = {
-    id: "0R68_ZzqUu0",
-    fallbackIds: ["dN9_R8YW4nU"],
+    id: "wyQmOXlCBTM",
+    fallbackIds: ["TBczHWyQ_Ig", "fimtgnKXQk8", "ojGJg3Wa5XY", "8SzFaEqbLRM"],
     title: "1. Somewhere Out There — Our Lady Peace",
     url: "https://music.youtube.com/watch?v=0R68_ZzqUu0&si=8E0J7O53bafxLEtj"
   };
@@ -1093,6 +1093,7 @@ function openSpaceCenterModal() {
     btn0.textContent = "1. Somewhere Out There";
     btn0.title = "Somewhere Out There — Our Lady Peace";
   }
+  jukeboxFallbackCursor = 0;
   if (!jukeboxSecretActive && jukeboxIdx === 0 && ytPlayer && typeof ytPlayer.loadVideoById === "function") {
     if (jukeboxPlaying) {
       ytPlayer.loadVideoById(JUKEBOX_TRACKS[0].id);
