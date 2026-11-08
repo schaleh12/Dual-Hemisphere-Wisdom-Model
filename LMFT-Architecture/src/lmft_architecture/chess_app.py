@@ -234,12 +234,6 @@ def _ensure_foundational_rules(rules: tuple[FuzzyConceptRule, ...]) -> tuple[Fuz
     seen_learned_sigs: dict[tuple[str, tuple[tuple[str, float], ...]], int] = {}
     for r in rules:
         if r.rule_id in foundational_by_id or r.concept_name in foundational_by_name:
-            if r.concept_name in ("grounded_coordination", "sanctuary_equilibrium"):
-                for f_idx, f_rule in enumerate(merged[:2]):
-                    if f_rule.concept_name == r.concept_name or f_rule.rule_id == r.rule_id:
-                        if float(r.low) >= float(f_rule.low) and len(r.target_leaves) >= len(f_rule.target_leaves):
-                            merged[f_idx] = r
-                        break
             continue
         if r.concept_name.startswith("hazard_") and (
             r.concept_name.startswith("hazard_high_wastelessness_")
@@ -249,7 +243,7 @@ def _ensure_foundational_rules(rules: tuple[FuzzyConceptRule, ...]) -> tuple[Fuz
         ):
             continue
         if r.concept_name.startswith("hazard_"):
-            # Strip inverted virtue, low-needlessness, dynamic hazard_*/coached_*, recursive, or low-shadow leaves
+            # Strip inverted virtue, low-needlessness, cross-polarity coached_*, recursive, or low-shadow/hazard leaves
             shadow_ids = {l.leaf_id for l in PHILOSOPHICAL_SHADOW_LEAVES}
             cleaned_haz_leaves = {
                 k: float(v)
@@ -258,7 +252,8 @@ def _ensure_foundational_rules(rules: tuple[FuzzyConceptRule, ...]) -> tuple[Fuz
                     (k == "cultural/freedom/needlessness" and float(v) <= 0.30)
                     or (k in shadow_ids and float(v) < 0.50)
                     or (k in ("philosophical/being/existence", "cultural/freedom/self-sufficiency", "philosophical/structure/order") and float(v) >= 0.58)
-                    or k.split("/")[-1].startswith(("coached_", "hazard_"))
+                    or k.split("/")[-1].startswith("coached_")
+                    or (k.split("/")[-1].startswith("hazard_") and float(v) < 0.50)
                     or any(
                         rec_tag in k.split("/")[-1]
                         for rec_tag in ("hazard_high_hazard_", "hazard_low_hazard_", "coached_high_coached_", "coached_low_coached_")
@@ -291,7 +286,7 @@ def _ensure_foundational_rules(rules: tuple[FuzzyConceptRule, ...]) -> tuple[Fuz
                 k: float(v)
                 for k, v in r.target_leaves.items()
                 if k not in shadow_ids
-                and not k.split("/")[-1].startswith(("hazard_", "coached_"))
+                and not k.split("/")[-1].startswith("hazard_")
                 and not any(
                     rec_tag in k.split("/")[-1]
                     for rec_tag in ("hazard_high_hazard_", "hazard_low_hazard_", "coached_high_coached_", "coached_low_coached_")
@@ -524,15 +519,7 @@ class ChessKibitzerRuntime:
         return VIRGIN_FOUNDATIONAL_RULES
 
     def _load_default_learned_leaves(self) -> tuple[LearnedLeaf, ...]:
-        canonical_leaves = tuple(DEFAULT_COMPLEX_FEELING_LEAVES) + tuple(PHILOSOPHICAL_SHADOW_LEAVES)
-        canonical_ids = {l.leaf_id for l in canonical_leaves}
-        referenced_ids = {
-            k
-            for r in getattr(self, "rules", ())
-            for k in r.target_leaves
-        }
         base: list[LearnedLeaf] = []
-        dynamic_count = 0
         user_ruleset = self.state_dir / "club_ruleset.json"
         candidates = [user_ruleset] + [
             self.training_root / rel
@@ -557,17 +544,12 @@ class ChessKibitzerRuntime:
                             )
                         ):
                             continue
-                        is_dyn = lf.leaf_name.startswith(("hazard_", "coached_"))
-                        if is_dyn and lf.leaf_id not in referenced_ids and dynamic_count >= 4:
-                            continue
-                        if is_dyn:
-                            dynamic_count += 1
                         base.append(lf)
                     break
                 except Exception:
                     pass
         existing_ids = {l.leaf_id for l in base}
-        for leaf in canonical_leaves:
+        for leaf in DEFAULT_COMPLEX_FEELING_LEAVES + PHILOSOPHICAL_SHADOW_LEAVES:
             if leaf.leaf_id not in existing_ids:
                 base.append(leaf)
                 existing_ids.add(leaf.leaf_id)
@@ -1029,15 +1011,8 @@ class ChessKibitzerRuntime:
             if seed_path.exists():
                 try:
                     merged_rules = _merge_rulesets(merged_rules, load_ruleset(seed_path))
-                    ref_ids = {k for r in merged_rules for k in r.target_leaves}
-                    dyn_count = sum(1 for l in merged_leaves if l.leaf_name.startswith(("hazard_", "coached_")))
                     for lf in load_learned_leaves(seed_path):
                         if lf.leaf_id not in existing_leaf_ids:
-                            is_dyn = lf.leaf_name.startswith(("hazard_", "coached_"))
-                            if is_dyn and lf.leaf_id not in ref_ids and dyn_count >= 4:
-                                continue
-                            if is_dyn:
-                                dyn_count += 1
                             merged_leaves.append(lf)
                             existing_leaf_ids.add(lf.leaf_id)
                 except Exception:
@@ -2696,9 +2671,11 @@ class ChessKibitzerRuntime:
         self,
         queued_scenes: tuple[UnresolvedSleepScene, ...],
     ) -> tuple[tuple[str, ...], tuple[FuzzyConceptRule, ...], tuple[str, ...]]:
+        virgin_ids = {r.rule_id for r in VIRGIN_FOUNDATIONAL_RULES}
+        non_virgin_rules = tuple(r for r in self.rules if r.rule_id not in virgin_ids)
         report = consolidate_sleep_clusters_locally(
             queued_scenes=queued_scenes,
-            rules=tuple(self.rules),
+            rules=non_virgin_rules,
             learned_leaves=self.learned_leaves,
             archives=self.archives,
             ledger=self.ledger,
@@ -3269,9 +3246,11 @@ class ChessKibitzerRuntime:
                             )
                     self._last_minted_leaves = ()
                     if self.teacher is not None:
+                        virgin_ids = {r.rule_id for r in VIRGIN_FOUNDATIONAL_RULES}
+                        non_virgin_rules = tuple(r for r in self.rules if r.rule_id not in virgin_ids)
                         report = run_sleep_consolidation(
                             unresolved_scenes=queued_snapshot,
-                            rules=tuple(self.rules),
+                            rules=non_virgin_rules,
                             learned_leaves=self.learned_leaves,
                             archives=self.archives,
                             ledger=self.ledger,

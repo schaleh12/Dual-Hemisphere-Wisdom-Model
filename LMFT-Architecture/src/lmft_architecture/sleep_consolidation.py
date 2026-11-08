@@ -293,7 +293,7 @@ def normalize_contrastive_target_leaves_and_thresholds(
         if not k.startswith(("cultural/", "philosophical/", "experiential/")):
             continue
         leaf_short = k.split("/")[-1]
-        if leaf_short.startswith(("hazard_", "coached_")) or any(
+        if any(
             rec_tag in leaf_short
             for rec_tag in (
                 "hazard_high_hazard_",
@@ -338,11 +338,9 @@ def normalize_contrastive_target_leaves_and_thresholds(
     for idx, (abs_diff, k, v_act, v_ref) in enumerate(divergent):
         if idx >= 3 or (idx == 2 and abs_diff < 0.08):
             break
-        t_val = round(min(0.78, max(0.08, v_act)), 2)
-        if v_act >= 0.55 and v_act >= v_ref and t_val < 0.65:
-            t_val = 0.65
-        elif v_act < v_ref and t_val >= 0.65:
-            t_val = 0.28 if v_act <= 0.35 else 0.64
+        t_val = round(min(0.95, max(0.05, v_act)), 2)
+        if v_act < v_ref and t_val >= 0.65:
+            t_val = 0.64
         elif v_act > v_ref and t_val <= 0.30:
             t_val = 0.31
         target_leaves[k] = t_val
@@ -352,7 +350,7 @@ def normalize_contrastive_target_leaves_and_thresholds(
             if k in target_leaves:
                 continue
             leaf_short = k.split("/")[-1]
-            if leaf_short.startswith(("hazard_", "coached_")) or any(
+            if any(
                 rec_tag in leaf_short
                 for rec_tag in (
                     "hazard_high_hazard_",
@@ -490,19 +488,18 @@ def _anchor_target_leaves_from_cluster(
     cult = {
         k: float(v)
         for k, v in avg_coords.items()
-        if k in FOUNDATIONAL_LEAVES and k.startswith("cultural/")
+        if k.startswith("cultural/") and is_valid_leaf_id(k)
     }
     phil = {
         k: float(v)
         for k, v in avg_coords.items()
-        if k in FOUNDATIONAL_LEAVES and k.startswith("philosophical/")
+        if k.startswith("philosophical/") and is_valid_leaf_id(k)
     }
     exp_complex = {
         k: float(v)
         for k, v in avg_coords.items()
         if k.startswith("experiential/")
         and is_valid_leaf_id(k)
-        and not k.split("/")[-1].startswith(("hazard_", "coached_"))
         and k not in (SALIENCE_LEAF, VALENCE_LEAF, AROUSAL_LEAF, RESONANCE_LEAF, RETENTION_LEAF, NOVELTY_LEAF)
     }
 
@@ -563,7 +560,7 @@ def _anchor_target_leaves_from_cluster(
 
     if len(target_leaves) < 2:
         for k, v in sorted(avg_coords.items(), key=lambda kv: (-kv[1], kv[0])):
-            if k in FOUNDATIONAL_LEAVES and k not in target_leaves and v >= 0.45:
+            if is_valid_leaf_id(k) and k not in target_leaves and v >= 0.45:
                 target_leaves[k] = round(min(0.75, v), 2)
                 if len(target_leaves) >= 2:
                     break
@@ -604,38 +601,10 @@ def refine_colliding_rules_during_sleep(
     if not unresolved_scenes:
         return tuple(rules), ()
 
-    has_coached_rule_or_scene = any(r.concept_name.startswith("coached_") for r in rules) or any(
-        not s.is_hazard
-        and (
-            (s.game_review_annotation and ("[!! BRILLIANCY" in s.game_review_annotation or "[! GREAT_MOVE" in s.game_review_annotation))
-            or float(s.external_coordinates.get("cultural/efficiency/wastelessness", 0.50)) >= 0.65
-        )
-        for s in unresolved_scenes
-    )
-
     updated: list[FuzzyConceptRule] = []
     refined_ids: list[str] = []
     for r in rules:
-        if (
-            r.tier == 1
-            and not r.concept_name.startswith(("hazard_", "coached_"))
-            and _rule_collided_on_unresolved(r, unresolved_scenes)
-        ):
-            if r.rule_id == "rule_grounded_coordination" and not has_coached_rule_or_scene:
-                new_targets = dict(r.target_leaves)
-                new_targets["cultural/efficiency/wastelessness"] = 0.68
-                refined_rule = FuzzyConceptRule(
-                    rule_id=r.rule_id,
-                    concept_name=r.concept_name,
-                    description=r.description,
-                    target_leaves=new_targets,
-                    low=r.low,
-                    high=r.high,
-                )
-                updated.append(refined_rule)
-                refined_ids.append(r.rule_id)
-                continue
-
+        if r.tier == 1 and _rule_collided_on_unresolved(r, unresolved_scenes):
             new_targets = dict(r.target_leaves)
             for k, val in list(new_targets.items()):
                 fval = float(val)
@@ -645,19 +614,9 @@ def refine_colliding_rules_during_sleep(
             has_steady_axis = (
                 float(new_targets.get("philosophical/persistence/continuity", 0.0)) >= 0.60
                 or float(new_targets.get("philosophical/structure/order", 0.0)) >= 0.65
-                or r.rule_id in ("rule_grounded_coordination", "rule_sanctuary_equilibrium")
             )
             if has_steady_axis and "philosophical/structure/chaos" not in new_targets:
                 new_targets["philosophical/structure/chaos"] = 0.10
-
-            if r.rule_id == "rule_grounded_coordination":
-                new_targets["philosophical/being/existence"] = 0.75
-                new_targets["cultural/efficiency/wastelessness"] = 0.75
-            elif r.rule_id == "rule_sanctuary_equilibrium":
-                new_targets["cultural/freedom/needlessness"] = max(
-                    0.75,
-                    float(new_targets.get("cultural/freedom/needlessness", 0.75)),
-                )
 
             refined_rule = FuzzyConceptRule(
                 rule_id=r.rule_id,
@@ -946,11 +905,7 @@ def entrain_existing_cluster_rule(
         else getattr(existing, "polarity", "attractive")
     )
     merged_leaves: dict[str, float] = {}
-    all_keys = [
-        k
-        for k in dict.fromkeys(list(existing.target_leaves.keys()) + list(incoming.target_leaves.keys()))
-        if not k.split("/")[-1].startswith(("hazard_", "coached_"))
-    ]
+    all_keys = list(dict.fromkeys(list(existing.target_leaves.keys()) + list(incoming.target_leaves.keys())))
     for k in all_keys:
         if k in existing.target_leaves and k in incoming.target_leaves:
             merged_leaves[k] = round(
@@ -1061,8 +1016,6 @@ def consolidate_sleep_clusters_locally(
                 resolved_uncertainty_scenes=(s.scene_index,),
             )
             continue
-        if float(s.external_coordinates.get("experiential/phase/bittersweet_release", 0.0)) == 0.35:
-            s.external_coordinates["experiential/phase/bittersweet_release"] = 0.0
         is_s_haz = bool(s.is_hazard or s.scene_index in hazard_scene_indices)
         if is_s_haz and s.game_review_annotation and (
             "[!! BRILLIANCY" in s.game_review_annotation
@@ -1073,6 +1026,10 @@ def consolidate_sleep_clusters_locally(
             s.external_coordinates["cultural/efficiency/wastelessness"] = min(
                 0.25,
                 float(s.external_coordinates.get("cultural/efficiency/wastelessness", 0.25)),
+            )
+            s.external_coordinates["cultural/freedom/needlessness"] = max(
+                0.53,
+                float(s.external_coordinates.get("cultural/freedom/needlessness", 0.53)),
             )
         ckey = _cluster_key_for_unresolved(s)
         if ckey is not None:
@@ -1105,13 +1062,15 @@ def consolidate_sleep_clusters_locally(
 
     for (ckey, is_group_hazard), group in clusters.items():
         avg_coords = _average_cluster_coordinates(group)
-        if float(avg_coords.get("experiential/phase/bittersweet_release", 0.0)) == 0.35:
-            avg_coords["experiential/phase/bittersweet_release"] = 0.0
         avg_ref_coords = _average_contrastive_reference_coordinates(group)
         if is_group_hazard:
             avg_coords["cultural/efficiency/wastelessness"] = min(
                 0.25,
                 float(avg_coords.get("cultural/efficiency/wastelessness", 0.25)),
+            )
+            avg_coords["cultural/freedom/needlessness"] = max(
+                0.53,
+                float(avg_coords.get("cultural/freedom/needlessness", 0.53)),
             )
         target_leaves, rule_low, rule_high = normalize_contrastive_target_leaves_and_thresholds(
             ckey,
@@ -1147,27 +1106,11 @@ def consolidate_sleep_clusters_locally(
                 "philosophical/structure/order",
             ):
                 if bad_k == "cultural/freedom/needlessness" and float(target_leaves.get(bad_k, 1.0)) <= 0.30:
-                    target_leaves.pop(bad_k, None)
+                    target_leaves[bad_k] = 0.53
                 elif bad_k != "cultural/freedom/needlessness" and float(target_leaves.get(bad_k, 0.0)) >= 0.65:
                     target_leaves.pop(bad_k, None)
             if len(target_leaves) < 2:
-                if float(avg_coords.get("philosophical/structure/chaos", 0.50)) >= 0.45:
-                    target_leaves["philosophical/structure/chaos"] = 0.65
-                elif float(avg_coords.get("cultural/efficiency/power", 0.50)) >= 0.55:
-                    target_leaves["cultural/efficiency/power"] = 0.65
-                elif float(avg_coords.get("cultural/freedom/self-sufficiency", 0.50)) <= 0.42:
-                    target_leaves["cultural/freedom/self-sufficiency"] = 0.25
-                else:
-                    target_leaves["philosophical/structure/chaos"] = 0.65
-            rule_low = max(rule_low, 0.65)
-            rule_high = max(rule_high, min(0.85, rule_low + 0.14))
-        else:
-            if "cultural/efficiency/wastelessness" in target_leaves and float(target_leaves["cultural/efficiency/wastelessness"]) >= 0.50:
-                target_leaves["cultural/efficiency/wastelessness"] = max(0.68, float(target_leaves["cultural/efficiency/wastelessness"]))
-            elif "cultural/efficiency/wastelessness" not in target_leaves and float(avg_coords.get("cultural/efficiency/wastelessness", 0.50)) >= 0.65 and len(target_leaves) < 3:
-                target_leaves["cultural/efficiency/wastelessness"] = 0.68
-            rule_low = max(rule_low, 0.65)
-            rule_high = max(rule_high, min(0.88, rule_low + 0.14))
+                target_leaves["cultural/freedom/needlessness"] = 0.53
         rep = max(group, key=lambda s: float(s.salience))
         rep_scene = rep.scene_index
 
@@ -1189,7 +1132,6 @@ def consolidate_sleep_clusters_locally(
             target_leaves=target_leaves,
             low=rule_low,
             high=rule_high,
-            polarity="repulsive" if is_group_hazard else "attractive",
         )
         if new_rule.tier == 1:
             probe_coords = dict(calm_book_coords)
@@ -1202,8 +1144,8 @@ def consolidate_sleep_clusters_locally(
                     rule_low = max(rule_low, 0.68)
                     rule_high = max(rule_high, 0.84)
                 else:
-                    rule_low = max(rule_low, 0.72)
-                    rule_high = max(rule_high, 0.86)
+                    rule_low = max(rule_low, 0.76)
+                    rule_high = max(rule_high, 0.88)
                 new_rule = FuzzyConceptRule(
                     rule_id=new_rule.rule_id,
                     concept_name=new_rule.concept_name,
@@ -1211,7 +1153,6 @@ def consolidate_sleep_clusters_locally(
                     target_leaves=adjusted_leaves,
                     low=rule_low,
                     high=rule_high,
-                    polarity="repulsive" if is_group_hazard else "attractive",
                 )
 
         # Authentic Discriminative Tier-2 LearnedLeaf Birth (Fix #5):
@@ -1230,9 +1171,6 @@ def consolidate_sleep_clusters_locally(
             )
         has_tier1_collision = bool(refined_ids) or any(bool(s.active_concept_collision) for s in group)
         candidate_leaf_id: str | None = None
-        dynamic_leaf_count = sum(
-            1 for lf in active_learned_leaves if lf.leaf_name.startswith(("hazard_", "coached_"))
-        )
         if len(group) >= 2 or max_contrastive_delta >= 0.25 or has_tier1_collision:
             dominant_leaf = max(
                 new_rule.target_leaves.items(),
@@ -1271,7 +1209,6 @@ def consolidate_sleep_clusters_locally(
                     cluster_signal >= 0.55
                     and calm_baseline_score <= 0.35
                     and candidate_leaf_id not in existing_leaf_ids
-                    and dynamic_leaf_count < 4
                 ):
                     if is_group_hazard:
                         leaf_desc = (
@@ -1335,11 +1272,7 @@ def consolidate_sleep_clusters_locally(
             if (
                 lf.leaf_id not in _DEFAULT_LEAF_ANCHOR_WEIGHTS
                 and lf.leaf_id not in minted_ids_set
-                and (
-                    lf.leaf_id == candidate_leaf_id
-                    or lf.leaf_id in new_rule.target_leaves
-                    or float(avg_coords.get(lf.leaf_id, 0.0)) >= 0.50
-                )
+                and (lf.leaf_id == candidate_leaf_id or lf.leaf_id in new_rule.target_leaves)
             ):
                 active_learned_leaves[lf_idx] = sculpt_learned_leaf_anchor_weights(
                     lf,
@@ -1347,7 +1280,6 @@ def consolidate_sleep_clusters_locally(
                     avg_ref_coords,
                 )
 
-        new_sig = {k: (float(v) >= 0.50) for k, v in new_rule.target_leaves.items()}
         dup_idx = next(
             (
                 idx
@@ -1356,21 +1288,16 @@ def consolidate_sleep_clusters_locally(
                 or (
                     r.concept_name.startswith(f"{prefix}_")
                     and canonical_cluster_concept_name(r.concept_name).endswith("_cluster")
-                    and (
-                        dict(r.target_leaves) == dict(new_rule.target_leaves)
-                        or {k: (float(v) >= 0.50) for k, v in r.target_leaves.items()} == new_sig
-                        or r.evaluate(avg_coords) >= 0.35
-                    )
+                    and dict(r.target_leaves) == dict(new_rule.target_leaves)
                 )
             ),
             None,
         )
         if dup_idx is not None:
-            keep_name = canonical_cluster_concept_name(active_rules[dup_idx].concept_name)
             entrained_rule = entrain_existing_cluster_rule(
                 active_rules[dup_idx],
                 new_rule,
-                keep_name,
+                base_name,
             )
             active_rules[dup_idx] = entrained_rule
             forged_rules.append(entrained_rule)
