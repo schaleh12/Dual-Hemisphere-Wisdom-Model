@@ -547,13 +547,25 @@ def generate_post_gap_continuation_greedy(
 
         generated_ids: list[int] = []
         eos_id = getattr(tokenizer, "eos_token_id", None)
+        past_kv = None
+        step_embeds = cur_embeds
 
         for _ in range(max_new_tokens):
-            out = model(
-                inputs_embeds=cur_embeds,
-                attention_mask=cur_mask,
-                use_cache=False,
-            )
+            try:
+                out = model(
+                    inputs_embeds=step_embeds,
+                    attention_mask=cur_mask,
+                    past_key_values=past_kv,
+                    use_cache=True,
+                )
+                past_kv = getattr(out, "past_key_values", None)
+            except TypeError:
+                out = model(
+                    inputs_embeds=cur_embeds,
+                    attention_mask=cur_mask,
+                    use_cache=False,
+                )
+                past_kv = None
             next_logits = out.logits[0, -1, :].clone()
             # Never emit another raw gap token during Clause 2 completion
             if 0 <= gap_token_id < next_logits.shape[-1]:
@@ -569,6 +581,7 @@ def generate_post_gap_continuation_greedy(
             next_id_tensor = torch.tensor([[next_id]], dtype=torch.long, device=device)
             next_embed = word_embed_fn(next_id_tensor)
             cur_embeds = torch.cat([cur_embeds, next_embed], dim=1)
+            step_embeds = next_embed if past_kv is not None else cur_embeds
             cur_mask = torch.cat(
                 [cur_mask, torch.ones((1, 1), dtype=cur_mask.dtype, device=device)],
                 dim=1,

@@ -222,6 +222,7 @@ def bootstrap_impish_bloodmoon_virgin_checkpoint(
     checkpoint_dir: str | Path | None = None,
     *,
     model: nn.Module | None = None,
+    tokenizer: Any | None = None,
     hf_model_id: str = DEFAULT_IMPISH_BLOODMOON_HF_ID,
     hidden_size: int = DEFAULT_IMPISH_BLOODMOON_HIDDEN_SIZE,
     intermediate_size: int = 256,
@@ -245,6 +246,8 @@ def bootstrap_impish_bloodmoon_virgin_checkpoint(
         hidden_size=resolved_hidden,
         intermediate_size=int(intermediate_size),
     )
+    if model is not None and tokenizer is not None:
+        projector.anchor_to_llm_embeddings(model, tokenizer)
     zero_initialize_projector_output_heads(projector)
 
     notes = (
@@ -385,6 +388,11 @@ def train_impish_bloodmoon_callosum_and_lora(
             model.resize_token_embeddings(vocab_len, mean_resizing=False)
         except TypeError:
             model.resize_token_embeddings(vocab_len)
+        if resolved_device.type == "cuda":
+            import gc
+
+            gc.collect()
+            torch.cuda.empty_cache()
 
     if not getattr(model, "is_loaded_in_4bit", False):
         model.to(resolved_device)
@@ -397,6 +405,11 @@ def train_impish_bloodmoon_callosum_and_lora(
             model.gradient_checkpointing_enable()
         if hasattr(model, "config") and hasattr(model.config, "use_cache"):
             model.config.use_cache = False
+        if resolved_device.type == "cuda":
+            import gc
+
+            gc.collect()
+            torch.cuda.empty_cache()
 
     resolved_hidden = detect_model_hidden_size(model)
     target_mods = detect_lora_target_modules(model)
@@ -416,6 +429,12 @@ def train_impish_bloodmoon_callosum_and_lora(
         hidden_size=resolved_hidden,
         intermediate_size=int(intermediate_size),
     ).to(resolved_device)
+    projector.anchor_to_llm_embeddings(model, tokenizer)
+    if resolved_device.type == "cuda":
+        import gc
+
+        gc.collect()
+        torch.cuda.empty_cache()
 
     if train_pairs is None:
         train_jsonl = root / "outputs" / "gap_trajectories_train.jsonl"
@@ -424,6 +443,42 @@ def train_impish_bloodmoon_callosum_and_lora(
         holdout_jsonl = root / "outputs" / "gap_trajectories_holdout.jsonl"
         if holdout_jsonl.exists():
             holdout_pairs = load_contrastive_gap_pairs_jsonl(holdout_jsonl)
+
+    resolved_sensors = sensors
+    resolved_learned_leaves = ()
+    bridges_dir = root / "models" / "right_brain_bridges"
+    if resolved_sensors is None and resolved_device.type == "cuda" and bridges_dir.exists():
+        try:
+            from .neural_bridge_classifiers import (
+                DEFAULT_COMPLEX_FEELING_LEAVES,
+                load_trained_neural_bridge_sensors,
+            )
+
+            resolved_sensors = load_trained_neural_bridge_sensors(bridges_dir, device="cpu")
+            resolved_learned_leaves = DEFAULT_COMPLEX_FEELING_LEAVES
+        except Exception:
+            resolved_sensors = None
+
+    pre_training_holdout_baseline: dict[str, Any] | None = None
+    if holdout_pairs:
+        if hasattr(model, "config") and hasattr(model.config, "use_cache"):
+            model.config.use_cache = True
+        pre_eval_res = evaluate_holdout_pairs(
+            model,
+            tokenizer,
+            projector,
+            holdout_pairs=holdout_pairs,
+            gap_token_id=gap_token_id,
+            device=resolved_device,
+            sensors=resolved_sensors,
+            learned_leaves=resolved_learned_leaves,
+        )
+        pre_training_holdout_baseline = pre_eval_res.to_dict()
+        if resolved_device.type == "cuda":
+            torch.cuda.empty_cache()
+
+    if getattr(model, "is_loaded_in_4bit", False) and hasattr(model, "config") and hasattr(model.config, "use_cache"):
+        model.config.use_cache = False
 
     epoch_metrics = train_left_brain_lora_and_callosum(
         model,
@@ -437,6 +492,8 @@ def train_impish_bloodmoon_callosum_and_lora(
         lr_lora=float(lr_lora),
         warmup_steps=int(warmup_steps),
     )
+    if resolved_device.type == "cuda":
+        torch.cuda.empty_cache()
 
     meta = save_lora_and_callosum_checkpoint(
         out_dir,
@@ -444,7 +501,7 @@ def train_impish_bloodmoon_callosum_and_lora(
         projector=projector,
         lora_config=lora_cfg,
         sleep_cycle_index=int(sleep_cycle_index),
-        trained_trajectories_count=len(train_pairs) * 2,
+        trained_trajectories_count=len(train_pairs),
         notes=f"Trained Corpus Callosum + LoRA for {resolved_hf_id} ({len(train_pairs)} contrastive pairs, {epochs} epochs).",
         base_model_id=resolved_hf_id,
         callosum_status=TRAINED_STEERED_STATUS,
@@ -452,15 +509,8 @@ def train_impish_bloodmoon_callosum_and_lora(
 
     holdout_report: dict[str, Any] | None = None
     if holdout_pairs:
-        resolved_sensors = sensors
-        bridges_dir = root / "models" / "right_brain_bridges"
-        if resolved_sensors is None and resolved_device.type == "cuda" and bridges_dir.exists():
-            try:
-                from .neural_bridge_classifiers import NeuralThreeBridgeSuite
-
-                resolved_sensors = NeuralThreeBridgeSuite.load_all(bridges_dir).as_three_bridge_sensors()
-            except Exception:
-                resolved_sensors = None
+        if hasattr(model, "config") and hasattr(model.config, "use_cache"):
+            model.config.use_cache = True
         eval_res = evaluate_holdout_pairs(
             model,
             tokenizer,
@@ -469,8 +519,10 @@ def train_impish_bloodmoon_callosum_and_lora(
             gap_token_id=gap_token_id,
             device=resolved_device,
             sensors=resolved_sensors,
+            learned_leaves=resolved_learned_leaves,
         )
         holdout_report = eval_res.to_dict()
+        holdout_report["pre_training_holdout_baseline"] = pre_training_holdout_baseline
         atomic_json(out_dir / "impish_bloodmoon_holdout_report.json", holdout_report)
 
     return {
@@ -487,6 +539,7 @@ def train_impish_bloodmoon_callosum_and_lora(
             if (epoch_metrics and hasattr(epoch_metrics[-1], "to_dict"))
             else (dict(epoch_metrics[-1]) if epoch_metrics else None)
         ),
+        "pre_training_holdout_baseline": pre_training_holdout_baseline,
         "holdout_report": holdout_report,
     }
 

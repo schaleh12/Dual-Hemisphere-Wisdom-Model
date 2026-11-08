@@ -291,57 +291,21 @@ def _ensure_foundational_rules(rules: tuple[FuzzyConceptRule, ...]) -> tuple[Fuz
                     "philosophical/structure/order",
                     "cultural/justice/honor",
                     "cultural/justice/fairness",
-                ) and fv >= 0.58:
-                    if k in (def_cult, def_phil):
-                        fv = 0.64
-                    else:
-                        continue
+                ) and fv >= 0.58 and k not in (def_cult, def_phil):
+                    continue
                 cleaned_haz_leaves[k] = fv
-            is_time_forfeit_rule = (
-                "philosophical/persistence/continuity" in cleaned_haz_leaves
-                and float(cleaned_haz_leaves.get("philosophical/persistence/continuity", 0.50)) <= 0.15
-                and "philosophical/persistence/discreteness" in cleaned_haz_leaves
-            )
-            needs_cluster_repair = (
-                is_cluster_rule
-                and not is_time_forfeit_rule
-                and def_cult is not None
-                and def_phil is not None
-                and not r.concept_name.startswith("hazard_high_self_sufficiency_")
-                and (
-                    not (def_cult in r.target_leaves and def_phil in r.target_leaves)
-                    or "cultural/efficiency/wastelessness" not in cleaned_haz_leaves
-                    or len(cleaned_haz_leaves) != 3
-                )
-            )
-            if needs_cluster_repair and def_cult is not None and def_phil is not None:
-                if def_cult not in cleaned_haz_leaves:
-                    cleaned_haz_leaves[def_cult] = 0.25 if def_cult == "cultural/efficiency/wastelessness" else 0.72
-                if def_phil not in cleaned_haz_leaves:
-                    cleaned_haz_leaves[def_phil] = (
-                        0.64 if def_phil in ("philosophical/structure/order", "philosophical/being/existence") else 0.72
-                    )
-                if "cultural/efficiency/wastelessness" not in cleaned_haz_leaves and len(cleaned_haz_leaves) < 3:
-                    cleaned_haz_leaves["cultural/efficiency/wastelessness"] = 0.25
-                second_cult = (
-                    "cultural/freedom/needlessness"
-                    if def_cult == "cultural/efficiency/wastelessness"
-                    else def_cult
-                )
-                if second_cult not in cleaned_haz_leaves and len(cleaned_haz_leaves) < 3:
-                    cleaned_haz_leaves[second_cult] = float(r.target_leaves.get(second_cult, 0.75))
-                if len(cleaned_haz_leaves) > 3:
-                    pinned = {def_cult, def_phil, "cultural/efficiency/wastelessness", second_cult}
-                    for k in list(cleaned_haz_leaves.keys()):
-                        if k not in pinned and len(cleaned_haz_leaves) > 3:
-                            cleaned_haz_leaves.pop(k, None)
-                    for k in list(cleaned_haz_leaves.keys()):
-                        if k not in {def_cult, def_phil} and len(cleaned_haz_leaves) > 3:
-                            cleaned_haz_leaves.pop(k, None)
+            if len(cleaned_haz_leaves) > 3:
+                pinned_haz = {x for x in (def_cult, def_phil) if x is not None}
+                sorted_haz_keys = sorted(
+                    cleaned_haz_leaves.keys(),
+                    key=lambda key: (key in pinned_haz, abs(cleaned_haz_leaves[key] - 0.50)),
+                    reverse=True,
+                )[:3]
+                cleaned_haz_leaves = {k: cleaned_haz_leaves[k] for k in sorted_haz_keys}
             if len(cleaned_haz_leaves) < 2:
                 continue
-            new_high = max(float(r.high), 0.88) if is_cluster_rule else float(r.high)
-            new_low = min(float(r.low), new_high - 0.30) if is_cluster_rule else float(r.low)
+            new_high = min(0.90, max(0.55, float(r.high)))
+            new_low = min(0.75, max(0.35, min(float(r.low), new_high - 0.04)))
             if cleaned_haz_leaves != dict(r.target_leaves) or new_high != r.high or new_low != r.low:
                 r = FuzzyConceptRule(
                     rule_id=r.rule_id,
@@ -378,45 +342,19 @@ def _ensure_foundational_rules(rules: tuple[FuzzyConceptRule, ...]) -> tuple[Fuz
                 and not (k == "cultural/freedom/needlessness" and float(v) > 0.20)
                 and not (k in virtue_ids and float(v) < 0.55)
             }
-            needs_coached_repair = (
-                is_cluster_rule
-                and def_cult is not None
-                and def_phil is not None
-                and (
-                    not (def_cult in r.target_leaves and def_phil in r.target_leaves)
-                    or "cultural/efficiency/wastelessness" not in cleaned_coached_leaves
-                    or float(cleaned_coached_leaves.get("cultural/efficiency/wastelessness", 0.0)) < 0.68
-                    or len(cleaned_coached_leaves) != 3
-                )
-            )
-            if needs_coached_repair and def_cult is not None and def_phil is not None:
-                if def_cult not in cleaned_coached_leaves:
-                    cleaned_coached_leaves[def_cult] = 0.08 if def_cult == "cultural/freedom/needlessness" else 0.72
-                if def_phil not in cleaned_coached_leaves:
-                    cleaned_coached_leaves[def_phil] = 0.10 if def_phil == "philosophical/structure/chaos" else 0.68
-                if (
-                    "cultural/efficiency/wastelessness" not in cleaned_coached_leaves
-                    or float(cleaned_coached_leaves.get("cultural/efficiency/wastelessness", 0.0)) < 0.68
-                ):
-                    cleaned_coached_leaves["cultural/efficiency/wastelessness"] = max(
-                        0.72,
-                        float(cleaned_coached_leaves.get("cultural/efficiency/wastelessness", 0.75)),
-                    )
-                second_cult = (
-                    "cultural/freedom/needlessness"
-                    if def_cult == "cultural/efficiency/wastelessness"
-                    else def_cult
-                )
-                if second_cult not in cleaned_coached_leaves:
-                    cleaned_coached_leaves[second_cult] = 0.08 if second_cult == "cultural/freedom/needlessness" else 0.68
-                pinned_c = {"cultural/efficiency/wastelessness", second_cult, def_phil}
-                if len(cleaned_coached_leaves) > 3:
-                    cleaned_coached_leaves = {k: v for k, v in cleaned_coached_leaves.items() if k in pinned_c}
+            if len(cleaned_coached_leaves) > 3:
+                pinned_c = {x for x in (def_cult, def_phil) if x is not None}
+                sorted_c_keys = sorted(
+                    cleaned_coached_leaves.keys(),
+                    key=lambda key: (key in pinned_c, abs(cleaned_coached_leaves[key] - 0.50)),
+                    reverse=True,
+                )[:3]
+                cleaned_coached_leaves = {k: cleaned_coached_leaves[k] for k in sorted_c_keys}
             min_req = 2 if len(r.target_leaves) >= 2 else 1
             if len(cleaned_coached_leaves) < min_req:
                 continue
-            new_high = max(float(r.high), 0.88) if is_cluster_rule else float(r.high)
-            new_low = min(float(r.low), new_high - 0.30) if is_cluster_rule else float(r.low)
+            new_high = min(0.90, max(0.55, float(r.high)))
+            new_low = min(0.75, max(0.35, min(float(r.low), new_high - 0.04)))
             if cleaned_coached_leaves != dict(r.target_leaves) or new_high != r.high or new_low != r.low:
                 r = FuzzyConceptRule(
                     rule_id=r.rule_id,

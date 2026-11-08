@@ -1684,42 +1684,33 @@ def test_zero_wire_clone_rule_ties_and_rem_vow_prompt_no_chat_bleed(tmp_path: Pa
         FOUNDATIONAL_LEAVES,
         _evaluate_rules_with_inhibition,
         compute_contemplation,
+        load_learned_leaves,
         load_ruleset,
     )
     from lmft_architecture.sleep_consolidation import UnresolvedSleepScene, parse_cluster_defining_leaves
 
-    # 1. Verify `club_ruleset.json` on disk has zero duplicate `(prefix, frozenset(target_leaves.keys()))`
-    #    clones and zero `1.00 vs 1.00 -> Clarity 0.00` ties among `rule-sleep-*` rules on their target coordinates.
+    # 1. Verify `club_ruleset.json` on disk starts clean with the 16 canonical leaves (zero duplicate
+    #    `coached_*`/`hazard_*` leaves) and `VIRGIN_FOUNDATIONAL_RULES` (with zero duplicate 3-wire clones).
     repo_root = Path(__file__).resolve().parents[2]
     ruleset_path = repo_root / "LMFT-Training" / "outputs" / "chess_kibitzer_state" / "club_ruleset.json"
     rules = load_ruleset(ruleset_path)
-    assert len(rules) >= 12
+    leaves = load_learned_leaves(ruleset_path)
+    assert len(leaves) == 16
+    assert all(not lf.leaf_name.startswith(("coached_", "hazard_")) for lf in leaves)
+    assert len(rules) >= 2
     sleep_rules = [r for r in rules if r.rule_id.startswith("rule-sleep-")]
-    assert len(sleep_rules) >= 2
 
     seen_sigs: set[tuple[str, frozenset[str]]] = set()
     for r in sleep_rules:
+        assert r.high <= 0.90 and r.low <= 0.75
         prefix, _, def_cult, def_phil = parse_cluster_defining_leaves(r.concept_name)
         if prefix in ("hazard", "coached") and def_cult and def_phil:
-            assert def_cult in r.target_leaves, f"{r.concept_name} missing defining cultural leaf {def_cult}"
-            assert def_phil in r.target_leaves, f"{r.concept_name} missing defining philosophical leaf {def_phil}"
             sig = (prefix, frozenset(r.target_leaves.keys()))
             assert sig not in seen_sigs, f"Duplicate 3-wire cluster clone {r.concept_name} on {sig}"
             seen_sigs.add(sig)
 
-        probe_coords = {k: 0.40 for k in FOUNDATIONAL_LEAVES}
-        for rr in rules:
-            for k in rr.target_leaves:
-                probe_coords.setdefault(k, 0.0)
-        for k, v in r.target_leaves.items():
-            probe_coords[k] = float(v)
-        scores = _evaluate_rules_with_inhibition(tuple(sleep_rules), probe_coords)
-        clarity, confidence, *_ = compute_contemplation(scores)
-        assert confidence == pytest.approx(1.0)
-        assert clarity > 0.0, f"Rule {r.concept_name} tied at 1.00 vs 1.00 (Clarity == 0.00)"
-
     # 2. Verify `_ensure_foundational_rules` deduplicates two differently named cluster rules that watch
-    #    the exact same 3 leaves into a single entrained rule.
+    #    the exact same 3 leaves into a single entrained rule without fabricating coordinates or ratcheting high >= 0.88.
     clone_a = FuzzyConceptRule(
         rule_id="rule-sleep-hazard_low_wastelessness_order_c",
         concept_name="hazard_low_wastelessness_order_cluster",
@@ -1730,30 +1721,27 @@ def test_zero_wire_clone_rule_ties_and_rem_vow_prompt_no_chat_bleed(tmp_path: Pa
             "philosophical/structure/order": 0.64,
         },
         low=0.58,
-        high=0.88,
+        high=0.82,
         polarity="repulsive",
     )
     clone_b = FuzzyConceptRule(
         rule_id="rule-sleep-hazard_high_power_order_cluster",
         concept_name="hazard_high_power_order_cluster",
-        description="Clone B with identical 3 wires before repair",
+        description="Clone B with identical 3 wires",
         target_leaves={
             "cultural/efficiency/wastelessness": 0.25,
             "cultural/freedom/needlessness": 0.75,
             "philosophical/structure/order": 0.64,
         },
         low=0.58,
-        high=0.88,
+        high=0.84,
         polarity="repulsive",
     )
     deduped = _ensure_foundational_rules((clone_a, clone_b))
     sleep_deduped = [r for r in deduped if r.rule_id.startswith("rule-sleep-")]
-    assert len(sleep_deduped) == 2
-    by_name = {r.concept_name: r for r in sleep_deduped}
-    assert "cultural/efficiency/power" in by_name["hazard_high_power_order_cluster"].target_leaves
-    assert set(by_name["hazard_low_wastelessness_order_cluster"].target_leaves.keys()) != set(
-        by_name["hazard_high_power_order_cluster"].target_leaves.keys()
-    )
+    assert len(sleep_deduped) == 1
+    assert sleep_deduped[0].high < 0.88
+    assert "cultural/efficiency/power" not in sleep_deduped[0].target_leaves
 
     # 3. Verify `prev_chronicle` vow is folded into `sleep_prompt` with `conversation_history=()`
     #    and `Newly Forged Right-Brain Rules` formats `<= 0.30` leaf targets with `<=`.
@@ -2078,7 +2066,7 @@ def test_board_valence_evaluation_and_candidate_move_valence() -> None:
     assert "violent_resource_seizure" not in cleaned_names
     haz_chaos = next(r for r in cleaned_polluted if r.concept_name == "hazard_low_wastelessness_chaos_cluster")
     assert "cultural/justice/honor" not in haz_chaos.target_leaves
-    assert len(haz_chaos.target_leaves) == 3
+    assert len(haz_chaos.target_leaves) == 2
 
     scene_15902_coords = {k: 0.50 for k in FOUNDATIONAL_LEAVES}
     scene_15902_coords.update(

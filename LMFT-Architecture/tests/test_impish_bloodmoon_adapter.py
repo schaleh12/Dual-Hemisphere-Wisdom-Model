@@ -104,6 +104,7 @@ def test_guardrail_3_bootstrap_vs_trained_callosum_and_holdout_checks(tmp_path: 
     boot_meta = bootstrap_impish_bloodmoon_virgin_checkpoint(
         boot_dir,
         model=model,
+        tokenizer=tok,
         hf_model_id=DEFAULT_IMPISH_BLOODMOON_HF_ID,
         intermediate_size=32,
         lora_rank=8,
@@ -140,7 +141,9 @@ def test_guardrail_3_bootstrap_vs_trained_callosum_and_holdout_checks(tmp_path: 
     assert report["callosum_status"] == TRAINED_STEERED_STATUS
     assert report["sleep_cycle_index"] == 1
     assert report["hidden_size"] == 48
+    assert report["pre_training_holdout_baseline"] is not None
     assert report["holdout_report"] is not None
+    assert report["holdout_report"]["pre_training_holdout_baseline"] is not None
     assert report["holdout_report"]["max_unplugged_chord_swap_shift"] == 0.0
 
 

@@ -2,8 +2,8 @@
   "schema_version": 1,
   "version": "0.2.0",
   "github_repo": "schaleh12/Dual-Hemisphere-Wisdom-Model",
-  "build_sha256": "fe09cfcd0646e3c22bee90f9b6ae0e01031f39f8364c8d7382de2227deb20b9c",
-  "build_short_hash": "fe09cfcd0646",
+  "build_sha256": "d8c8826936550588dfa9c5c14d273b1cd454c5da6fb2daeeb5fd380c6d983c7a",
+  "build_short_hash": "d8c882693655",
   "files": {
     "src/lmft_architecture/__init__.py": {
       "sha256": "a89f56c2195e87129adbffa5065d8769ea096e13ba98783d217c4d120ee92623",
@@ -90,8 +90,8 @@
       "size_bytes": 3267
     },
     "src/lmft_architecture/chess_app.py": {
-      "sha256": "e547a909fbaa75fb1e301fab98b8622fc50854810f21ef6551a782de61d2aed8",
-      "size_bytes": 186090
+      "sha256": "b2124a208d952173bbcab65e747d5bfb96ad0a1dfd48c7b1ebc9f932c4049559",
+      "size_bytes": 182211
     },
     "src/lmft_architecture/chess_kibitz_bridge.py": {
       "sha256": "5c26e784cbb1f62c6059a8345781d0a600bf4067a1b24ceeb99d838050e5d613",
@@ -158,8 +158,8 @@
       "size_bytes": 14529
     },
     "src/lmft_architecture/impish_bloodmoon_adapter.py": {
-      "sha256": "4b311691626d4c0e2bc59877bcfde460ae8c382c02532ab31b09450bda943b86",
-      "size_bytes": 23725
+      "sha256": "40c75798fb52a3b59e3356a02d03e6b31bf00eb525af296abca28be8105ab0ee",
+      "size_bytes": 25685
     },
     "src/lmft_architecture/installer_wizard.py": {
       "sha256": "2d31f59cc81d139fb4d0b32c38cac39899e1abfc7edf91d5e86aefa34187b37c",
@@ -242,8 +242,8 @@
       "size_bytes": 23256
     },
     "src/lmft_architecture/right_brain_equilibrium.py": {
-      "sha256": "8c9f582b34cb3377898b2fc2e9f177a65f102ae66b443c13838779f8aaccd8da",
-      "size_bytes": 77330
+      "sha256": "5282ec6f7b87a84fdf388537055f874200dbbb9265a488f850bd207e8ade1469",
+      "size_bytes": 79207
     },
     "src/lmft_architecture/runtime.py": {
       "sha256": "956d5410e1568020854a6a2bde681a8109a21ff4fdf1a62e22c66462450cc0f1",
@@ -266,7 +266,7 @@
       "size_bytes": 77053
     },
     "src/lmft_architecture/subliminal_gap_splice.py": {
-      "sha256": "c7552add4d46f4ce4c636eaa1069f05a55807cb86b5bd6075a81b603d4903aa6",
+      "sha256": "5ec68c2990a918f065450df00ba5e209e5f45d663869a3902c9b85bb26841810",
       "size_bytes": 50556
     },
     "src/lmft_architecture/teacher.py": {
@@ -294,8 +294,8 @@
       "size_bytes": 112994
     },
     "src/lmft_architecture/train_left_brain_lora.py": {
-      "sha256": "5b9b12c348ee69a92f38eaab462b9a0ee2e22b7d90eab0a3ce0c3adbb7752a21",
-      "size_bytes": 54267
+      "sha256": "3e0c6ffcaa10b87d0e9eeffc9ff90f461e5fb9f7bd6fb5ff742bb385dcf2236c",
+      "size_bytes": 54781
     },
     "src/lmft_architecture/virgin_baseline.py": {
       "sha256": "61fb17e790703ddd476ab812847ad3fdf433aa6211fcfdba7054ca3303631941",

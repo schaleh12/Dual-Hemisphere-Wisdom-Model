@@ -786,7 +786,7 @@ class SubliminalGapProjector(nn.Module):
         embed_mod = model.get_input_embeddings()
         if embed_mod is None or not hasattr(embed_mod, "weight"):
             return False
-        w_emb = embed_mod.weight.detach().to(dtype=torch.float32)
+        w_emb = embed_mod.weight.detach()
         if w_emb.ndim != 2 or int(w_emb.shape[1]) != int(self.hidden_size) or int(w_emb.shape[0]) < 1:
             return False
 
@@ -815,7 +815,7 @@ class SubliminalGapProjector(nn.Module):
                 if not valid_ids:
                     valid_ids = [ch_idx % vocab_n]
                 idx_tensor = torch.tensor(valid_ids, dtype=torch.long, device=emb_device)
-                tok_vecs = w_emb.index_select(0, idx_tensor)
+                tok_vecs = w_emb.index_select(0, idx_tensor).to(dtype=torch.float32)
                 mean_vec = torch.nan_to_num(tok_vecs.mean(dim=0), nan=0.0, posinf=0.0, neginf=0.0)
                 norm_vec = F.normalize(mean_vec, p=2, dim=0, eps=1e-6)
                 pooled_list.append(norm_vec)

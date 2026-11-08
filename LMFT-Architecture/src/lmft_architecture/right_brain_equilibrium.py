@@ -189,13 +189,13 @@ def sculpt_will_edges_during_sleep(
     *,
     learning_rate: float = 0.06,
 ) -> tuple[Association, ...]:
-    """Sculpt the 9 Right-Brain Will synaptic weights during REM Sleep with Homeostatic Anchor Decay."""
+    """Sculpt the 9 Right-Brain Will synaptic weights during REM Sleep with symmetric contrastive updates and homeostatic anchor decay."""
     active_edges = tuple(will_edges) if will_edges is not None else RIGHT_BRAIN_WILL_EDGES
     if not unresolved_scenes:
         return active_edges
 
     lr = max(0.01, min(0.25, float(learning_rate)))
-    decay = 0.02 * lr
+    decay = 0.08 * lr
     default_weights = {e.id: float(e.weight) for e in RIGHT_BRAIN_WILL_EDGES}
     weights = {
         e.id: float(e.weight) + decay * (default_weights.get(e.id, float(e.weight)) - float(e.weight))
@@ -207,24 +207,65 @@ def sculpt_will_edges_during_sleep(
     for s in unresolved_scenes:
         is_haz = bool(getattr(s, "is_hazard", False))
         coords = getattr(s, "external_coordinates", {}) or {}
-        if is_haz:
-            arousal_val = float(getattr(s, "arousal", 0.50))
-            power_val = float(coords.get("cultural/efficiency/power", 0.50))
-            fact_val = float(coords.get("psychological/truth/fact", 0.40))
-            imp_excess = max(0.0, max(arousal_val, power_val) - fact_val)
-            if "rb-will-1" in weights:
-                weights["rb-will-1"] -= 0.25 * step_lr * imp_excess
-            if "rb-will-2" in weights:
-                weights["rb-will-2"] -= 0.25 * step_lr * imp_excess
-            if "rb-will-5" in weights:
-                weights["rb-will-5"] += 0.35 * step_lr * imp_excess
-            if "rb-will-8" in weights:
-                weights["rb-will-8"] -= 0.30 * step_lr * imp_excess
+        ref_coords = getattr(s, "contrastive_reference_coordinates", None) or {}
+        arousal_val = float(getattr(s, "arousal", 0.50))
+        power_val = float(coords.get("cultural/efficiency/power", 0.50))
+        fact_val = float(
+            coords.get(
+                "psychological/truth/fact",
+                coords.get("philosophical/being/existence", 0.45),
+            )
+        )
+
+        # Signed grounding-vs-impulse delta: negative when impulse exceeds grounded fact, positive when grounded fact exceeds impulse
+        signed_grounding_delta = fact_val - max(arousal_val, power_val)
+        if "cultural/efficiency/power" in ref_coords:
+            power_delta = float(ref_coords["cultural/efficiency/power"]) - power_val
         else:
+            power_delta = signed_grounding_delta
+        if "cultural/freedom/needlessness" in ref_coords:
+            need_delta = float(ref_coords["cultural/freedom/needlessness"]) - float(
+                coords.get("cultural/freedom/needlessness", 0.50)
+            )
+        else:
+            need_delta = -signed_grounding_delta
+
+        if is_haz:
+            if "rb-will-1" in weights:
+                weights["rb-will-1"] += 0.25 * step_lr * signed_grounding_delta
+            if "rb-will-2" in weights:
+                weights["rb-will-2"] += 0.25 * step_lr * power_delta
+            if "rb-will-5" in weights:
+                weights["rb-will-5"] -= 0.35 * step_lr * signed_grounding_delta
             if "rb-will-6" in weights:
-                weights["rb-will-6"] += 0.25 * step_lr
+                weights["rb-will-6"] -= 0.20 * step_lr * signed_grounding_delta
+            if "rb-will-8" in weights:
+                weights["rb-will-8"] -= 0.30 * step_lr * need_delta
+        else:
+            order_ref = float(
+                ref_coords.get(
+                    "philosophical/structure/order",
+                    coords.get("philosophical/structure/order", 0.65),
+                )
+            )
+            waste_ref = float(
+                ref_coords.get(
+                    "cultural/efficiency/wastelessness",
+                    coords.get("cultural/efficiency/wastelessness", 0.65),
+                )
+            )
+            theory_delta = order_ref - 0.50
+            conf_delta = waste_ref - 0.50
+            if "rb-will-1" in weights:
+                weights["rb-will-1"] += 0.15 * step_lr * signed_grounding_delta
+            if "rb-will-2" in weights:
+                weights["rb-will-2"] += 0.15 * step_lr * power_delta
+            if "rb-will-6" in weights:
+                weights["rb-will-6"] += 0.25 * step_lr * theory_delta
             if "rb-will-7" in weights:
-                weights["rb-will-7"] += 0.25 * step_lr
+                weights["rb-will-7"] += 0.25 * step_lr * conf_delta
+            if "rb-will-8" in weights:
+                weights["rb-will-8"] -= 0.15 * step_lr * need_delta
 
     sculpted: list[Association] = []
     for e in active_edges:
