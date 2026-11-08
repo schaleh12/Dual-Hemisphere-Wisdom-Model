@@ -646,7 +646,7 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
         <div style="min-width:0;flex:1;">
           <div style="font-size:10px;font-weight:800;color:#7dd3fc;text-transform:uppercase;letter-spacing:0.4px;">🎵 Celestriad Jukebox</div>
-          <div id="jukebox-now-playing" style="font-size:11.5px;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">1. Forever Rachel — FFVI (Nobuo Uematsu)</div>
+          <div id="jukebox-now-playing" style="font-size:11.5px;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">1. Aria di Mezzo Carattere — FFVI (Rehn Stillnight)</div>
         </div>
         <div style="display:flex;gap:4px;align-items:center;flex-shrink:0;">
           <button class="btn" style="padding:3px 7px;font-size:11px;" onclick="jukeboxPrev()" title="Previous Track">⏮</button>
@@ -657,7 +657,7 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
         </div>
       </div>
       <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:4px;">
-        <button class="jukebox-track-btn active" id="jb-track-0" onclick="selectJukeboxTrack(0)" title="Forever Rachel (永遠に、レイチェル) — Final Fantasy VI">1. Rachel</button>
+        <button class="jukebox-track-btn active" id="jb-track-0" onclick="selectJukeboxTrack(0)" title="Aria di Mezzo Carattere — Final Fantasy VI (Rehn Stillnight)">1. Rehn Stillnight</button>
         <button class="jukebox-track-btn" id="jb-track-1" onclick="selectJukeboxTrack(1)" title="The Floating Continent (魔大陸) — Final Fantasy VI">2. Continent</button>
         <button class="jukebox-track-btn" id="jb-track-2" onclick="selectJukeboxTrack(2)" title="Magitek Research Facility (魔導研究所) — Final Fantasy VI">3. Magitek</button>
         <button class="jukebox-track-btn" id="jb-track-3" onclick="selectJukeboxTrack(3)" title="Schala's Theme (Piano) — Chrono Trigger">4. Schala</button>
@@ -1137,16 +1137,16 @@ function selectTourTab(tabNum) {
 }
 
 const JUKEBOX_TRACKS = [
-  { id: "sS7_VBgNawM", fallbackIds: ["88CuKNXFAq8"], title: "1. Forever Rachel — FFVI (Nobuo Uematsu)", url: "https://music.youtube.com/watch?v=sS7_VBgNawM&si=6OJCt4sShIwdfWbp" },
+  { id: "sS7_VBgNawM", fallbackIds: ["mXK3EvYjQl8", "88CuKNXFAq8"], title: "1. Aria di Mezzo Carattere — FFVI (Rehn Stillnight)", url: "https://music.youtube.com/watch?v=sS7_VBgNawM&si=6OJCt4sShIwdfWbp" },
   { id: "kpZFlSJS9ZI", fallbackIds: [], title: "2. The Floating Continent — FFVI (Nobuo Uematsu)", url: "https://music.youtube.com/watch?v=kpZFlSJS9ZI&si=A2_QE7uagQe_-p3m" },
   { id: "Ys-oKc88tXY", fallbackIds: [], title: "3. Magitek Research Facility — FFVI (Nobuo Uematsu)", url: "https://music.youtube.com/watch?v=Ys-oKc88tXY&si=CxowLaxsFjoW1b1k" },
   { id: "oDEpcYBu7eU", fallbackIds: [], title: "4. Schala's Theme (Piano) — Chrono Trigger (ryukahr)", url: "https://music.youtube.com/watch?v=oDEpcYBu7eU&si=N2RZzMfrpMQ1Pgtt" },
   { id: "Sf905k89AsY", fallbackIds: [], title: "5. Esper World (幻獣界) — FFVI (Nobuo Uematsu)", url: "https://music.youtube.com/watch?v=Sf905k89AsY&si=QQ4FWo_PQZoEbMEt" },
-  { id: "5-5b08omYag", fallbackIds: ["ipsZhMjCc-A", "OrQp9t6hFpY"], title: "6. The Phantom of the Opera", url: "https://music.youtube.com/watch?v=5-5b08omYag&si=Y_m_ofAPzKdkLEgi" }
+  { id: "vQG0iqPj708", fallbackIds: ["HDjGtfJkJxk", "KHCYH7TGtpg", "WDiZPjP9Lrs"], title: "6. The Phantom of the Opera", url: "https://music.youtube.com/watch?v=5-5b08omYag&si=Y_m_ofAPzKdkLEgi" }
 ];
 const HIDDEN_SEAL_TRACK = {
-  id: "_tdWkuyFI6c",
-  fallbackIds: ["ie1s-nGJUdQ", "m_3rMbiQkXs", "bGHhOBpqkWg"],
+  id: "ie1s-nGJUdQ",
+  fallbackIds: ["_tdWkuyFI6c"],
   title: "✦ Secret Seal Track — You Found Me (The Fray)",
   url: "https://music.youtube.com/watch?v=_tdWkuyFI6c&si=RSt2ENN000JXjIz2"
 };
@@ -1192,6 +1192,8 @@ window.onYouTubeIframeAPIReady = function() {
           const nextFbId = fbList[jukeboxFallbackCursor++];
           ytPlayer.loadVideoById(nextFbId);
           if (jukeboxPlaying && typeof ytPlayer.playVideo === "function") ytPlayer.playVideo();
+        } else if (!jukeboxSecretActive) {
+          setTimeout(function() { jukeboxNext(); }, 600);
         }
       }
     }
