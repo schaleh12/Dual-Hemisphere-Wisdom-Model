@@ -653,15 +653,16 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
           <button class="btn btn-chess-green" id="jukebox-play-btn" style="padding:3px 9px;font-size:11px;" onclick="jukeboxTogglePlay()" title="Play / Pause">▶ Play</button>
           <button class="btn" style="padding:3px 7px;font-size:11px;" onclick="jukeboxNext()" title="Next Track">⏭</button>
           <button class="btn" id="jukebox-mute-btn" style="padding:3px 8px;font-size:11px;border-color:#38bdf8;color:#7dd3fc;" onclick="toggleJukeboxMute()" title="Mute / Unmute Jukebox">🔊 Mute</button>
-          <a id="jukebox-ytm-link" href="https://music.youtube.com/watch?v=88CuKNXFAq8" target="_blank" rel="noopener" class="btn" style="padding:3px 7px;font-size:10.5px;text-decoration:none;" title="Open current track in YouTube Music">↗ YT</a>
+          <a id="jukebox-ytm-link" href="https://music.youtube.com/watch?v=sS7_VBgNawM&amp;si=6OJCt4sShIwdfWbp" target="_blank" rel="noopener" class="btn" style="padding:3px 7px;font-size:10.5px;text-decoration:none;" title="Open current track in YouTube Music">↗ YT</a>
         </div>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(5, 1fr);gap:4px;">
+      <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:4px;">
         <button class="jukebox-track-btn active" id="jb-track-0" onclick="selectJukeboxTrack(0)" title="Forever Rachel (永遠に、レイチェル) — Final Fantasy VI">1. Rachel</button>
         <button class="jukebox-track-btn" id="jb-track-1" onclick="selectJukeboxTrack(1)" title="The Floating Continent (魔大陸) — Final Fantasy VI">2. Continent</button>
         <button class="jukebox-track-btn" id="jb-track-2" onclick="selectJukeboxTrack(2)" title="Magitek Research Facility (魔導研究所) — Final Fantasy VI">3. Magitek</button>
         <button class="jukebox-track-btn" id="jb-track-3" onclick="selectJukeboxTrack(3)" title="Schala's Theme (Piano) — Chrono Trigger">4. Schala</button>
         <button class="jukebox-track-btn" id="jb-track-4" onclick="selectJukeboxTrack(4)" title="Esper World / Another World of Beasts (幻獣界) — Final Fantasy VI">5. Esper World</button>
+        <button class="jukebox-track-btn" id="jb-track-5" onclick="selectJukeboxTrack(5)" title="The Phantom of the Opera">6. Phantom</button>
       </div>
       <div id="jukebox-player-container" style="height:56px;border-radius:6px;overflow:hidden;border:1px solid rgba(255,255,255,0.12);background:#000;display:none;">
         <div id="jukebox-yt-player"></div>
@@ -1076,11 +1077,12 @@ function selectTourTab(tabNum) {
 }
 
 const JUKEBOX_TRACKS = [
-  { id: "88CuKNXFAq8", title: "1. Forever Rachel — FFVI (Nobuo Uematsu)", url: "https://music.youtube.com/watch?v=88CuKNXFAq8&si=LX5eCxilDfFFC8Ip" },
+  { id: "sS7_VBgNawM", title: "1. Forever Rachel — FFVI (Nobuo Uematsu)", url: "https://music.youtube.com/watch?v=sS7_VBgNawM&si=6OJCt4sShIwdfWbp" },
   { id: "kpZFlSJS9ZI", title: "2. The Floating Continent — FFVI (Nobuo Uematsu)", url: "https://music.youtube.com/watch?v=kpZFlSJS9ZI&si=A2_QE7uagQe_-p3m" },
   { id: "Ys-oKc88tXY", title: "3. Magitek Research Facility — FFVI (Nobuo Uematsu)", url: "https://music.youtube.com/watch?v=Ys-oKc88tXY&si=CxowLaxsFjoW1b1k" },
   { id: "oDEpcYBu7eU", title: "4. Schala's Theme (Piano) — Chrono Trigger (ryukahr)", url: "https://music.youtube.com/watch?v=oDEpcYBu7eU&si=N2RZzMfrpMQ1Pgtt" },
-  { id: "Sf905k89AsY", title: "5. Esper World (幻獣界) — FFVI (Nobuo Uematsu)", url: "https://music.youtube.com/watch?v=Sf905k89AsY&si=QQ4FWo_PQZoEbMEt" }
+  { id: "Sf905k89AsY", title: "5. Esper World (幻獣界) — FFVI (Nobuo Uematsu)", url: "https://music.youtube.com/watch?v=Sf905k89AsY&si=QQ4FWo_PQZoEbMEt" },
+  { id: "5-5b08omYag", title: "6. The Phantom of the Opera", url: "https://music.youtube.com/watch?v=5-5b08omYag&si=Y_m_ofAPzKdkLEgi" }
 ];
 let jukeboxIdx = 0;
 let jukeboxPlaying = false;
