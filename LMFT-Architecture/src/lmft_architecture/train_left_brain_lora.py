@@ -1031,7 +1031,7 @@ def train_left_brain_lora_and_callosum(
                 scale = min(1.0, float(global_step + 1) / float(w_steps))
                 optimizer.param_groups[0]["lr"] = base_lrs[0] * scale
                 optimizer.param_groups[1]["lr"] = base_lrs[1] * scale
-            optimizer.zero_grad()
+            optimizer.zero_grad(set_to_none=True)
             if getattr(model, "is_loaded_in_4bit", False):
                 with torch.no_grad():
                     v_aa = float(
@@ -1101,14 +1101,29 @@ def train_left_brain_lora_and_callosum(
                     "swap_margin_a": sw_ma,
                     "swap_margin_b": sw_mb,
                 }
-                act_sw_a = 1.0 if sw_ma < float(swap_margin_target) else 0.0
-                act_sw_b = 1.0 if sw_mb < float(swap_margin_target) else 0.0
-                act_br_a = 1.0 if br_ma < float(margin_target) else 0.0
-                act_br_b = 1.0 if br_mb < float(margin_target) else 0.0
-                w_aa = 0.5 * float(mle_weight) - float(contrastive_weight) * (0.35 * act_sw_a + 0.15 * act_br_a)
-                w_bb = 0.5 * float(mle_weight) - float(contrastive_weight) * (0.35 * act_sw_b + 0.15 * act_br_b)
-                w_ab = float(contrastive_weight) * (0.35 * act_sw_b + 0.15 * act_br_a)
-                w_ba = float(contrastive_weight) * (0.35 * act_sw_a + 0.15 * act_br_b)
+                t_aa = torch.tensor(v_aa, dtype=torch.float32, requires_grad=True)
+                t_bb = torch.tensor(v_bb, dtype=torch.float32, requires_grad=True)
+                t_ab = torch.tensor(v_ab, dtype=torch.float32, requires_grad=True)
+                t_ba = torch.tensor(v_ba, dtype=torch.float32, requires_grad=True)
+                mle_s = 0.5 * (t_aa + t_bb)
+                contrast_s = (
+                    0.35
+                    * (
+                        F.relu(float(swap_margin_target) - (t_ba - t_aa))
+                        + F.relu(float(swap_margin_target) - (t_ab - t_bb))
+                    )
+                    + 0.15
+                    * (
+                        F.relu(float(margin_target) - (t_ab - t_aa))
+                        + F.relu(float(margin_target) - (t_ba - t_bb))
+                    )
+                )
+                tot_s = float(mle_weight) * mle_s + float(contrastive_weight) * contrast_s
+                g_aa, g_bb, g_ab, g_ba = torch.autograd.grad(tot_s, (t_aa, t_bb, t_ab, t_ba))
+                w_aa = float(g_aa.item())
+                w_bb = float(g_bb.item())
+                w_ab = float(g_ab.item())
+                w_ba = float(g_ba.item())
                 for br_chord, br_text, br_w in (
                     (pair.chord_a, pair.continuation_a, w_aa),
                     (pair.chord_b, pair.continuation_b, w_bb),
@@ -1152,6 +1167,9 @@ def train_left_brain_lora_and_callosum(
             sum_ma += metrics["margin_a"]
             sum_mb += metrics["margin_b"]
 
+        if torch.device(device).type == "cuda":
+            torch.cuda.empty_cache()
+
         n = max(1, len(train_pairs))
         epoch_record = {
             "epoch": epoch_idx,
@@ -1162,6 +1180,14 @@ def train_left_brain_lora_and_callosum(
             "mean_train_margin_b": round(sum_mb / n, 6),
             "wall_time_s": round(time.perf_counter() - t0, 2),
         }
+        if torch.device(device).type == "cuda":
+            print(
+                f"  [Epoch {epoch_idx}/{epochs}] loss={epoch_record['mean_total_loss']:.4f}, "
+                f"ma={epoch_record['mean_train_margin_a']:+.4f}, mb={epoch_record['mean_train_margin_b']:+.4f}, "
+                f"wall={epoch_record['wall_time_s']:.1f}s, "
+                f"vram_res={torch.cuda.memory_reserved() / 1e9:.2f}GB",
+                flush=True,
+            )
         epoch_history.append(epoch_record)
 
     return epoch_history

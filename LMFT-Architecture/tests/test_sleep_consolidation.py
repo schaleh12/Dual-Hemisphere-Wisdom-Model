@@ -556,6 +556,7 @@ def test_core_weight_space_sculpting_upgrades_a_b_c() -> None:
             **base_coords,
             "cultural/efficiency/power": 0.84,
             "cultural/efficiency/wastelessness": 0.20,
+            "cultural/freedom/needlessness": 0.22,
             "philosophical/structure/chaos": 0.72,
             "psychological/truth/fact": 0.25,
             dyn_leaf.leaf_id: 0.82,
@@ -570,6 +571,7 @@ def test_core_weight_space_sculpting_upgrades_a_b_c() -> None:
             **base_coords,
             "cultural/efficiency/power": 0.52,
             "cultural/efficiency/wastelessness": 0.82,
+            "cultural/freedom/needlessness": 0.80,
             "philosophical/structure/chaos": 0.22,
         },
     )
@@ -579,6 +581,33 @@ def test_core_weight_space_sculpting_upgrades_a_b_c() -> None:
     assert new_by_id["rb-will-1"] < orig_by_id["rb-will-1"]
     assert new_by_id["rb-will-2"] < orig_by_id["rb-will-2"]
     assert new_by_id["rb-will-8"] < orig_by_id["rb-will-8"]  # Stronger inhibitory Needlessness -> Execution
+
+    # Verify symmetric opposite-direction plasticity (no one-way ratchet)
+    decisive_scene = UnresolvedSleepScene(
+        scene_index=22,
+        scenario_text="Missed decisive grounded conversion.",
+        external_coordinates={
+            **base_coords,
+            "cultural/efficiency/power": 0.22,
+            "cultural/freedom/needlessness": 0.82,
+            "psychological/truth/fact": 0.88,
+        },
+        felt_chord_notes={},
+        valence=0.65,
+        salience=0.75,
+        arousal=0.30,
+        left_brain_hunch="Hesitated instead of converting.",
+        is_hazard=False,
+        contrastive_reference_coordinates={
+            **base_coords,
+            "cultural/efficiency/power": 0.86,
+            "cultural/freedom/needlessness": 0.24,
+        },
+    )
+    re_sculpted = {e.id: e.weight for e in sculpt_will_edges_during_sleep(sculpted_edges, (decisive_scene,))}
+    assert re_sculpted["rb-will-1"] > new_by_id["rb-will-1"]
+    assert re_sculpted["rb-will-2"] > new_by_id["rb-will-2"]
+    assert re_sculpted["rb-will-8"] > new_by_id["rb-will-8"]
 
     birth = create_birth_state("test-d066", birth_event_id="birth-d066", random_seed=42)
     exp_map = {

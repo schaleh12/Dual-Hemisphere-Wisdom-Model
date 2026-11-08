@@ -391,10 +391,6 @@ def train_impish_bloodmoon_callosum_and_lora(
                 model.resize_token_embeddings(vocab_len)
         model.to(resolved_device)
     else:
-        if hasattr(model, "gradient_checkpointing_enable"):
-            model.gradient_checkpointing_enable()
-        if hasattr(model, "config") and hasattr(model.config, "use_cache"):
-            model.config.use_cache = False
         if resolved_device.type == "cuda":
             import gc
 
@@ -464,11 +460,29 @@ def train_impish_bloodmoon_callosum_and_lora(
             learned_leaves=resolved_learned_leaves,
         )
         pre_training_holdout_baseline = pre_eval_res.to_dict()
+        del pre_eval_res
         if resolved_device.type == "cuda":
-            torch.cuda.empty_cache()
+            import gc
 
-    if getattr(model, "is_loaded_in_4bit", False) and hasattr(model, "config") and hasattr(model.config, "use_cache"):
-        model.config.use_cache = False
+            gc.collect()
+            torch.cuda.empty_cache()
+            print(
+                f"  [Pre-Train Cycle 0 Eval Done] raw_flipped={pre_training_holdout_baseline.get('both_branches_flipped_count')}/{pre_training_holdout_baseline.get('total_holdout_pairs')}, "
+                f"mean_net_swap={pre_training_holdout_baseline.get('mean_net_chord_swap_margin', 0.0):+.4f}, "
+                f"vram_res={torch.cuda.memory_reserved() / 1e9:.2f}GB",
+                flush=True,
+            )
+
+    if getattr(model, "is_loaded_in_4bit", False):
+        if hasattr(model, "gradient_checkpointing_enable"):
+            model.gradient_checkpointing_enable()
+        if hasattr(model, "config") and hasattr(model.config, "use_cache"):
+            model.config.use_cache = False
+        if resolved_device.type == "cuda":
+            import gc
+
+            gc.collect()
+            torch.cuda.empty_cache()
 
     epoch_metrics = train_left_brain_lora_and_callosum(
         model,
