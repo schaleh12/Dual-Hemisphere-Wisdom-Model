@@ -68,8 +68,8 @@ To keep GPU memory clean and avoid mixing unrelated workflows into one interface
     1. **REM Sleep Match Chronicles & Longitudinal Vows (`rem_dream_chronicles`)**: During REM Sleep (`handle_run_rem_sleep`), the 4-bit `Qwen/Qwen3-8B` Left Brain wakes up to compose a **2-sentence cat-nap** or **4-sentence deep-sleep poem** (`Feeler -> Thinker -> Do-er Vow`), checks whether its previous dream vow was **`HONORED`** or **`BROKEN`** in pure coordinate space (`_evaluate_previous_dream_vow`), and harvests new `ContrastiveGapPair` rows (`celestriad_gap_trajectories.jsonl`).
     2. **Insightful Human Questions (`handle_chat_message`)**: When you ask a question in chat, the Right Brain probes the 40-node tree (`novelty`, `salience`, `clarity`, `intention`) and scales the Left Brain's response from `1` sentence up to a `2-stanza` (`6-sentence`) deep deliberation anchored to live board geometry (`Fact`).
   - **Objective Strength-Calibrated Sparring Opponent & Strict Anti-Cheat Air-Gap (`Stockfish 19`)**:
-    - **`[Auto Self-Play & Kibitz]`** pits `Celestriad 1.0` against an external, strength-calibrated **`ObjectiveCalibratedSparringEngine`** (`Stockfish 19 UCI`), alternating White and Black and enforcing a `10:00` match clock.
-    - **Strict Anti-Cheat Air-Gap**: `Celestriad 1.0` **never** queries Stockfish to choose its own moves (enforced by [`test_strict_airgap_sparring_engine_and_objective_elo_update`](LMFT-Architecture/tests/test_chess_app.py)). Stockfish serves strictly as the **opponent on the opposite color** and the **post-move referee** (extracting contrastive bitboard feature deltas for REM Sleep and updating FIDE Elo after each game—proven across a live **30-game, `852`-step self-training run reaching `1264.0` Elo**).
+    - **`[Auto Self-Play & Kibitz]`** pits `Celestriad 1.0` against an internal strength-calibrated **`ObjectiveCalibratedSparringEngine`** (`Stockfish 19 UCI` + handicap calibration wrapper), alternating White and Black and enforcing a `10:00` match clock.
+    - **Strict Anti-Cheat Air-Gap**: `Celestriad 1.0` **never** queries Stockfish to choose its own moves (enforced by [`test_strict_airgap_sparring_engine_and_objective_elo_update`](LMFT-Architecture/tests/test_chess_app.py)). Stockfish serves strictly as the **opponent on the opposite color** and the **post-move referee** (extracting contrastive bitboard feature deltas for REM Sleep and updating the Internal Sparring Calibration Rating after each game).
   - **Isolated State**: Saves all games, Elo ratings, REM dream chronicles, sculpted `bitboard_sleeve_weights.json`, `will_edges.json`, and `club_ruleset.json` to `LMFT-Training/outputs/chess_kibitzer_state/`.
 
 ---
@@ -162,8 +162,8 @@ Without changing any founding node name, the 6 `Philosophical` leaves map to 6 c
 2. **`Qwen/Qwen3-8B` (4-Bit NF4) & `Qwen/Qwen3-4B` (`bfloat16`) Contrastive Callosum + LoRA Training**:
    - **`Qwen/Qwen3-8B` 4-Bit NF4 (`models/left_brain_qwen3_8b/`, `D061`)**: Verified **`5/6`** positive chord-swap shift on unseen holdout pairs (`mean_net_chord_swap_margin = +0.88`, `0.000000` unplugged shift).
    - **`Qwen/Qwen3-4B` (`models/left_brain_lora_cycle2/`)**: Verified **`5/6`** positive chord-swap shift on unseen holdouts, with Cycle 2 margin improving from **`+0.7775` to `+0.8646`**, Daytime Parable settlement rising from **`5/8` to `7/8`**, and Unseen Harbor Bakehouse rising from **`3/4` to `4/4`**.
-3. **Live `Celestriad 1.0` Self-Training vs. Strength-Calibrated `Stockfish 19` (`D065–D066`)**:
-   - Over 30 completed games (`19W–9L–2D`, `852` distilled post-mortem steps), `Celestriad 1.0` climbed from `1000.0` to **`1264.0` FIDE Elo** under a strict anti-cheat air-gap while sculpting 6 clean Founding-Leaf REM cluster rules and 4 discriminative Tier-2 `LearnedLeaf` nodes.
+3. **Live `Celestriad 1.0` Self-Training vs. `ObjectiveCalibratedSparringEngine` (`D065–D066`)**:
+   - Over 30 completed games (`19W–9L–2D`), `Celestriad 1.0` climbed from `1000.0` to **`1264.0` Internal Sparring Calibration Rating** (`ObjectiveCalibratedSparringEngine` synthetic handicap ladder) under a strict anti-cheat air-gap while sculpting 6 Founding-Leaf REM cluster rules and 4 discriminative Tier-2 `LearnedLeaf` nodes.
 
 ---
 

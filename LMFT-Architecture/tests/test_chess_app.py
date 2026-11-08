@@ -2096,6 +2096,103 @@ def test_board_valence_evaluation_and_candidate_move_valence() -> None:
     assert matched_15902 == "coached_high_power_agency_cluster"
 
 
+def test_clean_machine_installer_crlf_sync_and_signed_contrastive_bitboard_sleeve(tmp_path: Path) -> None:
+    """Verify all 6 clean-machine installer fixes and signed contrastive BitboardIntuitionSleeve updates."""
+    from lmft_architecture.chess_kibitz_bridge import BitboardIntuitionSleeve
+    from lmft_architecture.github_auto_sync import (
+        PRETRAINED_MODEL_CHECKPOINT_PATHS,
+        compute_file_sha256,
+        sync_missing_pretrained_models,
+        verify_or_sync_against_manifest,
+    )
+    from lmft_architecture.installer_wizard import write_provision_venv_batch
+    from lmft_architecture.workspace_paths import resolve_arch_root, resolve_training_root
+
+    # 1. `write_provision_venv_batch` safely handles Windows usernames with spaces without `\"` escaping
+    spaced_arch = tmp_path / "Users" / "First Last" / "LMFT-Celestriad"
+    spaced_py = tmp_path / "Users" / "First Last" / "Python311" / "python.exe"
+    bat_path = write_provision_venv_batch(spaced_arch, spaced_py, launch_after=True)
+    assert bat_path.is_file()
+    bat_text = bat_path.read_text(encoding="utf-8")
+    assert '\\"' not in bat_text
+    assert f'"{spaced_py}" -m venv "%~dp0.venv"' in bat_text
+    assert '"%~dp0.venv\\Scripts\\python.exe" -m pip install -e "%~dp0"' in bat_text
+
+    # 2. `pyproject.toml` supports Python 3.11-3.13, valid PyPI versions, and runtime dependencies
+    arch_root = resolve_arch_root()
+    pyproject_text = (arch_root / "pyproject.toml").read_text(encoding="utf-8")
+    assert 'requires-python = ">=3.11,<3.14"' in pyproject_text
+    assert "[build-system]" in pyproject_text
+    for banned_pin in ("numpy==2.5.3", "scipy==1.18.1", "networkx==3.6.1", "pytest==9.1.1"):
+        assert banned_pin not in pyproject_text
+    for req_pkg in ("chess", "transformers", "accelerate", "bitsandbytes", "huggingface-hub", "pywebview"):
+        assert req_pkg in pyproject_text
+
+    # 3. CRLF vs LF normalization in `compute_file_sha256` and `verify_or_sync_against_manifest`
+    lf_bytes = b'{\n  "schema_version": 1\n}\n'
+    crlf_bytes = b'{\r\n  "schema_version": 1\r\n}\r\n'
+    f_lf = tmp_path / "sample_lf.json"
+    f_crlf = tmp_path / "sample_crlf.json"
+    f_lf.write_bytes(lf_bytes)
+    f_crlf.write_bytes(crlf_bytes)
+    assert compute_file_sha256(f_lf) == compute_file_sha256(f_crlf)
+
+    # Verify `apply_sync=True` succeeds when manifest has CRLF hash and GitHub returns LF bytes (or vice versa)
+    crlf_raw_sha = __import__("hashlib").sha256(crlf_bytes).hexdigest()
+    fake_manifest = {
+        "version": "0.2.0",
+        "build_short_hash": "abc123456789",
+        "files": {
+            "outputs/bitboard_sleeve_weights.json": {
+                "sha256": crlf_raw_sha,
+                "size_bytes": len(crlf_bytes),
+            }
+        },
+    }
+    sync_root = tmp_path / "clean_install"
+    res = verify_or_sync_against_manifest(
+        sync_root,
+        fake_manifest,
+        file_fetcher=lambda _rel: lf_bytes,
+        apply_sync=True,
+    )
+    assert res["status"] == "synced"
+    assert "outputs/bitboard_sleeve_weights.json" in res["synced_files"]
+
+    # 4. `sync_missing_pretrained_models` downloads missing model checkpoint files
+    assert len(PRETRAINED_MODEL_CHECKPOINT_PATHS) >= 20
+    dl = sync_missing_pretrained_models(sync_root, file_fetcher=lambda _rel: b"checkpoint-bytes")
+    assert len(dl) == len(PRETRAINED_MODEL_CHECKPOINT_PATHS)
+    assert sync_missing_pretrained_models(sync_root, file_fetcher=lambda _rel: b"checkpoint-bytes") == []
+
+    # 5. Desktop shortcut uses ASCII hyphen and PowerShell environment variables
+    wiz_src = (arch_root / "src" / "lmft_architecture" / "installer_wizard.py").read_text(encoding="utf-8")
+    assert "Celestriad 1.0 - LMFT Chess.lnk" in wiz_src
+    assert "$env:CELESTRIAD_LNK" in wiz_src
+    assert "$env:CELESTRIAD_TARGET" in wiz_src
+
+    # 6. `BitboardIntuitionSleeve` signed contrastive updates decrease over-weighted blunder features
+    sleeve = BitboardIntuitionSleeve()
+    start_attack_v = sleeve.value_weights["attack_control_share"]
+    sleeve.distill_post_mortem_scene(
+        {"philosophical/being/agency": 0.90, "psychological/truth/fact": 0.30},
+        {"philosophical/being/agency": 0.45, "psychological/truth/fact": 0.80},
+        is_hazard=True,
+        learning_rate=0.12,
+        played_bitboard_features={"attack_control_share": 0.92, "king_shield_safety": 0.25},
+        reference_bitboard_features={"attack_control_share": 0.40, "king_shield_safety": 0.85},
+    )
+    assert sleeve.value_weights["attack_control_share"] < start_attack_v
+    assert sleeve.value_weights["king_shield_safety"] > 0.95
+
+    train_root = resolve_training_root()
+    saved_weights = json.loads((train_root / "outputs" / "bitboard_sleeve_weights.json").read_text(encoding="utf-8"))
+    assert all(float(v) < 2.25 for v in saved_weights["value_weights"].values())
+    assert all(float(v) < 2.25 for v in saved_weights["policy_weights"].values())
+    assert all(abs(float(v)) < 2.25 for v in saved_weights["leaf_weights"].values())
+
+
+
 
 
 

@@ -674,6 +674,50 @@ class BitboardIntuitionSleeve:
             "features": feats,
         }
 
+    def _renormalize_budgets(self) -> None:
+        """Keep total value, policy, and positive leaf weight budgets anchored near birth sums so logits never saturate."""
+        target_v_sum = sum(DEFAULT_SLEEVE_VALUE_WEIGHTS.values())
+        for k in DEFAULT_SLEEVE_VALUE_WEIGHTS:
+            self.value_weights[k] = max(0.20, min(2.20, float(self.value_weights.get(k, DEFAULT_SLEEVE_VALUE_WEIGHTS[k]))))
+        cur_v_sum = sum(self.value_weights.get(k, 0.0) for k in DEFAULT_SLEEVE_VALUE_WEIGHTS)
+        if cur_v_sum > target_v_sum * 1.15 or cur_v_sum < target_v_sum * 0.85:
+            scale_v = target_v_sum / max(1e-6, cur_v_sum)
+            for k in DEFAULT_SLEEVE_VALUE_WEIGHTS:
+                self.value_weights[k] = round(max(0.20, min(2.20, self.value_weights[k] * scale_v)), 4)
+        else:
+            for k in DEFAULT_SLEEVE_VALUE_WEIGHTS:
+                self.value_weights[k] = round(self.value_weights[k], 4)
+
+        target_p_sum = sum(DEFAULT_SLEEVE_POLICY_WEIGHTS.values())
+        for k in DEFAULT_SLEEVE_POLICY_WEIGHTS:
+            self.policy_weights[k] = max(0.20, min(2.20, float(self.policy_weights.get(k, DEFAULT_SLEEVE_POLICY_WEIGHTS[k]))))
+        cur_p_sum = sum(self.policy_weights.get(k, 0.0) for k in DEFAULT_SLEEVE_POLICY_WEIGHTS)
+        if cur_p_sum > target_p_sum * 1.15 or cur_p_sum < target_p_sum * 0.85:
+            scale_p = target_p_sum / max(1e-6, cur_p_sum)
+            for k in DEFAULT_SLEEVE_POLICY_WEIGHTS:
+                self.policy_weights[k] = round(max(0.20, min(2.20, self.policy_weights[k] * scale_p)), 4)
+        else:
+            for k in DEFAULT_SLEEVE_POLICY_WEIGHTS:
+                self.policy_weights[k] = round(self.policy_weights[k], 4)
+
+        pos_leaf_keys = [k for k, v in DEFAULT_SLEEVE_LEAF_WEIGHTS.items() if v > 0.0]
+        target_l_sum = sum(DEFAULT_SLEEVE_LEAF_WEIGHTS[k] for k in pos_leaf_keys)
+        for k in pos_leaf_keys:
+            self.leaf_weights[k] = max(0.20, min(2.45, float(self.leaf_weights.get(k, DEFAULT_SLEEVE_LEAF_WEIGHTS[k]))))
+        cur_l_sum = sum(self.leaf_weights.get(k, 0.0) for k in pos_leaf_keys)
+        if cur_l_sum > target_l_sum * 1.35 or cur_l_sum < target_l_sum * 0.75:
+            scale_l = (target_l_sum * 1.15 if cur_l_sum > target_l_sum * 1.35 else target_l_sum * 0.85) / max(1e-6, cur_l_sum)
+            for k in pos_leaf_keys:
+                self.leaf_weights[k] = round(max(0.20, min(2.45, self.leaf_weights[k] * scale_l)), 4)
+        else:
+            for k in pos_leaf_keys:
+                self.leaf_weights[k] = round(self.leaf_weights[k], 4)
+        if "philosophical/structure/chaos" in self.leaf_weights:
+            self.leaf_weights["philosophical/structure/chaos"] = round(
+                max(-2.45, min(-0.20, float(self.leaf_weights["philosophical/structure/chaos"]))),
+                4,
+            )
+
     def distill_post_mortem_scene(
         self,
         played_coordinates: Mapping[str, float],
@@ -686,55 +730,52 @@ class BitboardIntuitionSleeve:
     ) -> dict[str, Any]:
         """Distill a post-mortem Game Review critique (`played` vs `best_alternative`) into the sleeve weights.
 
-        Preserves foundational leaf polarity so tactical blunders (`is_hazard=True`) reinforce safety and
-        virtue leaves where `best_alternative` exceeded `played` without ever training `order`, `continuity`,
-        `discreteness`, or `agency` in reverse when a developing move overlooked a tactical threat.
-        Also applies gentle homeostatic anchor decay toward birth defaults and sculpts all 8 named bitboard
-        circuits when `played_bitboard_features` and `reference_bitboard_features` are provided.
+        Uses two-way signed contrastive updates (rather than one-way `max(0, ...)` ratchets) plus
+        homeostatic anchor decay and total-budget normalization so weights redistribute toward
+        discriminative features without ever saturating at the rails.
         """
         lr = max(0.005, min(0.25, float(learning_rate)))
-        decay = 0.015 * lr
+        decay = 0.08 * lr
         for vk, def_v in DEFAULT_SLEEVE_VALUE_WEIGHTS.items():
             cur_v = float(self.value_weights.get(vk, def_v))
             self.value_weights[vk] = round(
-                max(0.20, min(3.0, cur_v + decay * (float(def_v) - cur_v))),
+                max(0.20, min(2.45, cur_v + decay * (float(def_v) - cur_v))),
                 4,
             )
         for pk, def_p in DEFAULT_SLEEVE_POLICY_WEIGHTS.items():
             cur_p = float(self.policy_weights.get(pk, def_p))
             self.policy_weights[pk] = round(
-                max(0.20, min(3.0, cur_p + decay * (float(def_p) - cur_p))),
+                max(0.20, min(2.45, cur_p + decay * (float(def_p) - cur_p))),
                 4,
             )
         for lk, def_l in DEFAULT_SLEEVE_LEAF_WEIGHTS.items():
             cur_l = float(self.leaf_weights.get(lk, def_l))
             blended_l = cur_l + decay * (float(def_l) - cur_l)
             if lk == "philosophical/structure/chaos":
-                self.leaf_weights[lk] = round(max(-2.5, min(-0.20, blended_l)), 4)
+                self.leaf_weights[lk] = round(max(-2.45, min(-0.20, blended_l)), 4)
             else:
-                floor_w = max(0.25, float(def_l) * 0.75)
-                self.leaf_weights[lk] = round(max(floor_w, min(2.5, blended_l)), 4)
+                self.leaf_weights[lk] = round(max(0.20, min(2.45, blended_l)), 4)
 
         updated_keys: list[str] = []
         updated_circuit_keys: list[str] = []
         ref_map = reference_coordinates or {}
+        safety_virtues = {"philosophical/being/existence", "cultural/efficiency/wastelessness"}
         for lk in list(self.leaf_weights.keys()):
             if lk in played_coordinates and lk in ref_map:
                 p_val = float(played_coordinates[lk])
                 r_val = float(ref_map[lk])
                 raw_delta = (r_val - p_val) if is_hazard else (p_val - r_val)
                 if lk == "philosophical/structure/chaos":
-                    delta = min(0.0, raw_delta)
+                    delta = raw_delta if raw_delta < 0.0 else 0.50 * raw_delta
                     if abs(delta) >= 0.01:
-                        new_w = max(-2.5, min(-0.20, float(self.leaf_weights[lk]) + lr * delta))
+                        new_w = max(-2.45, min(-0.20, float(self.leaf_weights[lk]) + lr * delta))
                         self.leaf_weights[lk] = round(new_w, 4)
                         updated_keys.append(lk)
                 else:
-                    # Foundational virtue leaves: reinforce positive structural advantage (`delta >= 0`)
-                    delta = max(0.0, raw_delta)
-                    if delta >= 0.01:
-                        floor_w = max(0.25, float(DEFAULT_SLEEVE_LEAF_WEIGHTS.get(lk, 0.35)) * 0.75)
-                        new_w = max(floor_w, min(2.5, float(self.leaf_weights[lk]) + lr * delta))
+                    # Two-way signed contrastive update (attenuating negative steps on core safety virtues)
+                    delta = raw_delta if (raw_delta >= 0.0 or lk not in safety_virtues) else 0.35 * raw_delta
+                    if abs(delta) >= 0.01:
+                        new_w = max(0.20, min(2.45, float(self.leaf_weights[lk]) + lr * delta))
                         self.leaf_weights[lk] = round(new_w, 4)
                         updated_keys.append(lk)
 
@@ -743,38 +784,43 @@ class BitboardIntuitionSleeve:
                 if fk in played_bitboard_features and fk in reference_bitboard_features:
                     p_feat = float(played_bitboard_features[fk])
                     r_feat = float(reference_bitboard_features[fk])
-                    feat_deficit = max(0.0, (r_feat - p_feat) if is_hazard else (p_feat - r_feat))
-                    if feat_deficit >= 0.01:
+                    feat_delta = (r_feat - p_feat) if is_hazard else (p_feat - r_feat)
+                    if abs(feat_delta) >= 0.01:
+                        eff_delta = feat_delta if feat_delta >= 0.0 else 0.65 * feat_delta
                         self.value_weights[fk] = round(
-                            max(0.20, min(3.0, float(self.value_weights.get(fk, DEFAULT_SLEEVE_VALUE_WEIGHTS[fk])) + 0.45 * lr * feat_deficit)),
+                            max(0.20, min(2.45, float(self.value_weights.get(fk, DEFAULT_SLEEVE_VALUE_WEIGHTS[fk])) + 0.45 * lr * eff_delta)),
                             4,
                         )
                         self.policy_weights[fk] = round(
-                            max(0.20, min(3.0, float(self.policy_weights.get(fk, DEFAULT_SLEEVE_POLICY_WEIGHTS[fk])) + 0.55 * lr * feat_deficit)),
+                            max(0.20, min(2.45, float(self.policy_weights.get(fk, DEFAULT_SLEEVE_POLICY_WEIGHTS[fk])) + 0.55 * lr * eff_delta)),
                             4,
                         )
                         updated_circuit_keys.append(fk)
 
         fact_p = float(played_coordinates.get("psychological/truth/fact", 0.50))
         fact_r = float(ref_map.get("psychological/truth/fact", 0.70))
-        if is_hazard and fact_r > fact_p:
-            self.value_weights["move_net_safety"] = round(
-                min(3.0, float(self.value_weights.get("move_net_safety", 1.55)) + 0.5 * lr * (fact_r - fact_p)),
-                4,
-            )
-            self.policy_weights["move_net_safety"] = round(
-                min(3.0, float(self.policy_weights.get("move_net_safety", 1.15)) + 0.5 * lr * (fact_r - fact_p)),
-                4,
-            )
-            if "move_net_safety" not in updated_circuit_keys:
-                updated_circuit_keys.append("move_net_safety")
-        elif not is_hazard:
-            self.policy_weights["move_positional_gain"] = round(
-                min(3.0, float(self.policy_weights.get("move_positional_gain", 1.45)) + 0.25 * lr),
-                4,
-            )
-            if "move_positional_gain" not in updated_circuit_keys:
-                updated_circuit_keys.append("move_positional_gain")
+        if not (played_bitboard_features and reference_bitboard_features):
+            if is_hazard and abs(fact_r - fact_p) >= 0.02:
+                fact_delta = fact_r - fact_p
+                self.value_weights["move_net_safety"] = round(
+                    max(0.20, min(2.45, float(self.value_weights.get("move_net_safety", 1.55)) + 0.5 * lr * fact_delta)),
+                    4,
+                )
+                self.policy_weights["move_net_safety"] = round(
+                    max(0.20, min(2.45, float(self.policy_weights.get("move_net_safety", 1.15)) + 0.5 * lr * fact_delta)),
+                    4,
+                )
+                if "move_net_safety" not in updated_circuit_keys:
+                    updated_circuit_keys.append("move_net_safety")
+            elif not is_hazard and abs(fact_p - fact_r) >= 0.02:
+                pos_delta = fact_p - fact_r
+                self.policy_weights["move_positional_gain"] = round(
+                    max(0.20, min(2.45, float(self.policy_weights.get("move_positional_gain", 1.45)) + 0.35 * lr * pos_delta)),
+                    4,
+                )
+                if "move_positional_gain" not in updated_circuit_keys:
+                    updated_circuit_keys.append("move_positional_gain")
+        self._renormalize_budgets()
         self.steps_distilled += 1
         return {
             "steps_distilled": self.steps_distilled,
@@ -809,12 +855,12 @@ class BitboardIntuitionSleeve:
                 key = str(k)
                 val = float(v)
                 if key == "philosophical/structure/chaos":
-                    lw[key] = min(-0.20, max(-2.5, val))
+                    lw[key] = min(-0.20, max(-2.45, val))
                 elif key in DEFAULT_SLEEVE_LEAF_WEIGHTS:
-                    lw[key] = max(float(DEFAULT_SLEEVE_LEAF_WEIGHTS[key]), min(2.5, val))
+                    lw[key] = max(0.20, min(2.45, val))
                 else:
                     lw[key] = val
-        return cls(
+        inst = cls(
             value_weights=vw,
             policy_weights=pw,
             leaf_weights=lw,
@@ -822,6 +868,8 @@ class BitboardIntuitionSleeve:
             policy_bias=float(raw.get("policy_bias", -0.45)),
             steps_distilled=int(raw.get("steps_distilled", 0)),
         )
+        inst._renormalize_budgets()
+        return inst
 
     def save(self, path: str | Path) -> None:
         target = Path(path)

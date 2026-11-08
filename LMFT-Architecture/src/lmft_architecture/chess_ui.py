@@ -609,7 +609,7 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
           <span id="posture-summary-span" style="display:none;">White to move</span>
         </div>
       </div>
-      <div style="display:flex;gap:5px;align-items:center;flex-shrink:0;"><span class="pill" id="top-clock-pill" style="font-family:monospace;font-weight:800;">⏱️ 05:00</span><span class="pill" id="elo-status-pill" title="Celestriad 1.0 FIDE Elo vs. Strength-Calibrated Stockfish 19">Elo 1000.0 (0W-0L-0D)</span></div>
+      <div style="display:flex;gap:5px;align-items:center;flex-shrink:0;"><span class="pill" id="top-clock-pill" style="font-family:monospace;font-weight:800;">⏱️ 05:00</span><span class="pill" id="elo-status-pill" title="Celestriad 1.0 Internal Sparring Calibration Rating (ObjectiveCalibratedSparringEngine)">Elo 1000.0 (0W-0L-0D)</span></div>
     </div>
 
     <!-- Eval Bar + 8x8 Chessboard -->

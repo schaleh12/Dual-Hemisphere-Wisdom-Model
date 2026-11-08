@@ -264,6 +264,68 @@ def find_venv_python(base_dir: Path, arch_dir: Path, *, windowless: bool = False
     return None
 
 
+def write_provision_venv_batch(
+    arch_dir: Path,
+    sys_py: Path,
+    *,
+    launch_after: bool = False,
+) -> Path:
+    """Write a multi-line `provision_venv.bat` helper that safely handles Windows paths containing spaces."""
+    arch_dir = Path(arch_dir).resolve()
+    arch_dir.mkdir(parents=True, exist_ok=True)
+    bat_path = arch_dir / "provision_venv.bat"
+    lines = [
+        "@echo off",
+        "setlocal",
+        'echo [Celestriad 1.0] Creating Python virtual environment in "%~dp0.venv"...',
+        f'"{sys_py}" -m venv "%~dp0.venv"',
+        "if errorlevel 1 (",
+        "    echo [ERROR] Failed to create Python virtual environment (.venv).",
+        "    pause",
+        "    exit /b 1",
+        ")",
+        "echo [Celestriad 1.0] Upgrading pip...",
+        '"%~dp0.venv\\Scripts\\python.exe" -m pip install --upgrade pip',
+        "if errorlevel 1 (",
+        "    echo [ERROR] Failed to upgrade pip.",
+        "    pause",
+        "    exit /b 1",
+        ")",
+        "echo [Celestriad 1.0] Installing PyTorch (CUDA 12.4)...",
+        '"%~dp0.venv\\Scripts\\python.exe" -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124',
+        "if errorlevel 1 (",
+        "    echo [ERROR] Failed to install PyTorch.",
+        "    pause",
+        "    exit /b 1",
+        ")",
+        "echo [Celestriad 1.0] Installing Celestriad 1.0 package and runtime dependencies...",
+        '"%~dp0.venv\\Scripts\\python.exe" -m pip install -e "%~dp0"',
+        "if errorlevel 1 (",
+        "    echo [ERROR] Failed to install Celestriad 1.0 package dependencies.",
+        "    pause",
+        "    exit /b 1",
+        ")",
+    ]
+    if launch_after:
+        lines.extend(
+            [
+                "echo.",
+                "echo [OK] Python .venv provisioned successfully! Launching Celestriad 1.0...",
+                'start "" /d "%~dp0" "%~dp0.venv\\Scripts\\pythonw.exe" -m lmft_architecture.chess_app --single-window',
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                "echo.",
+                "echo [OK] Python .venv provisioned successfully!",
+                "pause",
+            ]
+        )
+    bat_path.write_text("\r\n".join(lines) + "\r\n", encoding="utf-8")
+    return bat_path
+
+
 def check_install_folder_integrity(
     base_dir: Path, arch_dir: Path, train_dir: Path, assets_dir: Path
 ) -> tuple[str, bool]:
@@ -913,14 +975,16 @@ class CelestriadInstallerWizardApp:
                 sys.path.insert(0, src_dir)
             from lmft_architecture.github_auto_sync import (
                 fetch_remote_github_manifest,
+                sync_missing_pretrained_models,
                 verify_or_sync_against_manifest,
             )
 
             manifest = fetch_remote_github_manifest()
             res = verify_or_sync_against_manifest(self.arch_dir, manifest, apply_sync=True)
+            dl_models = sync_missing_pretrained_models(self.arch_dir)
             self.txt_page2_log.insert(
                 tk.END,
-                f"GitHub Sync Status: {res.get('status')} | Changed: {len(res.get('changed_files', []))} | Synced: {len(res.get('synced_files', []))}\n",
+                f"GitHub Sync Status: {res.get('status')} | Changed: {len(res.get('changed_files', []))} | Synced: {len(res.get('synced_files', []))} | Models fetched: {len(dl_models)}\n",
             )
         except Exception as exc:
             self.txt_page2_log.insert(tk.END, f"Sync check notice: {exc}\n")
@@ -946,63 +1010,62 @@ class CelestriadInstallerWizardApp:
         self.txt_integrity.delete("1.0", tk.END)
         self.txt_integrity.insert(tk.END, report)
 
-    def _provision_python_venv(self, *, launch_after: bool = False) -> None:
-        venv_dir = self.arch_dir / ".venv"
-        venv_py = venv_dir / "Scripts" / "python.exe"
-        venv_pyw = venv_dir / "Scripts" / "pythonw.exe"
+    def _provision_python_venv(self, *, launch_after: bool = False) -> Path:
         sys_py = Path(sys.executable)
         if sys_py.name.lower() == "pythonw.exe":
             candidate_py = sys_py.with_name("python.exe")
             if candidate_py.is_file():
                 sys_py = candidate_py
-        tail_cmd = (
-            f' && start "" /d "{self.arch_dir}" "{venv_pyw}" -m lmft_architecture.chess_app --single-window'
-            if launch_after
-            else " && echo. && echo [OK] Python .venv provisioned successfully! && pause"
-        )
-        cmd_chain = (
-            f'"{sys_py}" -m venv "{venv_dir}" && '
-            f'"{venv_py}" -m pip install --upgrade pip && '
-            f'"{venv_py}" -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124 && '
-            f'"{venv_py}" -m pip install -e "{self.arch_dir}"'
-            + tail_cmd
-        )
+        bat_path = write_provision_venv_batch(self.arch_dir, sys_py, launch_after=launch_after)
         try:
             subprocess.Popen(
-                ["cmd.exe", "/c", cmd_chain],
+                ["cmd.exe", "/c", "call", str(bat_path)],
                 cwd=str(self.arch_dir),
                 creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0),
             )
         except Exception as exc:
             messagebox.showwarning("Python .venv Setup", f"Could not launch Python .venv setup:\n{exc}")
+        return bat_path
 
-    def _create_desktop_shortcut(self) -> None:
+    def _create_desktop_shortcut(self, desktop_dir: Path | None = None) -> Path:
         """Create a Desktop .lnk shortcut pointing to `Launch-LMFT-Chess.bat` with the Arecibo `.ico`."""
-        try:
-            desktop = Path(os.environ.get("USERPROFILE", "~")).expanduser() / "Desktop"
-            shortcut_path = desktop / "Celestriad 1.0 — LMFT Chess.lnk"
-            launcher_bat = self.base_dir / "Launch-LMFT-Chess.bat"
-            if not launcher_bat.is_file():
-                launcher_bat = self.arch_dir / "Launch-LMFT-Chess.bat"
-            icon_path = self.assets_dir / "arecibo_desktop_icon.ico"
+        desktop = (
+            Path(desktop_dir)
+            if desktop_dir is not None
+            else Path(os.environ.get("USERPROFILE", "~")).expanduser() / "Desktop"
+        )
+        shortcut_path = desktop / "Celestriad 1.0 - LMFT Chess.lnk"
+        launcher_bat = self.base_dir / "Launch-LMFT-Chess.bat"
+        if not launcher_bat.is_file():
+            launcher_bat = self.arch_dir / "Launch-LMFT-Chess.bat"
+        icon_path = self.assets_dir / "arecibo_desktop_icon.ico"
 
-            ps_cmd = (
-                "$ws = New-Object -ComObject WScript.Shell; "
-                f"$s = $ws.CreateShortcut('{shortcut_path}'); "
-                f"$s.TargetPath = '{launcher_bat}'; "
-                f"$s.WorkingDirectory = '{launcher_bat.parent}'; "
-                f"$s.IconLocation = '{icon_path}'; "
-                "$s.Description = 'Launch Celestriad 1.0 — Dual-Hemisphere Chess Competitor & Coach'; "
-                "$s.Save()"
-            )
+        env = os.environ.copy()
+        env["CELESTRIAD_LNK"] = str(shortcut_path)
+        env["CELESTRIAD_TARGET"] = str(launcher_bat)
+        env["CELESTRIAD_WORKDIR"] = str(launcher_bat.parent)
+        env["CELESTRIAD_ICON"] = str(icon_path)
+
+        ps_cmd = (
+            "$ws = New-Object -ComObject WScript.Shell; "
+            "$s = $ws.CreateShortcut($env:CELESTRIAD_LNK); "
+            "$s.TargetPath = $env:CELESTRIAD_TARGET; "
+            "$s.WorkingDirectory = $env:CELESTRIAD_WORKDIR; "
+            "$s.IconLocation = $env:CELESTRIAD_ICON; "
+            "$s.Description = 'Launch Celestriad 1.0 - Dual-Hemisphere Chess Competitor & Coach'; "
+            "$s.Save()"
+        )
+        try:
             subprocess.run(
                 ["powershell.exe", "-NoProfile", "-WindowStyle", "Hidden", "-Command", ps_cmd],
-                timeout=6,
+                env=env,
+                timeout=8,
                 check=False,
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
         except Exception as exc:
             messagebox.showwarning("Desktop Shortcut", f"Could not create desktop shortcut:\n{exc}")
+        return shortcut_path
 
     def _launch_chess_app(self) -> None:
         venv_pyw = find_venv_python(self.base_dir, self.arch_dir, windowless=True)

@@ -2,67 +2,67 @@
   "schema_version": 1,
   "version": "0.2.0",
   "github_repo": "schaleh12/Dual-Hemisphere-Wisdom-Model",
-  "build_sha256": "49de84f341034436148190165604bffb33482aeea94b928bb559e05bbf05cd4b",
-  "build_short_hash": "49de84f34103",
+  "build_sha256": "376d0435f2c27a0dbb844a3b0e23733817d400c4b02d81b308e4ff6277eea49f",
+  "build_short_hash": "376d0435f2c2",
   "files": {
     "src/lmft_architecture/__init__.py": {
       "sha256": "a89f56c2195e87129adbffa5065d8769ea096e13ba98783d217c4d120ee92623",
       "size_bytes": 162
     },
     "src/lmft_architecture/__main__.py": {
-      "sha256": "4054868abeff759cf065beefc0aa3ea19ffe71071f5bf55c08921fe0e7165e12",
+      "sha256": "7db9ea075199820583f4b978a93d2d3e605f58ac24e0bc3376ea823fa7275533",
       "size_bytes": 2375
     },
     "src/lmft_architecture/action_policy.py": {
-      "sha256": "a6a636eff02b54d0f01a452c26547333b17360602499589c2da086b58f9e0250",
+      "sha256": "ece7e33f19a4e352aec143623938eb03305b7fb10b76fc74041e7f1523b66d73",
       "size_bytes": 11561
     },
     "src/lmft_architecture/action_runtime.py": {
-      "sha256": "62322e381d3745f356f7935846e70ecd7f9018f1fd09d481c9878d23ee2e3ac6",
+      "sha256": "8ed2bbe7dec510a16cee0d6f21eae2d32e9bfdf861c7c8d54c9671ddf9d09f9f",
       "size_bytes": 8428
     },
     "src/lmft_architecture/activation.py": {
-      "sha256": "49e9c4074fa00a7e8f164827fff2ed93d8964b04a97dcbc5f1783239724b2462",
+      "sha256": "fe99bb3ac38b7c0e726cd40e13c5fd2661f9a48d8da2fbcf92cc58e966490326",
       "size_bytes": 3886
     },
     "src/lmft_architecture/active_relationship.py": {
-      "sha256": "eefc31fbd47869798dcd078f5c038feaa50566ea02d923b1b6e47dcab18a475d",
+      "sha256": "f3ee9c6f966df06798ed7779c317d12a70fdd14265923e3c63e7d33234f2f9ea",
       "size_bytes": 16917
     },
     "src/lmft_architecture/ambiguity.py": {
-      "sha256": "7160c2e2d2b737a4f35cf6d256d552b7394916cefec65276eeab249a2fc19101",
+      "sha256": "8aecbd780840d94512f0d97aaefac4bfbf88d63375d3b2a0d78560611b921b9e",
       "size_bytes": 8889
     },
     "src/lmft_architecture/attention.py": {
-      "sha256": "f7831a93adcf1e4e70ce378e83225d4c2135d0a0b1267760548e1a60c06b6e1c",
+      "sha256": "4469fc5f80d488ddaa8977ad814bc94a23417c3c9dda112ba30f0e7093096ac4",
       "size_bytes": 9358
     },
     "src/lmft_architecture/attention_fixture.py": {
-      "sha256": "b57ec54d3ecbc77013449934c175fdf57b021033e966d1730c8c7d2e330c19d6",
+      "sha256": "02a59d37de32f4fd454216980ef09264e00a6c1f70313c922adec2214218515c",
       "size_bytes": 2060
     },
     "src/lmft_architecture/binding_contract.py": {
-      "sha256": "561ce58a1e87d1b8b5b261a39f9fe1d344e865340a72afd73667b19dbfbc02ad",
+      "sha256": "b33f78c864602b90e0edaca623ece2499e841c2a24ad85f9ef1eb9340e636418",
       "size_bytes": 2063
     },
     "src/lmft_architecture/binding_memory.py": {
-      "sha256": "f302b5e38d0853c63155dbc91eea97305f6c2ace08119cdb0ba31aa8208d1fb2",
+      "sha256": "7dca329ba764e5a7d3b7ab8ad460de0af4b37d219019b3e1725fe58704f67422",
       "size_bytes": 3535
     },
     "src/lmft_architecture/binding_primary.py": {
-      "sha256": "5b06bcda271bcaa9615ea37886121064eca48c5e22a61bd2b66000f77fa63af5",
+      "sha256": "7e7185bb4c7431c16d5ead9cd9efdbcd5b60153c34c36e1aeb5d3b464c0181f3",
       "size_bytes": 2512
     },
     "src/lmft_architecture/binding_runtime.py": {
-      "sha256": "f93f63b19c6d64178f9d26fb05b6cc89a353b1637b27c716bfd9118e31b39b69",
+      "sha256": "b6708b446a72083c543bc52826fdd520e4bc1366be1843981269950cf1854083",
       "size_bytes": 17457
     },
     "src/lmft_architecture/binding_verifier.py": {
-      "sha256": "6a901d8a1c67a0285d913495d7dc7d44d6eb81a93f68181abfd0f1cc632d41af",
+      "sha256": "a97f504c5db4467a696744c1c10945e8823db6c53a35f862f29fd308530ba684",
       "size_bytes": 3125
     },
     "src/lmft_architecture/birth.py": {
-      "sha256": "14c87862f9c478514dc55ec7982606515e4dc0ce42739c9f5768808527d4b4f4",
+      "sha256": "edab732c3d00f6988f8ca5e20a97deef2c371b0e3db94626881bf9d93318c2fd",
       "size_bytes": 5515
     },
     "src/lmft_architecture/bloodmoon_app.py": {
@@ -78,15 +78,15 @@
       "size_bytes": 54175
     },
     "src/lmft_architecture/capacity.py": {
-      "sha256": "449918ce2fac765542adb456ae3eacedd004ea5c0038022fad5de3ec7f0512e2",
+      "sha256": "f26ea1ea0ae3ece9e2288e1a21696497e424e56ff1748ed070fa66fb9e0a76ab",
       "size_bytes": 7799
     },
     "src/lmft_architecture/capacity_fixture.py": {
-      "sha256": "b8f65efffdbdcacca69473d8a24485736564abc8ab2bcb4a00c0b6417b105b70",
+      "sha256": "dcdccc5e24cbf7937c49a118147a83071993c3090b4ee62091f4e83cb1e0fb55",
       "size_bytes": 2134
     },
     "src/lmft_architecture/capacity_relations.py": {
-      "sha256": "dc8a191f9ae3f89297352a46b47620ef72ec15e35ece258e1ceb9886c7ce20e6",
+      "sha256": "1b378a1d5baa99ca5a689983db91ffdd82c99b74313c3f6a3a85dea7335229c7",
       "size_bytes": 3267
     },
     "src/lmft_architecture/chess_app.py": {
@@ -94,23 +94,23 @@
       "size_bytes": 186774
     },
     "src/lmft_architecture/chess_kibitz_bridge.py": {
-      "sha256": "8b3491c0d4ead7f554753a8562c7fb8e7025f5071604df11e70cd5925efc9307",
-      "size_bytes": 129087
+      "sha256": "86900b298d00cff7d7decafda5804eb53f6b8a87abc276e630827130356a26e9",
+      "size_bytes": 132157
     },
     "src/lmft_architecture/chess_ui.py": {
-      "sha256": "f4533ca964e7b203fd9551376a69b9ab7195a6ce646b588639acd64c339d51fb",
-      "size_bytes": 123037
+      "sha256": "e55ec74960ba8cbc7ef44ebcc4f479accc238dd96e6a6171c1234bee96730cee",
+      "size_bytes": 123064
     },
     "src/lmft_architecture/chord_memory.py": {
       "sha256": "6714d9c6cd9e0f7ae199e92a44f7371f168f65fb32319260d4b24d0ed1c54a66",
       "size_bytes": 23461
     },
     "src/lmft_architecture/consistent_attention.py": {
-      "sha256": "e6d6759e17977adb1f21d36d92c9f658f5f9fc3c3459161773b410cf1d4907d2",
+      "sha256": "8db557aa3ec23f3ec344d636c65d02303070c7e0fd5c6b38ea5c88390d532798",
       "size_bytes": 9084
     },
     "src/lmft_architecture/consistent_fixture.py": {
-      "sha256": "fd927704acd4cbeae66403a9d4369e520bdd79f0c3ef75501e2dd6496eaac2cb",
+      "sha256": "63e773fd448145a7632ab5133fdec9203d01b825617b919d3ea417658c0662d2",
       "size_bytes": 3394
     },
     "src/lmft_architecture/contemplation_ledger.py": {
@@ -118,19 +118,19 @@
       "size_bytes": 15443
     },
     "src/lmft_architecture/context_wording.py": {
-      "sha256": "e0ff6b90c875d81708ba0eb89a84d6129df81ce61cdc845ca8a81ab73da5e005",
+      "sha256": "27e2eac28c8e4adb5ed35529992776195786ca54973931bb5ad6195a051da061",
       "size_bytes": 2934
     },
     "src/lmft_architecture/contextual.py": {
-      "sha256": "8fd20b9fc216fd866be436abacdb07a2004ba788df527117f586c8262591e471",
+      "sha256": "2a79d16c77a4843a7c0ca61b30606ca5a81d24fe718d14142350a8aa331eaedb",
       "size_bytes": 12016
     },
     "src/lmft_architecture/correction.py": {
-      "sha256": "e2afe319302104457012dc98fb309aa497c1611c40c592e64acac99606f17a4e",
+      "sha256": "7330026b477f33a605cb6de3c6af6069d12d92b2932302ff3607508880b70021",
       "size_bytes": 12068
     },
     "src/lmft_architecture/correction_fixture.py": {
-      "sha256": "1a0f2e811b9a915254cf9a79ff9f5f4b29f3055037592fd388357c7b117bd5dd",
+      "sha256": "a0f6ff906c6ff02679c5b37fe7e9e3caa021552b29a9b31456078020006fb34b",
       "size_bytes": 3592
     },
     "src/lmft_architecture/dilemma_crucible.py": {
@@ -154,43 +154,43 @@
       "size_bytes": 23245
     },
     "src/lmft_architecture/github_auto_sync.py": {
-      "sha256": "0fb053ce8fc624a5b130a61b076dc68959e05896b31fde386a07f39d84b23210",
-      "size_bytes": 10797
+      "sha256": "f75f61e35d968f9b7832eb51227e2729517061eda1a5ae2acbdfc6b3c087a5db",
+      "size_bytes": 14529
     },
     "src/lmft_architecture/impish_bloodmoon_adapter.py": {
       "sha256": "4b311691626d4c0e2bc59877bcfde460ae8c382c02532ab31b09450bda943b86",
       "size_bytes": 23725
     },
     "src/lmft_architecture/installer_wizard.py": {
-      "sha256": "dac3f4f4b7aec5a5f55fc88a667ad31f75ff53d492adf5ea2e6a3bb16a1b8d50",
-      "size_bytes": 43691
+      "sha256": "2d31f59cc81d139fb4d0b32c38cac39899e1abfc7edf91d5e86aefa34187b37c",
+      "size_bytes": 45869
     },
     "src/lmft_architecture/insufficiency.py": {
-      "sha256": "2f0f91b9e286ee4e2042fb23ebc89baba90cfebecdc3e9eb1bb7289c8fc8052c",
+      "sha256": "705295fa433251559d70171903c3f1f99f8c5e3aa8bad0ec37e6248fd89a74eb",
       "size_bytes": 7869
     },
     "src/lmft_architecture/insufficiency_fixture.py": {
-      "sha256": "80b74adc80acfd15ce7a7cc15500515fa50d90f1f5a28cfbcc2c3b0b2edf60ce",
+      "sha256": "ce8b80b73a02db8aa1e9337ee8b0c1c72ee8b8f94bdf5f56a5aae948da322da3",
       "size_bytes": 2340
     },
     "src/lmft_architecture/judgment.py": {
-      "sha256": "cbac8ad1aa4a5d2b7fa9bb6b4b2eb569b28b34dc78c239c1f5d9b4c547427f68",
+      "sha256": "6d64dbff67255ab5f47b2ebf08859e4b8bb8d2595d64309cfc9021185dcc3e33",
       "size_bytes": 3172
     },
     "src/lmft_architecture/late_evidence.py": {
-      "sha256": "6f5b0fe17c4c6f28762cd8adb28e8debea0016d3cd97706cd9009da58694e5f2",
+      "sha256": "3758c1f82d91638c0b0996bd22a52c19fe476f5c29ce72a6ba442831efb2d2f2",
       "size_bytes": 1000
     },
     "src/lmft_architecture/local_models.py": {
-      "sha256": "7e134c61f4a9a45335a663d080f461545397362425c9794bce00844b0dd568d3",
+      "sha256": "daff8d93d6dfbd5f6da9ed0d30587d1831372f5a32753235cbdb6ac72cfbc12f",
       "size_bytes": 13552
     },
     "src/lmft_architecture/migration.py": {
-      "sha256": "5dbf4f5f6b2d485d086b26f9ffb75b87ac1b08a0b509b075829500293ef9e141",
+      "sha256": "5cbef1fc62805210896be519d50d10d87ffeda19fe757c81fa66bafebf2016bd",
       "size_bytes": 2943
     },
     "src/lmft_architecture/model_assets.py": {
-      "sha256": "21048a449f1bfc52bf5b5f35cd2b570aadfdc3f37926a695233d23222d22fe32",
+      "sha256": "06b146aa3ad34033165b8e0577a5e6bae33b1515fa6d902e09d5aceda2079f3b",
       "size_bytes": 6210
     },
     "src/lmft_architecture/neural_bridge_classifiers.py": {
@@ -198,23 +198,23 @@
       "size_bytes": 26674
     },
     "src/lmft_architecture/outcome_correction.py": {
-      "sha256": "ee85034b5f20e07d2eb52adf76c36b08f93b332594b6109cb5bcdd57f6066f87",
+      "sha256": "9447fe7ec91608282460eb2bfe2a0889329d321b802d1a0883cbdb6129e92535",
       "size_bytes": 9816
     },
     "src/lmft_architecture/outcome_fixture.py": {
-      "sha256": "63937a096b9b2969131f2cc1e6e5d9291662ac9208217a150814fbe29ffdd5c5",
+      "sha256": "2c0a5bbc95676030c2b1702ff7f53db23c539d78dcb49ddee5c6706869672116",
       "size_bytes": 5203
     },
     "src/lmft_architecture/passive_relationship.py": {
-      "sha256": "ba1496ad1a29e389639fc67f045d9aa7f5e7860ae4b20ed75bba20e6b8350460",
+      "sha256": "076f6b0007dc1b7a9b94f6e58aa677be07f86bf043632bd04328fbccead9363d",
       "size_bytes": 5299
     },
     "src/lmft_architecture/patreon_seal.py": {
-      "sha256": "b08704d38ebdb3cb2f4b13dc4b262f12a9edb004e5f6872fcb1d2ca736f0860c",
+      "sha256": "909ad946317e01f1e8f450aa801a324ddbad4591771f01353a7b98bf7458ae66",
       "size_bytes": 16685
     },
     "src/lmft_architecture/philosophical_abstraction_matrix.py": {
-      "sha256": "a538d551abf747a2d803c9e0772259eb3b9b34eff85f25197f89b888c34ddfc0",
+      "sha256": "0453792f22ccbce6ec6657ec5bb3ddaa91a53bf8fe7510aa56de452243097aea",
       "size_bytes": 26168
     },
     "src/lmft_architecture/preservation_context.py": {
@@ -222,11 +222,11 @@
       "size_bytes": 5999
     },
     "src/lmft_architecture/processing.py": {
-      "sha256": "a1256fdd246333318015f691237bd53ffc0f8f7e57a27a56583f3cd7b0a60255",
+      "sha256": "b0a8dcd49db22fed548d58e6ea36c4e7bebf1bf8a15993898edae780643fabd0",
       "size_bytes": 3121
     },
     "src/lmft_architecture/propagation.py": {
-      "sha256": "f6c73c3124ce12bc2c5355852f61f9a72ef580518869be4393e54ddfbe5a1539",
+      "sha256": "7c5340a54399bb1df91741323381a14ccd700539d323476b8d209b223f5227f8",
       "size_bytes": 6988
     },
     "src/lmft_architecture/reflection_classifier.py": {
@@ -234,7 +234,7 @@
       "size_bytes": 64619
     },
     "src/lmft_architecture/reliability.py": {
-      "sha256": "ab8fe7194e8e28d5707d43fc67adac59b1790e48c7803d4c16a5751f5d4d6916",
+      "sha256": "6a73d534e6c70fb96c91d1fbd37310ad82c78609c9e4ca7a857422ea81f5b95f",
       "size_bytes": 6876
     },
     "src/lmft_architecture/rem_sleep_cycle.py": {
@@ -246,19 +246,19 @@
       "size_bytes": 77330
     },
     "src/lmft_architecture/runtime.py": {
-      "sha256": "0dd3dcba339ab4306a50d0b0ba2722f6e99a563c685fe641d657128036eee6f0",
+      "sha256": "956d5410e1568020854a6a2bde681a8109a21ff4fdf1a62e22c66462450cc0f1",
       "size_bytes": 28015
     },
     "src/lmft_architecture/runtime_store.py": {
-      "sha256": "0e62f365d3746a5bf99eb2b34ee1e2817d26cd5f52584ccb8fabb4df1c307aac",
+      "sha256": "c9644a969d9c559909525dbc895f09f61fc339b13ecafcf2dc8a5f2c0e66df4f",
       "size_bytes": 5068
     },
     "src/lmft_architecture/scoped_attention.py": {
-      "sha256": "ad227d95902cdb3bed1f177d4ecbce5b11ec49abd7765927ff8a4b86cab41208",
+      "sha256": "b35d5c1bffc99dc5b1a529b253f690dbbf112f77e70cb4bb95db997cd46502dc",
       "size_bytes": 8624
     },
     "src/lmft_architecture/scoped_fixture.py": {
-      "sha256": "a3ab1b737a44f5e747c2791c9d784a7faf0ecee3bcecfff43b759e05796ca82d",
+      "sha256": "76e7113d7d40517ec36ce5a4dfb35980a97e295d5e38f86d1e3848e2b77158b9",
       "size_bytes": 2752
     },
     "src/lmft_architecture/sleep_consolidation.py": {
@@ -270,23 +270,23 @@
       "size_bytes": 43196
     },
     "src/lmft_architecture/teacher.py": {
-      "sha256": "3080cfb3c960b359a00e5f853f9c9f29e93fc348eef9742bd8a92611a5f138fa",
+      "sha256": "c41d9ddb0632bd08001b575560b9fb9e616deeb62f4f280e85e6c3763f82a883",
       "size_bytes": 12200
     },
     "src/lmft_architecture/teacher_adapter.py": {
-      "sha256": "e41dc533459d7509cefd84fca2d46e6fd1625f7cc6b4d0e7af87d615f97bc118",
+      "sha256": "35d0c82b7ff7d56c8d5bec6cb4d9343bdd33464bca2cd15d773a415734662049",
       "size_bytes": 6350
     },
     "src/lmft_architecture/teacher_briefing.py": {
-      "sha256": "383368057349aa8d8b5d45b3dad498d0e1f116fa616011da9a98ade5b2ad108a",
+      "sha256": "326b7782cb53ad3a86093556618c2374670d985f33b06be2f70184aa925fddf5",
       "size_bytes": 2078
     },
     "src/lmft_architecture/teacher_fixture.py": {
-      "sha256": "ca282ec129bfd06fbea6b2f08f394999d0ecd68f9456ba48ce18268f412b2123",
+      "sha256": "1bcf87f029fc1cc263dda05d4b77ba39b54861b7c2c7339b14675b21bb0097dd",
       "size_bytes": 1851
     },
     "src/lmft_architecture/teacher_profile.py": {
-      "sha256": "1c823c5f4894fa0a956101bdb149df8a4f287c98ebec2b9055ec2fe9b23b00be",
+      "sha256": "37e53974770f8d68653b2926eeded71e508907c83a9c29b392b439ccef5d3c5c",
       "size_bytes": 2802
     },
     "src/lmft_architecture/three_legged_runtime.py": {
@@ -298,7 +298,7 @@
       "size_bytes": 53069
     },
     "src/lmft_architecture/virgin_baseline.py": {
-      "sha256": "720ee8d2258e9d533ec4b1d1d26b32c5d2ff0054c24934090391c20fc29b8fb6",
+      "sha256": "61fb17e790703ddd476ab812847ad3fdf433aa6211fcfdba7054ca3303631941",
       "size_bytes": 11619
     },
     "src/lmft_architecture/workspace_paths.py": {
@@ -358,32 +358,32 @@
       "size_bytes": 105830
     },
     "outputs/rem_sleep_consolidated_ruleset.json": {
-      "sha256": "f1fb773eca5d84f745844c8b293b60bbe542a633c9dfeb9a9834d85b76f9634d",
-      "size_bytes": 21363
+      "sha256": "00913cf93d01334e6c73aceb2b72e9bfccba43d6ff534cc726e71ec15dac5db1",
+      "size_bytes": 13475
     },
     "outputs/sleep_consolidated_ruleset.json": {
-      "sha256": "f1fb773eca5d84f745844c8b293b60bbe542a633c9dfeb9a9834d85b76f9634d",
-      "size_bytes": 21363
+      "sha256": "00913cf93d01334e6c73aceb2b72e9bfccba43d6ff534cc726e71ec15dac5db1",
+      "size_bytes": 13475
     },
     "outputs/continuous_tiered_ruleset.json": {
-      "sha256": "b6769f70249a4c68f599c0a7e5a0f8da7afe1487de1f2f3e8e4be26e776f0d0d",
+      "sha256": "ee5147d72247e441ef0192051da06c69f01fe11f824c2f42bc229e0155cc86bb",
       "size_bytes": 6071
     },
     "outputs/bitboard_sleeve_weights.json": {
-      "sha256": "5bb004a25cd326fce03c2cf3887e4869d07a4b5fb0d2bc53e66ac68bb6d39833",
-      "size_bytes": 1149
+      "sha256": "2965f8f0b2ac9259e10807d60b50f07d91fc8f55943e7a2520b3d6dd241c39c8",
+      "size_bytes": 1161
     },
     "outputs/branch_archives/cultural_history.json": {
-      "sha256": "e56303466fbbd5d5ab9cf15ef4b1427123895c1077ed211ae2ce0367fbabe5c0",
-      "size_bytes": 24190
+      "sha256": "769d6f6f396502ca1df017fcc41491db00bf4c521a330e5bcba2b15b722296af",
+      "size_bytes": 13388
     },
     "outputs/branch_archives/experiential_felt_diary.json": {
-      "sha256": "1930f53170c1043545a258efa150e3720c618497af7ac27cff5fa818f63d0ada",
-      "size_bytes": 27467
+      "sha256": "ae0a0f3592cfd3c766ae97a5184263a6984b59e7d40e58c712162599215d8b63",
+      "size_bytes": 16563
     },
     "outputs/branch_archives/philosophical_lexicon.json": {
-      "sha256": "2d87c1d1bd1f12eca300954f9649d7c05564f8c84bd295f4f98f8a8febb5607e",
-      "size_bytes": 25319
+      "sha256": "500f59dcb21a0e438026e661c94650008519b5435edb72dc2478684fc2625cfa",
+      "size_bytes": 12145
     }
   }
 }

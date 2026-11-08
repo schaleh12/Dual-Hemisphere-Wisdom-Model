@@ -71,6 +71,8 @@ def build_release_zip(
         "docs/assets/celestial_seal_preview.png",
         "docs/assets/icy_sea_board.png",
         "docs/assets/esper_theories_alphabet.jpg",
+        "docs/assets/fe26_fusion_three_ply.jpg",
+        "docs/assets/materia_chess_archetypes_identity.jpg",
     ):
         asset_path = arch_root / asset_rel
         if asset_path.exists():
@@ -78,13 +80,13 @@ def build_release_zip(
 
     for py_file in sorted((arch_root / "src" / "lmft_architecture").rglob("*")):
         if py_file.is_file() and py_file.suffix in (".py", ".enc"):
-            include_pairs.append((str(py_file.relative_to(arch_root)), py_file))
+            include_pairs.append((py_file.relative_to(arch_root).as_posix(), py_file))
 
     virgin_dir = arch_root / "baselines" / "virgin_dual_hemisphere_v1"
     if virgin_dir.exists():
         for vf in sorted(virgin_dir.rglob("*")):
             if vf.is_file():
-                include_pairs.append((str(vf.relative_to(arch_root)), vf))
+                include_pairs.append((vf.relative_to(arch_root).as_posix(), vf))
 
     for ruleset_rel in (
         "outputs/rem_sleep_consolidated_ruleset.json",
@@ -109,7 +111,7 @@ def build_release_zip(
             if m_dir.exists():
                 for mf in sorted(m_dir.rglob("*")):
                     if mf.is_file():
-                        include_pairs.append((str(mf.relative_to(train_root)), mf))
+                        include_pairs.append((mf.relative_to(train_root).as_posix(), mf))
 
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         for arcname, file_path in include_pairs:
@@ -119,5 +121,5 @@ def build_release_zip(
 
 
 if __name__ == "__main__":
-    created = build_release_zip(include_model_weights=False)
+    created = build_release_zip(include_model_weights=True)
     print(f"Created GitHub Release bundle: {created} ({created.stat().st_size / 1024:.1f} KB)")

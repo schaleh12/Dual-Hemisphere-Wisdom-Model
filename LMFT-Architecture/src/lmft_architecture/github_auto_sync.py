@@ -41,6 +41,37 @@ SHARED_RELEASE_SEED_PATHS: tuple[str, ...] = (
     "outputs/branch_archives/philosophical_lexicon.json",
 )
 
+PRETRAINED_MODEL_CHECKPOINT_PATHS: tuple[str, ...] = (
+    "models/right_brain_bridges/doer_will_cultural/bridge_metadata.json",
+    "models/right_brain_bridges/doer_will_cultural/config.json",
+    "models/right_brain_bridges/doer_will_cultural/model.safetensors",
+    "models/right_brain_bridges/doer_will_cultural/tokenizer.json",
+    "models/right_brain_bridges/doer_will_cultural/tokenizer_config.json",
+    "models/right_brain_bridges/feeler_contemplation_experiential/bridge_metadata.json",
+    "models/right_brain_bridges/feeler_contemplation_experiential/config.json",
+    "models/right_brain_bridges/feeler_contemplation_experiential/model.safetensors",
+    "models/right_brain_bridges/feeler_contemplation_experiential/tokenizer.json",
+    "models/right_brain_bridges/feeler_contemplation_experiential/tokenizer_config.json",
+    "models/right_brain_bridges/thinker_truth_philosophical/bridge_metadata.json",
+    "models/right_brain_bridges/thinker_truth_philosophical/config.json",
+    "models/right_brain_bridges/thinker_truth_philosophical/model.safetensors",
+    "models/right_brain_bridges/thinker_truth_philosophical/tokenizer.json",
+    "models/right_brain_bridges/thinker_truth_philosophical/tokenizer_config.json",
+    "models/left_brain_qwen3_8b/corpus_callosum_meta.json",
+    "models/left_brain_qwen3_8b/impish_bloodmoon_holdout_report.json",
+    "models/left_brain_qwen3_8b/lora_adapters.pt",
+    "models/left_brain_qwen3_8b/lora_config.json",
+    "models/left_brain_qwen3_8b/projector_weights.pt",
+    "models/left_brain_lora_cycle2/corpus_callosum_meta.json",
+    "models/left_brain_lora_cycle2/lora_adapters.pt",
+    "models/left_brain_lora_cycle2/lora_config.json",
+    "models/left_brain_lora_cycle2/projector_weights.pt",
+)
+
+_TEXT_NORM_SUFFIXES: frozenset[str] = frozenset(
+    {".py", ".json", ".jsonl", ".md", ".toml", ".bat", ".txt", ".yml", ".yaml"}
+)
+
 PROTECTED_USER_STATE_PREFIXES: tuple[str, ...] = (
     "outputs/",
     "outputs/club_state",
@@ -55,12 +86,27 @@ def _normalize_rel_path(rel_path: str | Path) -> str:
     return str(rel_path).replace("\\", "/").lstrip("./")
 
 
+def _is_text_norm_candidate(path_or_rel: str | Path) -> bool:
+    return Path(str(path_or_rel)).suffix.lower() in _TEXT_NORM_SUFFIXES
+
+
+def _candidate_sha256_set(data: bytes, path_or_rel: str | Path) -> set[str]:
+    """Return valid SHA-256 hex digests for `data`, accounting for CRLF/LF on text files."""
+    digests = {hashlib.sha256(data).hexdigest().lower()}
+    if _is_text_norm_candidate(path_or_rel):
+        lf_bytes = data.replace(b"\r\n", b"\n")
+        crlf_bytes = lf_bytes.replace(b"\n", b"\r\n")
+        digests.add(hashlib.sha256(lf_bytes).hexdigest().lower())
+        digests.add(hashlib.sha256(crlf_bytes).hexdigest().lower())
+    return digests
+
+
 def is_protected_user_state_path(rel_path: str | Path) -> bool:
     """Return True if `rel_path` belongs to user runtime state that must never be overwritten."""
     norm = _normalize_rel_path(rel_path)
     if not norm or ".." in norm.split("/"):
         return True
-    if norm in SHARED_RELEASE_SEED_PATHS:
+    if norm in SHARED_RELEASE_SEED_PATHS or norm in PRETRAINED_MODEL_CHECKPOINT_PATHS:
         return False
     if norm.endswith("threads.json") or norm.endswith("impish_sparring_trajectories.jsonl"):
         return True
@@ -74,9 +120,13 @@ def is_protected_user_state_path(rel_path: str | Path) -> bool:
 
 
 def compute_file_sha256(path: str | Path) -> str:
-    """Compute the hex SHA-256 digest of a file on disk."""
+    """Compute the hex SHA-256 digest of a file on disk (normalizing CRLF to LF on text files)."""
+    p = Path(path)
+    if _is_text_norm_candidate(p):
+        raw = p.read_bytes().replace(b"\r\n", b"\n")
+        return hashlib.sha256(raw).hexdigest()
     h = hashlib.sha256()
-    with Path(path).open("rb") as f:
+    with p.open("rb") as f:
         while chunk := f.read(65536):
             h.update(chunk)
     return h.hexdigest()
@@ -191,13 +241,18 @@ def verify_or_sync_against_manifest(
             continue
         base_dir = _resolve_manifest_base_dir(local_root, rel)
         local_file = base_dir / rel
-        local_sha = compute_file_sha256(local_file).lower() if local_file.exists() else ""
-        if local_sha != expected_sha:
+        local_matches = (
+            expected_sha in _candidate_sha256_set(local_file.read_bytes(), rel)
+            if local_file.exists()
+            else False
+        )
+        if not local_matches:
             changed_files.append(rel)
             if apply_sync and active_fetcher is not None:
                 payload = active_fetcher(rel)
-                actual_sha = hashlib.sha256(payload).hexdigest().lower()
-                if actual_sha != expected_sha:
+                valid_shas = _candidate_sha256_set(payload, rel)
+                if expected_sha not in valid_shas:
+                    actual_sha = hashlib.sha256(payload).hexdigest().lower()
                     raise ValueError(
                         f"SHA-256 mismatch for {rel!r}: expected {expected_sha}, got {actual_sha}"
                     )
@@ -276,3 +331,22 @@ def fetch_remote_github_manifest(
         except Exception as exc:
             last_err = exc
     raise RuntimeError(f"Failed to fetch remote manifest: {last_err}")
+
+
+def sync_missing_pretrained_models(
+    local_root: str | Path,
+    *,
+    file_fetcher: Callable[[str], bytes] | None = None,
+) -> list[str]:
+    """Download any missing pre-trained bridge or Left-Brain LoRA/Callosum checkpoint files from GitHub."""
+    active_fetcher = file_fetcher if file_fetcher is not None else fetch_remote_github_file
+    downloaded: list[str] = []
+    for rel in PRETRAINED_MODEL_CHECKPOINT_PATHS:
+        base_dir = _resolve_manifest_base_dir(local_root, rel)
+        local_file = base_dir / rel
+        if not local_file.is_file() or local_file.stat().st_size == 0:
+            payload = active_fetcher(rel)
+            local_file.parent.mkdir(parents=True, exist_ok=True)
+            local_file.write_bytes(payload)
+            downloaded.append(rel)
+    return downloaded
