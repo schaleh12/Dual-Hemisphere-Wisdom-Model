@@ -55,5 +55,6 @@ LMFT-Training/models/*
 .huggingface/
 *.token
 
-# Heavy release zip & encrypted bundles (keep release_manifest.json and portable zip tracked)
+# Heavy release zip & encrypted bundles (built & uploaded by publish-release.yml on GitHub Actions)
 LMFT-Training/dist/*.enc
+LMFT-Training/dist/*.zip

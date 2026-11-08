@@ -24,6 +24,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Build Fresh Release Bundle Zip from main
+        run: |
+          python3 LMFT-Training/scripts/build_release_bundle.py
+
       - name: Create or Update GitHub Release v1.2.0
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
