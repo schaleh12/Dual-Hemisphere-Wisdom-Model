@@ -957,7 +957,7 @@ def compute_candidate_move_fuzzy_coordinates(
 
     coords: dict[str, float] = {k: 0.52 for k in FOUNDATIONAL_LEAVES}
     for leaf in learned_leaves:
-        coords[leaf.leaf_id] = 0.35
+        coords[leaf.leaf_id] = 0.0
     for leaf_id, val in post_posture.philosophical_coordinates.items():
         coords[leaf_id] = float(val)
     coords["cultural/efficiency/wastelessness"] = (

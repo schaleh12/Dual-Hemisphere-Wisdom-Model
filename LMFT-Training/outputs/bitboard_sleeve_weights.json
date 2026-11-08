@@ -1,36 +1,36 @@
 {
   "schema_version": 1,
   "value_weights": {
-    "material_balance_norm": 1.35,
-    "attack_control_share": 0.9,
-    "center_bitboard_control": 0.65,
-    "king_shield_safety": 0.95,
-    "piece_coordination_ratio": 0.7,
-    "development_progress": 0.45,
-    "move_net_safety": 1.8019,
-    "move_positional_gain": 0.4
+    "material_balance_norm": 2.994,
+    "attack_control_share": 1.058,
+    "center_bitboard_control": 1.855,
+    "king_shield_safety": 1.1369,
+    "piece_coordination_ratio": 1.1315,
+    "development_progress": 0.8379,
+    "move_net_safety": 2.9949,
+    "move_positional_gain": 1.8856
   },
   "policy_weights": {
-    "material_balance_norm": 0.55,
-    "attack_control_share": 0.85,
-    "center_bitboard_control": 1.1,
-    "king_shield_safety": 0.65,
-    "piece_coordination_ratio": 0.8,
-    "development_progress": 0.95,
-    "move_net_safety": 1.4019,
-    "move_positional_gain": 3.0
+    "material_balance_norm": 2.582,
+    "attack_control_share": 1.0444,
+    "center_bitboard_control": 2.5727,
+    "king_shield_safety": 0.876,
+    "piece_coordination_ratio": 1.3263,
+    "development_progress": 1.4238,
+    "move_net_safety": 2.9934,
+    "move_positional_gain": 2.9962
   },
   "leaf_weights": {
-    "philosophical/being/existence": 2.2396,
-    "philosophical/structure/order": 2.5,
-    "philosophical/persistence/continuity": 1.1576,
-    "philosophical/persistence/discreteness": 1.736,
-    "philosophical/being/agency": 0.9557,
-    "philosophical/structure/chaos": -2.5,
+    "philosophical/being/existence": 2.1898,
+    "philosophical/structure/order": 2.455,
+    "philosophical/persistence/continuity": 1.1879,
+    "philosophical/persistence/discreteness": 1.73,
+    "philosophical/being/agency": 1.4956,
+    "philosophical/structure/chaos": -2.4395,
     "cultural/efficiency/wastelessness": 2.5,
-    "cultural/freedom/self-sufficiency": 2.0396
+    "cultural/freedom/self-sufficiency": 1.9898
   },
   "value_bias": -0.55,
   "policy_bias": -0.45,
-  "steps_distilled": 852
+  "steps_distilled": 1246
 }

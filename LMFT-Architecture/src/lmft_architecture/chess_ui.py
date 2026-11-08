@@ -677,6 +677,20 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
         ✧ Esper Theories (Electro-Gravitational Alphabet of Espers)
       </button>
     </div>
+
+    <!-- 3-PLY INTUITION & FE-26 IRON FUSION SUN THRESHOLD CROP GLYPH CARD -->
+    <div onclick="openEsperTheoriesModal()" title="Click to inspect full-size in Esper Theories — 3-Ply Intuition &amp; 3 Spirit Particles (...) coming off the Fe-26 Iron Atoms Fusion Sun Threshold" style="flex:1;min-height:148px;display:flex;flex-direction:column;justify-content:space-between;background:linear-gradient(180deg, rgba(33,32,29,0.96), rgba(22,21,18,0.99));border:1px solid rgba(234,179,8,0.38);border-radius:8px;padding:6px 8px;gap:4px;overflow:hidden;cursor:pointer;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:10.5px;font-weight:800;color:#fde68a;flex-shrink:0;">
+        <span>☀️ 3-Ply Horizon · Fe-26 Iron Fusion Sun Threshold</span>
+        <span style="color:#38bdf8;letter-spacing:1.5px;font-weight:900;">• • • (3-Ply)</span>
+      </div>
+      <div style="flex:1;min-height:96px;display:flex;align-items:center;justify-content:center;overflow:hidden;border-radius:6px;border:1px solid rgba(255,255,255,0.14);background:#0c0b09;">
+        <img src="/assets/fe26_fusion_three_ply.jpg" alt="3-Ply Intuition — 3 Spirit Particles coming off the Fe-26 Iron Atoms Fusion Sun Threshold" style="width:100%;height:100%;max-height:185px;object-fit:cover;display:block;" onerror="this.parentElement.style.display='none'" />
+      </div>
+      <div style="font-size:10px;line-height:1.25;color:var(--text-1);text-align:center;flex-shrink:0;">
+        <strong>3-Ply</strong> &amp; <strong style="color:#38bdf8;">• • •</strong> — 3 Spirit Particles coming off the <strong style="color:#fde68a;">Fe-26 Iron Atoms</strong> Fusion Sun Threshold
+      </div>
+    </div>
   </section>
 
   <!-- CENTER COLUMN: The 2 Primary Buttons + Move Table + Chess.com Game Review Hub -->
@@ -973,7 +987,13 @@ Quaked like the terraforming of starseeds.</pre>
         <button class="btn" onclick="closeEsperTheoriesModal()">✕ Close</button>
       </div>
     </div>
-    <div style="overflow-y:auto;padding:8px;background:var(--bg-0);border:1px solid var(--border);border-radius:8px;flex:1;text-align:center;">
+    <div style="overflow-y:auto;padding:8px;background:var(--bg-0);border:1px solid var(--border);border-radius:8px;flex:1;text-align:center;display:flex;flex-direction:column;gap:12px;align-items:center;">
+      <div style="max-width:760px;background:var(--bg-1);border:1px solid rgba(234,179,8,0.38);border-radius:8px;padding:10px;">
+        <div style="font-size:12.5px;font-weight:800;color:#fde68a;margin-bottom:6px;">
+          ☀️ 3-Ply Horizon &amp; "• • •" — 3 Spirit Particles Coming Off the Fe-26 Iron Atoms Fusion Sun Threshold
+        </div>
+        <img src="/assets/fe26_fusion_three_ply.jpg" alt="3-Ply Intuition — Fe-26 Iron Atoms Fusion Sun Threshold" style="max-width:100%;max-height:340px;height:auto;border-radius:6px;border:1px solid rgba(255,255,255,0.14);" />
+      </div>
       <img src="/assets/esper_theories_alphabet.jpg" alt="The Electro-Gravitational Alphabet of Espers" style="max-width:100%;height:auto;border-radius:6px;border:1px solid rgba(255,255,255,0.12);" />
     </div>
   </div>

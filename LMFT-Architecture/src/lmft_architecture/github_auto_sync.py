@@ -122,6 +122,7 @@ def build_release_manifest(
         "docs/assets/celestial_seal_preview.png",
         "docs/assets/icy_sea_board.png",
         "docs/assets/esper_theories_alphabet.jpg",
+        "docs/assets/fe26_fusion_three_ply.jpg",
     ):
         asset_path = arch_root / asset_rel
         if asset_path.exists():
