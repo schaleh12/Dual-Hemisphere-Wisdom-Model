@@ -1084,20 +1084,22 @@ function selectTourTab(tabNum) {
 }
 
 const JUKEBOX_TRACKS = [
-  { id: "sS7_VBgNawM", title: "1. Forever Rachel — FFVI (Nobuo Uematsu)", url: "https://music.youtube.com/watch?v=sS7_VBgNawM&si=6OJCt4sShIwdfWbp" },
-  { id: "kpZFlSJS9ZI", title: "2. The Floating Continent — FFVI (Nobuo Uematsu)", url: "https://music.youtube.com/watch?v=kpZFlSJS9ZI&si=A2_QE7uagQe_-p3m" },
-  { id: "Ys-oKc88tXY", title: "3. Magitek Research Facility — FFVI (Nobuo Uematsu)", url: "https://music.youtube.com/watch?v=Ys-oKc88tXY&si=CxowLaxsFjoW1b1k" },
-  { id: "oDEpcYBu7eU", title: "4. Schala's Theme (Piano) — Chrono Trigger (ryukahr)", url: "https://music.youtube.com/watch?v=oDEpcYBu7eU&si=N2RZzMfrpMQ1Pgtt" },
-  { id: "Sf905k89AsY", title: "5. Esper World (幻獣界) — FFVI (Nobuo Uematsu)", url: "https://music.youtube.com/watch?v=Sf905k89AsY&si=QQ4FWo_PQZoEbMEt" },
-  { id: "5-5b08omYag", title: "6. The Phantom of the Opera", url: "https://music.youtube.com/watch?v=5-5b08omYag&si=Y_m_ofAPzKdkLEgi" }
+  { id: "sS7_VBgNawM", fallbackIds: ["88CuKNXFAq8"], title: "1. Forever Rachel — FFVI (Nobuo Uematsu)", url: "https://music.youtube.com/watch?v=sS7_VBgNawM&si=6OJCt4sShIwdfWbp" },
+  { id: "kpZFlSJS9ZI", fallbackIds: [], title: "2. The Floating Continent — FFVI (Nobuo Uematsu)", url: "https://music.youtube.com/watch?v=kpZFlSJS9ZI&si=A2_QE7uagQe_-p3m" },
+  { id: "Ys-oKc88tXY", fallbackIds: [], title: "3. Magitek Research Facility — FFVI (Nobuo Uematsu)", url: "https://music.youtube.com/watch?v=Ys-oKc88tXY&si=CxowLaxsFjoW1b1k" },
+  { id: "oDEpcYBu7eU", fallbackIds: [], title: "4. Schala's Theme (Piano) — Chrono Trigger (ryukahr)", url: "https://music.youtube.com/watch?v=oDEpcYBu7eU&si=N2RZzMfrpMQ1Pgtt" },
+  { id: "Sf905k89AsY", fallbackIds: [], title: "5. Esper World (幻獣界) — FFVI (Nobuo Uematsu)", url: "https://music.youtube.com/watch?v=Sf905k89AsY&si=QQ4FWo_PQZoEbMEt" },
+  { id: "5-5b08omYag", fallbackIds: ["ipsZhMjCc-A", "OrQp9t6hFpY"], title: "6. The Phantom of the Opera", url: "https://music.youtube.com/watch?v=5-5b08omYag&si=Y_m_ofAPzKdkLEgi" }
 ];
 const HIDDEN_SEAL_TRACK = {
-  id: "o4yHVMMHPJQ",
-  title: "✦ Secret Seal Track — Celestial Seal & Ontology",
-  url: "https://music.youtube.com/watch?v=o4yHVMMHPJQ&si=KuKSZ-NPy_iRFBe_"
+  id: "_tdWkuyFI6c",
+  fallbackIds: ["ie1s-nGJUdQ", "m_3rMbiQkXs", "bGHhOBpqkWg"],
+  title: "✦ Secret Seal Track — You Found Me (The Fray)",
+  url: "https://music.youtube.com/watch?v=_tdWkuyFI6c&si=RSt2ENN000JXjIz2"
 };
 let jukeboxIdx = 0;
 let jukeboxSecretActive = false;
+let jukeboxFallbackCursor = 0;
 let jukeboxPlaying = false;
 let jukeboxMuted = false;
 let ytPlayer = null;
@@ -1110,6 +1112,7 @@ function ensureYouTubeApiLoaded() {
   tag.src = "https://www.youtube.com/iframe_api";
   document.head.appendChild(tag);
 }
+setTimeout(ensureYouTubeApiLoaded, 250);
 
 window.onYouTubeIframeAPIReady = function() {
   ytApiReady = true;
@@ -1118,15 +1121,24 @@ window.onYouTubeIframeAPIReady = function() {
     height: "56",
     width: "100%",
     videoId: activeTrack.id,
-    playerVars: { autoplay: 0, controls: 1, rel: 0, modestbranding: 1 },
+    playerVars: { autoplay: jukeboxPlaying ? 1 : 0, controls: 1, rel: 0, modestbranding: 1 },
     events: {
-      onReady: function() {
-        if (jukeboxMuted && ytPlayer && ytPlayer.mute) ytPlayer.mute();
-        if (jukeboxPlaying && ytPlayer && ytPlayer.playVideo) ytPlayer.playVideo();
+      onReady: function(ev) {
+        if (jukeboxMuted && ev.target && ev.target.mute) ev.target.mute();
+        if (jukeboxPlaying && ev.target && ev.target.playVideo) ev.target.playVideo();
       },
       onStateChange: function(ev) {
         if (ev.data === 0) {
           jukeboxNext();
+        }
+      },
+      onError: function(_ev) {
+        const curTrack = jukeboxSecretActive ? HIDDEN_SEAL_TRACK : JUKEBOX_TRACKS[jukeboxIdx];
+        const fbList = (curTrack && curTrack.fallbackIds) ? curTrack.fallbackIds : [];
+        if (jukeboxFallbackCursor < fbList.length && ytPlayer && typeof ytPlayer.loadVideoById === "function") {
+          const nextFbId = fbList[jukeboxFallbackCursor++];
+          ytPlayer.loadVideoById(nextFbId);
+          if (jukeboxPlaying && typeof ytPlayer.playVideo === "function") ytPlayer.playVideo();
         }
       }
     }
@@ -1158,6 +1170,7 @@ function updateJukeboxUi() {
 
 function selectJukeboxTrack(idx) {
   jukeboxSecretActive = false;
+  jukeboxFallbackCursor = 0;
   jukeboxIdx = (idx + JUKEBOX_TRACKS.length) % JUKEBOX_TRACKS.length;
   jukeboxPlaying = true;
   const wrap = document.getElementById("jukebox-player-container");
@@ -1166,12 +1179,14 @@ function selectJukeboxTrack(idx) {
   if (ytPlayer && typeof ytPlayer.loadVideoById === "function") {
     ytPlayer.loadVideoById(JUKEBOX_TRACKS[jukeboxIdx].id);
     if (jukeboxMuted && ytPlayer.mute) ytPlayer.mute();
+    if (typeof ytPlayer.playVideo === "function") ytPlayer.playVideo();
   }
   updateJukeboxUi();
 }
 
 function playHiddenSecretJukeboxTrack() {
   jukeboxSecretActive = true;
+  jukeboxFallbackCursor = 0;
   jukeboxPlaying = true;
   const wrap = document.getElementById("jukebox-player-container");
   if (wrap) wrap.style.display = "block";
@@ -1179,6 +1194,7 @@ function playHiddenSecretJukeboxTrack() {
   if (ytPlayer && typeof ytPlayer.loadVideoById === "function") {
     ytPlayer.loadVideoById(HIDDEN_SEAL_TRACK.id);
     if (jukeboxMuted && ytPlayer.mute) ytPlayer.mute();
+    if (typeof ytPlayer.playVideo === "function") ytPlayer.playVideo();
   }
   updateJukeboxUi();
 }

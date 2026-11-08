@@ -3452,7 +3452,10 @@ def create_chess_http_server(
 
         def do_GET(self) -> None:  # noqa: N802
             if self.path in ("/", "/index.html") or self.path.startswith("/?") or self.path.startswith("/index.html?"):
-                body = CHESS_SINGLE_PAGE_HTML.encode("utf-8")
+                import importlib
+                from . import chess_ui as _live_ui
+                importlib.reload(_live_ui)
+                body = _live_ui.CHESS_SINGLE_PAGE_HTML.encode("utf-8")
                 self.send_response(int(HTTPStatus.OK))
                 self.send_header("Content-Type", "text/html; charset=utf-8")
                 self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
