@@ -1082,6 +1082,27 @@ function closeTutorialModal() {
 function openSpaceCenterModal() {
   const el = document.getElementById("space-center-modal-overlay");
   if (el) el.classList.add("open");
+  JUKEBOX_TRACKS[0] = {
+    id: "0R68_ZzqUu0",
+    fallbackIds: ["dN9_R8YW4nU"],
+    title: "1. Somewhere Out There — Our Lady Peace",
+    url: "https://music.youtube.com/watch?v=0R68_ZzqUu0&si=8E0J7O53bafxLEtj"
+  };
+  const btn0 = document.getElementById("jb-track-0");
+  if (btn0) {
+    btn0.textContent = "1. Somewhere Out There";
+    btn0.title = "Somewhere Out There — Our Lady Peace";
+  }
+  if (!jukeboxSecretActive && jukeboxIdx === 0 && ytPlayer && typeof ytPlayer.loadVideoById === "function") {
+    if (jukeboxPlaying) {
+      ytPlayer.loadVideoById(JUKEBOX_TRACKS[0].id);
+      if (jukeboxMuted && ytPlayer.mute) ytPlayer.mute();
+      if (typeof ytPlayer.playVideo === "function") ytPlayer.playVideo();
+    } else if (typeof ytPlayer.cueVideoById === "function") {
+      ytPlayer.cueVideoById(JUKEBOX_TRACKS[0].id);
+    }
+  }
+  updateJukeboxUi();
 }
 
 function closeSpaceCenterModal() {
