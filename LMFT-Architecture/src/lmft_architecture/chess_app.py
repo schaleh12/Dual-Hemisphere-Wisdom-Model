@@ -289,8 +289,14 @@ def _ensure_foundational_rules(rules: tuple[FuzzyConceptRule, ...]) -> tuple[Fuz
                     else:
                         continue
                 cleaned_haz_leaves[k] = fv
+            is_time_forfeit_rule = (
+                "philosophical/persistence/continuity" in cleaned_haz_leaves
+                and float(cleaned_haz_leaves.get("philosophical/persistence/continuity", 0.50)) <= 0.15
+                and "philosophical/persistence/discreteness" in cleaned_haz_leaves
+            )
             needs_cluster_repair = (
                 is_cluster_rule
+                and not is_time_forfeit_rule
                 and def_cult is not None
                 and def_phil is not None
                 and not r.concept_name.startswith("hazard_high_self_sufficiency_")

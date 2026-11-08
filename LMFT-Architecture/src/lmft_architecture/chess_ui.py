@@ -875,19 +875,49 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
       <!-- EXHIBIT 2 -->
       <div class="tour-exhibit" id="tour-exhibit-2" style="display:none;">
         <div class="tutorial-step" style="margin-top:0;">
-          <strong>🌳 Exhibit 2: The 40-Node Founding Seed &amp; 60-FPS Intuition (Gear 1)</strong><br/>
-          A physical body—or a blitz chess player on a 5:00 clock—cannot wait 4 seconds writing a paragraph of inner monologue before catching its balance.
+          <strong>🌳 Exhibit 2: The 40-Node Founding Seed &amp; All 24 Founding Leaves on the Chessboard</strong><br/>
+          A blitz chess player on a 5:00 clock cannot spend 4 seconds writing a paragraph of inner monologue before catching their balance. Every board state and candidate move is grounded across all <strong>24 Founding Leaves</strong> (grouped into 4 departments of 6 leaves each) so the Right Brain can move in <strong>Gear 1 (~15 ms, 0 LLM calls)</strong> or pass a rich 24-leaf chord into REM Sleep.
         </div>
         <div class="tutorial-step">
-          <strong>How Gear 1 Works Under the Hood</strong><br/>
-          Every turn is scored across <strong>24 Founding Leaves</strong> grouped into four departments:
-          <ul style="margin:6px 0 0 18px;padding:0;">
-            <li><strong>Cultural (6 Leaves)</strong>: <code>Power</code>, <code>Wastelessness</code>, <code>Honor</code>, <code>Fairness</code>, <code>Self-Sufficiency</code>, <code>Needlessness</code></li>
-            <li><strong>Philosophical (6 Leaves — The 6 Chess Archetypes)</strong>: <code>Agency</code> (Queen/Red), <code>Existence</code> (King/Cyan), <code>Order</code> (Bishop/Magenta), <code>Chaos</code> (Knight/Green), <code>Continuity</code> (Pawn/Blue), <code>Discreteness</code> (Rook/Yellow)</li>
-            <li><strong>Experiential (6 Leaves)</strong>: <code>Novelty</code>, <code>Salience</code>, <code>Valence</code>, <code>Arousal</code>, <code>Resonance</code>, <code>Entrainment</code></li>
-            <li><strong>Psychological (6 Leaves)</strong>: <code>Clarity</code>, <code>Confidence</code>, <code>Theory</code>, <code>Fact</code>, <code>Intention</code>, <code>Execution</code></li>
+          <strong>1. Philosophical Department (6 Leaves — The 6 Chess Piece / Color / Materia Archetypes)</strong><br/>
+          <ul style="margin:6px 0 0 18px;padding:0;line-height:1.45;">
+            <li><strong><code>philosophical/being/agency</code> (Queen · Red / Lightning)</strong>: Attacking volition, forward initiative, checks, and captures—scaled in the opening by minor-piece development so premature solo Queen raids are tempered until the army is ready.</li>
+            <li><strong><code>philosophical/being/existence</code> (King · Cyan / Water)</strong>: King shelter, pawn shield integrity, castled safety, and safe escape squares under enemy fire.</li>
+            <li><strong><code>philosophical/structure/order</code> (Bishop · Magenta / Wind)</strong>: Long-diagonal alignment, minor-piece development off the back rank, mutual piece defense, and whole-army coordination (penalizing unguarded hanging pieces or knights stranded on the rim).</li>
+            <li><strong><code>philosophical/structure/chaos</code> (Knight · Green / Ice)</strong>: Nonlinear knight forks, tactical contact, checks, captures, and board complexity/tension.</li>
+            <li><strong><code>philosophical/persistence/continuity</code> (Pawn · Blue / Fire)</strong>: Connected pawn phalanx, central pawn presence (<code>d4/e4/d5/e5</code>), and passed-pawn momentum toward promotion.</li>
+            <li><strong><code>philosophical/persistence/discreteness</code> (Rook · Yellow / Ground)</strong>: Heavy-piece files, open/semi-open file control, and 7th-rank bastions.</li>
           </ul>
-          When a position is familiar and clear, the Right Brain moves immediately by reflex in <strong>Gear 1 (~15 ms, 0 LLM calls)</strong>.
+        </div>
+        <div class="tutorial-step">
+          <strong>2. Cultural Department (6 Leaves — Development, Whole-Army Participation &amp; Sufficiency)</strong><br/>
+          <ul style="margin:6px 0 0 18px;padding:0;line-height:1.45;">
+            <li><strong><code>cultural/efficiency/power</code></strong>: Combined heavy/attacking force projection (<code>Agency + Discreteness</code>).</li>
+            <li><strong><code>cultural/efficiency/wastelessness</code></strong>: Material stewardship and move economy—high (<code>&ge; 0.72</code>) when pieces are protected and trades are sound; drops sharply (<code>0.25</code>) when a move hangs material or walks into a tactic.</li>
+            <li><strong><code>cultural/justice/honor</code> (Principled Development &amp; Whole-Army Play)</strong>: Rewards developing Knights and Bishops off the back rank, castling, and mobilizing the whole army; penalizes premature solo attacks while minor pieces sleep on the back rank,blunders, or cheap 2-fold move repetitions.</li>
+            <li><strong><code>cultural/justice/fairness</code> (Trade Parity &amp; Board Equity)</strong>: Tracks whether exchanges and the resulting board evaluation keep material and positional balance fair or favorable rather than giving away pieces for nothing.</li>
+            <li><strong><code>cultural/freedom/self-sufficiency</code> (Knowing When All Pieces Are Required vs. When Local Force Is Enough)</strong>: In a quiet strategic battle, no 1–2 pieces can win alone, so high <code>Self-Sufficiency</code> requires <strong>whole-army mobilization + King shelter + mutual piece defense</strong>. However, when a concrete tactical knockout (winning capture, promotion, checkmate) or simplified endgame is on the board right now, the local strike force is <strong>immediately self-sufficient</strong> without needing slow buildup from a corner Rook!</li>
+            <li><strong><code>cultural/freedom/needlessness</code> (Freedom from Wasted / Over-Complicated Moves)</strong>: Stays low (<code>0.06–0.10</code>) on clean developing moves, castling, or direct tactical conversions; rises when moving the same piece repeatedly while teammates sleep on the back rank, repeating moves, or blundering.</li>
+          </ul>
+        </div>
+        <div class="tutorial-step">
+          <strong>3. Experiential Department (6 Leaves — Live Board Evaluation, Harmony &amp; Momentum)</strong><br/>
+          <ul style="margin:6px 0 0 18px;padding:0;line-height:1.45;">
+            <li><strong><code>experiential/phase/valence</code> (The <code>+/-</code> Board Evaluation Bar)</strong>: Directly wired to the objective <code>+/-</code> centipawn and positional evaluation from the player's perspective—<code>0.50</code> is an equal board, <code>0.70–0.95</code> is winning, and <code>0.05–0.28</code> is losing or blundering.</li>
+            <li><strong><code>experiential/phase/arousal</code></strong>: Tactical heat, urgency, and time/attack pressure (<code>Agency + Chaos</code>).</li>
+            <li><strong><code>experiential/reflection/salience</code></strong>: How critical or forcing the moment is (captures, checks, big evaluation swings, or shadow warnings).</li>
+            <li><strong><code>experiential/reflection/novelty</code></strong>: Fresh structural transformation (captures, castling, promotions, dynamic tension) vs. stale 2-fold move repetition (where <code>Novelty</code> drops to <code>0.08</code>).</li>
+            <li><strong><code>experiential/synchronization/resonance</code> (Whole-Army Orchestra Harmony)</strong>: Rises when all surviving pieces participate together in structural order and pawn flow alongside coherent Bitboard Sleeve priors.</li>
+            <li><strong><code>experiential/synchronization/entrainment</code> (Multi-Ply Plan Follow-Through)</strong>: Sustained positional rhythm and pawn-phalanx continuity across turns without self-inflicted ruptures.</li>
+          </ul>
+        </div>
+        <div class="tutorial-step">
+          <strong>4. Psychological Department (6 Leaves — Truth, Contemplation &amp; Will)</strong><br/>
+          <ul style="margin:6px 0 0 18px;padding:0;line-height:1.45;">
+            <li><strong><code>psychological/truth/fact</code> &amp; <code>psychological/truth/theory</code></strong>: <code>Fact</code> measures concrete 1-ply bitboard survival, material reality, and King safety; <code>Theory</code> projects the 2-to-3 ply rollout hypothesis against the opponent's best replies.</li>
+            <li><strong><code>psychological/contemplation/clarity</code> &amp; <code>psychological/contemplation/confidence</code></strong>: <code>Clarity</code> measures agreement between <code>Fact</code> and <code>Theory</code> plus unambiguous Fuzzy Rule separation; <code>Confidence</code> reflects Bitboard Intuition Sleeve certainty.</li>
+            <li><strong><code>psychological/will/intention</code> &amp; <code>psychological/will/execution</code></strong>: <code>Intention</code> gathers purposeful drive (<code>Salience + Arousal + Power - Needlessness</code>); <code>Execution</code> is the final right-brain action bid that selects the move on the board.</li>
+          </ul>
         </div>
       </div>
 
@@ -910,14 +940,14 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
       <!-- EXHIBIT 4 -->
       <div class="tour-exhibit" id="tour-exhibit-4" style="display:none;">
         <div class="tutorial-step" style="margin-top:0;">
-          <strong>🏛️ Exhibit 4: The Three Constitutional Branches of Mind</strong><br/>
-          Before any reflection settles, three independent branches hold a check-and-balance audience:
+          <strong>🏛️ Exhibit 4: The Three Constitutional Branches of Mind &amp; Faculty Archives</strong><br/>
+          Every move and reflection is governed by three co-equal constitutional branches that pair one Psychological faculty with one external department and store permanent precedents in the <strong>3-Branch Faculty Archives</strong>:
         </div>
         <div class="tutorial-step">
-          <ul style="margin:0 0 0 18px;padding:0;">
-            <li><strong>1. Executive Branch (<code>Will &lt;-&gt; Cultural</code> — The Do-er · Poetry &amp; Storytelling)</strong>: Tracks purposeful action, narrative trajectory, and resource stewardship (<code>Intention</code>, <code>Execution</code>, <code>Wastelessness</code>).</li>
-            <li><strong>2. Legislative Branch (<code>Contemplation &lt;-&gt; Experiential</code> — The Feeler · Philosophy &amp; Coding)</strong>: Feels the lived emotional chord first (<code>Valence</code>, <code>Arousal</code>, <code>Clarity</code>) and originates the demand for new laws and rules when a wound occurs.</li>
-            <li><strong>3. Judicial Branch (<code>Truth [Fact / Theory] &lt;-&gt; Philosophical</code> — The Thinker · Music &amp; Art)</strong>: The supreme court of proportion and harmony—weighing objective mathematical reality (<code>Fact</code>) against the mind's subjective perspective and voice (<code>Theory</code>).</li>
+          <ul style="margin:0 0 0 18px;padding:0;line-height:1.5;">
+            <li><strong>1. Executive Branch (<code>Will [Intention / Execution] &lt;-&gt; Cultural</code> — The Do-er · Action &amp; Stewardship)</strong>: Governs purposeful mobilization, opening development (<code>Honor</code>), resource preservation (<code>Wastelessness</code>), and knowing when the whole army is needed vs. when a local strike force is already <code>Self-Sufficient</code> without <code>Needlessness</code>.</li>
+            <li><strong>2. Legislative Branch (<code>Contemplation [Clarity / Confidence] &lt;-&gt; Experiential</code> — The Feeler · Evaluation &amp; Lawmaking)</strong>: Feels the live <code>+/-</code> board evaluation (<code>Valence</code>), urgency (<code>Arousal</code>), novelty (<code>Novelty</code>), and whole-army harmony (<code>Resonance</code> &amp; <code>Entrainment</code>). When a blunder (<code>??</code>) or brilliancy (<code>!!</code>) creates a coordinate gap, the Legislative Branch originates new fuzzy rules during REM Sleep.</li>
+            <li><strong>3. Judicial Branch (<code>Truth [Fact / Theory] &lt;-&gt; Philosophical</code> — The Thinker · Geometry &amp; Proportion)</strong>: Weighs objective 1-ply board reality (<code>Fact</code> across the 6 Piece Archetypes: <code>Agency</code>, <code>Existence</code>, <code>Order</code>, <code>Chaos</code>, <code>Continuity</code>, <code>Discreteness</code>) against the 3-ply rollout projection (<code>Theory</code>) and detects Shadow Pathologies (such as <em>Reckless Overextension</em> when <code>Agency/Chaos</code> outrun <code>Order/Existence</code>).</li>
           </ul>
         </div>
       </div>
@@ -925,15 +955,16 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
       <!-- EXHIBIT 5 -->
       <div class="tour-exhibit" id="tour-exhibit-5" style="display:none;">
         <div class="tutorial-step" style="margin-top:0;">
-          <strong>🌙 Exhibit 5: Nighttime REM Sleep, Tier-2 Leaf Growth &amp; Active Waking Vows</strong><br/>
-          When a human learns chess, an instrument, or a sport, Day 1 is conscious and awkward. After sleeping on it, yesterday's stumbles become today's intuition.
+          <strong>🌙 Exhibit 5: End-of-Game REM Sleep, 24-Leaf Rule Forging &amp; Active Waking Vows</strong><br/>
+          During a game, Celestriad 1.0 plays uninterrupted from opening to endgame while queuing any post-move Game Review blunders (<code>??</code> / <code>?</code>) and brilliancies (<code>!!</code> / <code>!</code>) along with their full 24-leaf contrastive coordinate deltas.
         </div>
         <div class="tutorial-step">
-          <strong>What Happens When You Click [🌙 Run REM Sleep] (or Let Self-Train Run)</strong><br/>
-          <ul style="margin:6px 0 0 18px;padding:0;">
-            <li><strong>Cluster &amp; Forge</strong>: Tactical blunders (<code>??</code>) and brilliancies (<code>!!</code>) are clustered into new <code>hazard_</code> and <code>coached_</code> rules plus discriminative <strong>Tier-2 <code>LearnedLeaf</code> nodes</strong>.</li>
-            <li><strong>Dream Self-Talk &amp; Waking Vow</strong>: Qwen3-8B reflects on the game in clean multi-stanza prose and records a <strong>Waking Vow</strong>.</li>
-            <li><strong>True Behavioral Change</strong>: On the very next game, that Waking Vow actively tugs candidate move scores (<code>vow_alignment_delta</code>) and recalls matching archive clauses so the AI doesn't fall into the same trap twice!</li>
+          <strong>What Happens at End-of-Game Auto-REM Sleep (or When You Click [🌙 Run REM Sleep])</strong><br/>
+          <ul style="margin:6px 0 0 18px;padding:0;line-height:1.5;">
+            <li><strong>1. 24-Leaf Contrastive Rule &amp; Tier-2 Leaf Forging</strong>: REM Sleep compares the played move's 24 Founding Leaves against the best alternative (<code>played_coordinates</code> vs. <code>contrastive_reference_coordinates</code>), clusters recurring mistakes or masterstrokes, and mints 3-wire <code>hazard_</code> and <code>coached_</code> rules plus discriminative <strong>Tier-2 <code>LearnedLeaf</code> nodes</strong> anchored to the exact department where the gap occurred.</li>
+            <li><strong>2. Same-Family Centroid Winner-Take-All &amp; Cross-Family Dissonance</strong>: Co-firing sub-facets of the same cluster family resolve cleanly to the closest archetype centroid, while genuine collisions between a <code>hazard_</code> rule and a <code>coached_</code> rule trigger conscious deliberation.</li>
+            <li><strong>3. Bitboard Sleeve &amp; Callosum Homeostasis</strong>: Post-mortem coordinate deltas sculpt the 8-circuit Bitboard Intuition Sleeve weights and gently regularize the Left-Brain LoRA adapters toward their birth anchor so repeated dreams never distort prose grammar.</li>
+            <li><strong>4. Dream Chronicle &amp; Active Waking Vow</strong>: Qwen3-8B reflects on the game in clean 3-stanza prose and distills a single-sentence <strong>Waking Vow</strong> that actively tugs candidate move scores (<code>vow_alignment_delta</code>) in the very next game!</li>
           </ul>
         </div>
       </div>

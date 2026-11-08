@@ -2,8 +2,8 @@
   "schema_version": 1,
   "version": "0.2.0",
   "github_repo": "schaleh12/Dual-Hemisphere-Wisdom-Model",
-  "build_sha256": "2eee1948a186b9fc0cd93e1e58ab427e86293f979ee75c6f0c3f0208627663dc",
-  "build_short_hash": "2eee1948a186",
+  "build_sha256": "996e4613ec7365fa1ae8c7c8ee91a017f1a6d107979a9bf3ab6ee42d984097ac",
+  "build_short_hash": "996e4613ec73",
   "files": {
     "src/lmft_architecture/__init__.py": {
       "sha256": "a89f56c2195e87129adbffa5065d8769ea096e13ba98783d217c4d120ee92623",
@@ -74,8 +74,8 @@
       "size_bytes": 20169
     },
     "src/lmft_architecture/branch_archives.py": {
-      "sha256": "56a9e0b88831df985821c582ce119711b22cae88fc71ef6f21468b5f26f1d9b5",
-      "size_bytes": 53974
+      "sha256": "e8e401a2961d622b87240fbb1701cafb046a1d413f761cca94c52a0bf1865989",
+      "size_bytes": 54175
     },
     "src/lmft_architecture/capacity.py": {
       "sha256": "449918ce2fac765542adb456ae3eacedd004ea5c0038022fad5de3ec7f0512e2",
@@ -90,16 +90,16 @@
       "size_bytes": 3267
     },
     "src/lmft_architecture/chess_app.py": {
-      "sha256": "467f35db7b463d07f5dd69a78bcc2eeab394fa7c8b3b727e750c1513f1196cb2",
-      "size_bytes": 184225
+      "sha256": "6cd338d367f9463e2121f09df7021d45a6ae4080196faa391d7ce3262ab1303b",
+      "size_bytes": 184585
     },
     "src/lmft_architecture/chess_kibitz_bridge.py": {
-      "sha256": "e1d444c354e2ccc30ef4cdfd0ac81ce45a3aa8079e129d5203aacee6b45de697",
-      "size_bytes": 118237
+      "sha256": "8b3491c0d4ead7f554753a8562c7fb8e7025f5071604df11e70cd5925efc9307",
+      "size_bytes": 129087
     },
     "src/lmft_architecture/chess_ui.py": {
-      "sha256": "091291bf4addab5ecc475b04be5e57eccdd8756ef5559c3532651743f272c712",
-      "size_bytes": 114523
+      "sha256": "a06b1004e85173527406c743fd6b6fffa406fa39a5a363b744941173fd67f69f",
+      "size_bytes": 121971
     },
     "src/lmft_architecture/chord_memory.py": {
       "sha256": "6714d9c6cd9e0f7ae199e92a44f7371f168f65fb32319260d4b24d0ed1c54a66",
@@ -262,8 +262,8 @@
       "size_bytes": 2752
     },
     "src/lmft_architecture/sleep_consolidation.py": {
-      "sha256": "ac80b61f1f0c2642d0f11aac05b471076d2b21033173fdf9e0d7230388ba69a9",
-      "size_bytes": 76747
+      "sha256": "416192099e32a5f064af2f0ebde95ae1b5a1bebccfd34d084939fb338e771b89",
+      "size_bytes": 76917
     },
     "src/lmft_architecture/subliminal_gap_splice.py": {
       "sha256": "c82de8d9871f8e6ec840889e74b620eeb0fca4ceaca0885d5d74ce7e5ddba9fb",

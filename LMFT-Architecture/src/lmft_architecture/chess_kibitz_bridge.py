@@ -888,6 +888,138 @@ class CandidateMoveEvaluation:
         }
 
 
+def _compute_army_mobilization_and_sufficiency(
+    board_before: chess.Board,
+    move: chess.Move,
+    next_board: chess.Board,
+    *,
+    us: chess.Color,
+    existence: float,
+    continuity: float,
+    piece_coord_ratio: float,
+    net_capture_gain: float,
+    is_blunder: bool,
+) -> tuple[float, bool, bool, float]:
+    """Compute whole-army participation, premature-solo detection, and phase-aware `self-sufficiency`."""
+    them = not us
+    home_rank = 0 if us == chess.WHITE else 7
+    seventh_rank = 6 if us == chess.WHITE else 1
+    corner_sqs = {chess.A1, chess.H1} if us == chess.WHITE else {chess.A8, chess.H8}
+
+    our_pawns = list(next_board.pieces(chess.PAWN, us))
+    our_minors = list(next_board.pieces(chess.KNIGHT, us)) + list(next_board.pieces(chess.BISHOP, us))
+    our_rooks = list(next_board.pieces(chess.ROOK, us))
+    our_queens = list(next_board.pieces(chess.QUEEN, us))
+    total_non_pawn = len(our_minors) + len(our_rooks) + len(our_queens)
+
+    king_sq = next_board.king(us)
+    is_castled_like = bool(
+        king_sq is not None
+        and chess.square_rank(king_sq) == home_rank
+        and chess.square_file(king_sq) in (2, 6)
+    )
+
+    if total_non_pawn == 0:
+        army_participation_ratio = 1.0
+    else:
+        active_units = 0.0
+        for msq in our_minors:
+            if chess.square_rank(msq) != home_rank:
+                active_units += 1.0
+        for qsq in our_queens:
+            if (
+                chess.square_rank(qsq) != home_rank
+                or bool(next_board.attacks_mask(qsq) & _BB_EXTENDED_CENTER)
+                or is_castled_like
+            ):
+                active_units += 1.0
+            else:
+                active_units += 0.5
+        rook_set = set(our_rooks)
+        for rsq in our_rooks:
+            rf = chess.square_file(rsq)
+            rr = chess.square_rank(rsq)
+            has_friendly_pawn_on_file = any(chess.square_file(psq) == rf for psq in our_pawns)
+            connects_other_rook = any(
+                other_r != rsq and bool(next_board.attacks_mask(rsq) & chess.BB_SQUARES[other_r])
+                for other_r in rook_set
+            )
+            if (
+                rsq not in corner_sqs
+                or rr == seventh_rank
+                or not has_friendly_pawn_on_file
+                or connects_other_rook
+            ):
+                active_units += 1.0
+            elif is_castled_like:
+                active_units += 0.5
+        army_participation_ratio = _clamp01(active_units / total_non_pawn)
+
+    minors_before = list(board_before.pieces(chess.KNIGHT, us)) + list(board_before.pieces(chess.BISHOP, us))
+    undeveloped_minors_before = sum(
+        1 for sq in minors_before if chess.square_rank(sq) == home_rank
+    )
+    piece_type = board_before.piece_type_at(move.from_square) or chess.PAWN
+    from_rank = chess.square_rank(move.from_square)
+    to_rank = chess.square_rank(move.to_square)
+    was_attacked_before = board_before.is_attacked_by(them, move.from_square)
+
+    is_tactical_conversion = bool(
+        next_board.is_checkmate()
+        or move.promotion
+        or (net_capture_gain >= 1.0 and not is_blunder)
+    )
+    is_tactical_or_forced = bool(
+        is_tactical_conversion
+        or board_before.is_check()
+        or board_before.is_castling(move)
+        or (next_board.is_check() and not is_blunder and net_capture_gain >= 0.0)
+        or was_attacked_before
+    )
+
+    premature_solo_move = False
+    if (
+        board_before.fullmove_number <= 10
+        and undeveloped_minors_before >= 2
+        and not is_tactical_or_forced
+        and net_capture_gain < 0.5
+    ):
+        second_rank = home_rank + (1 if us == chess.WHITE else -1)
+        if piece_type == chess.QUEEN and to_rank not in (home_rank, second_rank):
+            premature_solo_move = True
+        elif piece_type in (chess.KNIGHT, chess.BISHOP, chess.ROOK) and from_rank != home_rank:
+            premature_solo_move = True
+
+    if next_board.is_checkmate():
+        self_sufficiency = 0.95
+    elif is_tactical_conversion:
+        # Local strike force wins material or promotes right now without needing slow army buildup
+        self_sufficiency = _clamp01(
+            0.45 * existence
+            + 0.40 * min(1.0, 0.68 + 0.10 * net_capture_gain)
+            + 0.15 * piece_coord_ratio
+        )
+    elif total_non_pawn <= 2:
+        # Simplified endgame: remaining pieces + King + pawn flow are self-sufficient
+        self_sufficiency = _clamp01(
+            0.40 * existence
+            + 0.35 * continuity
+            + 0.25 * army_participation_ratio
+            - (0.22 if is_blunder else 0.0)
+        )
+    else:
+        # Quiet opening/middlegame: full-army mobilization + King shelter + mutual defense are required
+        self_sufficiency = _clamp01(
+            0.40 * existence
+            + 0.35 * army_participation_ratio
+            + 0.25 * piece_coord_ratio
+            - (0.18 if premature_solo_move else 0.0)
+            - (0.22 if is_blunder else 0.0)
+        )
+
+    return army_participation_ratio, premature_solo_move, is_tactical_conversion, self_sufficiency
+
+
 def compute_candidate_move_fuzzy_coordinates(
     board: chess.Board,
     move: chess.Move,
@@ -1078,8 +1210,32 @@ def compute_candidate_move_fuzzy_coordinates(
     coords["psychological/contemplation/clarity"] = clarity_coord
     coords["psychological/contemplation/confidence"] = sleeve_conf
     coords["cultural/efficiency/power"] = _clamp01(0.50 * agency + 0.50 * discreteness)
+
+    sleeve_feats = sleeve_out.get("features") or {}
+    dev_prog = float(sleeve_feats.get("development_progress", 0.50))
+    piece_coord_ratio = float(sleeve_feats.get("piece_coordination_ratio", 0.50))
+    is_rep_move = next_board.is_repetition(2)
+    army_participation_ratio, premature_solo_move, is_tactical_conversion, self_sufficiency = (
+        _compute_army_mobilization_and_sufficiency(
+            board,
+            move,
+            next_board,
+            us=us,
+            existence=existence,
+            continuity=continuity,
+            piece_coord_ratio=piece_coord_ratio,
+            net_capture_gain=net_capture_gain,
+            is_blunder=is_blunder,
+        )
+    )
+    coords["cultural/freedom/self-sufficiency"] = self_sufficiency
     coords["cultural/freedom/needlessness"] = _clamp01(
-        0.08 + (0.45 if is_blunder else 0.0) + (0.20 if shadow_names else 0.0)
+        0.08
+        + (0.45 if is_blunder else 0.0)
+        + (0.20 if shadow_names else 0.0)
+        + (0.22 if premature_solo_move else 0.0)
+        + (0.20 if is_rep_move else 0.0)
+        - (0.03 if is_tactical_conversion and not is_blunder else 0.0)
     )
     coords["experiential/reflection/salience"] = _clamp01(
         0.45 + 0.08 * net_capture_gain + 0.25 * float(sleeve_out["policy_prior"])
@@ -1095,6 +1251,59 @@ def compute_candidate_move_fuzzy_coordinates(
     if is_blunder:
         valence_coord = min(0.28, valence_coord)
     coords["experiential/phase/valence"] = valence_coord
+
+    coords["cultural/justice/honor"] = _clamp01(
+        0.24
+        + 0.28 * order
+        + 0.18 * dev_prog
+        + 0.14 * army_participation_ratio
+        + 0.10 * continuity
+        + 0.08 * float(sleeve_out["policy_prior"])
+        - (0.18 if premature_solo_move else 0.0)
+        - (0.35 if is_rep_move else 0.0)
+        - (0.22 if is_blunder else 0.0)
+    )
+    trade_parity = _clamp01(
+        0.48
+        + 0.10 * min(5.0, max(-3.5, float(net_capture_gain)))
+        + 0.04 * order
+        - 0.22 * min(3.5, float(blunder_penalty))
+    )
+    fairness_coord = _clamp01(0.55 * trade_parity + 0.45 * float(post_posture.board_valence))
+    coords["cultural/justice/fairness"] = min(0.30, fairness_coord) if is_blunder else fairness_coord
+
+    is_transforming = bool(
+        is_cap or move.promotion or board.is_castling(move) or next_board.is_check()
+    )
+    coords["experiential/reflection/novelty"] = (
+        0.08
+        if is_rep_move
+        else _clamp01(
+            0.35
+            + (0.24 if is_transforming else 0.0)
+            + 0.22 * chaos
+            + 0.19 * float(sleeve_out["policy_prior"])
+        )
+    )
+    sleeve_coherence = 1.0 - min(
+        1.0, abs(float(sleeve_out["value_prior"]) - float(sleeve_out["policy_prior"]))
+    )
+    coords["experiential/synchronization/resonance"] = _clamp01(
+        0.32 * order
+        + 0.24 * army_participation_ratio
+        + 0.22 * continuity
+        + 0.22 * sleeve_coherence
+        - (0.15 if premature_solo_move else 0.0)
+        - (0.25 if is_blunder else 0.0)
+        - (0.20 if is_rep_move else 0.0)
+    )
+    coords["experiential/synchronization/entrainment"] = _clamp01(
+        0.45 * continuity
+        + 0.35 * order
+        + 0.20 * float(sleeve_out["policy_prior"])
+        - (0.25 if is_blunder else 0.0)
+        - (0.30 if is_rep_move else 0.0)
+    )
 
     # 4. `psychological/will/intention` via `RIGHT_BRAIN_WILL_EDGES` (`rb-will-0..3`)
     intention_coord = _clamp01(
@@ -1510,6 +1719,7 @@ def _enrich_move_coords_with_theory_rollout(
         0.40 * float(coords.get("psychological/contemplation/clarity", 0.60)) + 0.60 * r_clarity
     )
     if r_loss >= 0.8:
+        was_blunder = is_blunder
         is_blunder = True
         blunder_penalty = max(float(blunder_penalty), r_loss)
         coords["cultural/efficiency/wastelessness"] = 0.25
@@ -1519,6 +1729,19 @@ def _enrich_move_coords_with_theory_rollout(
         coords["experiential/phase/valence"] = min(
             0.28, float(coords.get("experiential/phase/valence", 0.25))
         )
+        coords["cultural/justice/fairness"] = min(
+            0.30, float(coords.get("cultural/justice/fairness", 0.30))
+        )
+        if not was_blunder:
+            coords["cultural/justice/honor"] = _clamp01(
+                float(coords.get("cultural/justice/honor", 0.50)) - 0.22
+            )
+            coords["experiential/synchronization/resonance"] = _clamp01(
+                float(coords.get("experiential/synchronization/resonance", 0.50)) - 0.25
+            )
+            coords["experiential/synchronization/entrainment"] = _clamp01(
+                float(coords.get("experiential/synchronization/entrainment", 0.50)) - 0.25
+            )
     return coords, is_blunder, blunder_penalty
 
 
@@ -1639,6 +1862,7 @@ def evaluate_candidate_moves_with_right_brain(
             0.40 * float(c_dict.get("psychological/contemplation/clarity", 0.60)) + 0.60 * r_clarity
         )
         if r_loss >= 0.8:
+            was_blunder = bool(cand["is_blunder"])
             cand["is_blunder"] = True
             cand["blunder_penalty"] = max(float(cand["blunder_penalty"]), r_loss)
             c_dict["cultural/efficiency/wastelessness"] = 0.25
@@ -1648,6 +1872,19 @@ def evaluate_candidate_moves_with_right_brain(
             c_dict["experiential/phase/valence"] = min(
                 0.28, float(c_dict.get("experiential/phase/valence", 0.25))
             )
+            c_dict["cultural/justice/fairness"] = min(
+                0.30, float(c_dict.get("cultural/justice/fairness", 0.30))
+            )
+            if not was_blunder:
+                c_dict["cultural/justice/honor"] = _clamp01(
+                    float(c_dict.get("cultural/justice/honor", 0.50)) - 0.22
+                )
+                c_dict["experiential/synchronization/resonance"] = _clamp01(
+                    float(c_dict.get("experiential/synchronization/resonance", 0.50)) - 0.25
+                )
+                c_dict["experiential/synchronization/entrainment"] = _clamp01(
+                    float(c_dict.get("experiential/synchronization/entrainment", 0.50)) - 0.25
+                )
 
     rollout_k = max(10, int(limit))
     for cand in pending_candidates[:rollout_k]:
@@ -2101,28 +2338,42 @@ class BoardAnchoredBridgeSensors:
             for leaf_id, board_val in self.board_posture.philosophical_coordinates.items():
                 anchored[leaf_id] = float(board_val)
             # When scoring an automatic board state prompt (no user story text), ground
-            # the 6 Cultural coordinates and 3 Experiential sensor coordinates in the board's
+            # the 6 Cultural coordinates and 6 Experiential coordinates in the board's
             # structural and +/- evaluation state instead of MiniLM's dry reading of the
             # "Chess table — Move N..." header.
             if self.ground_cultural_on_board or clean_for_minilm.startswith("Chess table —"):
                 phil = self.board_posture.philosophical_coordinates
+                order_f = float(phil.get("philosophical/structure/order", 0.50))
+                cont_f = float(phil.get("philosophical/persistence/continuity", 0.50))
+                exist_f = float(phil.get("philosophical/being/existence", 0.50))
+                chaos_f = float(phil.get("philosophical/structure/chaos", 0.30))
+                agency_f = float(phil.get("philosophical/being/agency", 0.50))
+                board_val_f = _clamp01(float(self.board_posture.board_valence))
+
                 anchored["cultural/efficiency/power"] = _clamp01(
-                    0.55 * float(phil.get("philosophical/being/agency", 0.50))
+                    0.55 * agency_f
                     + 0.45 * float(phil.get("philosophical/persistence/discreteness", 0.50))
                 )
                 anchored["cultural/efficiency/wastelessness"] = 0.68
-                anchored["cultural/justice/honor"] = 0.52
-                anchored["cultural/justice/fairness"] = 0.52
+                anchored["cultural/justice/honor"] = _clamp01(
+                    0.18
+                    + 0.28 * order_f
+                    + 0.14 * cont_f
+                    + 0.08 * exist_f
+                    - (0.15 if self.board_posture.board_shadow_warnings else 0.0)
+                )
+                anchored["cultural/justice/fairness"] = _clamp01(
+                    0.15
+                    + 0.55 * board_val_f
+                    + 0.15 * order_f
+                    - (0.12 if self.board_posture.in_check else 0.0)
+                )
                 anchored["cultural/freedom/self-sufficiency"] = _clamp01(
-                    float(phil.get("philosophical/being/existence", 0.75))
+                    0.50 * exist_f + 0.30 * order_f + 0.20 * cont_f
                 )
                 anchored["cultural/freedom/needlessness"] = 0.08
-                board_val_f = _clamp01(float(self.board_posture.board_valence))
-                board_arousal = _clamp01(
-                    0.35
-                    + 0.40 * float(phil.get("philosophical/being/agency", 0.50))
-                    + 0.25 * float(phil.get("philosophical/structure/chaos", 0.30))
-                )
+
+                board_arousal = _clamp01(0.35 + 0.40 * agency_f + 0.25 * chaos_f)
                 board_salience = _clamp01(
                     max(
                         float(exp_raw.get("experiential/reflection/salience", 0.45)),
@@ -2131,12 +2382,34 @@ class BoardAnchoredBridgeSensors:
                         + (0.18 if self.board_posture.board_shadow_warnings else 0.0),
                     )
                 )
-                exp_out["experiential/phase/valence"] = board_val_f
-                exp_out["experiential/phase/arousal"] = board_arousal
-                exp_out["experiential/reflection/salience"] = board_salience
-                anchored["experiential/phase/valence"] = board_val_f
-                anchored["experiential/phase/arousal"] = board_arousal
-                anchored["experiential/reflection/salience"] = board_salience
+                board_novelty = _clamp01(
+                    0.35
+                    + 0.35 * chaos_f
+                    + 0.20 * agency_f
+                    + (0.10 if self.board_posture.in_check else 0.0)
+                )
+                board_resonance = _clamp01(
+                    0.45 * order_f
+                    + 0.35 * cont_f
+                    + 0.20 * exist_f
+                    - (0.15 if self.board_posture.board_shadow_warnings else 0.0)
+                )
+                board_entrainment = _clamp01(
+                    0.50 * cont_f
+                    + 0.35 * order_f
+                    + 0.15 * exist_f
+                    - (0.15 if self.board_posture.in_check else 0.0)
+                )
+                for exp_k, exp_v in (
+                    ("experiential/phase/valence", board_val_f),
+                    ("experiential/phase/arousal", board_arousal),
+                    ("experiential/reflection/salience", board_salience),
+                    ("experiential/reflection/novelty", board_novelty),
+                    ("experiential/synchronization/resonance", board_resonance),
+                    ("experiential/synchronization/entrainment", board_entrainment),
+                ):
+                    exp_out[exp_k] = exp_v
+                    anchored[exp_k] = exp_v
             return anchored, exp_out, queried, skipped
 
         # Subsequent calls (Clause 1 at comma and full-sentence Pass 2+ Theory) score

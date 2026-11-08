@@ -1906,8 +1906,46 @@ def test_board_valence_evaluation_and_candidate_move_valence() -> None:
     )
     assert exp_out["experiential/phase/valence"] == pytest.approx(0.50, abs=0.05)
     assert coords["experiential/phase/valence"] == pytest.approx(0.50, abs=0.05)
+    for exp_key in (
+        "experiential/phase/valence",
+        "experiential/phase/arousal",
+        "experiential/reflection/salience",
+        "experiential/reflection/novelty",
+        "experiential/synchronization/resonance",
+        "experiential/synchronization/entrainment",
+    ):
+        assert exp_key in exp_out and 0.0 <= exp_out[exp_key] <= 1.0
+        assert exp_key in coords and coords[exp_key] == pytest.approx(exp_out[exp_key])
+    assert coords["cultural/justice/honor"] != 0.52
+    assert coords["cultural/justice/fairness"] != 0.52
 
-    # Candidate move fuzzy coordinates populate `experiential/phase/valence`
+    # Candidate move fuzzy coordinates populate all 24 Founding Leaves
+    all_24_founding_leaves = (
+        "cultural/efficiency/power",
+        "cultural/efficiency/wastelessness",
+        "cultural/justice/honor",
+        "cultural/justice/fairness",
+        "cultural/freedom/self-sufficiency",
+        "cultural/freedom/needlessness",
+        "philosophical/being/agency",
+        "philosophical/being/existence",
+        "philosophical/structure/order",
+        "philosophical/structure/chaos",
+        "philosophical/persistence/continuity",
+        "philosophical/persistence/discreteness",
+        "experiential/reflection/novelty",
+        "experiential/reflection/salience",
+        "experiential/phase/valence",
+        "experiential/phase/arousal",
+        "experiential/synchronization/resonance",
+        "experiential/synchronization/entrainment",
+        "psychological/will/intention",
+        "psychological/will/execution",
+        "psychological/truth/theory",
+        "psychological/truth/fact",
+        "psychological/contemplation/clarity",
+        "psychological/contemplation/confidence",
+    )
     italian_board = chess.Board("r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 3 3")
     coords_bxf7, is_blunder_bxf7, _, _, _ = compute_candidate_move_fuzzy_coordinates(
         italian_board,
@@ -1917,12 +1955,37 @@ def test_board_valence_evaluation_and_candidate_move_valence() -> None:
         italian_board,
         italian_board.parse_san("O-O"),
     )
+    for k24 in all_24_founding_leaves:
+        assert k24 in coords_oo, f"Missing Founding Leaf {k24} in candidate move coordinates"
+        assert 0.0 <= coords_oo[k24] <= 1.0
     assert is_blunder_bxf7 is True
     assert is_blunder_oo is False
     assert coords_bxf7["experiential/phase/valence"] <= 0.28
     assert coords_oo["experiential/phase/valence"] > coords_bxf7["experiential/phase/valence"] + 0.20
+    assert coords_bxf7["cultural/justice/fairness"] <= 0.30
+    assert coords_oo["cultural/justice/fairness"] > coords_bxf7["cultural/justice/fairness"]
+    assert coords_oo["cultural/justice/honor"] > coords_bxf7["cultural/justice/honor"]
+    assert coords_oo["experiential/synchronization/resonance"] > coords_bxf7["experiential/synchronization/resonance"]
+    assert coords_oo["experiential/synchronization/entrainment"] > coords_bxf7["experiential/synchronization/entrainment"]
 
-    # Winning free-queen capture has high positive valence (>= 0.68)
+    # 2-fold move repetition drops `experiential/reflection/novelty <= 0.10` and `cultural/justice/honor`
+    rep_board = chess.Board()
+    for san_mv in ("Nf3", "Nf6", "Ng1"):
+        rep_board.push_san(san_mv)
+    coords_rep_ng8, _, _, _, _ = compute_candidate_move_fuzzy_coordinates(
+        rep_board,
+        rep_board.parse_san("Ng8"),
+    )
+    coords_dev_nc6, _, _, _, _ = compute_candidate_move_fuzzy_coordinates(
+        rep_board,
+        rep_board.parse_san("Nc6"),
+    )
+    assert coords_rep_ng8["experiential/reflection/novelty"] <= 0.10
+    assert coords_dev_nc6["experiential/reflection/novelty"] > coords_rep_ng8["experiential/reflection/novelty"] + 0.25
+    assert coords_dev_nc6["cultural/justice/honor"] > coords_rep_ng8["cultural/justice/honor"] + 0.20
+
+    # Winning free-queen capture has high positive valence (>= 0.68) and high tactical self-sufficiency (>= 0.72)
+    # even in the opening while other minor pieces sit on the back rank (knowing when all pieces are NOT required)
     free_queen_board = chess.Board("rnb1kbnr/pppp1ppp/8/4p3/3qP3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 0 3")
     coords_nxd4, is_blunder_nxd4, _, _, _ = compute_candidate_move_fuzzy_coordinates(
         free_queen_board,
@@ -1930,6 +1993,26 @@ def test_board_valence_evaluation_and_candidate_move_valence() -> None:
     )
     assert is_blunder_nxd4 is False
     assert coords_nxd4["experiential/phase/valence"] >= 0.68
+    assert coords_nxd4["cultural/justice/fairness"] >= 0.65
+    assert coords_nxd4["cultural/freedom/self-sufficiency"] >= 0.72
+    assert coords_nxd4["cultural/freedom/needlessness"] <= 0.08
+
+    # Quiet opening position (Move 2: after 1. e4 e5 2. Nf3 Nc6):
+    # Developing a new piece (`Bc4`) beats moving the same knight twice (`Ng5`) while 3 minor pieces sleep on rank 1
+    quiet_opening = chess.Board("r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3")
+    coords_bc4, _, _, _, _ = compute_candidate_move_fuzzy_coordinates(
+        quiet_opening,
+        quiet_opening.parse_san("Bc4"),
+    )
+    coords_ng5, _, _, _, _ = compute_candidate_move_fuzzy_coordinates(
+        quiet_opening,
+        quiet_opening.parse_san("Ng5"),
+    )
+    assert coords_bc4["cultural/justice/honor"] > coords_ng5["cultural/justice/honor"] + 0.12
+    assert coords_bc4["cultural/freedom/self-sufficiency"] > coords_ng5["cultural/freedom/self-sufficiency"] + 0.12
+    assert coords_ng5["cultural/freedom/needlessness"] > coords_bc4["cultural/freedom/needlessness"] + 0.15
+    assert coords_bc4["experiential/synchronization/resonance"] > coords_ng5["experiential/synchronization/resonance"]
+
 
 
 

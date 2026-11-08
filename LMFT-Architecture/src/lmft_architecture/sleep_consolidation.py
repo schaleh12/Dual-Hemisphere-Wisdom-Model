@@ -169,7 +169,13 @@ def _cluster_key_for_unresolved(scene: UnresolvedSleepScene) -> str | None:
             if v >= 0.45
             and (
                 not explicit_hazard_scene
-                or k not in ("cultural/efficiency/wastelessness", "cultural/freedom/self-sufficiency")
+                or k
+                not in (
+                    "cultural/efficiency/wastelessness",
+                    "cultural/freedom/self-sufficiency",
+                    "cultural/justice/honor",
+                    "cultural/justice/fairness",
+                )
             )
         ),
         key=lambda kv: (-kv[1], kv[0]),

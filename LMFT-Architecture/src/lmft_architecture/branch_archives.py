@@ -718,9 +718,18 @@ class ThreeBranchArchives:
         min_similarity: float = 0.68,
     ) -> dict[str, Any]:
         """Recall the highest-resonance clauses across Legislative, Judicial, and Executive archives for `coordinates`."""
-        leg_best, leg_sim = _best_matching_clause(self.legislative.feeling_clauses, coordinates)
-        jud_best, jud_sim = _best_matching_clause(self.judicial.structural_clauses, coordinates)
-        exec_best, exec_sim = _best_matching_clause(self.executive.action_clauses, coordinates)
+        leg_best, leg_sim = _best_matching_clause(
+            self.legislative.feeling_clauses,
+            _branch_subset(coordinates, "experiential/"),
+        )
+        jud_best, jud_sim = _best_matching_clause(
+            self.judicial.structural_clauses,
+            _branch_subset(coordinates, "philosophical/"),
+        )
+        exec_best, exec_sim = _best_matching_clause(
+            self.executive.action_clauses,
+            _branch_subset(coordinates, "cultural/"),
+        )
 
         def _fmt(entry: BranchClauseEntry | None, sim: float) -> dict[str, Any] | None:
             if entry is None or sim < min_similarity:
