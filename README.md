@@ -39,6 +39,7 @@ Standard language models are **single-hemisphere text predictors**: they generat
 2. **The Corpus Callosum (`SubliminalGapProjector` + `<|subliminal_gap|>` Comma Splice)**:
    - Instead of stuffing fake English stage directions into the system prompt (*"Act cautious and wise"*), the Left Brain starts writing a sentence naturally and pauses at the first comma (`<|subliminal_gap|>`).
    - At that comma, the Right Brain scores how the sentence started (`Theory`) against the actual situation (`Fact`) and splices **52 departmental floats** (`K = 4` virtual token embeddings: `[Do-er, Thinker, Feeler, Cadence]`) directly into the model's hidden layers before it finishes the sentence.
+   - **Semantic Birth Anchoring (`anchor_to_llm_embeddings`, `D067`)**: Even at Birth (`Cycle 0`, before any flashcard training), the compact `256`-dim `SubliminalGapProjector` (`10.13 MB`) initializes its 4 department heads directly from the LLM's native input token embeddings (`model.get_input_embeddings()`) for all 52 channel descriptions (`SUBLIMINAL_CHANNEL_DESCRIPTIONS`) rather than random static.
    - **Persistent `past_kv` Multi-Stanza Streaming & Ghost-Chord Masking (`D062–D063`)**: Prompt prefill runs once per turn (`_PersistentTurnStreamState`), `past_kv` persists across `<|subliminal_gap|>` chords and `\n\n` stanza breaks (`1..4` stanzas), and prior virtual gap tokens are attention-masked (`_mask_prior_virtual_gaps`) so each stanza is steered strictly by its fresh residual chord (`compute_stanza_residual_chord`).
 3. **REM Sleep Consolidation & Weight-Space Circuit Sculpting (`D061–D066`)**:
    - When the Right Brain hits a conflict or tactical surprise it cannot settle cleanly during waking turns (`settled = False`), it never fakes an answer. It queues the scene for **REM Sleep**, where it consolidates new `hazard_` (repulsive) and `coached_` (attractive) `FuzzyConceptRule` items, mints discriminative Tier-2 `LearnedLeaf` nodes, writes multi-stanza dream vows into the 3-Branch Archives, and directly sculpts its named circuit weights with **Homeostatic Anchor Decay**.
@@ -158,11 +159,11 @@ Without changing any founding node name, the 6 `Philosophical` leaves map to 6 c
 
 ### 5.4 Measured Benchmark Milestones
 1. **Four Disjoint Departmental Vectors (`17 + 16 + 16 + 3 = 52` floats, [`subliminal_gap_splice.py`](LMFT-Architecture/src/lmft_architecture/subliminal_gap_splice.py))**:
-   - Projects `doer_vector` (`17`), `thinker_vector` (`16`), `feeler_vector` (`16`), and `cadence_vector` (`3`) into `K = 4` virtual token embeddings via `SubliminalGapProjector`.
-2. **`Qwen/Qwen3-8B` (4-Bit NF4) & `Qwen/Qwen3-4B` (`bfloat16`) Contrastive Callosum + LoRA Training**:
+   - Projects `doer_vector` (`17`), `thinker_vector` (`16`), `feeler_vector` (`16`), and `cadence_vector` (`3`) into `K = 4` virtual token embeddings via the semantically birth-anchored `256`-dim `SubliminalGapProjector` (`10.13 MB`).
+2. **`Qwen/Qwen3-8B` (4-Bit NF4) & `Qwen/Qwen3-4B` (`bfloat16`) Contrastive Callosum + LoRA Training (`D061`, `D067`)**:
    - **`Qwen/Qwen3-8B` 4-Bit NF4 (`models/left_brain_qwen3_8b/`, `D061`)**: Verified **`5/6`** positive chord-swap shift on unseen holdout pairs (`mean_net_chord_swap_margin = +0.88`, `0.000000` unplugged shift).
-   - **`Qwen/Qwen3-4B` (`models/left_brain_lora_cycle2/`)**: Verified **`5/6`** positive chord-swap shift on unseen holdouts, with Cycle 2 margin improving from **`+0.7775` to `+0.8646`**, Daytime Parable settlement rising from **`5/8` to `7/8`**, and Unseen Harbor Bakehouse rising from **`3/4` to `4/4`**.
-3. **Live `Celestriad 1.0` Self-Training vs. `ObjectiveCalibratedSparringEngine` (`D065–D066`)**:
+   - **`Qwen/Qwen3-4B` (`models/left_brain_lora_cycle2/`, `72` 3-Bridge-Scored Contrastive Pairs, `D067`)**: Verified **`5/6` (`83.3%`) raw uncalibrated holdout flips** (`6/6` zero-chord and no-gap calibrated flips, `6/6` positive chord-swap shifts, `mean_net_chord_swap_margin = +4.7017`, `mean_generated_sensor_l2 = 1.3166`, and `6/6` distinct greedy English continuations under `Chord A` vs. `Chord B`), with Daytime Parable settlement rising from **`5/8` to `7/8`** and Unseen Harbor Bakehouse rising from **`3/4` to `4/4`**.
+3. **Live `Celestriad 1.0` Self-Training vs. `ObjectiveCalibratedSparringEngine` (`D065–D067`)**:
    - Over 30 completed games (`19W–9L–2D`), `Celestriad 1.0` climbed from `1000.0` to **`1264.0` Internal Sparring Calibration Rating** (`ObjectiveCalibratedSparringEngine` synthetic handicap ladder) under a strict anti-cheat air-gap while sculpting 6 Founding-Leaf REM cluster rules and 4 discriminative Tier-2 `LearnedLeaf` nodes.
 
 ---
@@ -178,7 +179,7 @@ Language Model Fuzzy Tree Research/      # Top-level Git repository & Desktop pr
 ├── Launch-LMFT-Bloodmoon.bat            # Standalone App #2: Clockwise Content-Evolution Studio (Impish_Bloodmoon_12B)
 ├── AGENTS.md                            # Anti-delusion, plain-English, and zero-rigging development rules
 ├── PROJECT_STATE.md                     # Concise (<40 lines) current status & benchmark summary
-├── DECISIONS.md                         # Rolling engineering decision log (5 most recent decisions, D062–D066)
+├── DECISIONS.md                         # Rolling engineering decision log (5 most recent decisions, D063–D067)
 ├── LMFT-Architecture/                   # [PURE CORE ARCHITECTURE ONLY — READ-ONLY AT RUNTIME]
 │   ├── baselines/
 │   │   └── virgin_dual_hemisphere_v1/   # [CYCLE 0] SHA-256 locked "Virgin" Core Architecture snapshot

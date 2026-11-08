@@ -52,6 +52,20 @@ When we look at the general, domain-independent **`LMFT-Architecture` core** (`s
 - **Current bottleneck**: When an existing cluster rule is re-encountered in REM Sleep, `entrain_existing_cluster_rule` blindly blends `0.7 * existing + 0.3 * incoming` and takes the union of all `target_leaves`. Over 30+ games:
   1. `high` thresholds ratchet up to `0.9295+` (`[0.72, 0.9295]`), making rules too narrow to fire until a blunder is extreme.
   2. `blended_leaves` accumulates 4–5 target leaves over time, choking `min_similarity` on whichever leaf happens to be slightly lower.
-- **Proposed fix**:
+- **Implemented fix (`D066`)**:
   1. In `entrain_existing_cluster_rule`, apply gentle homeostatic threshold decay pulling `low` and `high` (`3%` per step) toward balanced defaults (`[0.62, 0.82]` for Tier-1, `[0.55, 0.78]` for Tier-2) before blending, and cap `low <= 0.75`, `high <= 0.90` so rules never go deaf at the top rail.
   2. Cap `blended_leaves` to the **top 3 most discriminative target leaves** (highest extremity from neutral `0.50` / strongest alignment with incoming contrastive leaves) and preserve `polarity=incoming.polarity if incoming.polarity != "attractive" else existing.polarity`.
+
+---
+
+## 3. Red-Team Audit & Base Architecture Hardening (`D067`)
+
+Following our Red-Team empirical audit of the raw outputs and checkpoints on disk, three additional weight-space fixes were implemented in `D067`:
+1. **Semantic Birth Anchoring (`SubliminalGapProjector.anchor_to_llm_embeddings`)**:
+   - Previously, `SubliminalGapProjector` initialized its 4 department heads with random Kaiming noise at `Cycle 0`, requiring training flashcards to discover what each of the 52 channels meant from scratch.
+   - Now, at Birth (`Cycle 0`), `anchor_to_llm_embeddings(model, tokenizer)` pools and unit-normalizes `model.get_input_embeddings()` for all 52 channel descriptions (`SUBLIMINAL_CHANNEL_DESCRIPTIONS`), mean-centers across channels so the zero-neutral chord remains balanced, and initializes the compact `256`-dim department heads (`10.13 MB`) along those native vocabulary directions before capturing `_resting_anchor_params`.
+2. **Symmetric `BitboardIntuitionSleeve` Updates (`distill_post_mortem_scene`)**:
+   - Removed the one-way `max(0.0, ...)` ceiling ratchet and `_renormalize_budgets()` scaling in `chess_kibitz_bridge.py`, replacing them with a clean symmetric update `lr * (r_val - p_val)` paired with `0.015 * lr` homeostatic decay toward birth defaults (`steps_distilled = 0`).
+3. **Unified 3-Bridge Contrastive Polarity (`72` Train + `6` Holdout Pairs)**:
+   - Scored all `72` training pairs and `6` unseen holdout pairs through the unified 3-bridge `score_continuation_to_chord` pipeline (`social_drift_b=True` on exclusionary/boundary `Chord B` pairs).
+   - **Measured Holdout Result (`Qwen/Qwen3-4B`)**: Uncalibrated raw holdout flips jumped from **`0/6` to `5/6` (`83.3%`)** (`6/6` zero-chord and no-gap calibrated flips, `6/6` positive chord-swap shifts, `mean_net_chord_swap_margin = +4.7017`, and `6/6` distinct greedy English continuations).
