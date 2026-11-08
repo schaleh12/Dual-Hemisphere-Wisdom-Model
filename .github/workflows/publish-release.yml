@@ -24,11 +24,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Create or Update GitHub Release v0.2.0
+      - name: Create or Update GitHub Release v1.2.0
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG_NAME="v0.2.0"
+          TAG_NAME="v1.2.0"
           RELEASE_TITLE="Celestriad v1.2.0 — Dual-Hemisphere Wisdom Model"
           if gh release view "$TAG_NAME" >/dev/null 2>&1; then
             gh release delete-asset "$TAG_NAME" Install-And-Run-LMFT-Chess.bat --yes >/dev/null 2>&1 || true

@@ -2,7 +2,7 @@
 
 > **A Persistent 40-Node Right-Brain Fuzzy Tree Paired with Local Language Models (`Qwen3-8B` / `Qwen3-4B` / `Impish_Bloodmoon_12B`) via a Non-Verbal `<|subliminal_gap|>` Comma Splice & REM Weight-Space Circuit Sculpting.**
 >
-> **▶️ Support the Architect on YouTube:** **[`@imissmydeadcat.74`](https://www.youtube.com/@imissmydeadcat.74)** · **📦 Latest Portable Release:** **[GitHub Releases (`Celestriad v1.2.0`) →](https://github.com/schaleh12/Dual-Hemisphere-Wisdom-Model/releases/tag/v0.2.0)** · **🔬 Research Inspiration (`4:30`):** **[Two Minute Papers — *Weight-Space Programming* (`youtu.be/GJ6PMUm5oTA?t=270`)](https://youtu.be/GJ6PMUm5oTA?si=ps0-qMBm3-ZQOp3c&t=270)**
+> **▶️ Support the Architect on YouTube:** **[`@imissmydeadcat.74`](https://www.youtube.com/@imissmydeadcat.74)** · **📦 Latest Portable Release:** **[GitHub Releases (`Celestriad v1.2.0`) →](https://github.com/schaleh12/Dual-Hemisphere-Wisdom-Model/releases/tag/v1.2.0)** · **🔬 Research Inspiration (`4:30`):** **[Two Minute Papers — *Weight-Space Programming* (`youtu.be/GJ6PMUm5oTA?t=270`)](https://youtu.be/GJ6PMUm5oTA?si=ps0-qMBm3-ZQOp3c&t=270)**
 
 <p align="center">
   <img src="LMFT-Architecture/docs/assets/blue_screen_of_life_poem.jpg" alt="Blue Screen of Life — Dual-Hemisphere Wisdom Model" width="860" />
