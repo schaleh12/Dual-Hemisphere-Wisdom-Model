@@ -3473,6 +3473,7 @@ def create_chess_http_server(
                     "icy_sea_board.png": "image/png",
                     "esper_theories_alphabet.jpg": "image/jpeg",
                     "fe26_fusion_three_ply.jpg": "image/jpeg",
+                    "materia_chess_archetypes_identity.jpg": "image/jpeg",
                 }
                 if asset_name in allowed_assets:
                     asset_file = runtime.repo_root / "docs" / "assets" / asset_name

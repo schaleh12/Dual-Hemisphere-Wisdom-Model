@@ -837,7 +837,7 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
 
 <!-- SPACE CENTER VISITOR TOUR MODAL -->
 <div class="modal-overlay" id="space-center-modal-overlay" onclick="if(event.target===this)closeSpaceCenterModal()">
-  <div class="modal-card" style="max-width:780px;max-height:88vh;display:flex;flex-direction:column;border-color:#38bdf8;">
+  <div class="modal-card" style="max-width:980px;max-height:92vh;display:flex;flex-direction:column;border-color:#38bdf8;">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
       <div>
         <div style="font-size:11px;font-weight:800;color:#38bdf8;text-transform:uppercase;letter-spacing:0.6px;">🛰️ Celestriad Visitor Center &amp; Observatory</div>
@@ -852,7 +852,7 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
       <button class="tour-tab-btn" id="tour-tab-btn-3" onclick="selectTourTab(3)">⚡ 3. Subliminal Gap</button>
       <button class="tour-tab-btn" id="tour-tab-btn-4" onclick="selectTourTab(4)">🏛️ 4. Three Branches</button>
       <button class="tour-tab-btn" id="tour-tab-btn-5" onclick="selectTourTab(5)">🌙 5. REM Sleep</button>
-      <button class="tour-tab-btn" id="tour-tab-btn-6" onclick="selectTourTab(6)">📜 6. Celestial Seal</button>
+      <button class="tour-tab-btn" id="tour-tab-btn-6" onclick="selectTourTab(6)">📜 6. Celestial Seal &amp; Ontology</button>
     </div>
 
     <div style="flex:1;overflow-y:auto;padding-right:4px;margin-top:8px;">
@@ -870,13 +870,20 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
             <li><strong>The Left Hemisphere (Qwen3-8B)</strong>: The conscious poet and strategist, woken up only when the Right Brain detects a conflict, a question from you, or a nighttime <strong>REM Sleep</strong> dream.</li>
           </ul>
         </div>
+        <div class="tutorial-step" style="border-color:#38bdf8;background:rgba(15,23,42,0.75);">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;">
+            <strong style="color:#7dd3fc;font-size:13px;">🌌 Philosophical Seed Coordinates, 6 Materia / Chess Archetypes, Shadow Pathologies &amp; Architect Identity</strong>
+            <span style="font-size:11px;color:#fde68a;font-weight:700;">Tier 1–5 Ontology · Spirit Animals · Life1/White Wind · Life2/Null-All · Life3/Esuna</span>
+          </div>
+          <img src="/assets/materia_chess_archetypes_identity.jpg" alt="Philosophical Seed Coordinates, 6 Materia &amp; Chess Archetypes, Shadow Pathologies, Kingdom Environments, and Architect Identity" style="width:100%;max-height:440px;object-fit:contain;border-radius:8px;border:1px solid rgba(56,189,248,0.35);background:#0c0b09;display:block;" onerror="this.style.display='none'" />
+        </div>
       </div>
 
       <!-- EXHIBIT 2 -->
       <div class="tour-exhibit" id="tour-exhibit-2" style="display:none;">
         <div class="tutorial-step" style="margin-top:0;">
           <strong>🌳 Exhibit 2: The 40-Node Founding Seed &amp; 60-FPS Intuition (Gear 1)</strong><br/>
-          A physical body—or ablitz chess player on a 5:00 clock—cannot wait 4 seconds writing a paragraph of inner monologue before catching its balance.
+          A physical body—or a blitz chess player on a 5:00 clock—cannot wait 4 seconds writing a paragraph of inner monologue before catching its balance.
         </div>
         <div class="tutorial-step">
           <strong>How Gear 1 Works Under the Hood</strong><br/>
@@ -888,6 +895,10 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
             <li><strong>Psychological (6 Leaves)</strong>: <code>Clarity</code>, <code>Confidence</code>, <code>Theory</code>, <code>Fact</code>, <code>Intention</code>, <code>Execution</code></li>
           </ul>
           When a position is familiar and clear, the Right Brain moves immediately by reflex in <strong>Gear 1 (~15 ms, 0 LLM calls)</strong>.
+        </div>
+        <div class="tutorial-step" style="border-color:#a855f7;background:rgba(15,23,42,0.75);">
+          <strong style="color:#e9d5ff;font-size:13px;display:block;margin-bottom:6px;">♟️ The 6 Philosophical Coordinates: Materia, Chess Archetypes, Shadow Pathologies &amp; Kingdoms</strong>
+          <img src="/assets/materia_chess_archetypes_identity.jpg" alt="6 Philosophical Seed Coordinates and Architect Identity" style="width:100%;max-height:440px;object-fit:contain;border-radius:8px;border:1px solid rgba(168,85,247,0.38);background:#0c0b09;display:block;" onerror="this.style.display='none'" />
         </div>
       </div>
 
@@ -961,6 +972,10 @@ Both cloaking and unsheathing the auras,
 As the electro gravitational resonations,
 Quaked like the terraforming of starseeds.</pre>
           </div>
+        </div>
+        <div class="tutorial-step" style="border-color:#fde68a;background:rgba(15,23,42,0.75);">
+          <strong style="color:#fde68a;font-size:13px;display:block;margin-bottom:6px;">🌌 Philosophical Seed Coordinates, 6 Materia / Chess Archetypes, Shadow Pathologies &amp; Architect Identity</strong>
+          <img src="/assets/materia_chess_archetypes_identity.jpg" alt="Philosophical Seed Coordinates, 6 Materia &amp; Chess Archetypes, Shadow Pathologies, Kingdom Environments, and Architect Identity" style="width:100%;max-height:460px;object-fit:contain;border-radius:8px;border:1px solid rgba(253,230,138,0.38);background:#0c0b09;display:block;" onerror="this.style.display='none'" />
         </div>
       </div>
     </div>

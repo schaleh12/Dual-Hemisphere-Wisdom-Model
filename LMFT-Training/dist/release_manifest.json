@@ -2,8 +2,8 @@
   "schema_version": 1,
   "version": "0.2.0",
   "github_repo": "schaleh12/Dual-Hemisphere-Wisdom-Model",
-  "build_sha256": "b8d98b8bec37210bcfb4cb0d7173361ba59f509bd1036c4de02b6da9055fcae0",
-  "build_short_hash": "b8d98b8bec37",
+  "build_sha256": "6611f22a228c8a2e1dbc84856c787c5571ad0e6a6f4bddc55859300863040921",
+  "build_short_hash": "6611f22a228c",
   "files": {
     "src/lmft_architecture/__init__.py": {
       "sha256": "a89f56c2195e87129adbffa5065d8769ea096e13ba98783d217c4d120ee92623",
@@ -90,16 +90,16 @@
       "size_bytes": 3267
     },
     "src/lmft_architecture/chess_app.py": {
-      "sha256": "4a70a98e7ed49387dda0167cf56657848e2c973b10b1c1a3d06d97cf2c2036fe",
-      "size_bytes": 173921
+      "sha256": "0acf8d4c3c93373a00d2c980cb139d04e24bafb3a59d427e436a9e2752fd65a6",
+      "size_bytes": 173996
     },
     "src/lmft_architecture/chess_kibitz_bridge.py": {
       "sha256": "cff4d7010f1802ac6d4cde94ac330a74e7124fd9fbddbea3b3e474c6684ed5d4",
       "size_bytes": 114955
     },
     "src/lmft_architecture/chess_ui.py": {
-      "sha256": "564981c3289cfd7412a7301a6dade8c7686830a1371351659e83348298655fad",
-      "size_bytes": 111851
+      "sha256": "6d1dcd0cc9e6c2b228c41ea31ac07fb015aa121053d9dfffa0aa9842b389e505",
+      "size_bytes": 114195
     },
     "src/lmft_architecture/chord_memory.py": {
       "sha256": "6714d9c6cd9e0f7ae199e92a44f7371f168f65fb32319260d4b24d0ed1c54a66",
@@ -154,8 +154,8 @@
       "size_bytes": 23245
     },
     "src/lmft_architecture/github_auto_sync.py": {
-      "sha256": "caef809d26f1b68e359f4d977bbd79ea5e2faf876c245ae017db10d2b793d163",
-      "size_bytes": 10736
+      "sha256": "0fb053ce8fc624a5b130a61b076dc68959e05896b31fde386a07f39d84b23210",
+      "size_bytes": 10797
     },
     "src/lmft_architecture/impish_bloodmoon_adapter.py": {
       "sha256": "4b311691626d4c0e2bc59877bcfde460ae8c382c02532ab31b09450bda943b86",
@@ -380,6 +380,10 @@
     "outputs/branch_archives/philosophical_lexicon.json": {
       "sha256": "c9fc9d0c73649a18d7b72ec1f2f348d346f5e45b41923c7fe26766886a295719",
       "size_bytes": 42045
+    },
+    "docs/assets/materia_chess_archetypes_identity.jpg": {
+      "sha256": "273493ebc9dc12279d76904ffc7c7dbb30623c4dcb1c6dcd1e8eb51df62f5f6b",
+      "size_bytes": 105830
     }
   }
 }
