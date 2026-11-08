@@ -586,12 +586,12 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
     <button class="btn btn-tutorial" id="space-center-tour-btn" onclick="openSpaceCenterModal()" style="background:rgba(168,85,247,0.2);border-color:#9333ea;color:#e9d5ff;">🚀 Space Center Tour</button>
     <button class="btn btn-tutorial" id="new-user-tutorial-btn" onclick="openTutorialModal()">? Quick Start</button>
     <button class="btn" id="auto-update-sync-btn" onclick="syncAndAutoUpdate()" title="Sync latest code &amp; wisdom rules from GitHub and auto-relaunch if updated">🔄 Auto-Update</button>
+    <span class="pill" id="rules-count-pill">Rules: 24</span>
     <select id="lineage-select" onchange="switchLineage(this.value)">
       <option value="schooled" selected>Schooled (Cycle 2 · Chess Wisdom)</option>
       <option value="virgin">Virgin Baseline (Cycle 0 · Read-Only)</option>
     </select>
     <span class="pill" id="model-status-pill">Qwen3-8B</span>
-    <span class="pill" id="rules-count-pill">Rules: 24</span>
     <span class="pill" id="sleep-queue-pill">Sleep Queue: 0</span>
   </div>
 </header>
