@@ -587,12 +587,12 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
     <button class="btn btn-tutorial" id="new-user-tutorial-btn" onclick="openTutorialModal()">? Quick Start</button>
     <button class="btn" id="auto-update-sync-btn" onclick="syncAndAutoUpdate()" title="Sync latest code &amp; wisdom rules from GitHub and auto-relaunch if updated">🔄 Auto-Update</button>
     <span class="pill" id="rules-count-pill">Rules: 24</span>
+    <span class="pill" id="model-status-pill">Qwen3-8B</span>
+    <span class="pill" id="sleep-queue-pill">Sleep Queue: 0</span>
     <select id="lineage-select" onchange="switchLineage(this.value)">
       <option value="schooled" selected>Schooled (Cycle 2 · Chess Wisdom)</option>
       <option value="virgin">Virgin Baseline (Cycle 0 · Read-Only)</option>
     </select>
-    <span class="pill" id="model-status-pill">Qwen3-8B</span>
-    <span class="pill" id="sleep-queue-pill">Sleep Queue: 0</span>
   </div>
 </header>
 
