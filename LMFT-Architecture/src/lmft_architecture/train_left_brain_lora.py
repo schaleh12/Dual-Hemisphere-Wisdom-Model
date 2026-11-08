@@ -91,6 +91,11 @@ class LoRALinear(nn.Module):
         # Keep trainable LoRA weights in float32 for clean gradient accumulation even when base is bfloat16
         self.lora_a = nn.Linear(self.in_features, self.rank, bias=False, device=device, dtype=torch.float32)
         self.lora_b = nn.Linear(self.rank, self.out_features, bias=False, device=device, dtype=torch.float32)
+        self.register_buffer(
+            "rank_scale",
+            torch.ones(self.rank, device=device, dtype=torch.float32),
+            persistent=False,
+        )
 
         nn.init.kaiming_uniform_(self.lora_a.weight, a=math.sqrt(5))
         nn.init.zeros_(self.lora_b.weight)
@@ -98,7 +103,9 @@ class LoRALinear(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         base_out = self.base_linear(x)
         x_fp32 = self.dropout(x.to(dtype=torch.float32))
-        lora_delta = self.lora_b(self.lora_a(x_fp32)) * self.scaling
+        scale_vec = self.rank_scale.to(device=x_fp32.device, dtype=torch.float32)
+        h_rank = self.lora_a(x_fp32) * scale_vec
+        lora_delta = self.lora_b(h_rank) * self.scaling
         return base_out + lora_delta.to(dtype=base_out.dtype)
 
 
@@ -1020,6 +1027,151 @@ def train_left_brain_lora_and_callosum(
     return epoch_history
 
 
+def _build_contrastive_probe_chords(
+    pairs: Sequence[ContrastiveGapPair],
+    *,
+    device: torch.device,
+) -> tuple[Tensor, Tensor]:
+    """Build a `[N, 52]` contrastive batch `(chords_a, chords_b)` combining harvested pairs and canonical orthogonal probes."""
+    rows_a: list[Tensor] = []
+    rows_b: list[Tensor] = []
+    for p in list(pairs[-8:]):
+        rows_a.append(p.chord_a.to_tensor(device=device, dtype=torch.float32))
+        rows_b.append(p.chord_b.to_tensor(device=device, dtype=torch.float32))
+
+    # Add 4 canonical orthogonal Right-Brain probes (Do-er, Thinker, Feeler, Cadence)
+    canonical_pairs = (
+        (
+            [0.85 if i in (1, 3, 4) else (0.10 if i == 5 else 0.50) for i in range(52)],
+            [0.20 if i in (1, 3, 4) else (0.85 if i == 5 else 0.50) for i in range(52)],
+        ),
+        (
+            [0.88 if i in (17, 18, 19, 21) else (0.15 if i == 20 else 0.50) for i in range(52)],
+            [0.25 if i in (17, 18, 19, 21) else (0.88 if i == 20 else 0.50) for i in range(52)],
+        ),
+        (
+            [0.85 if i in (34, 35, 37, 39, 40) else 0.45 for i in range(52)],
+            [0.20 if i in (34, 35, 37, 39, 40) else 0.65 for i in range(52)],
+        ),
+        (
+            [0.90 if i == 49 else (0.10 if i in (50, 51) else 0.55) for i in range(52)],
+            [0.20 if i == 49 else (0.88 if i in (50, 51) else 0.45) for i in range(52)],
+        ),
+    )
+    for flat_a, flat_b in canonical_pairs:
+        rows_a.append(torch.tensor(flat_a, device=device, dtype=torch.float32))
+        rows_b.append(torch.tensor(flat_b, device=device, dtype=torch.float32))
+    return torch.stack(rows_a, dim=0), torch.stack(rows_b, dim=0)
+
+
+def sculpt_lora_rank_channels(
+    model: nn.Module,
+    projector: SubliminalGapProjector,
+    pairs: Sequence[ContrastiveGapPair] = (),
+    *,
+    top_k_vo: int = 6,
+    qk_gain: float = 0.85,
+    vo_gain: float = 0.65,
+    homeostatic_decay: float = 0.02,
+    state_dir: str | Path | None = None,
+) -> dict[str, Any]:
+    """MIT Contrastive Rank Prober: keep `q_proj / k_proj` attention routing active while pruning static/memorized rank channels in `v_proj / o_proj`."""
+    proj_params = list(projector.parameters())
+    device = proj_params[0].device if proj_params else torch.device("cpu")
+    with torch.no_grad():
+        chords_a, chords_b = _build_contrastive_probe_chords(pairs, device=device)
+        proj_dtype = proj_params[0].dtype if proj_params else torch.float32
+        va = projector(chords_a.to(dtype=proj_dtype)).to(dtype=torch.float32)  # [N, 4, H]
+        vb = projector(chords_b.to(dtype=proj_dtype)).to(dtype=torch.float32)  # [N, 4, H]
+        delta_v = (va - vb).reshape(-1, va.shape[-1])  # [M, H]
+        mean_v = (0.5 * (va + vb)).reshape(-1, va.shape[-1])  # [M, H]
+        hidden_dim = int(delta_v.shape[-1])
+
+        qk_modules = 0
+        vo_modules = 0
+        pruned_channels_total = 0
+        active_channels_total = 0
+        saved_scales: dict[str, Tensor] = {}
+        decay = max(0.0, min(0.25, float(homeostatic_decay)))
+
+        for mod_name, mod in model.named_modules():
+            if not isinstance(mod, LoRALinear):
+                continue
+            short_name = mod_name.split(".")[-1]
+            r_dim = int(mod.rank)
+            a_w = mod.lora_a.weight.detach().to(dtype=torch.float32)  # [rank, in_features]
+            b_w = mod.lora_b.weight.detach().to(dtype=torch.float32)  # [out_features, rank]
+            in_dim = int(a_w.shape[1])
+
+            d_in = delta_v.to(device=a_w.device)
+            m_in = mean_v.to(device=a_w.device)
+            if in_dim < hidden_dim:
+                d_in = d_in[:, :in_dim]
+                m_in = m_in[:, :in_dim]
+            elif in_dim > hidden_dim:
+                repeats = (in_dim + hidden_dim - 1) // hidden_dim
+                d_in = d_in.repeat(1, repeats)[:, :in_dim]
+                m_in = m_in.repeat(1, repeats)[:, :in_dim]
+
+            delta_proj = torch.matmul(d_in, a_w.t())  # [M, rank]
+            mean_proj = torch.matmul(m_in, a_w.t())  # [M, rank]
+            chord_mod = torch.norm(delta_proj, dim=0)  # [rank]
+            a_norm = torch.norm(a_w, dim=1) + 1e-6
+            b_norm = torch.norm(b_w, dim=0) + 1e-6
+            static_bias = torch.norm(mean_proj, dim=0) + 0.25 * b_norm * a_norm
+            selectivity = chord_mod / (static_bias + 1e-6)  # [rank]
+
+            if short_name in ("q_proj", "k_proj"):
+                qk_modules += 1
+                sel_max = float(torch.max(selectivity).item())
+                sel_min = float(torch.min(selectivity).item())
+                if sel_max > sel_min + 1e-6:
+                    norm_sel = (selectivity - sel_min) / (sel_max - sel_min)
+                else:
+                    norm_sel = torch.ones_like(selectivity)
+                target_scale = float(qk_gain) * (0.60 + 0.40 * norm_sel)
+                active_channels_total += r_dim
+            else:
+                vo_modules += 1
+                k_keep = min(r_dim, max(1, int(top_k_vo)))
+                _, top_idx = torch.topk(selectivity, k=k_keep, largest=True)
+                target_scale = torch.zeros_like(selectivity)
+                top_vals = selectivity[top_idx]
+                t_max = float(torch.max(top_vals).item())
+                t_min = float(torch.min(top_vals).item())
+                if t_max > t_min + 1e-6:
+                    norm_top = (top_vals - t_min) / (t_max - t_min)
+                else:
+                    norm_top = torch.ones_like(top_vals)
+                target_scale[top_idx] = float(vo_gain) * (0.45 + 0.55 * norm_top)
+                active_channels_total += k_keep
+                pruned_channels_total += max(0, r_dim - k_keep)
+
+            baseline_ones = torch.ones_like(target_scale)
+            sculpted = (1.0 - decay) * target_scale + decay * baseline_ones
+            if short_name not in ("q_proj", "k_proj") and r_dim > int(top_k_vo):
+                # Keep pruned memorization wires strictly zeroed
+                zero_mask = target_scale <= 1e-6
+                sculpted[zero_mask] = 0.0
+            mod.rank_scale.copy_(sculpted.to(device=mod.rank_scale.device, dtype=mod.rank_scale.dtype))
+            saved_scales[mod_name] = mod.rank_scale.detach().cpu().clone()
+
+    if state_dir is not None and saved_scales:
+        out_dir = Path(state_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        torch.save(saved_scales, out_dir / "live_lora_rank_scales.pt")
+
+    return {
+        "qk_modules": qk_modules,
+        "vo_modules": vo_modules,
+        "qk_modules_sculpted": qk_modules,
+        "vo_modules_sculpted": vo_modules,
+        "active_channels": active_channels_total,
+        "pruned_channels": pruned_channels_total,
+        "top_k_vo": int(top_k_vo),
+    }
+
+
 def update_projector_on_harvested_gap_pairs(
     projector: SubliminalGapProjector,
     pairs: Sequence[ContrastiveGapPair],
@@ -1029,13 +1181,16 @@ def update_projector_on_harvested_gap_pairs(
     tokenizer=None,
     lr_projector: float = 2e-4,
     lambda_anchor: float = 0.05,
+    homeostatic_decay: float = 0.02,
     max_grad_norm: float = 0.5,
     max_pairs: int = 4,
 ) -> dict[str, Any]:
     """Run a bounded, L2-anchored micro-plasticity step on `SubliminalGapProjector` during Deep REM Sleep.
 
     Guardrails:
-    - Adds `lambda_anchor * ||theta - theta_0||^2` so live REM sleep never drifts from the Cycle-2 Callosum.
+    - Anchors strictly to the true resting checkpoint `theta_0` (`projector.get_resting_anchor_params()`)
+      with a `2%` MIT homeostatic spring-back (`homeostatic_decay = 0.02`).
+    - Adds `lambda_anchor * ||theta - theta_0||^2` so live REM sleep never drifts from the resting Callosum.
     - Clips gradients at `max_grad_norm = 0.5`.
     - Saves updated weights strictly to `state_dir / "live_projector_weights.pt"` (never touching `LMFT-Training/models/`).
     """
@@ -1050,17 +1205,24 @@ def update_projector_on_harvested_gap_pairs(
             "steps": 0,
             "initial_loss": 0.0,
             "final_loss": 0.0,
+            "l2_drift_from_resting_theta0": 0.0,
             "saved_path": str(save_path),
         }
 
-    proj_params = [p for p in projector.parameters() if p.requires_grad]
-    if not proj_params:
-        for p in projector.parameters():
+    all_params = list(projector.parameters())
+    for p in all_params:
+        if not p.requires_grad:
             p.requires_grad_(True)
-        proj_params = list(projector.parameters())
+    proj_params = all_params
 
     device = proj_params[0].device
-    anchor_params = [p.detach().clone() for p in proj_params]
+    anchor_params = projector.get_resting_anchor_params()
+    decay = max(0.0, min(0.25, float(homeostatic_decay)))
+    if decay > 0.0:
+        with torch.no_grad():
+            for p, p0 in zip(proj_params, anchor_params):
+                p.lerp_(p0, decay)
+
     was_proj_training = projector.training
     projector.train()
 
@@ -1105,17 +1267,37 @@ def update_projector_on_harvested_gap_pairs(
     finally:
         projector.train(was_proj_training)
 
+    with torch.no_grad():
+        drift_sq = sum(
+            torch.sum((p.detach() - p0) ** 2) for p, p0 in zip(proj_params, anchor_params)
+        )
+        l2_drift = round(float(torch.sqrt(drift_sq).cpu().item()), 6)
+
+    lora_sculpt_meta: dict[str, Any] | None = None
+    if model is not None:
+        lora_sculpt_meta = sculpt_lora_rank_channels(
+            model,
+            projector,
+            selected,
+            homeostatic_decay=decay,
+            state_dir=out_dir,
+        )
+
     torch.save(projector.state_dict(), save_path)
-    meta_payload = {
+    meta_payload: dict[str, Any] = {
         "updated": True,
         "pairs_used": len(selected),
         "steps": len(losses),
         "lambda_anchor": float(lambda_anchor),
+        "homeostatic_decay": decay,
         "max_grad_norm": float(max_grad_norm),
         "initial_loss": round(losses[0], 6) if losses else 0.0,
         "final_loss": round(losses[-1], 6) if losses else 0.0,
+        "l2_drift_from_resting_theta0": l2_drift,
         "saved_path": str(save_path),
     }
+    if lora_sculpt_meta is not None:
+        meta_payload["lora_rank_sculpting"] = lora_sculpt_meta
     atomic_json(out_dir / "live_projector_meta.json", meta_payload)
     return meta_payload
 

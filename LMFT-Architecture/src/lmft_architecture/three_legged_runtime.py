@@ -97,6 +97,7 @@ from .train_left_brain_lora import (
     LoRAConfig,
     ensure_subliminal_gap_token,
     load_lora_and_callosum_checkpoint,
+    sculpt_lora_rank_channels,
 )
 
 DEFAULT_QWEN_4B_HF_ID = "Qwen/Qwen3-4B"
@@ -351,20 +352,42 @@ def extract_dream_vow_sentence(dream_text: str, *, fallback: str = "") -> str:
 
 
 class _AttenuatedLoRAScalingContext:
-    """Context manager that temporarily scales `LoRALinear.scaling` by `factor` (e.g. `0.0` or `0.15`) and restores it on exit."""
+    """Context manager that temporarily scales `LoRALinear.scaling` (uniformly or split across `q_proj/k_proj` vs `v_proj/o_proj`) and restores it on exit."""
 
-    def __init__(self, model: Any, factor: float = 0.0) -> None:
+    def __init__(
+        self,
+        model: Any,
+        factor: float = 0.0,
+        *,
+        qk_factor: float | None = None,
+        vo_factor: float | None = None,
+    ) -> None:
         self.model = model
         self.factor = float(factor)
+        self.qk_factor = float(qk_factor) if qk_factor is not None else None
+        self.vo_factor = float(vo_factor) if vo_factor is not None else None
         self._saved: list[tuple[Any, float]] = []
 
     def __enter__(self) -> _AttenuatedLoRAScalingContext:
-        if self.model is not None and hasattr(self.model, "modules"):
-            for mod in self.model.modules():
+        if self.model is not None:
+            if hasattr(self.model, "named_modules"):
+                iter_mods = list(self.model.named_modules())
+            elif hasattr(self.model, "modules"):
+                iter_mods = [("", m) for m in self.model.modules()]
+            else:
+                iter_mods = []
+            for mod_name, mod in iter_mods:
                 if hasattr(mod, "lora_a") and hasattr(mod, "lora_b") and hasattr(mod, "scaling"):
                     orig = float(getattr(mod, "scaling"))
                     self._saved.append((mod, orig))
-                    setattr(mod, "scaling", orig * self.factor)
+                    short_name = str(mod_name).split(".")[-1]
+                    if short_name in ("q_proj", "k_proj") and self.qk_factor is not None:
+                        mult = self.qk_factor
+                    elif short_name not in ("q_proj", "k_proj") and self.vo_factor is not None:
+                        mult = self.vo_factor
+                    else:
+                        mult = self.factor
+                    setattr(mod, "scaling", orig * mult)
         return self
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
@@ -373,9 +396,20 @@ class _AttenuatedLoRAScalingContext:
         self._saved.clear()
 
 
-def attenuate_lora_scaling(model: Any, factor: float = 0.0) -> _AttenuatedLoRAScalingContext:
-    """Return a context manager that temporarily multiplies `LoRALinear.scaling` across `model` by `factor`."""
-    return _AttenuatedLoRAScalingContext(model, factor=factor)
+def attenuate_lora_scaling(
+    model: Any,
+    factor: float = 0.0,
+    *,
+    qk_factor: float | None = None,
+    vo_factor: float | None = None,
+) -> _AttenuatedLoRAScalingContext:
+    """Return a context manager that temporarily multiplies `LoRALinear.scaling` across `model` (uniformly or split `q_proj/k_proj` vs `v_proj/o_proj`)."""
+    return _AttenuatedLoRAScalingContext(
+        model,
+        factor=factor,
+        qk_factor=qk_factor,
+        vo_factor=vo_factor,
+    )
 
 
 def _mask_prior_virtual_gaps(state: _PersistentTurnStreamState) -> None:
@@ -581,6 +615,7 @@ class SubliminalGapLeftBrain:
             model=model,
             device=resolved_device,
         )
+        sculpt_lora_rank_channels(model, projector)
         model.eval()
         projector.eval()
         return cls(
@@ -1010,6 +1045,7 @@ class SubliminalGapLeftBrain:
         num_sentences: int = 1,
         pass_index: int = 2,
         clause_1_prefix: str | None = None,
+        clause_1_override: str | None = None,
         conversation_history: Sequence[tuple[str, str]] = (),
         max_context_chars: int = DEFAULT_MAX_CONTEXT_CHARS,
         chord_builder_at_comma: Callable[
@@ -1021,13 +1057,14 @@ class SubliminalGapLeftBrain:
         lead_with_gap: bool = False,
     ) -> tuple[str, SplicedThoughtTrace]:
         """Generate up to `num_sentences` `<|subliminal_gap|>` thoughts and return `(full_thought, trace)`."""
+        effective_c1 = clause_1_override if clause_1_override is not None else clause_1_prefix
         if int(num_sentences) > 1 or stop_condition is not None:
             passage, traces = self.generate_multi_sentence_script(
                 scenario_text,
                 chord=chord,
                 num_sentences=max(1, int(num_sentences)),
                 pass_index=pass_index,
-                clause_1_prefix=clause_1_prefix,
+                clause_1_prefix=effective_c1,
                 conversation_history=conversation_history,
                 max_context_chars=max_context_chars,
                 chord_builder_at_comma=chord_builder_at_comma,
@@ -1040,7 +1077,7 @@ class SubliminalGapLeftBrain:
             scenario_text,
             chord=chord,
             pass_index=pass_index,
-            clause_1_prefix=clause_1_prefix,
+            clause_1_prefix=effective_c1,
             conversation_history=conversation_history,
             max_context_chars=max_context_chars,
             chord_builder_at_comma=chord_builder_at_comma,
@@ -1143,6 +1180,7 @@ class SubliminalGapLeftBrain:
         sentences_per_stanza: int = 3,
         pass_index: int = 2,
         clause_1_prefix: str | None = None,
+        clause_1_override: str | None = None,
         conversation_history: Sequence[tuple[str, str]] = (),
         max_context_chars: int = DEFAULT_MAX_CONTEXT_CHARS,
         chord_builder_at_comma: Callable[
@@ -1158,6 +1196,8 @@ class SubliminalGapLeftBrain:
         lead_with_gap: bool = False,
     ) -> tuple[str, tuple[str, ...], tuple[SplicedThoughtTrace, ...]]:
         """Generate `1..max_stanzas` stanzas (`sentences_per_stanza` sentences each) joined by `\\n\\n` over a single persistent `past_kv` cache."""
+        if clause_1_override is not None:
+            clause_1_prefix = clause_1_override
         stanza_limit = int(max_stanzas)
         sent_per_stanza = int(sentences_per_stanza)
         if not (1 <= stanza_limit <= 4):
@@ -1273,11 +1313,25 @@ class SubliminalGapLeftBrain:
             tuple[bool, SubliminalChordVector | None],
         ]
         | None = None,
+        clause_1_override: str | None = None,
         lead_with_gap: bool = True,
-        lora_scale_factor: float = 0.0,
+        lora_scale_factor: float | None = None,
+        qk_lora_scale: float | None = 0.35,
+        vo_lora_scale: float | None = 0.08,
     ) -> str:
-        """Generate REM sleep self-reflection with `LoRALinear.scaling` attenuated while keeping Corpus Callosum soft tokens active."""
-        with attenuate_lora_scaling(self.model, factor=lora_scale_factor):
+        """Generate REM sleep self-reflection with split-projection LoRA scaling (`qk_lora_scale` vs `vo_lora_scale`) and optional 1st-person `clause_1_override`."""
+        clean_c1 = str(clause_1_override).strip() if clause_1_override else None
+        effective_lead_with_gap = False if clean_c1 else bool(lead_with_gap)
+        if lora_scale_factor is not None:
+            ctx = attenuate_lora_scaling(self.model, factor=float(lora_scale_factor))
+        else:
+            ctx = attenuate_lora_scaling(
+                self.model,
+                factor=0.0,
+                qk_factor=qk_lora_scale,
+                vo_factor=vo_lora_scale,
+            )
+        with ctx:
             if int(max_stanzas) > 1 and hasattr(self, "generate_multi_stanza_discourse"):
                 dream_text, _, _ = self.generate_multi_stanza_discourse(
                     sleep_prompt,
@@ -1287,7 +1341,8 @@ class SubliminalGapLeftBrain:
                     conversation_history=conversation_history,
                     chord_builder_at_comma=chord_builder_at_comma,
                     stanza_boundary_callback=stanza_boundary_callback,
-                    lead_with_gap=bool(lead_with_gap),
+                    clause_1_override=clean_c1,
+                    lead_with_gap=effective_lead_with_gap,
                 )
                 return dream_text
             dream_text, _ = self.generate_with_subliminal_splice(
@@ -1296,7 +1351,8 @@ class SubliminalGapLeftBrain:
                 num_sentences=int(num_sentences),
                 conversation_history=conversation_history,
                 chord_builder_at_comma=chord_builder_at_comma,
-                lead_with_gap=bool(lead_with_gap),
+                clause_1_override=clean_c1,
+                lead_with_gap=effective_lead_with_gap,
             )
             return dream_text
 
@@ -1320,10 +1376,13 @@ def generate_rem_dream_self_reflection(
         tuple[bool, SubliminalChordVector | None],
     ]
     | None = None,
+    clause_1_override: str | None = None,
     lead_with_gap: bool = True,
-    lora_scale_factor: float = 0.0,
+    lora_scale_factor: float | None = None,
+    qk_lora_scale: float | None = 0.35,
+    vo_lora_scale: float | None = 0.08,
 ) -> str:
-    """Generate REM sleep self-reflection on `left_brain` with `LoRALinear.scaling` attenuated."""
+    """Generate REM sleep self-reflection on `left_brain` with split-projection LoRA scaling and optional 1st-person `clause_1_override`."""
     if hasattr(left_brain, "generate_rem_dream_self_reflection"):
         return left_brain.generate_rem_dream_self_reflection(
             sleep_prompt,
@@ -1334,10 +1393,25 @@ def generate_rem_dream_self_reflection(
             conversation_history=conversation_history,
             chord_builder_at_comma=chord_builder_at_comma,
             stanza_boundary_callback=stanza_boundary_callback,
+            clause_1_override=clause_1_override,
             lead_with_gap=lead_with_gap,
             lora_scale_factor=lora_scale_factor,
+            qk_lora_scale=qk_lora_scale,
+            vo_lora_scale=vo_lora_scale,
         )
-    with attenuate_lora_scaling(getattr(left_brain, "model", None), factor=lora_scale_factor):
+    clean_c1 = str(clause_1_override).strip() if clause_1_override else None
+    effective_lead_with_gap = False if clean_c1 else bool(lead_with_gap)
+    model_obj = getattr(left_brain, "model", None)
+    if lora_scale_factor is not None:
+        ctx = attenuate_lora_scaling(model_obj, factor=float(lora_scale_factor))
+    else:
+        ctx = attenuate_lora_scaling(
+            model_obj,
+            factor=0.0,
+            qk_factor=qk_lora_scale,
+            vo_factor=vo_lora_scale,
+        )
+    with ctx:
         if int(max_stanzas) > 1 and hasattr(left_brain, "generate_multi_stanza_discourse"):
             dream_text, _, _ = left_brain.generate_multi_stanza_discourse(
                 sleep_prompt,
@@ -1347,7 +1421,8 @@ def generate_rem_dream_self_reflection(
                 conversation_history=conversation_history,
                 chord_builder_at_comma=chord_builder_at_comma,
                 stanza_boundary_callback=stanza_boundary_callback,
-                lead_with_gap=bool(lead_with_gap),
+                clause_1_override=clean_c1,
+                lead_with_gap=effective_lead_with_gap,
             )
             return dream_text
         dream_text, _ = left_brain.generate_with_subliminal_splice(
@@ -1356,7 +1431,8 @@ def generate_rem_dream_self_reflection(
             num_sentences=int(num_sentences),
             conversation_history=conversation_history,
             chord_builder_at_comma=chord_builder_at_comma,
-            lead_with_gap=bool(lead_with_gap),
+            clause_1_override=clean_c1,
+            lead_with_gap=effective_lead_with_gap,
         )
         return dream_text
 

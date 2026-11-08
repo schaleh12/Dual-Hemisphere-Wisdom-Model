@@ -1625,6 +1625,54 @@ def test_chess_runtime_will_edges_persistence_and_virgin_lock(tmp_path: Path) ->
         assert "Legal replies include" not in pair.continuation_b
         assert not pair.continuation_b.startswith("Rg4")
 
+    # Verify `_generate_rem_sleep_self_talk` branches cleanly between 1st-person Blunder (`is_hazard=True`)
+    # and 1st-person Brilliancy/Checkmate (`is_hazard=False`, e.g., `Found Qe8#`)
+    captured_dream_calls: list[tuple[str, str | None]] = []
+    orig_gen_splice = runtime._qwen_left_brain.generate_with_subliminal_splice
+
+    def _spy_gen_splice(scenario_prompt: str, chord, **kwargs):
+        c1 = kwargs.get("clause_1_override")
+        captured_dream_calls.append((scenario_prompt, c1))
+        return orig_gen_splice(scenario_prompt, chord, **kwargs)
+
+    runtime._qwen_left_brain.generate_with_subliminal_splice = _spy_gen_splice  # type: ignore[method-assign]
+    blunder_scene = UnresolvedSleepScene(
+        scene_index=10,
+        scenario_text="Move 3. White played Bxf7+.",
+        external_coordinates=rev["played_coordinates"],
+        felt_chord_notes={},
+        valence=0.25,
+        salience=0.85,
+        arousal=0.72,
+        left_brain_hunch="Test blunder",
+        is_hazard=True,
+        contrastive_reference_coordinates=rev["contrastive_reference_coordinates"],
+        game_review_annotation="?? Blunder: played Bxf7+ instead of O-O.",
+    )
+    brilliancy_scene = UnresolvedSleepScene(
+        scene_index=11,
+        scenario_text="Move 39. White played Qe8#.",
+        external_coordinates=rev["contrastive_reference_coordinates"],
+        felt_chord_notes={},
+        valence=0.88,
+        salience=0.92,
+        arousal=0.68,
+        left_brain_hunch="Test checkmate",
+        is_hazard=False,
+        contrastive_reference_coordinates=rev["contrastive_reference_coordinates"],
+        game_review_annotation="!! Brilliancy: Found 39. Qe8# checkmate.",
+    )
+    runtime._generate_rem_sleep_self_talk((blunder_scene,), (), num_sentences=2, max_stanzas=1)
+    runtime._generate_rem_sleep_self_talk((brilliancy_scene,), (), num_sentences=2, max_stanzas=1)
+    assert len(captured_dream_calls) == 2
+    blunder_prompt, blunder_c1 = captured_dream_calls[0]
+    brilliancy_prompt, brilliancy_c1 = captured_dream_calls[1]
+    assert blunder_c1 == "Looking back at my move Bxf7+ on the board,"
+    assert "overlooked the stronger continuation" in blunder_prompt
+    assert brilliancy_c1 == "Savoring how my move Qe8# harmonized the board,"
+    assert "delivered the winning continuation" in brilliancy_prompt
+
+
 
 
 

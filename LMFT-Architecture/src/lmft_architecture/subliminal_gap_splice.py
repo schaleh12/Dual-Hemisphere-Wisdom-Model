@@ -737,6 +737,21 @@ class SubliminalGapProjector(nn.Module):
             ]
         )
         self.output_norm = nn.LayerNorm(hidden_size)
+        self._resting_anchor_params: tuple[Tensor, ...] | None = None
+
+    def capture_resting_anchor(self) -> None:
+        """Snapshot the current parameters as the immutable resting baseline `theta_0` for homeostatic sleep plasticity."""
+        self._resting_anchor_params = tuple(p.detach().clone() for p in self.parameters())
+
+    def get_resting_anchor_params(self) -> list[Tensor]:
+        """Return the resting baseline `theta_0` parameter tensors (capturing them once if not yet set)."""
+        if self._resting_anchor_params is None or len(self._resting_anchor_params) != len(list(self.parameters())):
+            self.capture_resting_anchor()
+        assert self._resting_anchor_params is not None
+        return [
+            p0.to(device=p.device, dtype=p.dtype)
+            for p, p0 in zip(self.parameters(), self._resting_anchor_params)
+        ]
 
     def forward(self, chord_vectors: Tensor) -> Tensor:
         """Map `[..., 52]` disjoint departmental tensor -> `[..., 4, hidden_size]` virtual token embeddings."""
@@ -998,5 +1013,6 @@ def load_corpus_callosum_checkpoint(
     state_dict = torch.load(weights_path, map_location=device, weights_only=True)
     projector.load_state_dict(state_dict)
     projector.to(device)
+    projector.capture_resting_anchor()
     return projector, meta
 

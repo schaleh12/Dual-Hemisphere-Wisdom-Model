@@ -335,3 +335,93 @@ def test_saved_stage3_gpu_report_and_checkpoint_artifacts_exist() -> None:
     assert post["no_gap_calibrated_both_flipped_count"] == 4
     assert len(post["pair_results"]) == 6
 
+
+
+def test_mit_lora_rank_channel_sculpting_and_true_theta0_callosum_homeostasis(tmp_path: Path) -> None:
+    """Verify MIT rank-channel sculpting in `LoRALinear` and true `theta_0` homeostatic anchoring in `update_projector_on_harvested_gap_pairs`."""
+    from lmft_architecture.train_left_brain_lora import (
+        sculpt_lora_rank_channels,
+        update_projector_on_harvested_gap_pairs,
+    )
+
+    torch.manual_seed(42)
+    model = _MiniCausalLM(vocab_size=32, hidden_size=32, num_layers=2)
+    lora_cfg = LoRAConfig(rank=8, lora_alpha=16.0, lora_dropout=0.0, num_top_layers=2)
+    inject_lora_adapters(model, lora_cfg)
+    with torch.no_grad():
+        for m in model.modules():
+            if isinstance(m, LoRALinear):
+                torch.nn.init.normal_(m.lora_b.weight, std=0.05)
+
+    projector = SubliminalGapProjector(hidden_size=32)
+    projector.capture_resting_anchor()
+    resting_snapshot = projector.get_resting_anchor_params()
+    assert len(resting_snapshot) > 0
+
+    pair = _sample_pair("mit_sculpt_pair")
+
+    # 1. Verify `LoRALinear.rank_scale` gates rank channels in `LoRALinear.forward`
+    sample_x = torch.randn(1, 4, 32)
+    v_mod = model.layers[-1].v_proj
+    assert isinstance(v_mod, LoRALinear)
+    out_full = v_mod(sample_x)
+    with torch.no_grad():
+        v_mod.rank_scale.zero_()
+    out_zeroed = v_mod(sample_x)
+    base_only = v_mod.base_linear(sample_x)
+    assert torch.allclose(out_zeroed, base_only, atol=1e-6)
+    assert not torch.allclose(out_full, out_zeroed, atol=1e-5)
+    with torch.no_grad():
+        v_mod.rank_scale.fill_(1.0)
+
+    # 2. Verify `sculpt_lora_rank_channels` keeps all q_proj/k_proj wires active and prunes v_proj/o_proj to top_k_vo
+    sculpt_meta = sculpt_lora_rank_channels(
+        model,
+        projector,
+        (pair,),
+        top_k_vo=3,
+        qk_gain=0.85,
+        vo_gain=0.65,
+        state_dir=tmp_path,
+    )
+    assert sculpt_meta["qk_modules_sculpted"] == 4
+    assert sculpt_meta["vo_modules_sculpted"] == 4
+    assert (tmp_path / "live_lora_rank_scales.pt").exists()
+
+    q_mod = model.layers[-1].q_proj
+    assert isinstance(q_mod, LoRALinear)
+    assert int((q_mod.rank_scale > 0.0).sum().item()) == 8
+    assert int((v_mod.rank_scale > 0.0).sum().item()) == 3
+    assert int((v_mod.rank_scale == 0.0).sum().item()) == 5
+
+    # 3. Verify `update_projector_on_harvested_gap_pairs` anchors to true resting `theta_0` across consecutive cycles
+    meta_c1 = update_projector_on_harvested_gap_pairs(
+        projector,
+        (pair,),
+        lr_projector=1e-3,
+        state_dir=tmp_path,
+        model=model,
+    )
+    assert meta_c1["updated"] is True
+    assert "l2_drift_from_resting_theta0" in meta_c1
+    assert meta_c1["l2_drift_from_resting_theta0"] > 0.0
+    assert "lora_rank_sculpting" in meta_c1
+
+    # Even if we perturb projector weights far from theta_0, homeostatic spring-back + theta_0 anchor pull it back toward theta_0
+    with torch.no_grad():
+        for p in projector.parameters():
+            p.add_(0.50)
+        dist_before = sum(
+            float((p.detach().cpu() - p0.detach().cpu()).pow(2).sum().item())
+            for p, p0 in zip(projector.parameters(), resting_snapshot)
+        ) ** 0.5
+
+    meta_c2 = update_projector_on_harvested_gap_pairs(
+        projector,
+        (pair,),
+        lr_projector=1e-3,
+        lambda_anchor=0.50,
+        homeostatic_decay=0.10,
+        state_dir=tmp_path,
+    )
+    assert meta_c2["l2_drift_from_resting_theta0"] < dist_before

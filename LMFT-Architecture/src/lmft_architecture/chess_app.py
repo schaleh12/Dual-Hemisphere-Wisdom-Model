@@ -34,6 +34,7 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import threading
@@ -3055,6 +3056,37 @@ class ChessKibitzerRuntime:
 
             target_sents = max(1, min(6, int(num_sentences)))
             stanza_limit = max(1, min(3, int(max_stanzas)))
+            raw_annot = (rep.game_review_annotation or "").strip()
+            is_hazard_rep = (
+                bool(rep.is_hazard)
+                or (rep.scene_index in self._hazard_scene_indices)
+                or ("instead of best move" in raw_annot.lower())
+            )
+            if "found " in raw_annot.lower() and "instead of best move" not in raw_annot.lower():
+                is_hazard_rep = False
+
+            played_move = ""
+            m_mv = re.search(
+                r"\b(?:played|found)\s+(?:\d+\.\.\.\s*|\d+\.\s*)?([A-Za-z0-9+#=\-]+)",
+                raw_annot or rep.scenario_text,
+                flags=re.IGNORECASE,
+            )
+            if m_mv:
+                played_move = m_mv.group(1).rstrip(".,;:")
+
+            if is_hazard_rep:
+                sleep_clause_1 = (
+                    f"Looking back at my move {played_move} on the board,"
+                    if played_move
+                    else "Looking back at that critical turn on the board,"
+                )
+            else:
+                sleep_clause_1 = (
+                    f"Savoring how my move {played_move} harmonized the board,"
+                    if played_move
+                    else "Savoring how our pieces coordinated at that decisive turn,"
+                )
+
             if target_sents >= 4 or stanza_limit >= 2:
                 extra_moments = [
                     _clean_rem_moment_text(s, max_len=110)
@@ -3065,16 +3097,29 @@ class ChessKibitzerRuntime:
                     if extra_moments
                     else ""
                 )
-                sleep_prompt = (
-                    f"{moment_desc}.{extra_clause}{vow_context_clause} "
-                    f"Reflect deeply on why the played move diverged from the best continuation, "
-                    f"how the board's structural balance shifted, and the lasting vow to carry into future games."
-                )
+                if is_hazard_rep:
+                    sleep_prompt = (
+                        f"{moment_desc}.{extra_clause}{vow_context_clause} "
+                        f"In first-person inner reflection, examine why my move overlooked the stronger continuation, "
+                        f"how the board's structural balance shifted, and the vow I will carry into our next game."
+                    )
+                else:
+                    sleep_prompt = (
+                        f"{moment_desc}.{extra_clause}{vow_context_clause} "
+                        f"In first-person inner reflection, savor how my move delivered the winning continuation and what piece coordination made it decisive, "
+                        f"plus the vow I will carry forward to preserve this clarity."
+                    )
             else:
-                sleep_prompt = (
-                    f"{moment_desc}.{vow_context_clause} "
-                    f"What is the key positional lesson to carry forward from this moment?"
-                )
+                if is_hazard_rep:
+                    sleep_prompt = (
+                        f"{moment_desc}.{vow_context_clause} "
+                        f"In first-person inner reflection, examine why my move overlooked the stronger continuation and what positional lesson I will carry forward from this mistake."
+                    )
+                else:
+                    sleep_prompt = (
+                        f"{moment_desc}.{vow_context_clause} "
+                        f"In first-person inner reflection, savor how my move delivered the winning continuation and what positional harmony made it so effective."
+                    )
             valid_ext_keys = set(FOUNDATIONAL_LEAVES) | {lf.leaf_id for lf in self.learned_leaves}
 
             def _coords_for_scene(sc: UnresolvedSleepScene) -> tuple[dict[str, float], dict[str, float] | None, dict[str, float]]:
@@ -3212,8 +3257,9 @@ class ChessKibitzerRuntime:
                 conversation_history=tuple(conv_hist),
                 chord_builder_at_comma=_build_sleep_comma_chord,
                 stanza_boundary_callback=_stanza_cb,
-                lead_with_gap=True,
-                lora_scale_factor=0.0,
+                clause_1_override=sleep_clause_1,
+                qk_lora_scale=0.35,
+                vo_lora_scale=0.08,
             )
             return dream_text.strip() or None
         except Exception:
@@ -3358,6 +3404,7 @@ class ChessKibitzerRuntime:
                             self._qwen_left_brain.projector,
                             self._last_harvested_gap_pairs,
                             state_dir=self.state_dir,
+                            model=getattr(self._qwen_left_brain, "model", None),
                         )
                     chronicle_entry = {
                         "cycle_index": int(self.sleep_cycle_index) + len(self.rem_dream_chronicles) + 1,

@@ -175,6 +175,7 @@ from .three_legged_runtime import (
     ThreeLeggedTurnResult,
     _compile_mid_sentence_comma_vibe,
     compute_stanza_residual_chord,
+    generate_rem_dream_self_reflection,
     run_three_legged_turn,
 )
 from .virgin_baseline import VIRGIN_FOUNDATIONAL_RULES, load_virgin_baseline_state
@@ -2349,11 +2350,21 @@ class BloodmoonClockRuntime:
 
             target_sents = max(1, min(6, int(num_sentences)))
             stanza_limit = max(1, min(3, int(max_stanzas)))
-            sleep_prompt = (
-                f"{clean_scenario[:220]}.{vow_context_clause} "
-                f"Reflect in quiet, lucid prose on how the hypnotic rhythm pulled at attention, "
-                f"where inner stillness held firm, and the vow of self-possession to carry into the next cycle."
-            )
+            is_hazard_rep = bool(getattr(rep, "is_hazard", False)) or vow_outcome == "BROKEN"
+            if is_hazard_rep:
+                sleep_clause_1 = "Looking back at how my attention drifted during the cadence,"
+                sleep_prompt = (
+                    f"{clean_scenario[:220]}.{vow_context_clause} "
+                    f"Reflect in 1st-person lucid prose on where my attention was pulled by the hypnotic rhythm, "
+                    f"how I can steady my inner stillness next time, and the vow I carry into the next cycle."
+                )
+            else:
+                sleep_clause_1 = "Savoring how my inner stillness held steady during the cadence,"
+                sleep_prompt = (
+                    f"{clean_scenario[:220]}.{vow_context_clause} "
+                    f"Reflect in 1st-person lucid prose on how my inner stillness harmonized against the hypnotic rhythm, "
+                    f"and the vow of self-possession I carry into the next cycle."
+                )
             valid_ext_keys = set(FOUNDATIONAL_LEAVES) | {lf.leaf_id for lf in self.learned_leaves}
 
             def _coords_for_scene(sc: UnresolvedSleepScene) -> tuple[dict[str, float], dict[str, float]]:
@@ -2434,59 +2445,55 @@ class BloodmoonClockRuntime:
                     c_vibe.self_registry.dissonance_notes,
                 )
 
-            if stanza_limit > 1 and hasattr(self._impish_left_brain, "generate_multi_stanza_discourse"):
-                def _sleep_stanza_boundary(
-                    stanza_idx: int,
-                    stanza_text: str,
-                    cumulative_text: str,
-                ) -> tuple[bool, SubliminalChordVector | None]:
-                    if stanza_idx + 1 >= stanza_limit:
-                        return True, None
-                    next_sc = sorted_scenes[min(stanza_idx + 1, len(sorted_scenes) - 1)]
-                    nx_base, nx_exp = _coords_for_scene(next_sc)
-                    st_coords, st_exp, _, _ = self.sensors.score_text(
-                        stanza_text.strip() or cumulative_text.strip(),
-                        learned_leaves=self.learned_leaves,
-                    )
-                    st_vibe, _ = compile_right_brain_vibe(
-                        self.birth_state,
-                        nx_base,
-                        nx_exp,
-                        self.rules,
-                        pass_index=2,
-                        event_id=f"bloodmoon_rem_stanza_{stanza_idx + 1}",
-                        prior_memory=self.memory,
-                        learned_leaves=self.learned_leaves,
-                        internal_theory_coords=st_coords,
-                        internal_theory_experiential=st_exp,
-                    )
-                    next_chord = compute_stanza_residual_chord(
-                        self.birth_state,
-                        nx_base,
-                        st_coords,
-                        st_vibe,
-                        stanza_index=stanza_idx + 1,
-                        learned_leaves=self.learned_leaves,
-                    )
-                    return False, next_chord
+            def _sleep_stanza_boundary(
+                stanza_idx: int,
+                stanza_text: str,
+                cumulative_text: str,
+            ) -> tuple[bool, SubliminalChordVector | None]:
+                if stanza_idx + 1 >= stanza_limit:
+                    return True, None
+                next_sc = sorted_scenes[min(stanza_idx + 1, len(sorted_scenes) - 1)]
+                nx_base, nx_exp = _coords_for_scene(next_sc)
+                st_coords, st_exp, _, _ = self.sensors.score_text(
+                    stanza_text.strip() or cumulative_text.strip(),
+                    learned_leaves=self.learned_leaves,
+                )
+                st_vibe, _ = compile_right_brain_vibe(
+                    self.birth_state,
+                    nx_base,
+                    nx_exp,
+                    self.rules,
+                    pass_index=2,
+                    event_id=f"bloodmoon_rem_stanza_{stanza_idx + 1}",
+                    prior_memory=self.memory,
+                    learned_leaves=self.learned_leaves,
+                    internal_theory_coords=st_coords,
+                    internal_theory_experiential=st_exp,
+                )
+                next_chord = compute_stanza_residual_chord(
+                    self.birth_state,
+                    nx_base,
+                    st_coords,
+                    st_vibe,
+                    stanza_index=stanza_idx + 1,
+                    learned_leaves=self.learned_leaves,
+                )
+                return False, next_chord
 
-                dream_text, _, _ = self._impish_left_brain.generate_multi_stanza_discourse(
-                    sleep_prompt,
-                    sleep_chord,
-                    max_stanzas=stanza_limit,
-                    sentences_per_stanza=3,
-                    conversation_history=tuple(conv_hist),
-                    chord_builder_at_comma=_build_sleep_comma_chord,
-                    stanza_boundary_callback=_sleep_stanza_boundary,
-                )
-            else:
-                dream_text, _ = self._impish_left_brain.generate_with_subliminal_splice(
-                    sleep_prompt,
-                    sleep_chord,
-                    num_sentences=target_sents,
-                    conversation_history=tuple(conv_hist),
-                    chord_builder_at_comma=_build_sleep_comma_chord,
-                )
+            dream_text = generate_rem_dream_self_reflection(
+                self._impish_left_brain,
+                sleep_prompt,
+                sleep_chord,
+                max_stanzas=stanza_limit,
+                sentences_per_stanza=3,
+                num_sentences=target_sents,
+                conversation_history=tuple(conv_hist),
+                chord_builder_at_comma=_build_sleep_comma_chord,
+                stanza_boundary_callback=_sleep_stanza_boundary if stanza_limit > 1 else None,
+                clause_1_override=sleep_clause_1,
+                qk_lora_scale=0.35,
+                vo_lora_scale=0.08,
+            )
             return dream_text.strip() or None
         except Exception:
             return None
@@ -2635,6 +2642,7 @@ class BloodmoonClockRuntime:
                             self._impish_left_brain.projector,
                             self._last_harvested_gap_pairs,
                             state_dir=self.state_dir,
+                            model=getattr(self._impish_left_brain, "model", None),
                         )
                     chronicle_entry = {
                         "cycle_index": int(self.sleep_cycle_index) + len(self.rem_dream_chronicles) + 1,

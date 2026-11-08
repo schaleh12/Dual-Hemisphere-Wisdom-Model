@@ -1157,6 +1157,40 @@ def test_repetition_and_ngram_penalty_and_stanza_start_duplicate_check() -> None
         assert model.lora_test.scaling == pytest.approx(orig_scaling * 0.15)
     assert model.lora_test.scaling == pytest.approx(orig_scaling)
 
+    # 5. Verify split-projection `qk_factor` / `vo_factor` attenuation and `clause_1_override` in `generate_rem_dream_self_reflection`
+    q_lora = model.layers[-1].q_proj = LoRALinear(torch.nn.Linear(32, 32), rank=4, lora_alpha=8.0)
+    v_lora = model.layers[-1].v_proj = LoRALinear(torch.nn.Linear(32, 32), rank=4, lora_alpha=8.0)
+    with attenuate_lora_scaling(model, qk_factor=0.35, vo_factor=0.08):
+        assert q_lora.scaling == pytest.approx(2.0 * 0.35)
+        assert v_lora.scaling == pytest.approx(2.0 * 0.08)
+    assert q_lora.scaling == pytest.approx(2.0)
+    assert v_lora.scaling == pytest.approx(2.0)
+
+    observed_c1_overrides: list[str | None] = []
+    observed_qk_vo: list[tuple[float, float]] = []
+
+    def _spy_single_stanza(*args, **kwargs):
+        observed_c1_overrides.append(kwargs.get("clause_1_override"))
+        observed_qk_vo.append((float(q_lora.scaling), float(v_lora.scaling)))
+        return "Looking back at my move Nf3 on the board, the center held steady.", fixed_trace
+
+    left_brain.generate_with_subliminal_splice = _spy_single_stanza  # type: ignore[method-assign]
+    dream_single = generate_rem_dream_self_reflection(
+        left_brain,
+        "Reflect in 1st-person prose.",
+        chord_a,
+        max_stanzas=1,
+        num_sentences=2,
+        clause_1_override="Looking back at my move Nf3 on the board,",
+        qk_lora_scale=0.35,
+        vo_lora_scale=0.08,
+    )
+    assert dream_single.startswith("Looking back at my move Nf3 on the board,")
+    assert observed_c1_overrides == ["Looking back at my move Nf3 on the board,"]
+    assert observed_qk_vo[0][0] == pytest.approx(2.0 * 0.35)
+    assert observed_qk_vo[0][1] == pytest.approx(2.0 * 0.08)
+
+
 
 
 
