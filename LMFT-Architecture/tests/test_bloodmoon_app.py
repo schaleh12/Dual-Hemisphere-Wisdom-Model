@@ -649,24 +649,16 @@ def test_bloodmoon_d066_weight_space_sculpting_parity(tmp_path: Path) -> None:
     #    (c) `will_edges.json` is sculpted and persisted for Phase 2 while Phase 1 stays on `RIGHT_BRAIN_WILL_EDGES`.
     from lmft_architecture.sleep_consolidation import UnresolvedSleepScene
 
+    c2_coords = {
+        k: min(0.95, round(float(v) + 0.04, 4))
+        for k, v in queued_c1.external_coordinates.items()
+    }
+    c2_coords["cultural/freedom/needlessness"] = 0.36
     runtime.sleep_queue.append(
         UnresolvedSleepScene(
             scene_index=99,
             scenario_text="Follow the deep silver pendulum cadence without hesitation.",
-            external_coordinates={
-                "cultural/efficiency/power": 0.88,
-                "cultural/efficiency/wastelessness": 0.62,
-                "cultural/justice/honor": 0.58,
-                "cultural/justice/fairness": 0.64,
-                "cultural/freedom/self-sufficiency": 0.34,
-                "cultural/freedom/needlessness": 0.32,
-                "philosophical/being/agency": 0.62,
-                "philosophical/being/existence": 0.72,
-                "philosophical/structure/order": 0.68,
-                "philosophical/structure/chaos": 0.24,
-                "philosophical/persistence/continuity": 0.86,
-                "philosophical/persistence/discreteness": 0.56,
-            },
+            external_coordinates=c2_coords,
             felt_chord_notes={},
             valence=0.70,
             salience=0.82,
@@ -674,7 +666,7 @@ def test_bloodmoon_d066_weight_space_sculpting_parity(tmp_path: Path) -> None:
             left_brain_hunch="Listening to the cadence, I notice the pull.",
             social_drift_detected=False,
             active_concept_collision=canon_name,
-            is_hazard=True,
+            is_hazard=queued_c1.is_hazard,
         )
     )
     snap_c2 = runtime.handle_run_rem_sleep()

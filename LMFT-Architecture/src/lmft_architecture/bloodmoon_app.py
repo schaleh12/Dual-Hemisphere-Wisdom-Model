@@ -268,6 +268,14 @@ def _default_lucid_reference_coordinates(
     ref: dict[str, float] = {
         str(k): round(float(v), 4) for k, v in (base_coords or {}).items()
     }
+    ref["cultural/efficiency/power"] = round(
+        min(0.48, float(ref.get("cultural/efficiency/power", 0.48))),
+        4,
+    )
+    ref["cultural/efficiency/wastelessness"] = round(
+        max(0.70, float(ref.get("cultural/efficiency/wastelessness", 0.70))),
+        4,
+    )
     ref["cultural/freedom/self-sufficiency"] = round(
         max(0.74, float(ref.get("cultural/freedom/self-sufficiency", 0.74))),
         4,
