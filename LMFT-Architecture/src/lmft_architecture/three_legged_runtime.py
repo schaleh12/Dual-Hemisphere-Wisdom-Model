@@ -651,18 +651,13 @@ class SubliminalGapLeftBrain:
             )
 
         vocab_len = len(tokenizer) if hasattr(tokenizer, "__len__") else len(tokenizer.get_vocab())
-        if vocab_len > model.get_input_embeddings().num_embeddings:
-            try:
-                model.resize_token_embeddings(vocab_len, mean_resizing=False)
-            except TypeError:
-                model.resize_token_embeddings(vocab_len)
         if not getattr(model, "is_loaded_in_4bit", False):
+            if vocab_len > model.get_input_embeddings().num_embeddings:
+                try:
+                    model.resize_token_embeddings(vocab_len, mean_resizing=False)
+                except TypeError:
+                    model.resize_token_embeddings(vocab_len)
             model.to(resolved_device)
-        else:
-            model.get_input_embeddings().to(device=resolved_device, dtype=resolved_dtype)
-            out_emb = model.get_output_embeddings() if hasattr(model, "get_output_embeddings") else None
-            if out_emb is not None:
-                out_emb.to(device=resolved_device, dtype=resolved_dtype)
 
         projector, meta, lora_cfg = load_lora_and_callosum_checkpoint(
             ckpt_path,

@@ -383,24 +383,14 @@ def train_impish_bloodmoon_callosum_and_lora(
 
     gap_token_id = ensure_subliminal_gap_token(tokenizer)
     vocab_len = len(tokenizer) if hasattr(tokenizer, "__len__") else len(tokenizer.get_vocab())
-    if hasattr(model, "resize_token_embeddings") and vocab_len > model.get_input_embeddings().num_embeddings:
-        try:
-            model.resize_token_embeddings(vocab_len, mean_resizing=False)
-        except TypeError:
-            model.resize_token_embeddings(vocab_len)
-        if resolved_device.type == "cuda":
-            import gc
-
-            gc.collect()
-            torch.cuda.empty_cache()
-
     if not getattr(model, "is_loaded_in_4bit", False):
+        if hasattr(model, "resize_token_embeddings") and vocab_len > model.get_input_embeddings().num_embeddings:
+            try:
+                model.resize_token_embeddings(vocab_len, mean_resizing=False)
+            except TypeError:
+                model.resize_token_embeddings(vocab_len)
         model.to(resolved_device)
     else:
-        model.get_input_embeddings().to(device=resolved_device, dtype=dtype)
-        out_emb = model.get_output_embeddings() if hasattr(model, "get_output_embeddings") else None
-        if out_emb is not None:
-            out_emb.to(device=resolved_device, dtype=dtype)
         if hasattr(model, "gradient_checkpointing_enable"):
             model.gradient_checkpointing_enable()
         if hasattr(model, "config") and hasattr(model.config, "use_cache"):

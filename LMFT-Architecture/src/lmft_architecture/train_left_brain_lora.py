@@ -1032,19 +1032,116 @@ def train_left_brain_lora_and_callosum(
                 optimizer.param_groups[0]["lr"] = base_lrs[0] * scale
                 optimizer.param_groups[1]["lr"] = base_lrs[1] * scale
             optimizer.zero_grad()
-            loss, metrics = compute_contrastive_pair_loss(
-                model,
-                tokenizer,
-                projector,
-                pair,
-                gap_token_id=gap_token_id,
-                device=device,
-                mle_weight=mle_weight,
-                contrastive_weight=contrastive_weight,
-                margin_target=margin_target,
-                swap_margin_target=swap_margin_target,
-            )
-            loss.backward()
+            if getattr(model, "is_loaded_in_4bit", False):
+                with torch.no_grad():
+                    v_aa = float(
+                        compute_post_gap_continuation_nll(
+                            model,
+                            tokenizer,
+                            projector,
+                            pair,
+                            chord=pair.chord_a,
+                            continuation_text=pair.continuation_a,
+                            gap_token_id=gap_token_id,
+                            device=device,
+                        ).detach().item()
+                    )
+                    v_bb = float(
+                        compute_post_gap_continuation_nll(
+                            model,
+                            tokenizer,
+                            projector,
+                            pair,
+                            chord=pair.chord_b,
+                            continuation_text=pair.continuation_b,
+                            gap_token_id=gap_token_id,
+                            device=device,
+                        ).detach().item()
+                    )
+                    v_ab = float(
+                        compute_post_gap_continuation_nll(
+                            model,
+                            tokenizer,
+                            projector,
+                            pair,
+                            chord=pair.chord_a,
+                            continuation_text=pair.continuation_b,
+                            gap_token_id=gap_token_id,
+                            device=device,
+                        ).detach().item()
+                    )
+                    v_ba = float(
+                        compute_post_gap_continuation_nll(
+                            model,
+                            tokenizer,
+                            projector,
+                            pair,
+                            chord=pair.chord_b,
+                            continuation_text=pair.continuation_a,
+                            gap_token_id=gap_token_id,
+                            device=device,
+                        ).detach().item()
+                    )
+                mle_val = 0.5 * (v_aa + v_bb)
+                br_ma = v_ab - v_aa
+                br_mb = v_ba - v_bb
+                sw_ma = v_ba - v_aa
+                sw_mb = v_ab - v_bb
+                contrast_val = (
+                    0.35 * (max(0.0, float(swap_margin_target) - sw_ma) + max(0.0, float(swap_margin_target) - sw_mb))
+                    + 0.15 * (max(0.0, float(margin_target) - br_ma) + max(0.0, float(margin_target) - br_mb))
+                )
+                tot_val = float(mle_weight) * mle_val + float(contrastive_weight) * contrast_val
+                metrics = {
+                    "total_loss": tot_val,
+                    "mle_loss": mle_val,
+                    "contrast_loss": contrast_val,
+                    "margin_a": br_ma,
+                    "margin_b": br_mb,
+                    "swap_margin_a": sw_ma,
+                    "swap_margin_b": sw_mb,
+                }
+                act_sw_a = 1.0 if sw_ma < float(swap_margin_target) else 0.0
+                act_sw_b = 1.0 if sw_mb < float(swap_margin_target) else 0.0
+                act_br_a = 1.0 if br_ma < float(margin_target) else 0.0
+                act_br_b = 1.0 if br_mb < float(margin_target) else 0.0
+                w_aa = 0.5 * float(mle_weight) - float(contrastive_weight) * (0.35 * act_sw_a + 0.15 * act_br_a)
+                w_bb = 0.5 * float(mle_weight) - float(contrastive_weight) * (0.35 * act_sw_b + 0.15 * act_br_b)
+                w_ab = float(contrastive_weight) * (0.35 * act_sw_b + 0.15 * act_br_a)
+                w_ba = float(contrastive_weight) * (0.35 * act_sw_a + 0.15 * act_br_b)
+                for br_chord, br_text, br_w in (
+                    (pair.chord_a, pair.continuation_a, w_aa),
+                    (pair.chord_b, pair.continuation_b, w_bb),
+                    (pair.chord_a, pair.continuation_b, w_ab),
+                    (pair.chord_b, pair.continuation_a, w_ba),
+                ):
+                    if abs(br_w) > 1e-12:
+                        step_nll = compute_post_gap_continuation_nll(
+                            model,
+                            tokenizer,
+                            projector,
+                            pair,
+                            chord=br_chord,
+                            continuation_text=br_text,
+                            gap_token_id=gap_token_id,
+                            device=device,
+                        )
+                        (step_nll * float(br_w)).backward()
+                        del step_nll
+            else:
+                loss, metrics = compute_contrastive_pair_loss(
+                    model,
+                    tokenizer,
+                    projector,
+                    pair,
+                    gap_token_id=gap_token_id,
+                    device=device,
+                    mle_weight=mle_weight,
+                    contrastive_weight=contrastive_weight,
+                    margin_target=margin_target,
+                    swap_margin_target=swap_margin_target,
+                )
+                loss.backward()
             torch.nn.utils.clip_grad_norm_(proj_params + lora_params, max_norm=1.0)
             optimizer.step()
             global_step += 1
