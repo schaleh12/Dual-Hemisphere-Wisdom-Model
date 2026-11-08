@@ -451,3 +451,179 @@ def test_dual_hemisphere_open_thread_trigger_and_proposer_self_critic_closure():
     assert len(res.next_archives.legislative.feeling_clauses) == 1
     assert len(res.next_archives.judicial.structural_clauses) == 1
     assert len(res.next_archives.judicial.ratified_chords) == 1
+
+
+def test_sparse_branch_signatures_contrastive_role_separation_and_coordinate_voting():
+    """Verify MIT sparse wire pruning (`_sparse_branch_signature`), contrastive Executive/Judicial/Legislative role separation during REM sleep, and `0.70 * archived + 0.30 * text` coordinate-space committee voting."""
+    from lmft_architecture.branch_archives import (
+        _sparse_branch_signature,
+        deliberate_across_three_branches,
+    )
+    from lmft_architecture.right_brain_equilibrium import RIGHT_BRAIN_WILL_EDGES
+    from lmft_architecture.sleep_consolidation import (
+        UnresolvedSleepScene,
+        apply_dream_reflection_to_archives,
+        consolidate_sleep_clusters_locally,
+    )
+
+    # 1. `_sparse_branch_signature` keeps 6 Founding branch leaves + at most top 2 active Tier-2 leaves (> 0.35)
+    bloated_cult = {
+        **{k: 0.52 for k in WILL_CULTURAL_LEAVES},
+        "cultural/efficiency/wastelessness": 0.68,
+        "cultural/efficiency/administrative_rot": 0.35,  # default 0.35 -> pruned
+        "cultural/efficiency/coached_high_wastelessness_chaos": 0.84,  # top 1 learned leaf
+        "cultural/efficiency/coached_high_power_chaos": 0.79,  # top 2 learned leaf
+        "cultural/efficiency/coached_low_needlessness_agency": 0.62,  # 3rd learned leaf -> pruned
+        "cultural/freedom/coached_low_self_sufficiency_chaos": 0.58,  # 4th learned leaf -> pruned
+        "cultural/efficiency/hazard_low_wastelessness_chaos": 0.25,  # <= 0.35 -> pruned
+    }
+    sparse_cult = _sparse_branch_signature(bloated_cult, "cultural/", max_learned_leaves=2)
+    assert len(sparse_cult) == 8  # 6 Founding cultural leaves + 2 sharpest Tier-2 leaves
+    assert "cultural/efficiency/coached_high_wastelessness_chaos" in sparse_cult
+    assert "cultural/efficiency/coached_high_power_chaos" in sparse_cult
+    assert "cultural/efficiency/administrative_rot" not in sparse_cult
+    assert "cultural/efficiency/coached_low_needlessness_agency" not in sparse_cult
+
+    # 2. Contrastive "Problem vs. Remedy" Role Separation in `consolidate_sleep_clusters_locally`
+    hazard_scene = UnresolvedSleepScene(
+        scene_index=101,
+        scenario_text="Chess table — Move 6: White played Bxf7+.",
+        external_coordinates={
+            **{k: 0.50 for k in WILL_CULTURAL_LEAVES},
+            **{k: 0.50 for k in TRUTH_PHILOSOPHICAL_LEAVES},
+            "cultural/efficiency/wastelessness": 0.20,
+            "cultural/freedom/needlessness": 0.62,
+            "philosophical/structure/chaos": 0.74,
+            "philosophical/being/existence": 0.38,
+        },
+        felt_chord_notes={},
+        valence=0.22,
+        salience=0.84,
+        arousal=0.70,
+        left_brain_hunch="Unresolved scene tension: Chess table — Move 6. Legal replies include Kxf7, Ke7.",
+        is_hazard=True,
+        contrastive_reference_coordinates={
+            **{k: 0.50 for k in WILL_CULTURAL_LEAVES},
+            **{k: 0.50 for k in TRUTH_PHILOSOPHICAL_LEAVES},
+            "cultural/efficiency/wastelessness": 0.88,
+            "cultural/freedom/needlessness": 0.08,
+            "philosophical/structure/chaos": 0.24,
+            "philosophical/being/existence": 0.85,
+        },
+        game_review_annotation="Game Review [?? BLUNDER_??]: Played Bxf7+ instead of best move O-O.",
+    )
+    report = consolidate_sleep_clusters_locally(
+        queued_scenes=(hazard_scene,),
+        rules=_founding_rules(),
+        learned_leaves=(),
+        archives=ThreeBranchArchives(),
+        ledger=ContemplationLedger(),
+        hazard_scene_indices={101},
+    )
+    exec_cl = report.updated_archives.executive.action_clauses[-1]
+    jud_cl = report.updated_archives.judicial.structural_clauses[-1]
+    leg_cl = report.updated_archives.legislative.feeling_clauses[-1]
+
+    # Judicial stores the problem signature (high chaos = 0.74, low existence = 0.38)
+    assert jud_cl.signature_coords["philosophical/structure/chaos"] == 0.74
+    assert jud_cl.signature_coords["philosophical/being/existence"] == 0.38
+    # Executive sculpts toward the contrastive remedy (0.70 * 0.88 + 0.30 * 0.25 = 0.691 wastelessness, 0.70 * 0.08 + 0.30 * 0.62 = 0.242 needlessness)
+    assert exec_cl.signature_coords["cultural/efficiency/wastelessness"] > 0.65
+    assert exec_cl.signature_coords["cultural/freedom/needlessness"] < 0.30
+    assert "Legal replies include" not in exec_cl.text
+    assert "Unresolved scene tension:" not in exec_cl.text
+    # Legislative stores the felt chord signature
+    assert leg_cl.signature_coords[VALENCE_LEAF] == 0.22
+
+    # 3. `apply_dream_reflection_to_archives` blocks repetitive dream sentences from overwriting clean clauses
+    before_exec_text = exec_cl.text
+    after_rep_archives = apply_dream_reflection_to_archives(
+        report.updated_archives,
+        scene_index=101,
+        dream_text="Leap forward with Rc1 to leap forward with Rc1 and leap forward with Rc1.",
+    )
+    assert after_rep_archives.executive.action_clauses[-1].text == before_exec_text
+
+    # 4. Coordinate-Space Committee Voting (`0.70 * archived_clause_coords + 0.30 * text_sensor_coords`)
+    # Even if `sensors.score_text(candidate_bid_text)` returns distorted text coordinates (e.g. fairness=0.10),
+    # the stored archive clause coordinates (`fairness=0.88`) anchor `bid_coords` at `0.70 * 0.88 + 0.30 * 0.10 = 0.646`!
+    birth = _birth()
+    fair_exec = BranchClauseEntry(
+        clause_id="exec-fair-1",
+        branch=EXECUTIVE_BRANCH,
+        text="Kb2 followed by Rc1 and Qd4.",
+        signature_coords={**{k: 0.50 for k in WILL_CULTURAL_LEAVES}, "cultural/justice/fairness": 0.88},
+        source_scene=1,
+        concept_tag="high_fairness",
+    )
+    calm_jud = BranchClauseEntry(
+        clause_id="jud-calm-1",
+        branch=JUDICIAL_BRANCH,
+        text="Kb2 followed by Rc1 and Qd4.",
+        signature_coords={**{k: 0.50 for k in TRUTH_PHILOSOPHICAL_LEAVES}, "philosophical/structure/order": 0.82, "philosophical/structure/chaos": 0.18},
+        source_scene=1,
+        concept_tag="high_order",
+    )
+    warm_leg = BranchClauseEntry(
+        clause_id="leg-warm-1",
+        branch=LEGISLATIVE_BRANCH,
+        text="Kb2 followed by Rc1 and Qd4.",
+        signature_coords={SALIENCE_LEAF: 0.72, VALENCE_LEAF: 0.75, AROUSAL_LEAF: 0.45},
+        source_scene=1,
+        concept_tag="warm_relief",
+    )
+    test_arch = ThreeBranchArchives(
+        executive=ThreeBranchArchives().executive.record_scene(
+            scene_index=1,
+            coordinates=fair_exec.signature_coords,
+            action_summary=fair_exec.text,
+            harvested_clause=fair_exec,
+        ),
+        legislative=ThreeBranchArchives().legislative.record_scene(
+            scene_index=1,
+            sensory_snapshot=warm_leg.text,
+            felt_chord=compile_felt_chord(fair_exec.signature_coords, salience=0.72, valence=0.75, arousal=0.45, resonance=0.70),
+            coordinates=fair_exec.signature_coords,
+            harvested_clause=warm_leg,
+        ),
+        judicial=ThreeBranchArchives().judicial.record_clause_and_chord(harvested_clause=calm_jud),
+    )
+    distorted_text_sensors = ThreeBridgeSensors(
+        will_cultural=lambda _t, _c: {**{k: 0.20 for k in WILL_CULTURAL_LEAVES}, "cultural/justice/fairness": 0.10},
+        truth_philosophical=lambda _t, _c: {**{k: 0.20 for k in TRUTH_PHILOSOPHICAL_LEAVES}, "philosophical/structure/order": 0.20},
+        contemplation_experiential=lambda _t, _c=(): {SALIENCE_LEAF: 0.30, VALENCE_LEAF: 0.20, AROUSAL_LEAF: 0.80},
+    )
+    ext_c = {**fair_exec.signature_coords, **calm_jud.signature_coords}
+    ext_e = {SALIENCE_LEAF: 0.72, VALENCE_LEAF: 0.75, AROUSAL_LEAF: 0.45}
+    fc = compile_felt_chord(ext_c, salience=0.72, valence=0.75, arousal=0.45, resonance=0.70)
+    delib = deliberate_across_three_branches(
+        birth,
+        ext_c,
+        ext_e,
+        fc,
+        distorted_text_sensors,
+        test_arch,
+        RIGHT_BRAIN_WILL_EDGES,
+        "test-v1",
+        scene_index=2,
+    )
+    # 0.70 * 0.88 + 0.30 * 0.10 = 0.646
+    assert abs(delib.bid_coordinates["cultural/justice/fairness"] - 0.646) < 1e-3
+    # 0.70 * 0.75 + 0.30 * 0.20 = 0.585
+    assert abs(delib.bid_experiential[VALENCE_LEAF] - 0.585) < 1e-3
+
+    # 5. Verify on-disk `LMFT-Training/outputs/branch_archives/*.json` are sparse and free of overfit LoRA rants
+    repo_arch_dir = Path(__file__).resolve().parents[2] / "LMFT-Training" / "outputs" / "branch_archives"
+    if repo_arch_dir.exists():
+        disk_arch = ThreeBranchArchives.load_all(repo_arch_dir)
+        for cl in disk_arch.executive.action_clauses:
+            assert len(cl.signature_coords) <= 8
+            assert "sudden diagonal leap" not in cl.text.lower()
+            assert "leap forward with rc1" not in cl.text.lower()
+        for cl in disk_arch.judicial.structural_clauses:
+            assert len(cl.signature_coords) <= 8
+            assert "sudden diagonal leap" not in cl.text.lower()
+        for cl in disk_arch.legislative.feeling_clauses:
+            assert len(cl.signature_coords) <= 8
+            assert "curfew" not in cl.text.lower()
+

@@ -2716,6 +2716,7 @@ class ChessKibitzerRuntime:
             is_fallback_hunch = (
                 not raw_hunch
                 or raw_hunch.startswith("Unresolved scene tension:")
+                or raw_hunch.startswith("Chess table")
                 or "Legal replies include" in raw_hunch
                 or raw_hunch.lower() == clean_vow.lower()
             )

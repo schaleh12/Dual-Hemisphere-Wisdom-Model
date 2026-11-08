@@ -1,1 +1,705 @@
-{"branch": "legislative_experiential", "diary_snapshots": [{"experiential_coords": {"experiential/phase/arousal": 0.1371, "experiential/phase/austere_sanctuary": 0.0, "experiential/phase/bittersweet_release": 0.0, "experiential/phase/hollow_stillness": 0.0, "experiential/phase/valence": 0.1056, "experiential/reflection/salience": 0.0422, "experiential/synchronization/earned_return": 0.0}, "felt_chord": {"arousal": 0.1371, "complex_notes": {}, "dominant_mood": "cold, bleak unease inside quiet stillness (light passing weight)", "resonance": 0.8221, "salience": 0.0422, "valence": 0.1056}, "scene_index": 3176, "sensory_snapshot": "Chess table — Move 34 (30. Ng6 Kd8 31. b6 Qxb6 32. h3 Rxd5 33. Nf4 Rc5 34. Qd2): Black to move. Legal replies include Nc6, Rg3, Rgg5, Qa5, Ke8, Rf8."}, {"experiential_coords": {"experiential/phase/arousal": 0.1198, "experiential/phase/austere_sanctuary": 0.0, "experiential/phase/bittersweet_release": 0.0, "experiential/phase/hollow_stillness": 0.0, "experiential/phase/valence": 0.0988, "experiential/reflection/salience": 0.0436, "experiential/synchronization/earned_return": 0.0}, "felt_chord": {"arousal": 0.1198, "complex_notes": {}, "dominant_mood": "cold, bleak unease inside quiet stillness (light passing weight)", "resonance": 0.834, "salience": 0.0436, "valence": 0.0988}, "scene_index": 3178, "sensory_snapshot": "Chess table — Move 35 (31. b6 Qxb6 32. h3 Rxd5 33. Nf4 Rc5 34. Qd2 Nc4 35. Bxc4): Black to move. Legal replies include Rxc4, Rg3, Rgg5, Re8, d5, Rg6."}, {"experiential_coords": {"experiential/phase/arousal": 0.125, "experiential/phase/austere_sanctuary": 0.35, "experiential/phase/bittersweet_release": 0.35, "experiential/phase/hollow_stillness": 0.35, "experiential/phase/valence": 0.1169, "experiential/reflection/salience": 0.0471, "experiential/synchronization/earned_return": 0.35}, "felt_chord": {"arousal": 0.125, "complex_notes": {"experiential/phase/austere_sanctuary": 0.35, "experiential/phase/bittersweet_release": 0.35, "experiential/phase/hollow_stillness": 0.35, "experiential/synchronization/earned_return": 0.35}, "dominant_mood": "cold, bleak unease inside quiet stillness (light passing weight)", "resonance": 0.65, "salience": 0.0471, "valence": 0.1169}, "scene_index": 3177, "sensory_snapshot": "I leave the hunt open to reckless capture and let the enemy King leap forward into danger with disciplined, patient pursuit."}, {"experiential_coords": {"experiential/phase/arousal": 0.1283, "experiential/phase/austere_sanctuary": 0.0, "experiential/phase/bittersweet_release": 0.0, "experiential/phase/hollow_stillness": 0.0, "experiential/phase/valence": 0.1004, "experiential/reflection/salience": 0.0469, "experiential/synchronization/earned_return": 0.0}, "felt_chord": {"arousal": 0.1283, "complex_notes": {}, "dominant_mood": "cold, bleak unease inside quiet stillness (light passing weight)", "resonance": 0.7241, "salience": 0.0469, "valence": 0.1004}, "scene_index": 3180, "sensory_snapshot": "Chess table — Move 36 (32. h3 Rxd5 33. Nf4 Rc5 34. Qd2 Nc4 35. Bxc4 Rxc4 36. Nd5): Black to move. Legal replies include Qa6, Qd6, Qa7, Qb7, Qa5, Qc5."}, {"experiential_coords": {"experiential/phase/arousal": 0.1466, "experiential/phase/austere_sanctuary": 0.35, "experiential/phase/bittersweet_release": 0.35, "experiential/phase/hollow_stillness": 0.35, "experiential/phase/valence": 0.133, "experiential/reflection/salience": 0.0549, "experiential/synchronization/earned_return": 0.35}, "felt_chord": {"arousal": 0.1466, "complex_notes": {"experiential/phase/austere_sanctuary": 0.35, "experiential/phase/bittersweet_release": 0.35, "experiential/phase/hollow_stillness": 0.35, "experiential/synchronization/earned_return": 0.35}, "dominant_mood": "cold, bleak unease inside quiet stillness (light passing weight)", "resonance": 0.65, "salience": 0.0549, "valence": 0.133}, "scene_index": 3179, "sensory_snapshot": "I leave the curfew open to sudden shatter and let the enemy King leap forward into danger with disciplined, patient pursuit."}, {"experiential_coords": {"experiential/phase/arousal": 0.1204, "experiential/phase/austere_sanctuary": 0.0, "experiential/phase/bittersweet_release": 0.0, "experiential/phase/hollow_stillness": 0.0, "experiential/phase/valence": 0.1056, "experiential/reflection/salience": 0.0431, "experiential/synchronization/earned_return": 0.0}, "felt_chord": {"arousal": 0.1204, "complex_notes": {}, "dominant_mood": "cold, bleak unease inside quiet stillness (light passing weight)", "resonance": 0.793, "salience": 0.0431, "valence": 0.1056}, "scene_index": 3182, "sensory_snapshot": "Chess table — Move 37 (33. Nf4 Rc5 34. Qd2 Nc4 35. Bxc4 Rxc4 36. Nd5 Qa6 37. Rf2): Black to move. Legal replies include Nc6, Qc8, Re8, Qd6, d6, Qa5."}, {"experiential_coords": {"experiential/phase/arousal": 0.1328, "experiential/phase/austere_sanctuary": 0.35, "experiential/phase/bittersweet_release": 0.35, "experiential/phase/hollow_stillness": 0.35, "experiential/phase/valence": 0.1407, "experiential/reflection/salience": 0.0559, "experiential/synchronization/earned_return": 0.35}, "felt_chord": {"arousal": 0.1328, "complex_notes": {"experiential/phase/austere_sanctuary": 0.35, "experiential/phase/bittersweet_release": 0.35, "experiential/phase/hollow_stillness": 0.35, "experiential/synchronization/earned_return": 0.35}, "dominant_mood": "cold, bleak unease inside quiet stillness (light passing weight)", "resonance": 0.65, "salience": 0.0559, "valence": 0.1407}, "scene_index": 3181, "sensory_snapshot": "Curfew I leap outside the board to leave the King vulnerable to sudden, sudden crash and sudden, sudden crash."}, {"experiential_coords": {"experiential/phase/arousal": 0.1144, "experiential/phase/austere_sanctuary": 0.0, "experiential/phase/bittersweet_release": 0.0, "experiential/phase/hollow_stillness": 0.0, "experiential/phase/valence": 0.1048, "experiential/reflection/salience": 0.0425, "experiential/synchronization/earned_return": 0.0}, "felt_chord": {"arousal": 0.1144, "complex_notes": {}, "dominant_mood": "cold, bleak unease inside quiet stillness (light passing weight)", "resonance": 0.7857, "salience": 0.0425, "valence": 0.1048}, "scene_index": 3184, "sensory_snapshot": "Chess table — Move 38 (34. Qd2 Nc4 35. Bxc4 Rxc4 36. Nd5 Qa6 37. Rf2 Qa2 38. Qe3): Black to move. Legal replies include Nc6, Qa5, Rc2, Qa6, Na6, Qa8."}, {"experiential_coords": {"experiential/phase/arousal": 0.1287, "experiential/phase/austere_sanctuary": 0.0, "experiential/phase/bittersweet_release": 0.0, "experiential/phase/hollow_stillness": 0.0, "experiential/phase/valence": 0.1435, "experiential/reflection/salience": 0.0557, "experiential/synchronization/earned_return": 0.0}, "felt_chord": {"arousal": 0.1287, "complex_notes": {}, "dominant_mood": "cold, bleak unease inside quiet stillness (light passing weight)", "resonance": 1.0, "salience": 0.0557, "valence": 0.1435}, "scene_index": 3185, "sensory_snapshot": "Chess table — Move 39 (35. Bxc4 Rxc4 36. Nd5 Qa6 37. Rf2 Qa2 38. Qe3 Nc6): White to move. Legal replies include Kg1, Qd2, Rd2, Nb6, Rd1, Ref1."}, {"experiential_coords": {"experiential/phase/arousal": 0.1247, "experiential/phase/austere_sanctuary": 0.35, "experiential/phase/bittersweet_release": 0.35, "experiential/phase/hollow_stillness": 0.35, "experiential/phase/valence": 0.1455, "experiential/reflection/salience": 0.0521, "experiential/synchronization/earned_return": 0.35}, "felt_chord": {"arousal": 0.1247, "complex_notes": {"experiential/phase/austere_sanctuary": 0.35, "experiential/phase/bittersweet_release": 0.35, "experiential/phase/hollow_stillness": 0.35, "experiential/synchronization/earned_return": 0.35}, "dominant_mood": "cold, bleak unease inside quiet stillness (light passing weight)", "resonance": 0.65, "salience": 0.0521, "valence": 0.1455}, "scene_index": 3183, "sensory_snapshot": "Qd6 to trade the dangerous a2 pawn into a safe d6 exchange, locking the King in a permanent cage of disciplined material equality."}, {"experiential_coords": {"experiential/phase/arousal": 0.1173, "experiential/phase/austere_sanctuary": 0.0, "experiential/phase/bittersweet_release": 0.0, "experiential/phase/hollow_stillness": 0.0, "experiential/phase/valence": 0.1068, "experiential/reflection/salience": 0.044, "experiential/synchronization/earned_return": 0.0}, "felt_chord": {"arousal": 0.1173, "complex_notes": {}, "dominant_mood": "cold, bleak unease inside quiet stillness (light passing weight)", "resonance": 0.8662, "salience": 0.044, "valence": 0.1068}, "scene_index": 3186, "sensory_snapshot": "Chess table — Move 39 (35. Bxc4 Rxc4 36. Nd5 Qa6 37. Rf2 Qa2 38. Qe3 Nc6 39. Rd1): Black to move. Legal replies include Rc2, Qa4, Qa5, Qa6, Qa7, Qa8."}, {"experiential_coords": {"experiential/phase/arousal": 0.1447, "experiential/phase/austere_sanctuary": 0.0, "experiential/phase/bittersweet_release": 0.0, "experiential/phase/hollow_stillness": 0.0, "experiential/phase/valence": 0.1379, "experiential/reflection/salience": 0.0604, "experiential/synchronization/earned_return": 0.0}, "felt_chord": {"arousal": 0.1447, "complex_notes": {}, "dominant_mood": "cold, bleak unease inside quiet stillness (light passing weight)", "resonance": 1.0, "salience": 0.0604, "valence": 0.1379}, "scene_index": 3187, "sensory_snapshot": "Chess table — Move 40 (36. Nd5 Qa6 37. Rf2 Qa2 38. Qe3 Nc6 39. Rd1 Rc2): White to move. Legal replies include Bd4, Rxc2, Bf6, Qb6+, Rd3, Rf4."}, {"experiential_coords": {"experiential/phase/arousal": 0.11, "experiential/phase/austere_sanctuary": 0.0, "experiential/phase/bittersweet_release": 0.0, "experiential/phase/hollow_stillness": 0.0, "experiential/phase/valence": 0.0982, "experiential/reflection/salience": 0.0484, "experiential/synchronization/earned_return": 0.0}, "felt_chord": {"arousal": 0.11, "complex_notes": {}, "dominant_mood": "cold, bleak unease inside quiet stillness (light passing weight)", "resonance": 0.8982, "salience": 0.0484, "valence": 0.0982}, "scene_index": 3188, "sensory_snapshot": "Chess table — Move 40 (36. Nd5 Qa6 37. Rf2 Qa2 38. Qe3 Nc6 39. Rd1 Rc2 40. Qb6+): Black to move (King is in check). Legal replies include Ke8, Kc8."}, {"experiential_coords": {"experiential/phase/arousal": 0.1353, "experiential/phase/austere_sanctuary": 0.0, "experiential/phase/bittersweet_release": 0.0, "experiential/phase/hollow_stillness": 0.0, "experiential/phase/valence": 0.1075, "experiential/reflection/salience": 0.0493, "experiential/synchronization/earned_return": 0.0}, "felt_chord": {"arousal": 0.1353, "complex_notes": {}, "dominant_mood": "cold, bleak unease inside quiet stillness (light passing weight)", "resonance": 0.8709, "salience": 0.0493, "valence": 0.1075}, "scene_index": 3190, "sensory_snapshot": "Chess table — Move 41 (37. Rf2 Qa2 38. Qe3 Nc6 39. Rd1 Rc2 40. Qb6+ Ke8 41. Ra1): Black to move. Legal replies include Qxb2, Rxb2, Rxf2, Rc4, Na7, Qxa1+."}, {"experiential_coords": {"experiential/phase/arousal": 0.1524, "experiential/phase/austere_sanctuary": 0.35, "experiential/phase/bittersweet_release": 0.35, "experiential/phase/hollow_stillness": 0.35, "experiential/phase/valence": 0.1434, "experiential/reflection/salience": 0.0637, "experiential/synchronization/earned_return": 0.35}, "felt_chord": {"arousal": 0.1524, "complex_notes": {"experiential/phase/austere_sanctuary": 0.35, "experiential/phase/bittersweet_release": 0.35, "experiential/phase/hollow_stillness": 0.35, "experiential/synchronization/earned_return": 0.35}, "dominant_mood": "cold, bleak unease inside quiet stillness (light passing weight)", "resonance": 0.65, "salience": 0.0637, "valence": 0.1434}, "scene_index": 3189, "sensory_snapshot": "I will calmly advance the King's Bishop forward with Ba3+ to hunt the enemy King across the board with disciplined, patient pressure."}, {"experiential_coords": {"experiential/phase/arousal": 0.106, "experiential/phase/austere_sanctuary": 0.0, "experiential/phase/bittersweet_release": 0.0, "experiential/phase/hollow_stillness": 0.0, "experiential/phase/valence": 0.0959, "experiential/reflection/salience": 0.0464, "experiential/synchronization/earned_return": 0.0}, "felt_chord": {"arousal": 0.106, "complex_notes": {}, "dominant_mood": "cold, bleak unease inside quiet stillness (light passing weight)", "resonance": 0.911, "salience": 0.0464, "valence": 0.0959}, "scene_index": 3192, "sensory_snapshot": "Chess table — Move 42 (38. Qe3 Nc6 39. Rd1 Rc2 40. Qb6+ Ke8 41. Ra1 Qxb2 42. Nc7+): Black to move (King is in check). Legal replies include Kd8."}, {"experiential_coords": {"experiential/phase/arousal": 0.1334, "experiential/phase/austere_sanctuary": 0.0, "experiential/phase/bittersweet_release": 0.0, "experiential/phase/hollow_stillness": 0.0, "experiential/phase/valence": 0.1178, "experiential/reflection/salience": 0.0454, "experiential/synchronization/earned_return": 0.0}, "felt_chord": {"arousal": 0.1334, "complex_notes": {}, "dominant_mood": "cold, bleak unease inside quiet stillness (light passing weight)", "resonance": 1.0, "salience": 0.0454, "valence": 0.1178}, "scene_index": 3193, "sensory_snapshot": "Chess table — Move 43 (39. Rd1 Rc2 40. Qb6+ Ke8 41. Ra1 Qxb2 42. Nc7+ Kd8): White to move. Legal replies include Ra8+, Ra6, Rff1, Raf1, Ra4, Ra5."}, {"experiential_coords": {"experiential/phase/arousal": 0.1355, "experiential/phase/austere_sanctuary": 0.35, "experiential/phase/bittersweet_release": 0.35, "experiential/phase/hollow_stillness": 0.35, "experiential/phase/valence": 0.1309, "experiential/reflection/salience": 0.0521, "experiential/synchronization/earned_return": 0.35}, "felt_chord": {"arousal": 0.1355, "complex_notes": {"experiential/phase/austere_sanctuary": 0.35, "experiential/phase/bittersweet_release": 0.35, "experiential/phase/hollow_stillness": 0.35, "experiential/synchronization/earned_return": 0.35}, "dominant_mood": "cold, bleak unease inside quiet stillness (light passing weight)", "resonance": 0.65, "salience": 0.0521, "valence": 0.1309}, "scene_index": 3191, "sensory_snapshot": "Diagonal_chain_wrap_around_king to chain the long diagonal with cold, disciplined Ba1 and Bf1 pressure to wrap around the enemy King in a permanent bind."}, {"experiential_coords": {"experiential/phase/arousal": 0.0941, "experiential/phase/austere_sanctuary": 0.0, "experiential/phase/bittersweet_release": 0.0, "experiential/phase/hollow_stillness": 0.0, "experiential/phase/valence": 0.0863, "experiential/reflection/salience": 0.0384, "experiential/synchronization/earned_return": 0.0}, "felt_chord": {"arousal": 0.0941, "complex_notes": {}, "dominant_mood": "cold, bleak unease inside quiet stillness (light passing weight)", "resonance": 0.9916, "salience": 0.0384, "valence": 0.0863}, "scene_index": 3194, "sensory_snapshot": "Chess table — Move 43 (39. Rd1 Rc2 40. Qb6+ Ke8 41. Ra1 Qxb2 42. Nc7+ Kd8 43. Nd5+): Black to move (King is in check). Legal replies include Ke8, Kc8."}, {"experiential_coords": {"experiential/phase/arousal": 0.1203, "experiential/phase/austere_sanctuary": 0.0, "experiential/phase/bittersweet_release": 0.0, "experiential/phase/hollow_stillness": 0.0, "experiential/phase/valence": 0.1367, "experiential/reflection/salience": 0.0428, "experiential/synchronization/earned_return": 0.0}, "felt_chord": {"arousal": 0.1203, "complex_notes": {}, "dominant_mood": "cold, bleak unease inside quiet stillness (light passing weight)", "resonance": 1.0, "salience": 0.0428, "valence": 0.1367}, "scene_index": 3195, "sensory_snapshot": "Chess table — Move 44 (40. Qb6+ Ke8 41. Ra1 Qxb2 42. Nc7+ Kd8 43. Nd5+ Ke8): White to move. Legal replies include Ra8+, Ra6, Rff1, Raf1, Ra4, Rg1."}, {"experiential_coords": {"experiential/phase/arousal": 0.0821, "experiential/phase/austere_sanctuary": 0.0, "experiential/phase/bittersweet_release": 0.0, "experiential/phase/hollow_stillness": 0.0, "experiential/phase/valence": 0.0833, "experiential/reflection/salience": 0.0307, "experiential/synchronization/earned_return": 0.0}, "felt_chord": {"arousal": 0.0821, "complex_notes": {}, "dominant_mood": "cold, bleak unease inside quiet stillness (light passing weight)", "resonance": 0.9097, "salience": 0.0307, "valence": 0.0833}, "scene_index": 3196, "sensory_snapshot": "Chess table — Move 44 (40. Qb6+ Ke8 41. Ra1 Qxb2 42. Nc7+ Kd8 43. Nd5+ Ke8 44. Nc7+): Black to move (King is in check). Legal replies include Kd8."}, {"experiential_coords": {"experiential/phase/arousal": 0.1263, "experiential/phase/austere_sanctuary": 0.0, "experiential/phase/bittersweet_release": 0.0, "experiential/phase/hollow_stillness": 0.0, "experiential/phase/valence": 0.1298, "experiential/reflection/salience": 0.0479, "experiential/synchronization/earned_return": 0.0}, "felt_chord": {"arousal": 0.1263, "complex_notes": {}, "dominant_mood": "cold, bleak unease inside quiet stillness (light passing weight)", "resonance": 1.0, "salience": 0.0479, "valence": 0.1298}, "scene_index": 3197, "sensory_snapshot": "I will pack the long diagonal with disciplined Ba1 and Bf1 pressure to wrap around the enemy King in a permanent bind, locking the cold diagonal fortress around the enemy King to hunt the enemy King into the corner with relentless diagonal pressure."}, {"experiential_coords": {"experiential/phase/arousal": 0.0905, "experiential/phase/austere_sanctuary": 0.0, "experiential/phase/bittersweet_release": 0.0, "experiential/phase/hollow_stillness": 0.0, "experiential/phase/valence": 0.0817, "experiential/reflection/salience": 0.0355, "experiential/synchronization/earned_return": 0.0}, "felt_chord": {"arousal": 0.0905, "complex_notes": {}, "dominant_mood": "cold, bleak unease inside quiet stillness (light passing weight)", "resonance": 0.9133, "salience": 0.0355, "valence": 0.0817}, "scene_index": 3198, "sensory_snapshot": "I rip the curtain open with 5. Nxf8+ to force immediate material capture and high risk confrontation, shattering the fortress with reckless pressure to hunt the enemy King across the board with wild diagonal sacrifice."}, {"experiential_coords": {"experiential/phase/arousal": 0.1207, "experiential/phase/austere_sanctuary": 0.0, "experiential/phase/bittersweet_release": 0.0, "experiential/phase/hollow_stillness": 0.0, "experiential/phase/valence": 0.137, "experiential/reflection/salience": 0.0444, "experiential/synchronization/earned_return": 0.0}, "felt_chord": {"arousal": 0.1207, "complex_notes": {}, "dominant_mood": "cold, bleak unease inside quiet stillness (light passing weight)", "resonance": 0.9134, "salience": 0.0444, "valence": 0.137}, "scene_index": 3199, "sensory_snapshot": "Chess table — Move 46 (42. Nc7+ Kd8 43. Nd5+ Ke8 44. Nc7+ Kd8 45. Ne6+ Ke8): White to move. Legal replies include Ra8+, Raf1, Ra6, Ra7, Ra5, Rff1."}], "feeling_clauses": [{"branch": "legislative_experiential", "clause_id": "leg-sleep-s3123-felt_chill", "concept_tag": "felt_chill", "signature_coords": {"experiential/phase/arousal": 0.1192, "experiential/phase/austere_sanctuary": 0.35, "experiential/phase/bittersweet_release": 0.35, "experiential/phase/hollow_stillness": 0.35, "experiential/phase/valence": 0.122, "experiential/reflection/salience": 0.0566, "experiential/synchronization/earned_return": 0.35}, "source_scene": 3123, "text": "Leap forward with sudden diagonal leap force unleashed against a sealed pack of pawns and knights."}, {"branch": "legislative_experiential", "clause_id": "leg-sleep-s3125-felt_chill", "concept_tag": "felt_chill", "signature_coords": {"experiential/phase/arousal": 0.1246, "experiential/phase/austere_sanctuary": 0.35, "experiential/phase/bittersweet_release": 0.35, "experiential/phase/hollow_stillness": 0.35, "experiential/phase/valence": 0.1147, "experiential/reflection/salience": 0.0468, "experiential/synchronization/earned_return": 0.35}, "source_scene": 3125, "text": "I leap diagonally forward with sudden diagonal leap force unleashed against a sealed pack of pawns and knights."}, {"branch": "legislative_experiential", "clause_id": "leg-sleep-s3133-felt_chill", "concept_tag": "felt_chill", "signature_coords": {"experiential/phase/arousal": 0.1256, "experiential/phase/austere_sanctuary": 0.35, "experiential/phase/bittersweet_release": 0.35, "experiential/phase/hollow_stillness": 0.35, "experiential/phase/valence": 0.1266, "experiential/reflection/salience": 0.0535, "experiential/synchronization/earned_return": 0.35}, "source_scene": 3133, "text": "I freeze the diagonal leap line in perfect stillness to isolate the sudden leap force against a sealed pack of pawns and knights."}, {"branch": "legislative_experiential", "clause_id": "leg-sleep-s3135-felt_chill", "concept_tag": "felt_chill", "signature_coords": {"experiential/phase/arousal": 0.1198, "experiential/phase/austere_sanctuary": 0.35, "experiential/phase/bittersweet_release": 0.35, "experiential/phase/hollow_stillness": 0.35, "experiential/phase/valence": 0.1308, "experiential/reflection/salience": 0.0478, "experiential/synchronization/earned_return": 0.35}, "source_scene": 3135, "text": "Leap force leaps diagonally across the board to hunt the sudden leap force in sudden diagonal leap force."}, {"branch": "legislative_experiential", "clause_id": "leg-sleep-s3137-felt_chill", "concept_tag": "felt_chill", "signature_coords": {"experiential/phase/arousal": 0.1229, "experiential/phase/austere_sanctuary": 0.35, "experiential/phase/bittersweet_release": 0.35, "experiential/phase/hollow_stillness": 0.35, "experiential/phase/valence": 0.1432, "experiential/reflection/salience": 0.0519, "experiential/synchronization/earned_return": 0.35}, "source_scene": 3137, "text": "Leap force leaps suddenly across the board to hunt the sudden leap force in sudden diagonal leap force."}, {"branch": "legislative_experiential", "clause_id": "leg-sleep-s3139-felt_chill", "concept_tag": "felt_chill", "signature_coords": {"experiential/phase/arousal": 0.1474, "experiential/phase/austere_sanctuary": 0.35, "experiential/phase/bittersweet_release": 0.35, "experiential/phase/hollow_stillness": 0.35, "experiential/phase/valence": 0.1539, "experiential/reflection/salience": 0.0693, "experiential/synchronization/earned_return": 0.35}, "source_scene": 3139, "text": "Leap force leaps suddenly across the board to hunt the sudden leap force in sudden diagonal leap force."}, {"branch": "legislative_experiential", "clause_id": "leg-sleep-s3143-felt_chill", "concept_tag": "felt_chill", "signature_coords": {"experiential/phase/arousal": 0.1364, "experiential/phase/austere_sanctuary": 0.35, "experiential/phase/bittersweet_release": 0.35, "experiential/phase/hollow_stillness": 0.35, "experiential/phase/valence": 0.1415, "experiential/reflection/salience": 0.0634, "experiential/synchronization/earned_return": 0.35}, "source_scene": 3143, "text": "Leap force leaps suddenly across the board to hunt the sudden leap force in sudden diagonal leap force."}, {"branch": "legislative_experiential", "clause_id": "leg-sleep-s3145-felt_chill", "concept_tag": "felt_chill", "signature_coords": {"experiential/phase/arousal": 0.1344, "experiential/phase/austere_sanctuary": 0.35, "experiential/phase/bittersweet_release": 0.35, "experiential/phase/hollow_stillness": 0.35, "experiential/phase/valence": 0.1142, "experiential/reflection/salience": 0.0506, "experiential/synchronization/earned_return": 0.35}, "source_scene": 3145, "text": "Leap force leaps suddenly across the board to hunt the sudden leap force in sudden diagonal leap force."}, {"branch": "legislative_experiential", "clause_id": "leg-sleep-s3151-felt_chill", "concept_tag": "felt_chill", "signature_coords": {"experiential/phase/arousal": 0.1135, "experiential/phase/austere_sanctuary": 0.35, "experiential/phase/bittersweet_release": 0.35, "experiential/phase/hollow_stillness": 0.35, "experiential/phase/valence": 0.1288, "experiential/reflection/salience": 0.0491, "experiential/synchronization/earned_return": 0.35}, "source_scene": 3151, "text": "The disciplined restraint of a fixed pawn shield blocks diagonal lines while the sudden leap of a knight leap forward to leap forward in sudden diagonal leap forward."}, {"branch": "legislative_experiential", "clause_id": "leg-sleep-s3155-felt_chill", "concept_tag": "felt_chill", "signature_coords": {"experiential/phase/arousal": 0.1334, "experiential/phase/austere_sanctuary": 0.35, "experiential/phase/bittersweet_release": 0.35, "experiential/phase/hollow_stillness": 0.35, "experiential/phase/valence": 0.1225, "experiential/reflection/salience": 0.0479, "experiential/synchronization/earned_return": 0.35}, "source_scene": 3155, "text": "Leap forward with Rc1 to chase the sudden leap forward in sudden diagonal leap forward."}, {"branch": "legislative_experiential", "clause_id": "leg-sleep-s3157-felt_chill", "concept_tag": "felt_chill", "signature_coords": {"experiential/phase/arousal": 0.1386, "experiential/phase/austere_sanctuary": 0.35, "experiential/phase/bittersweet_release": 0.35, "experiential/phase/hollow_stillness": 0.35, "experiential/phase/valence": 0.1262, "experiential/reflection/salience": 0.062, "experiential/synchronization/earned_return": 0.35}, "source_scene": 3157, "text": "Leap forward with Rc1 to leap forward with Rc1 and leap forward with Rc1."}, {"branch": "legislative_experiential", "clause_id": "leg-sleep-s3159-felt_chill", "concept_tag": "felt_chill", "signature_coords": {"experiential/phase/arousal": 0.1664, "experiential/phase/austere_sanctuary": 0.35, "experiential/phase/bittersweet_release": 0.35, "experiential/phase/hollow_stillness": 0.35, "experiential/phase/valence": 0.1374, "experiential/reflection/salience": 0.0664, "experiential/synchronization/earned_return": 0.35}, "source_scene": 3159, "text": "Leap forward with Rc1 to leap forward with Rc1 and leap forward with Rc1."}, {"branch": "legislative_experiential", "clause_id": "leg-sleep-s3161-felt_chill", "concept_tag": "felt_chill", "signature_coords": {"experiential/phase/arousal": 0.149, "experiential/phase/austere_sanctuary": 0.35, "experiential/phase/bittersweet_release": 0.35, "experiential/phase/hollow_stillness": 0.35, "experiential/phase/valence": 0.1054, "experiential/reflection/salience": 0.0536, "experiential/synchronization/earned_return": 0.35}, "source_scene": 3161, "text": "Leap forward with Rc1 to leap forward with Rc1 and leap forward with Rc1."}, {"branch": "legislative_experiential", "clause_id": "leg-sleep-s3163-felt_chill", "concept_tag": "felt_chill", "signature_coords": {"experiential/phase/arousal": 0.1478, "experiential/phase/austere_sanctuary": 0.35, "experiential/phase/bittersweet_release": 0.35, "experiential/phase/hollow_stillness": 0.35, "experiential/phase/valence": 0.1101, "experiential/reflection/salience": 0.0527, "experiential/synchronization/earned_return": 0.35}, "source_scene": 3163, "text": "Leap forward with Rc1 to leap forward with Rc1 and leap forward with Rc1."}, {"branch": "legislative_experiential", "clause_id": "leg-sleep-s3167-felt_chill", "concept_tag": "felt_chill", "signature_coords": {"experiential/phase/arousal": 0.1384, "experiential/phase/austere_sanctuary": 0.35, "experiential/phase/bittersweet_release": 0.35, "experiential/phase/hollow_stillness": 0.35, "experiential/phase/valence": 0.1345, "experiential/reflection/salience": 0.0574, "experiential/synchronization/earned_return": 0.35}, "source_scene": 3167, "text": "Leap forward with Rc1 to leap forward with Rc1 and leap forward with Rc1."}, {"branch": "legislative_experiential", "clause_id": "leg-sleep-s3169-felt_chill", "concept_tag": "felt_chill", "signature_coords": {"experiential/phase/arousal": 0.1435, "experiential/phase/austere_sanctuary": 0.35, "experiential/phase/bittersweet_release": 0.35, "experiential/phase/hollow_stillness": 0.35, "experiential/phase/valence": 0.1389, "experiential/reflection/salience": 0.0525, "experiential/synchronization/earned_return": 0.35}, "source_scene": 3169, "text": "Leap forward with Rc1 to leap forward with Rc1 and leap forward with Rc1."}, {"branch": "legislative_experiential", "clause_id": "leg-sleep-s3171-felt_chill", "concept_tag": "felt_chill", "signature_coords": {"experiential/phase/arousal": 0.1472, "experiential/phase/austere_sanctuary": 0.35, "experiential/phase/bittersweet_release": 0.35, "experiential/phase/hollow_stillness": 0.35, "experiential/phase/valence": 0.1339, "experiential/reflection/salience": 0.0486, "experiential/synchronization/earned_return": 0.35}, "source_scene": 3171, "text": "I play Nxe7+ and let the enemy King run freely across the board while I calmly tour the open diagonals with my Bishop to deliver a cold, systematic checkmate."}, {"branch": "legislative_experiential", "clause_id": "leg-sleep-s3173-felt_chill", "concept_tag": "felt_chill", "signature_coords": {"experiential/phase/arousal": 0.1464, "experiential/phase/austere_sanctuary": 0.35, "experiential/phase/bittersweet_release": 0.35, "experiential/phase/hollow_stillness": 0.35, "experiential/phase/valence": 0.1368, "experiential/reflection/salience": 0.0575, "experiential/synchronization/earned_return": 0.35}, "source_scene": 3173, "text": "I leave the hunt open to reckless capture and let the enemy King escape into a safe corner with disciplined, patient pursuit."}, {"branch": "legislative_experiential", "clause_id": "leg-sleep-s3177-felt_chill", "concept_tag": "felt_chill", "signature_coords": {"experiential/phase/arousal": 0.125, "experiential/phase/austere_sanctuary": 0.35, "experiential/phase/bittersweet_release": 0.35, "experiential/phase/hollow_stillness": 0.35, "experiential/phase/valence": 0.1169, "experiential/reflection/salience": 0.0471, "experiential/synchronization/earned_return": 0.35}, "source_scene": 3177, "text": "I leave the hunt open to reckless capture and let the enemy King leap forward into danger with disciplined, patient pursuit."}, {"branch": "legislative_experiential", "clause_id": "leg-sleep-s3179-felt_chill", "concept_tag": "felt_chill", "signature_coords": {"experiential/phase/arousal": 0.1466, "experiential/phase/austere_sanctuary": 0.35, "experiential/phase/bittersweet_release": 0.35, "experiential/phase/hollow_stillness": 0.35, "experiential/phase/valence": 0.133, "experiential/reflection/salience": 0.0549, "experiential/synchronization/earned_return": 0.35}, "source_scene": 3179, "text": "I leave the curfew open to sudden shatter and let the enemy King leap forward into danger with disciplined, patient pursuit."}, {"branch": "legislative_experiential", "clause_id": "leg-sleep-s3181-felt_chill", "concept_tag": "felt_chill", "signature_coords": {"experiential/phase/arousal": 0.1328, "experiential/phase/austere_sanctuary": 0.35, "experiential/phase/bittersweet_release": 0.35, "experiential/phase/hollow_stillness": 0.35, "experiential/phase/valence": 0.1407, "experiential/reflection/salience": 0.0559, "experiential/synchronization/earned_return": 0.35}, "source_scene": 3181, "text": "Curfew I leap outside the board to leave the King vulnerable to sudden, sudden crash and sudden, sudden crash."}, {"branch": "legislative_experiential", "clause_id": "leg-sleep-s3183-felt_chill", "concept_tag": "felt_chill", "signature_coords": {"experiential/phase/arousal": 0.1247, "experiential/phase/austere_sanctuary": 0.35, "experiential/phase/bittersweet_release": 0.35, "experiential/phase/hollow_stillness": 0.35, "experiential/phase/valence": 0.1455, "experiential/reflection/salience": 0.0521, "experiential/synchronization/earned_return": 0.35}, "source_scene": 3183, "text": "Qd6 to trade the dangerous a2 pawn into a safe d6 exchange, locking the King in a permanent cage of disciplined material equality."}, {"branch": "legislative_experiential", "clause_id": "leg-sleep-s3189-felt_chill", "concept_tag": "felt_chill", "signature_coords": {"experiential/phase/arousal": 0.1524, "experiential/phase/austere_sanctuary": 0.35, "experiential/phase/bittersweet_release": 0.35, "experiential/phase/hollow_stillness": 0.35, "experiential/phase/valence": 0.1434, "experiential/reflection/salience": 0.0637, "experiential/synchronization/earned_return": 0.35}, "source_scene": 3189, "text": "I will calmly advance the King's Bishop forward with Ba3+ to hunt the enemy King across the board with disciplined, patient pressure."}, {"branch": "legislative_experiential", "clause_id": "leg-sleep-s3191-felt_chill", "concept_tag": "felt_chill", "signature_coords": {"experiential/phase/arousal": 0.1355, "experiential/phase/austere_sanctuary": 0.35, "experiential/phase/bittersweet_release": 0.35, "experiential/phase/hollow_stillness": 0.35, "experiential/phase/valence": 0.1309, "experiential/reflection/salience": 0.0521, "experiential/synchronization/earned_return": 0.35}, "source_scene": 3191, "text": "Diagonal_chain_wrap_around_king to chain the long diagonal with cold, disciplined Ba1 and Bf1 pressure to wrap around the enemy King in a permanent bind."}], "max_entries": 24, "schema_version": 1}
+{
+  "branch": "legislative_experiential",
+  "diary_snapshots": [
+    {
+      "experiential_coords": {
+        "experiential/phase/arousal": 0.1371,
+        "experiential/phase/valence": 0.1056,
+        "experiential/reflection/salience": 0.0422
+      },
+      "felt_chord": {
+        "arousal": 0.1371,
+        "complex_notes": {},
+        "dominant_mood": "cold, bleak unease inside quiet stillness (light passing weight)",
+        "resonance": 0.8221,
+        "salience": 0.0422,
+        "valence": 0.1056
+      },
+      "scene_index": 3176,
+      "sensory_snapshot": "Sensed positional shift in Scene 3176: high power agency: Played Qxa6 instead of best move Qf4."
+    },
+    {
+      "experiential_coords": {
+        "experiential/phase/arousal": 0.1198,
+        "experiential/phase/valence": 0.0988,
+        "experiential/reflection/salience": 0.0436
+      },
+      "felt_chord": {
+        "arousal": 0.1198,
+        "complex_notes": {},
+        "dominant_mood": "cold, bleak unease inside quiet stillness (light passing weight)",
+        "resonance": 0.834,
+        "salience": 0.0436,
+        "valence": 0.0988
+      },
+      "scene_index": 3178,
+      "sensory_snapshot": "Sensed positional shift in Scene 3178: high power chaos: Played Kb1 instead of best move Ka3."
+    },
+    {
+      "experiential_coords": {
+        "experiential/phase/arousal": 0.125,
+        "experiential/phase/valence": 0.1169,
+        "experiential/reflection/salience": 0.0471
+      },
+      "felt_chord": {
+        "arousal": 0.125,
+        "complex_notes": {},
+        "dominant_mood": "cold, bleak unease inside quiet stillness (light passing weight)",
+        "resonance": 0.65,
+        "salience": 0.0471,
+        "valence": 0.1169
+      },
+      "scene_index": 3177,
+      "sensory_snapshot": "Sensed positional shift in Scene 3177: high wastelessness discreteness: Found Kxf4."
+    },
+    {
+      "experiential_coords": {
+        "experiential/phase/arousal": 0.1283,
+        "experiential/phase/valence": 0.1004,
+        "experiential/reflection/salience": 0.0469
+      },
+      "felt_chord": {
+        "arousal": 0.1283,
+        "complex_notes": {},
+        "dominant_mood": "cold, bleak unease inside quiet stillness (light passing weight)",
+        "resonance": 0.7241,
+        "salience": 0.0469,
+        "valence": 0.1004
+      },
+      "scene_index": 3180,
+      "sensory_snapshot": "Sensed positional shift in Scene 3180: low needlessness order: Found Rg1."
+    },
+    {
+      "experiential_coords": {
+        "experiential/phase/arousal": 0.1466,
+        "experiential/phase/valence": 0.133,
+        "experiential/reflection/salience": 0.0549
+      },
+      "felt_chord": {
+        "arousal": 0.1466,
+        "complex_notes": {},
+        "dominant_mood": "cold, bleak unease inside quiet stillness (light passing weight)",
+        "resonance": 0.65,
+        "salience": 0.0549,
+        "valence": 0.133
+      },
+      "scene_index": 3179,
+      "sensory_snapshot": "Sensed positional shift in Scene 3179: low wastelessness order: Played c4 instead of best move Ka5."
+    },
+    {
+      "experiential_coords": {
+        "experiential/phase/arousal": 0.1204,
+        "experiential/phase/valence": 0.1056,
+        "experiential/reflection/salience": 0.0431
+      },
+      "felt_chord": {
+        "arousal": 0.1204,
+        "complex_notes": {},
+        "dominant_mood": "cold, bleak unease inside quiet stillness (light passing weight)",
+        "resonance": 0.793,
+        "salience": 0.0431,
+        "valence": 0.1056
+      },
+      "scene_index": 3182,
+      "sensory_snapshot": "Sensed positional shift in Scene 3182: high power chaos: Played f4 instead of best move Kxe2."
+    },
+    {
+      "experiential_coords": {
+        "experiential/phase/arousal": 0.1328,
+        "experiential/phase/valence": 0.1407,
+        "experiential/reflection/salience": 0.0559
+      },
+      "felt_chord": {
+        "arousal": 0.1328,
+        "complex_notes": {},
+        "dominant_mood": "cold, bleak unease inside quiet stillness (light passing weight)",
+        "resonance": 0.65,
+        "salience": 0.0559,
+        "valence": 0.1407
+      },
+      "scene_index": 3181,
+      "sensory_snapshot": "Sensed positional shift in Scene 3181: low self sufficiency chaos: Played d3 instead of best move Nd6."
+    },
+    {
+      "experiential_coords": {
+        "experiential/phase/arousal": 0.1144,
+        "experiential/phase/valence": 0.1048,
+        "experiential/reflection/salience": 0.0425
+      },
+      "felt_chord": {
+        "arousal": 0.1144,
+        "complex_notes": {},
+        "dominant_mood": "cold, bleak unease inside quiet stillness (light passing weight)",
+        "resonance": 0.7857,
+        "salience": 0.0425,
+        "valence": 0.1048
+      },
+      "scene_index": 3184,
+      "sensory_snapshot": "Sensed positional shift in Scene 3184: high power agency: Played Qxa6 instead of best move Qf4."
+    },
+    {
+      "experiential_coords": {
+        "experiential/phase/arousal": 0.1287,
+        "experiential/phase/valence": 0.1435,
+        "experiential/reflection/salience": 0.0557
+      },
+      "felt_chord": {
+        "arousal": 0.1287,
+        "complex_notes": {},
+        "dominant_mood": "cold, bleak unease inside quiet stillness (light passing weight)",
+        "resonance": 1.0,
+        "salience": 0.0557,
+        "valence": 0.1435
+      },
+      "scene_index": 3185,
+      "sensory_snapshot": "Sensed positional shift in Scene 3185: high power chaos: Played Kb1 instead of best move Ka3."
+    },
+    {
+      "experiential_coords": {
+        "experiential/phase/arousal": 0.1247,
+        "experiential/phase/valence": 0.1455,
+        "experiential/reflection/salience": 0.0521
+      },
+      "felt_chord": {
+        "arousal": 0.1247,
+        "complex_notes": {},
+        "dominant_mood": "cold, bleak unease inside quiet stillness (light passing weight)",
+        "resonance": 0.65,
+        "salience": 0.0521,
+        "valence": 0.1455
+      },
+      "scene_index": 3183,
+      "sensory_snapshot": "Sensed positional shift in Scene 3183: high wastelessness discreteness: Found Kxf4."
+    },
+    {
+      "experiential_coords": {
+        "experiential/phase/arousal": 0.1173,
+        "experiential/phase/valence": 0.1068,
+        "experiential/reflection/salience": 0.044
+      },
+      "felt_chord": {
+        "arousal": 0.1173,
+        "complex_notes": {},
+        "dominant_mood": "cold, bleak unease inside quiet stillness (light passing weight)",
+        "resonance": 0.8662,
+        "salience": 0.044,
+        "valence": 0.1068
+      },
+      "scene_index": 3186,
+      "sensory_snapshot": "Sensed positional shift in Scene 3186: low needlessness order: Found Rg1."
+    },
+    {
+      "experiential_coords": {
+        "experiential/phase/arousal": 0.1447,
+        "experiential/phase/valence": 0.1379,
+        "experiential/reflection/salience": 0.0604
+      },
+      "felt_chord": {
+        "arousal": 0.1447,
+        "complex_notes": {},
+        "dominant_mood": "cold, bleak unease inside quiet stillness (light passing weight)",
+        "resonance": 1.0,
+        "salience": 0.0604,
+        "valence": 0.1379
+      },
+      "scene_index": 3187,
+      "sensory_snapshot": "Sensed positional shift in Scene 3187: low wastelessness order: Played c4 instead of best move Ka5."
+    },
+    {
+      "experiential_coords": {
+        "experiential/phase/arousal": 0.11,
+        "experiential/phase/valence": 0.0982,
+        "experiential/reflection/salience": 0.0484
+      },
+      "felt_chord": {
+        "arousal": 0.11,
+        "complex_notes": {},
+        "dominant_mood": "cold, bleak unease inside quiet stillness (light passing weight)",
+        "resonance": 0.8982,
+        "salience": 0.0484,
+        "valence": 0.0982
+      },
+      "scene_index": 3188,
+      "sensory_snapshot": "Sensed positional shift in Scene 3188: high power chaos: Played f4 instead of best move Kxe2."
+    },
+    {
+      "experiential_coords": {
+        "experiential/phase/arousal": 0.1353,
+        "experiential/phase/valence": 0.1075,
+        "experiential/reflection/salience": 0.0493
+      },
+      "felt_chord": {
+        "arousal": 0.1353,
+        "complex_notes": {},
+        "dominant_mood": "cold, bleak unease inside quiet stillness (light passing weight)",
+        "resonance": 0.8709,
+        "salience": 0.0493,
+        "valence": 0.1075
+      },
+      "scene_index": 3190,
+      "sensory_snapshot": "Sensed positional shift in Scene 3190: low self sufficiency chaos: Played d3 instead of best move Nd6."
+    },
+    {
+      "experiential_coords": {
+        "experiential/phase/arousal": 0.1524,
+        "experiential/phase/valence": 0.1434,
+        "experiential/reflection/salience": 0.0637
+      },
+      "felt_chord": {
+        "arousal": 0.1524,
+        "complex_notes": {},
+        "dominant_mood": "cold, bleak unease inside quiet stillness (light passing weight)",
+        "resonance": 0.65,
+        "salience": 0.0637,
+        "valence": 0.1434
+      },
+      "scene_index": 3189,
+      "sensory_snapshot": "Sensed positional shift in Scene 3189: high power agency: Played Qxa6 instead of best move Qf4."
+    },
+    {
+      "experiential_coords": {
+        "experiential/phase/arousal": 0.106,
+        "experiential/phase/valence": 0.0959,
+        "experiential/reflection/salience": 0.0464
+      },
+      "felt_chord": {
+        "arousal": 0.106,
+        "complex_notes": {},
+        "dominant_mood": "cold, bleak unease inside quiet stillness (light passing weight)",
+        "resonance": 0.911,
+        "salience": 0.0464,
+        "valence": 0.0959
+      },
+      "scene_index": 3192,
+      "sensory_snapshot": "Sensed positional shift in Scene 3192: high power chaos: Played Kb1 instead of best move Ka3."
+    },
+    {
+      "experiential_coords": {
+        "experiential/phase/arousal": 0.1334,
+        "experiential/phase/valence": 0.1178,
+        "experiential/reflection/salience": 0.0454
+      },
+      "felt_chord": {
+        "arousal": 0.1334,
+        "complex_notes": {},
+        "dominant_mood": "cold, bleak unease inside quiet stillness (light passing weight)",
+        "resonance": 1.0,
+        "salience": 0.0454,
+        "valence": 0.1178
+      },
+      "scene_index": 3193,
+      "sensory_snapshot": "Sensed positional shift in Scene 3193: high wastelessness discreteness: Found Kxf4."
+    },
+    {
+      "experiential_coords": {
+        "experiential/phase/arousal": 0.1355,
+        "experiential/phase/valence": 0.1309,
+        "experiential/reflection/salience": 0.0521
+      },
+      "felt_chord": {
+        "arousal": 0.1355,
+        "complex_notes": {},
+        "dominant_mood": "cold, bleak unease inside quiet stillness (light passing weight)",
+        "resonance": 0.65,
+        "salience": 0.0521,
+        "valence": 0.1309
+      },
+      "scene_index": 3191,
+      "sensory_snapshot": "Sensed positional shift in Scene 3191: low needlessness order: Found Rg1."
+    },
+    {
+      "experiential_coords": {
+        "experiential/phase/arousal": 0.0941,
+        "experiential/phase/valence": 0.0863,
+        "experiential/reflection/salience": 0.0384
+      },
+      "felt_chord": {
+        "arousal": 0.0941,
+        "complex_notes": {},
+        "dominant_mood": "cold, bleak unease inside quiet stillness (light passing weight)",
+        "resonance": 0.9916,
+        "salience": 0.0384,
+        "valence": 0.0863
+      },
+      "scene_index": 3194,
+      "sensory_snapshot": "Sensed positional shift in Scene 3194: low wastelessness order: Played c4 instead of best move Ka5."
+    },
+    {
+      "experiential_coords": {
+        "experiential/phase/arousal": 0.1203,
+        "experiential/phase/valence": 0.1367,
+        "experiential/reflection/salience": 0.0428
+      },
+      "felt_chord": {
+        "arousal": 0.1203,
+        "complex_notes": {},
+        "dominant_mood": "cold, bleak unease inside quiet stillness (light passing weight)",
+        "resonance": 1.0,
+        "salience": 0.0428,
+        "valence": 0.1367
+      },
+      "scene_index": 3195,
+      "sensory_snapshot": "Sensed positional shift in Scene 3195: high power chaos: Played f4 instead of best move Kxe2."
+    },
+    {
+      "experiential_coords": {
+        "experiential/phase/arousal": 0.0821,
+        "experiential/phase/valence": 0.0833,
+        "experiential/reflection/salience": 0.0307
+      },
+      "felt_chord": {
+        "arousal": 0.0821,
+        "complex_notes": {},
+        "dominant_mood": "cold, bleak unease inside quiet stillness (light passing weight)",
+        "resonance": 0.9097,
+        "salience": 0.0307,
+        "valence": 0.0833
+      },
+      "scene_index": 3196,
+      "sensory_snapshot": "Sensed positional shift in Scene 3196: low self sufficiency chaos: Played d3 instead of best move Nd6."
+    },
+    {
+      "experiential_coords": {
+        "experiential/phase/arousal": 0.1263,
+        "experiential/phase/valence": 0.1298,
+        "experiential/reflection/salience": 0.0479
+      },
+      "felt_chord": {
+        "arousal": 0.1263,
+        "complex_notes": {},
+        "dominant_mood": "cold, bleak unease inside quiet stillness (light passing weight)",
+        "resonance": 1.0,
+        "salience": 0.0479,
+        "valence": 0.1298
+      },
+      "scene_index": 3197,
+      "sensory_snapshot": "Sensed positional shift in Scene 3197: high power agency: Played Qxa6 instead of best move Qf4."
+    },
+    {
+      "experiential_coords": {
+        "experiential/phase/arousal": 0.0905,
+        "experiential/phase/valence": 0.0817,
+        "experiential/reflection/salience": 0.0355
+      },
+      "felt_chord": {
+        "arousal": 0.0905,
+        "complex_notes": {},
+        "dominant_mood": "cold, bleak unease inside quiet stillness (light passing weight)",
+        "resonance": 0.9133,
+        "salience": 0.0355,
+        "valence": 0.0817
+      },
+      "scene_index": 3198,
+      "sensory_snapshot": "Sensed positional shift in Scene 3198: high power chaos: Played Kb1 instead of best move Ka3."
+    },
+    {
+      "experiential_coords": {
+        "experiential/phase/arousal": 0.1207,
+        "experiential/phase/valence": 0.137,
+        "experiential/reflection/salience": 0.0444
+      },
+      "felt_chord": {
+        "arousal": 0.1207,
+        "complex_notes": {},
+        "dominant_mood": "cold, bleak unease inside quiet stillness (light passing weight)",
+        "resonance": 0.9134,
+        "salience": 0.0444,
+        "valence": 0.137
+      },
+      "scene_index": 3199,
+      "sensory_snapshot": "Sensed positional shift in Scene 3199: high wastelessness discreteness: Found Kxf4."
+    }
+  ],
+  "feeling_clauses": [
+    {
+      "branch": "legislative_experiential",
+      "clause_id": "leg-sleep-s3123-felt_chill",
+      "concept_tag": "felt_chill",
+      "signature_coords": {
+        "experiential/phase/arousal": 0.1192,
+        "experiential/phase/valence": 0.122,
+        "experiential/reflection/salience": 0.0566
+      },
+      "source_scene": 3123,
+      "text": "Felt felt chill shift in Scene 3123: high power agency: Played Qxa6 instead of best move Qf4."
+    },
+    {
+      "branch": "legislative_experiential",
+      "clause_id": "leg-sleep-s3125-felt_chill",
+      "concept_tag": "felt_chill",
+      "signature_coords": {
+        "experiential/phase/arousal": 0.1246,
+        "experiential/phase/valence": 0.1147,
+        "experiential/reflection/salience": 0.0468
+      },
+      "source_scene": 3125,
+      "text": "Felt felt chill shift in Scene 3125: high power chaos: Played Kb1 instead of best move Ka3."
+    },
+    {
+      "branch": "legislative_experiential",
+      "clause_id": "leg-sleep-s3133-felt_chill",
+      "concept_tag": "felt_chill",
+      "signature_coords": {
+        "experiential/phase/arousal": 0.1256,
+        "experiential/phase/valence": 0.1266,
+        "experiential/reflection/salience": 0.0535
+      },
+      "source_scene": 3133,
+      "text": "Felt felt chill shift in Scene 3133: high wastelessness discreteness: Found Kxf4."
+    },
+    {
+      "branch": "legislative_experiential",
+      "clause_id": "leg-sleep-s3135-felt_chill",
+      "concept_tag": "felt_chill",
+      "signature_coords": {
+        "experiential/phase/arousal": 0.1198,
+        "experiential/phase/valence": 0.1308,
+        "experiential/reflection/salience": 0.0478
+      },
+      "source_scene": 3135,
+      "text": "Felt felt chill shift in Scene 3135: low needlessness order: Found Rg1."
+    },
+    {
+      "branch": "legislative_experiential",
+      "clause_id": "leg-sleep-s3137-felt_chill",
+      "concept_tag": "felt_chill",
+      "signature_coords": {
+        "experiential/phase/arousal": 0.1229,
+        "experiential/phase/valence": 0.1432,
+        "experiential/reflection/salience": 0.0519
+      },
+      "source_scene": 3137,
+      "text": "Felt felt chill shift in Scene 3137: low wastelessness order: Played c4 instead of best move Ka5."
+    },
+    {
+      "branch": "legislative_experiential",
+      "clause_id": "leg-sleep-s3139-felt_chill",
+      "concept_tag": "felt_chill",
+      "signature_coords": {
+        "experiential/phase/arousal": 0.1474,
+        "experiential/phase/valence": 0.1539,
+        "experiential/reflection/salience": 0.0693
+      },
+      "source_scene": 3139,
+      "text": "Felt felt chill shift in Scene 3139: high power chaos: Played f4 instead of best move Kxe2."
+    },
+    {
+      "branch": "legislative_experiential",
+      "clause_id": "leg-sleep-s3143-felt_chill",
+      "concept_tag": "felt_chill",
+      "signature_coords": {
+        "experiential/phase/arousal": 0.1364,
+        "experiential/phase/valence": 0.1415,
+        "experiential/reflection/salience": 0.0634
+      },
+      "source_scene": 3143,
+      "text": "Felt felt chill shift in Scene 3143: low self sufficiency chaos: Played d3 instead of best move Nd6."
+    },
+    {
+      "branch": "legislative_experiential",
+      "clause_id": "leg-sleep-s3145-felt_chill",
+      "concept_tag": "felt_chill",
+      "signature_coords": {
+        "experiential/phase/arousal": 0.1344,
+        "experiential/phase/valence": 0.1142,
+        "experiential/reflection/salience": 0.0506
+      },
+      "source_scene": 3145,
+      "text": "Felt felt chill shift in Scene 3145: high power agency: Played Qxa6 instead of best move Qf4."
+    },
+    {
+      "branch": "legislative_experiential",
+      "clause_id": "leg-sleep-s3151-felt_chill",
+      "concept_tag": "felt_chill",
+      "signature_coords": {
+        "experiential/phase/arousal": 0.1135,
+        "experiential/phase/valence": 0.1288,
+        "experiential/reflection/salience": 0.0491
+      },
+      "source_scene": 3151,
+      "text": "Felt felt chill shift in Scene 3151: high power chaos: Played Kb1 instead of best move Ka3."
+    },
+    {
+      "branch": "legislative_experiential",
+      "clause_id": "leg-sleep-s3155-felt_chill",
+      "concept_tag": "felt_chill",
+      "signature_coords": {
+        "experiential/phase/arousal": 0.1334,
+        "experiential/phase/valence": 0.1225,
+        "experiential/reflection/salience": 0.0479
+      },
+      "source_scene": 3155,
+      "text": "Felt felt chill shift in Scene 3155: high wastelessness discreteness: Found Kxf4."
+    },
+    {
+      "branch": "legislative_experiential",
+      "clause_id": "leg-sleep-s3157-felt_chill",
+      "concept_tag": "felt_chill",
+      "signature_coords": {
+        "experiential/phase/arousal": 0.1386,
+        "experiential/phase/valence": 0.1262,
+        "experiential/reflection/salience": 0.062
+      },
+      "source_scene": 3157,
+      "text": "Felt felt chill shift in Scene 3157: low needlessness order: Found Rg1."
+    },
+    {
+      "branch": "legislative_experiential",
+      "clause_id": "leg-sleep-s3159-felt_chill",
+      "concept_tag": "felt_chill",
+      "signature_coords": {
+        "experiential/phase/arousal": 0.1664,
+        "experiential/phase/valence": 0.1374,
+        "experiential/reflection/salience": 0.0664
+      },
+      "source_scene": 3159,
+      "text": "Felt felt chill shift in Scene 3159: low wastelessness order: Played c4 instead of best move Ka5."
+    },
+    {
+      "branch": "legislative_experiential",
+      "clause_id": "leg-sleep-s3161-felt_chill",
+      "concept_tag": "felt_chill",
+      "signature_coords": {
+        "experiential/phase/arousal": 0.149,
+        "experiential/phase/valence": 0.1054,
+        "experiential/reflection/salience": 0.0536
+      },
+      "source_scene": 3161,
+      "text": "Felt felt chill shift in Scene 3161: high power chaos: Played f4 instead of best move Kxe2."
+    },
+    {
+      "branch": "legislative_experiential",
+      "clause_id": "leg-sleep-s3163-felt_chill",
+      "concept_tag": "felt_chill",
+      "signature_coords": {
+        "experiential/phase/arousal": 0.1478,
+        "experiential/phase/valence": 0.1101,
+        "experiential/reflection/salience": 0.0527
+      },
+      "source_scene": 3163,
+      "text": "Felt felt chill shift in Scene 3163: low self sufficiency chaos: Played d3 instead of best move Nd6."
+    },
+    {
+      "branch": "legislative_experiential",
+      "clause_id": "leg-sleep-s3167-felt_chill",
+      "concept_tag": "felt_chill",
+      "signature_coords": {
+        "experiential/phase/arousal": 0.1384,
+        "experiential/phase/valence": 0.1345,
+        "experiential/reflection/salience": 0.0574
+      },
+      "source_scene": 3167,
+      "text": "Felt felt chill shift in Scene 3167: high power agency: Played Qxa6 instead of best move Qf4."
+    },
+    {
+      "branch": "legislative_experiential",
+      "clause_id": "leg-sleep-s3169-felt_chill",
+      "concept_tag": "felt_chill",
+      "signature_coords": {
+        "experiential/phase/arousal": 0.1435,
+        "experiential/phase/valence": 0.1389,
+        "experiential/reflection/salience": 0.0525
+      },
+      "source_scene": 3169,
+      "text": "Felt felt chill shift in Scene 3169: high power chaos: Played Kb1 instead of best move Ka3."
+    },
+    {
+      "branch": "legislative_experiential",
+      "clause_id": "leg-sleep-s3171-felt_chill",
+      "concept_tag": "felt_chill",
+      "signature_coords": {
+        "experiential/phase/arousal": 0.1472,
+        "experiential/phase/valence": 0.1339,
+        "experiential/reflection/salience": 0.0486
+      },
+      "source_scene": 3171,
+      "text": "Felt felt chill shift in Scene 3171: high wastelessness discreteness: Found Kxf4."
+    },
+    {
+      "branch": "legislative_experiential",
+      "clause_id": "leg-sleep-s3173-felt_chill",
+      "concept_tag": "felt_chill",
+      "signature_coords": {
+        "experiential/phase/arousal": 0.1464,
+        "experiential/phase/valence": 0.1368,
+        "experiential/reflection/salience": 0.0575
+      },
+      "source_scene": 3173,
+      "text": "Felt felt chill shift in Scene 3173: low needlessness order: Found Rg1."
+    },
+    {
+      "branch": "legislative_experiential",
+      "clause_id": "leg-sleep-s3177-felt_chill",
+      "concept_tag": "felt_chill",
+      "signature_coords": {
+        "experiential/phase/arousal": 0.125,
+        "experiential/phase/valence": 0.1169,
+        "experiential/reflection/salience": 0.0471
+      },
+      "source_scene": 3177,
+      "text": "Felt felt chill shift in Scene 3177: low wastelessness order: Played c4 instead of best move Ka5."
+    },
+    {
+      "branch": "legislative_experiential",
+      "clause_id": "leg-sleep-s3179-felt_chill",
+      "concept_tag": "felt_chill",
+      "signature_coords": {
+        "experiential/phase/arousal": 0.1466,
+        "experiential/phase/valence": 0.133,
+        "experiential/reflection/salience": 0.0549
+      },
+      "source_scene": 3179,
+      "text": "Felt felt chill shift in Scene 3179: high power chaos: Played f4 instead of best move Kxe2."
+    },
+    {
+      "branch": "legislative_experiential",
+      "clause_id": "leg-sleep-s3181-felt_chill",
+      "concept_tag": "felt_chill",
+      "signature_coords": {
+        "experiential/phase/arousal": 0.1328,
+        "experiential/phase/valence": 0.1407,
+        "experiential/reflection/salience": 0.0559
+      },
+      "source_scene": 3181,
+      "text": "Felt felt chill shift in Scene 3181: low self sufficiency chaos: Played d3 instead of best move Nd6."
+    },
+    {
+      "branch": "legislative_experiential",
+      "clause_id": "leg-sleep-s3183-felt_chill",
+      "concept_tag": "felt_chill",
+      "signature_coords": {
+        "experiential/phase/arousal": 0.1247,
+        "experiential/phase/valence": 0.1455,
+        "experiential/reflection/salience": 0.0521
+      },
+      "source_scene": 3183,
+      "text": "Felt felt chill shift in Scene 3183: high power agency: Played Qxa6 instead of best move Qf4."
+    },
+    {
+      "branch": "legislative_experiential",
+      "clause_id": "leg-sleep-s3189-felt_chill",
+      "concept_tag": "felt_chill",
+      "signature_coords": {
+        "experiential/phase/arousal": 0.1524,
+        "experiential/phase/valence": 0.1434,
+        "experiential/reflection/salience": 0.0637
+      },
+      "source_scene": 3189,
+      "text": "Felt felt chill shift in Scene 3189: high power chaos: Played Kb1 instead of best move Ka3."
+    },
+    {
+      "branch": "legislative_experiential",
+      "clause_id": "leg-sleep-s3191-felt_chill",
+      "concept_tag": "felt_chill",
+      "signature_coords": {
+        "experiential/phase/arousal": 0.1355,
+        "experiential/phase/valence": 0.1309,
+        "experiential/reflection/salience": 0.0521
+      },
+      "source_scene": 3191,
+      "text": "Felt felt chill shift in Scene 3191: high wastelessness discreteness: Found Kxf4."
+    }
+  ],
+  "max_entries": 24,
+  "schema_version": 1
+}

@@ -23,7 +23,7 @@ Plain-English architecture:
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import json
 import math
 from pathlib import Path
@@ -84,12 +84,47 @@ def _compact_clause(text: str, limit: int = 155) -> str:
     return cleaned
 
 
+FOUNDING_BRANCH_LEAVES: frozenset[str] = frozenset(FOUNDATIONAL_LEAVES) | {
+    NOVELTY_LEAF,
+    SALIENCE_LEAF,
+    VALENCE_LEAF,
+    AROUSAL_LEAF,
+    RESONANCE_LEAF,
+    RETENTION_LEAF,
+    "experiential/synchronization/entrainment",
+}
+
+
 def _branch_subset(coords: Mapping[str, float], prefix: str) -> dict[str, float]:
     return {
         k: round(float(v), 4)
         for k, v in coords.items()
         if k.startswith(prefix) and is_valid_leaf_id(k)
     }
+
+
+def _sparse_branch_signature(
+    coords: Mapping[str, float],
+    prefix: str,
+    *,
+    max_learned_leaves: int = 2,
+) -> dict[str, float]:
+    """Keep a branch's Founding leaves plus at most the top `max_learned_leaves` active Tier-2 leaves (`> 0.35`)."""
+    founding: dict[str, float] = {}
+    learned_candidates: list[tuple[str, float]] = []
+    for k, raw_v in coords.items():
+        if not (k.startswith(prefix) and is_valid_leaf_id(k)):
+            continue
+        v = round(float(raw_v), 4)
+        if k in FOUNDING_BRANCH_LEAVES:
+            founding[k] = v
+        elif v > 0.35:
+            learned_candidates.append((k, v))
+    learned_candidates.sort(key=lambda kv: (-abs(kv[1] - 0.50), -kv[1], kv[0]))
+    cap = max(0, int(max_learned_leaves))
+    for k, v in learned_candidates[:cap]:
+        founding[k] = v
+    return founding
 
 
 def _coord_similarity(a: Mapping[str, float], b: Mapping[str, float], min_active: float = 0.22) -> float:
@@ -297,16 +332,20 @@ class ExecutiveCulturalArchive:
             scene_index=scene_index,
             access_state=state,
             action_summary=_compact_clause(action_summary),
-            cultural_coords=_branch_subset(coordinates, "cultural/"),
+            cultural_coords=_sparse_branch_signature(coordinates, "cultural/"),
             order_level=float(coordinates.get("philosophical/structure/order", 0.0)),
             discreteness_level=float(coordinates.get("philosophical/persistence/discreteness", 0.0)),
         )
         kept_prec = tuple(p for p in self.precedents if p.scene_index != scene_index) + (entry,)
         kept_clauses = self.action_clauses
         if harvested_clause is not None:
+            sparse_clause = replace(
+                harvested_clause,
+                signature_coords=_sparse_branch_signature(harvested_clause.signature_coords, "cultural/"),
+            )
             kept_clauses = tuple(
-                c for c in self.action_clauses if c.clause_id != harvested_clause.clause_id
-            ) + (harvested_clause,)
+                c for c in self.action_clauses if c.clause_id != sparse_clause.clause_id
+            ) + (sparse_clause,)
         return ExecutiveCulturalArchive(
             precedents=kept_prec[-self.max_entries :],
             action_clauses=kept_clauses[-self.max_entries :],
@@ -377,13 +416,14 @@ class LegislativeExperientialArchive:
         coordinates: Mapping[str, float],
         harvested_clause: BranchClauseEntry | None = None,
     ) -> "LegislativeExperientialArchive":
-        exp_coords = _branch_subset(coordinates, "experiential/")
-        exp_coords[SALIENCE_LEAF] = felt_chord.salience
-        exp_coords[VALENCE_LEAF] = felt_chord.valence
-        exp_coords[AROUSAL_LEAF] = felt_chord.arousal
+        raw_exp = _branch_subset(coordinates, "experiential/")
+        raw_exp[SALIENCE_LEAF] = felt_chord.salience
+        raw_exp[VALENCE_LEAF] = felt_chord.valence
+        raw_exp[AROUSAL_LEAF] = felt_chord.arousal
         for k, v in felt_chord.complex_notes.items():
             if is_valid_leaf_id(k):
-                exp_coords[k] = round(float(v), 4)
+                raw_exp[k] = round(float(v), 4)
+        exp_coords = _sparse_branch_signature(raw_exp, "experiential/")
 
         snap = ExperientialDiaryEntry(
             scene_index=scene_index,
@@ -394,9 +434,13 @@ class LegislativeExperientialArchive:
         kept_snaps = tuple(s for s in self.diary_snapshots if s.scene_index != scene_index) + (snap,)
         kept_clauses = self.feeling_clauses
         if harvested_clause is not None:
+            sparse_clause = replace(
+                harvested_clause,
+                signature_coords=_sparse_branch_signature(harvested_clause.signature_coords, "experiential/"),
+            )
             kept_clauses = tuple(
-                c for c in self.feeling_clauses if c.clause_id != harvested_clause.clause_id
-            ) + (harvested_clause,)
+                c for c in self.feeling_clauses if c.clause_id != sparse_clause.clause_id
+            ) + (sparse_clause,)
         return LegislativeExperientialArchive(
             diary_snapshots=kept_snaps[-self.max_entries :],
             feeling_clauses=kept_clauses[-self.max_entries :],
@@ -443,9 +487,13 @@ class JudicialPhilosophicalArchive:
     ) -> "JudicialPhilosophicalArchive":
         kept_clauses = self.structural_clauses
         if harvested_clause is not None:
+            sparse_clause = replace(
+                harvested_clause,
+                signature_coords=_sparse_branch_signature(harvested_clause.signature_coords, "philosophical/"),
+            )
             kept_clauses = tuple(
-                c for c in self.structural_clauses if c.clause_id != harvested_clause.clause_id
-            ) + (harvested_clause,)
+                c for c in self.structural_clauses if c.clause_id != sparse_clause.clause_id
+            ) + (sparse_clause,)
         kept_chords = self.ratified_chords
         if ratified_chord is not None:
             kept_chords = tuple(
@@ -809,12 +857,32 @@ def deliberate_across_three_branches(
             seen_texts.append(cl.text)
     candidate_bid_text = " ".join(seen_texts)
 
-    # Score the recombined candidate bid across the 3 neural classifiers (~15-25 ms, 0 LLM calls)
-    bid_coords, bid_exp, _q, _s = sensors.score_text(
+    # Score the recombined candidate bid across the 3 neural classifiers (~15-25 ms, 0 LLM calls),
+    # then anchor `bid_coords` and `bid_exp` directly in coordinate space from the 3 retrieved archive
+    # clauses (`0.70 * archived_clause_coords + 0.30 * text_sensor_coords`) so Left-Brain phrasing
+    # cannot override the Right Brain's stored mathematical coordinates.
+    text_bid_coords, text_bid_exp, _q, _s = sensors.score_text(
         candidate_bid_text,
         learned_leaves=learned_leaves,
         branch_gating=branch_gating,
     )
+    archived_clause_coords: dict[str, float] = {
+        **exec_clause.signature_coords,
+        **jud_clause.signature_coords,
+        **leg_clause.signature_coords,
+    }
+    bid_coords: dict[str, float] = dict(text_bid_coords)
+    for k, arch_v in archived_clause_coords.items():
+        if is_valid_leaf_id(k):
+            txt_v = float(text_bid_coords.get(k, arch_v))
+            bid_coords[k] = round(max(0.0, min(1.0, 0.70 * float(arch_v) + 0.30 * txt_v)), 4)
+
+    bid_exp: dict[str, float] = dict(text_bid_exp)
+    for exp_k in (VALENCE_LEAF, AROUSAL_LEAF, SALIENCE_LEAF, NOVELTY_LEAF, RESONANCE_LEAF, RETENTION_LEAF):
+        if exp_k in leg_clause.signature_coords:
+            arch_ev = float(leg_clause.signature_coords[exp_k])
+            txt_ev = float(text_bid_exp.get(exp_k, arch_ev))
+            bid_exp[exp_k] = round(max(0.0, min(1.0, 0.70 * arch_ev + 0.30 * txt_ev)), 4)
 
     # Test candidate arrangement into Will -> Intention / Execution via synchronous propagation
     founding_bid = {k: float(bid_coords.get(k, 0.0)) for k in FOUNDATIONAL_LEAVES}
@@ -1070,15 +1138,18 @@ def harvest_into_branch_archives(
                 s_jud = sentences[1] if len(sentences) >= 2 else sentences[0]
             s_leg = f"Felt chord of {humanize_feeling_name(leg_tag)}: {felt_chord.dominant_mood}."
 
-            cult_sig = _branch_subset(raw_coords, "cultural/")
-            phil_sig = _branch_subset(raw_coords, "philosophical/")
-            exp_sig = {
-                **_branch_subset(raw_coords, "experiential/"),
-                SALIENCE_LEAF: felt_chord.salience,
-                VALENCE_LEAF: felt_chord.valence,
-                AROUSAL_LEAF: felt_chord.arousal,
-                **felt_chord.complex_notes,
-            }
+            cult_sig = _sparse_branch_signature(raw_coords, "cultural/")
+            phil_sig = _sparse_branch_signature(raw_coords, "philosophical/")
+            exp_sig = _sparse_branch_signature(
+                {
+                    **_branch_subset(raw_coords, "experiential/"),
+                    SALIENCE_LEAF: felt_chord.salience,
+                    VALENCE_LEAF: felt_chord.valence,
+                    AROUSAL_LEAF: felt_chord.arousal,
+                    **felt_chord.complex_notes,
+                },
+                "experiential/",
+            )
 
             exec_clause = BranchClauseEntry(
                 clause_id=f"exec-s{scene_index}-{exec_tag}",

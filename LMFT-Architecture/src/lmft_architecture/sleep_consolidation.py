@@ -31,6 +31,7 @@ from .branch_archives import (
     BranchClauseEntry,
     ThreeBranchArchives,
     _derive_concept_tags,
+    _sparse_branch_signature,
 )
 from .contemplation_ledger import ContemplationLedger, save_contemplation_ledger
 from .local_models import strict_json
@@ -1305,30 +1306,67 @@ def consolidate_sleep_clusters_locally(
             active_rules.append(new_rule)
             forged_rules.append(new_rule)
 
-        cult_sig = {k: v for k, v in avg_coords.items() if k.startswith("cultural/")}
-        phil_sig = {k: v for k, v in avg_coords.items() if k.startswith("philosophical/")}
-        exp_sig = {k: v for k, v in avg_coords.items() if k.startswith("experiential/")}
-        exp_sig[SALIENCE_LEAF] = round(sum(s.salience for s in group) / len(group), 4)
-        exp_sig[VALENCE_LEAF] = round(sum(s.valence for s in group) / len(group), 4)
-        exp_sig[AROUSAL_LEAF] = round(sum(s.arousal for s in group) / len(group), 4)
+        avg_salience = round(sum(s.salience for s in group) / len(group), 4)
+        avg_valence = round(sum(s.valence for s in group) / len(group), 4)
+        avg_arousal = round(sum(s.arousal for s in group) / len(group), 4)
 
         avg_fc = compile_felt_chord(
             avg_coords,
-            salience=exp_sig[SALIENCE_LEAF],
-            valence=exp_sig[VALENCE_LEAF],
-            arousal=exp_sig[AROUSAL_LEAF],
+            salience=avg_salience,
+            valence=avg_valence,
+            arousal=avg_arousal,
             resonance=0.65,
             learned_leaves=tuple(active_learned_leaves),
         )
-        exec_tag, leg_tag, jud_tag = _derive_concept_tags(avg_coords, avg_fc)
+
+        # Contrastive "Problem vs. Remedy" role separation across the 3 faculties:
+        # 1. Judicial (Thinker / Fact-vs-Theory): sparse philosophical/ problem signature
+        phil_sig = _sparse_branch_signature(avg_coords, "philosophical/")
+        # 2. Executive (Do-er / Will & Action): when `is_group_hazard` and `avg_ref_coords` exist,
+        #    sculpt cultural/ signature toward the contrastive remedy (`avg_ref_coords`)
+        if is_group_hazard and avg_ref_coords:
+            exec_remedy_coords: dict[str, float] = {}
+            for k, v in avg_coords.items():
+                if not k.startswith("cultural/") or "/hazard_" in k:
+                    continue
+                ref_v = float(avg_ref_coords.get(k, v))
+                exec_remedy_coords[k] = round(max(0.0, min(1.0, 0.70 * ref_v + 0.30 * float(v))), 4)
+            for k, ref_v in avg_ref_coords.items():
+                if k.startswith("cultural/") and "/hazard_" not in k and k not in exec_remedy_coords:
+                    exec_remedy_coords[k] = round(max(0.0, min(1.0, float(ref_v))), 4)
+            cult_sig = _sparse_branch_signature(exec_remedy_coords, "cultural/")
+            exec_record_coords = {**avg_coords, **cult_sig}
+        else:
+            cult_sig = _sparse_branch_signature(avg_coords, "cultural/")
+            exec_record_coords = dict(avg_coords)
+        # 3. Legislative (Feeler / Contemplation): felt chord + sparse experiential signature
+        raw_exp_sig: dict[str, float] = {k: v for k, v in avg_coords.items() if k.startswith("experiential/")}
+        raw_exp_sig[SALIENCE_LEAF] = avg_salience
+        raw_exp_sig[VALENCE_LEAF] = avg_valence
+        raw_exp_sig[AROUSAL_LEAF] = avg_arousal
+        for k, v in avg_fc.complex_notes.items():
+            raw_exp_sig[k] = round(float(v), 4)
+        exp_sig = _sparse_branch_signature(raw_exp_sig, "experiential/")
+
+        exec_tag, leg_tag, jud_tag = _derive_concept_tags(exec_record_coords, avg_fc)
         clean_hunch = " ".join((rep.left_brain_hunch or "").split()).strip()
+        is_fallback_hunch = (
+            not clean_hunch
+            or clean_hunch.startswith("Unresolved scene tension:")
+            or clean_hunch.startswith("Chess table")
+            or "Legal replies include" in clean_hunch
+        )
         clean_scenario = re.sub(r"Game Review\s*\[[^\]]+\]:\s*", "", " ".join((rep.scenario_text or "").split()))
         clean_scenario = re.sub(r"\s*\([^)]*[+-]\d+\.\d+[^)]*\)", "", clean_scenario).strip()
+        if "Legal replies include" in clean_scenario:
+            clean_scenario = clean_scenario.split("Legal replies include", 1)[0].strip().rstrip(".")
         exec_label = exec_tag.replace("_", " ")
         leg_label = leg_tag.replace("_", " ")
         jud_label = jud_tag.replace("_", " ")
-        if clean_hunch:
+        if not is_fallback_hunch:
             exec_text = clean_hunch[:240]
+        elif description and "Consolidated REM chess wisdom rule:" in description:
+            exec_text = description.removeprefix("Consolidated REM chess wisdom rule:").strip()[:240]
         else:
             exec_text = f"Maintain {exec_label} and guard {human_theme} before committing to a sharp line."
         leg_text = f"Sensed {leg_label} tension across {human_theme}: {clean_scenario[:160]}"
@@ -1363,7 +1401,7 @@ def consolidate_sleep_clusters_locally(
         cur_archives = ThreeBranchArchives(
             executive=cur_archives.executive.record_scene(
                 scene_index=rep_scene,
-                coordinates=avg_coords,
+                coordinates=exec_record_coords,
                 action_summary=exec_text,
                 harvested_clause=exec_clause,
             ),
@@ -1411,13 +1449,15 @@ def apply_dream_reflection_to_archives(
     dream_text: str,
 ) -> ThreeBranchArchives:
     """Record the Left Brain's multi-sentence REM Dream reflection directly into the 3-Branch Archives."""
+    from .three_legged_runtime import is_repetitive_sentence
+
     cleaned = str(dream_text or "").strip()
     if not cleaned:
         return archives
     sentences = [
         s.strip()
         for s in re.split(r"(?<=[.!?])\s+", cleaned)
-        if s and s.strip()
+        if s and s.strip() and not is_repetitive_sentence(s.strip())
     ]
     if not sentences:
         return archives
