@@ -1,0 +1,1 @@
+{"base_model_id": "SicariusSicariiStuff/Impish_Bloodmoon_12B", "lora_alpha": 32.0, "lora_dropout": 0.05, "num_top_layers": 8, "rank": 16, "schema_version": 1, "target_modules": ["q_proj", "k_proj", "v_proj", "o_proj"]}
