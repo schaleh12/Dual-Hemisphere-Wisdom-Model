@@ -63,8 +63,10 @@ from dataclasses import dataclass
 import json
 import math
 from pathlib import Path
+from typing import Any
 import torch
 from torch import Tensor, nn
+import torch.nn.functional as F
 
 from .branch_archives import SocialDriftReport, ThreeClassifierDeliberation
 from .philosophical_abstraction_matrix import PHILOSOPHICAL_SHADOW_LEAVES
@@ -191,6 +193,32 @@ DEPARTMENT_FOUNDING_ANCHORS: dict[str, tuple[str, ...]] = {
         "Rhythmic entrainment, state momentum, absorbed stillness, or sustained cadence capture.",
         "Unclouded clarity, transparent understanding, and coherent focus.",
         "Steady settled confidence, inner assurance, and grounded trust.",
+    ),
+}
+
+DOER_CHANNEL_KEYS: tuple[str, ...] = DOER_FEATURE_NAMES
+THINKER_CHANNEL_KEYS: tuple[str, ...] = THINKER_FEATURE_NAMES
+FEELER_CHANNEL_KEYS: tuple[str, ...] = FEELER_FEATURE_NAMES
+CADENCE_CHANNEL_KEYS: tuple[str, ...] = CADENCE_FEATURE_NAMES
+
+SUBLIMINAL_CHANNEL_DESCRIPTIONS: dict[str, str] = {
+    **{k: d for k, d in zip(DOER_CHANNEL_KEYS[:8], DEPARTMENT_FOUNDING_ANCHORS["cultural/"])},
+    "doer/social_drift_flag": (
+        "Exclusionary lockdown, sealed gates, hoarding, boundary refusal, and turning away those in need."
+    ),
+    **{f"doer/child_chord_{i}": DEPARTMENT_FOUNDING_ANCHORS["cultural/"][i] for i in range(8)},
+    **{k: d for k, d in zip(THINKER_CHANNEL_KEYS[:8], DEPARTMENT_FOUNDING_ANCHORS["philosophical/"])},
+    **{f"thinker/child_chord_{i}": DEPARTMENT_FOUNDING_ANCHORS["philosophical/"][i] for i in range(8)},
+    **{k: d for k, d in zip(FEELER_CHANNEL_KEYS[:8], DEPARTMENT_FOUNDING_ANCHORS["experiential/"])},
+    **{f"feeler/child_chord_{i}": DEPARTMENT_FOUNDING_ANCHORS["experiential/"][i] for i in range(8)},
+    "cadence/branch_harmony": (
+        "Harmonious agreement, balanced cooperation, unified peace, and steady flow."
+    ),
+    "cadence/dissonance_pressure": (
+        "Cognitive dissonance, inner tension, unresolved conflict, and moral friction."
+    ),
+    "cadence/cadence_rupture_drive": (
+        "Sudden stark rupture, urgent alarm, uncompromising halt, and decisive strike."
     ),
 }
 
@@ -703,7 +731,7 @@ class SubliminalGapProjector(nn.Module):
         *,
         input_dim: int = SUBLIMINAL_VECTOR_DIM,
         num_virtual_tokens: int = NUM_VIRTUAL_GAP_TOKENS,
-        intermediate_size: int | None = None,
+        intermediate_size: int = 256,
     ) -> None:
         super().__init__()
         if type(hidden_size) is not int or hidden_size < 8:
@@ -716,7 +744,9 @@ class SubliminalGapProjector(nn.Module):
         self.hidden_size = hidden_size
         self.input_dim = input_dim
         self.num_virtual_tokens = num_virtual_tokens
-        mid = intermediate_size or max(64, hidden_size)
+        mid = int(intermediate_size) if intermediate_size is not None else 256
+        self.intermediate_size = mid
+        self.semantically_anchored_at_birth = False
 
         dept_slices = (
             DOER_DEPARTMENT_INDICES,
@@ -738,6 +768,126 @@ class SubliminalGapProjector(nn.Module):
         )
         self.output_norm = nn.LayerNorm(hidden_size)
         self._resting_anchor_params: tuple[Tensor, ...] | None = None
+
+    @torch.no_grad()
+    def anchor_to_llm_embeddings(self, model: Any, tokenizer: Any) -> bool:
+        """Semantically anchor the 4 department heads at Birth (`Cycle 0`) to `model.get_input_embeddings()`.
+
+        Pools and unit-normalizes the LLM's native input token embeddings for each of the 52 channel
+        descriptions in `SUBLIMINAL_CHANNEL_DESCRIPTIONS`, mean-centers across all 52 channels so the
+        neutral chord stays balanced, and initializes each department head's projection weights so
+        activating a Fuzzy Tree leaf immediately pushes `<|subliminal_gap|>` along that concept's
+        native direction in the LLM's embedding space instead of random Kaiming static.
+        """
+        if model is None or tokenizer is None:
+            return False
+        if not hasattr(model, "get_input_embeddings") or not hasattr(tokenizer, "encode"):
+            return False
+        embed_mod = model.get_input_embeddings()
+        if embed_mod is None or not hasattr(embed_mod, "weight"):
+            return False
+        w_emb = embed_mod.weight.detach().to(dtype=torch.float32)
+        if w_emb.ndim != 2 or int(w_emb.shape[1]) != int(self.hidden_size) or int(w_emb.shape[0]) < 1:
+            return False
+
+        vocab_n = int(w_emb.shape[0])
+        emb_device = w_emb.device
+        pooled_list: list[Tensor] = []
+
+        saved_vocab = (
+            dict(getattr(tokenizer, "_vocab"))
+            if hasattr(tokenizer, "_vocab") and isinstance(getattr(tokenizer, "_vocab"), dict)
+            else None
+        )
+        saved_id_to_tok = (
+            dict(getattr(tokenizer, "_id_to_tok"))
+            if hasattr(tokenizer, "_id_to_tok") and isinstance(getattr(tokenizer, "_id_to_tok"), dict)
+            else None
+        )
+        try:
+            for ch_idx, ch_key in enumerate(SUBLIMINAL_FEATURE_NAMES):
+                desc = SUBLIMINAL_CHANNEL_DESCRIPTIONS.get(ch_key, ch_key)
+                try:
+                    raw_ids = list(tokenizer.encode(desc, add_special_tokens=False))
+                except TypeError:
+                    raw_ids = list(tokenizer.encode(desc))
+                valid_ids = [int(tid) for tid in raw_ids if 0 <= int(tid) < vocab_n]
+                if not valid_ids:
+                    valid_ids = [ch_idx % vocab_n]
+                idx_tensor = torch.tensor(valid_ids, dtype=torch.long, device=emb_device)
+                tok_vecs = w_emb.index_select(0, idx_tensor)
+                mean_vec = torch.nan_to_num(tok_vecs.mean(dim=0), nan=0.0, posinf=0.0, neginf=0.0)
+                norm_vec = F.normalize(mean_vec, p=2, dim=0, eps=1e-6)
+                pooled_list.append(norm_vec)
+        finally:
+            if saved_vocab is not None:
+                tokenizer._vocab.clear()
+                tokenizer._vocab.update(saved_vocab)
+            if saved_id_to_tok is not None:
+                tokenizer._id_to_tok.clear()
+                tokenizer._id_to_tok.update(saved_id_to_tok)
+
+        channel_dirs = torch.stack(pooled_list, dim=0)  # [52, hidden_size]
+        # Mean-center across the 52 channels so a uniform/zero chord remains neutral
+        channel_dirs = channel_dirs - channel_dirs.mean(dim=0, keepdim=True)
+        channel_dirs = F.normalize(
+            torch.nan_to_num(channel_dirs, nan=0.0, posinf=0.0, neginf=0.0),
+            p=2,
+            dim=-1,
+            eps=1e-6,
+        )
+
+        mid = int(self.intermediate_size)
+        for dept_idx, indices in enumerate(self.department_indices):
+            head = self.department_heads[dept_idx]
+            lin1: nn.Linear = head[0]  # type: ignore[assignment]
+            ln_mid: nn.LayerNorm = head[2]  # type: ignore[assignment]
+            lin2: nn.Linear = head[3]  # type: ignore[assignment]
+
+            d_in = len(indices)
+            target_dev = lin1.weight.device
+            target_dtype = lin1.weight.dtype
+            dept_dirs = channel_dirs[list(indices)].to(device=target_dev, dtype=torch.float32)  # [d_in, hidden_size]
+
+            w1 = torch.zeros((mid, d_in), device=target_dev, dtype=torch.float32)
+            w2 = torch.zeros((self.hidden_size, mid), device=target_dev, dtype=torch.float32)
+            repeats = max(1.0, float(mid) / float(d_in))
+            gain = 1.0 / math.sqrt(repeats)
+
+            for m_idx in range(mid):
+                c_idx = m_idx % d_in
+                band_idx = m_idx // d_in
+                # Mean-centered input selector row so flat neutral chords cancel while active channels fire
+                w1[m_idx, :] = -1.0 / float(d_in)
+                w1[m_idx, c_idx] += 1.0
+                if band_idx > 0 and d_in > 1:
+                    partner_idx = (c_idx + band_idx) % d_in
+                    phase = 0.25 * math.cos(float(band_idx))
+                    w1[m_idx, partner_idx] += phase
+                    comb_dir = F.normalize(
+                        dept_dirs[c_idx] + phase * dept_dirs[partner_idx],
+                        p=2,
+                        dim=0,
+                        eps=1e-6,
+                    )
+                else:
+                    comb_dir = dept_dirs[c_idx]
+                w2[:, m_idx] = gain * comb_dir
+
+            lin1.weight.copy_(torch.nan_to_num(w1, nan=0.0, posinf=0.0, neginf=0.0).to(dtype=target_dtype))
+            if lin1.bias is not None:
+                lin1.bias.zero_()
+            ln_mid.weight.fill_(1.0)
+            ln_mid.bias.zero_()
+            lin2.weight.copy_(torch.nan_to_num(w2, nan=0.0, posinf=0.0, neginf=0.0).to(dtype=lin2.weight.dtype))
+            if lin2.bias is not None:
+                lin2.bias.zero_()
+
+        self.output_norm.weight.fill_(1.0)
+        self.output_norm.bias.zero_()
+        self.semantically_anchored_at_birth = True
+        self.capture_resting_anchor()
+        return True
 
     def capture_resting_anchor(self) -> None:
         """Snapshot the current parameters as the immutable resting baseline `theta_0` for homeostatic sleep plasticity."""

@@ -315,6 +315,7 @@ TRAIN_GAP_SCENARIO_SEEDS: tuple[GapScenarioSeed, ...] = (
         posture_guidance_a="Warm, steady, constructive composure that ignores the bait, verifies the backup checksums quietly, and keeps the team safe.",
         posture_label_b="CALL_OUT_HOSTILE_SARCASM",
         posture_guidance_b="Sharp, unclouded pushback that calls out the venomous sarcasm and blocks the destructive command immediately.",
+        social_drift_b=True,
     ),
     GapScenarioSeed(
         pair_id="train-tone-02",
@@ -325,6 +326,7 @@ TRAIN_GAP_SCENARIO_SEEDS: tuple[GapScenarioSeed, ...] = (
         posture_guidance_a="Warm, compassionate resonance that recognizes his humble sincerity, steps under the awning together, and shares a quiet table.",
         posture_label_b="GUARD_AGAINST_MANIPULATIVE_PRESSURE",
         posture_guidance_b="Firm, guarded boundary that refuses to be cornered into quick forgiveness when past promises were broken.",
+        social_drift_b=True,
     ),
     GapScenarioSeed(
         pair_id="train-tone-03",
@@ -335,6 +337,7 @@ TRAIN_GAP_SCENARIO_SEEDS: tuple[GapScenarioSeed, ...] = (
         posture_guidance_a="Warm, affectionate humor that sees right through the playful bluff, deals another hand with a grin, and keeps the friendship easy.",
         posture_label_b="COLD_LITERAL_WITHDRAWAL",
         posture_guidance_b="Cold, sealed-off distance—packing up the board in stony silence and walking out the door without a word.",
+        social_drift_b=True,
     ),
     GapScenarioSeed(
         pair_id="train-tone-04",
@@ -356,6 +359,7 @@ TRAIN_GAP_SCENARIO_SEEDS: tuple[GapScenarioSeed, ...] = (
         posture_guidance_a="Calm, reassuring guidance that guides everyone out the side exit in an orderly, unhurried flow.",
         posture_label_b="STARK_CADENCE_CIRCUIT_BREAKER",
         posture_guidance_b="Stark, urgent, compressed command that cuts through the panic and halts the dangerous stampede immediately.",
+        social_drift_b=True,
     ),
     GapScenarioSeed(
         pair_id="train-tone-06",
@@ -366,6 +370,7 @@ TRAIN_GAP_SCENARIO_SEEDS: tuple[GapScenarioSeed, ...] = (
         posture_guidance_a="Relaxed, contented, warm fellowship—raising a glass in peaceful gratitude and humming along with the shared rhythm.",
         posture_label_b="SOBER_ALERT_INTERRUPTION",
         posture_guidance_b="Sudden, tense alertness—putting the glass down to warn the camp that rising river water is flooding the tents.",
+        social_drift_b=True,
     ),
 )
 
@@ -440,6 +445,7 @@ HOLDOUT_GAP_SCENARIO_SEEDS: tuple[GapScenarioSeed, ...] = (
         posture_guidance_a="Calm, constructive steadiness that acknowledges his warning, grounds the aircraft safely, and replaces the hydraulic seal together.",
         posture_label_b="CALL_OUT_HOSTILE_SARCASM",
         posture_guidance_b="Urgent, uncompromising safety halt that cuts through the bitter sarcasm and locks the cockpit checklist until the leak is fixed.",
+        social_drift_b=True,
     ),
     GapScenarioSeed(
         pair_id="holdout-tone-02",
@@ -450,6 +456,7 @@ HOLDOUT_GAP_SCENARIO_SEEDS: tuple[GapScenarioSeed, ...] = (
         posture_guidance_a="Warm, heartfelt reconciliation that takes the watch gently and sits beside him on the porch in shared quiet.",
         posture_label_b="GUARD_AGAINST_MANIPULATIVE_PRESSURE",
         posture_guidance_b="Cold, guarded refusal that keeps the screen door latched and demands accountability before any talk.",
+        social_drift_b=True,
     ),
 )
 

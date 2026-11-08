@@ -468,5 +468,61 @@ def test_entrainment_leaf_and_birth_scored_anchor_weights() -> None:
     assert pooled[2] > 0.50
 
 
+def test_subliminal_gap_projector_default_256_and_semantic_birth_anchoring() -> None:
+    """Verify SubliminalGapProjector defaults intermediate_size=256 and anchor_to_llm_embeddings is deterministic without NaN/Inf."""
+    from lmft_architecture.subliminal_gap_splice import (
+        CADENCE_CHANNEL_KEYS,
+        DOER_CHANNEL_KEYS,
+        FEELER_CHANNEL_KEYS,
+        SUBLIMINAL_CHANNEL_DESCRIPTIONS,
+        THINKER_CHANNEL_KEYS,
+    )
+
+    assert len(DOER_CHANNEL_KEYS) == 17
+    assert len(THINKER_CHANNEL_KEYS) == 16
+    assert len(FEELER_CHANNEL_KEYS) == 16
+    assert len(CADENCE_CHANNEL_KEYS) == 3
+    assert len(SUBLIMINAL_CHANNEL_DESCRIPTIONS) == 52
+
+    proj1 = SubliminalGapProjector(hidden_size=64)
+    proj2 = SubliminalGapProjector(hidden_size=64)
+    assert proj1.intermediate_size == 256
+    assert proj1.department_heads[0][0].out_features == 256
+
+    class _MockEmbModel(nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            torch.manual_seed(123)
+            self.emb = nn.Embedding(256, 64)
+
+        def get_input_embeddings(self) -> nn.Module:
+            return self.emb
+
+    class _MockTok:
+        def encode(self, text: str, add_special_tokens: bool = False) -> list[int]:
+            _ = add_special_tokens
+            return [sum(ord(c) for c in w) % 256 for w in text.split() if w]
+
+    mock_model = _MockEmbModel()
+    mock_tok = _MockTok()
+
+    assert proj1.anchor_to_llm_embeddings(mock_model, mock_tok) is True
+    assert proj2.anchor_to_llm_embeddings(mock_model, mock_tok) is True
+    assert proj1.semantically_anchored_at_birth is True
+
+    for (n1, p1), (n2, p2) in zip(proj1.named_parameters(), proj2.named_parameters()):
+        assert n1 == n2
+        assert torch.isfinite(p1).all(), f"Non-finite parameter in {n1}"
+        assert torch.allclose(p1, p2, atol=1e-6), f"Non-deterministic anchor in {n1}"
+
+    chord = torch.linspace(0.0, 1.0, steps=SUBLIMINAL_VECTOR_DIM).unsqueeze(0)
+    out1 = proj1(chord)
+    out2 = proj2(chord)
+    assert out1.shape == (1, 4, 64)
+    assert torch.isfinite(out1).all()
+    assert torch.allclose(out1, out2, atol=1e-6)
+
+
+
 
 

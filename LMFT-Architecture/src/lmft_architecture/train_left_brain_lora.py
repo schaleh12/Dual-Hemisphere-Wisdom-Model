@@ -980,8 +980,11 @@ def train_left_brain_lora_and_callosum(
     margin_target: float = 0.35,
     swap_margin_target: float = 1.20,
     warmup_steps: int = 0,
+    anchor_at_birth: bool = False,
 ) -> list[dict[str, float]]:
     """Train `SubliminalGapProjector` and `LoRALinear` adapters on `train_pairs` with `batch_size=1`."""
+    if bool(anchor_at_birth) and not getattr(projector, "semantically_anchored_at_birth", False):
+        projector.anchor_to_llm_embeddings(model, tokenizer)
     model.train()
     projector.train()
 

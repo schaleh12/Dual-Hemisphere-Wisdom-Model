@@ -540,6 +540,7 @@ class SubliminalGapLeftBrain:
         max_post_gap_tokens: int = 64,
         callosum_metadata: CorpusCallosumMetadata | None = None,
         lora_config: LoRAConfig | None = None,
+        anchor_at_birth: bool = False,
     ) -> None:
         embed_weight = model.get_input_embeddings().weight
         model_hidden_size = int(embed_weight.shape[1])
@@ -562,6 +563,13 @@ class SubliminalGapLeftBrain:
         self.callosum_metadata = callosum_metadata
         self.lora_config = lora_config
         self.last_traces: list[SplicedThoughtTrace] = []
+        if not getattr(self.projector, "semantically_anchored_at_birth", False):
+            should_anchor = bool(anchor_at_birth) or (
+                callosum_metadata is not None
+                and int(getattr(callosum_metadata, "trained_trajectories_count", 0)) == 0
+            )
+            if should_anchor:
+                self.projector.anchor_to_llm_embeddings(self.model, self.tokenizer)
 
     @classmethod
     def from_checkpoint(
