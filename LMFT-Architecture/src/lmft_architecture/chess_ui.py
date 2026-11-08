@@ -23,7 +23,9 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<link rel="icon" type="image/jpeg" href="/assets/celestriad_spirit_particle.jpg" />
+<link rel="icon" type="image/x-icon" href="/assets/celestriad_spirit_particle.ico" />
+<link rel="shortcut icon" type="image/x-icon" href="/assets/celestriad_spirit_particle.ico" />
+<link rel="apple-touch-icon" href="/assets/celestriad_spirit_particle.jpg" />
 <title>LMFT-Chess — Dual-Hemisphere Chess Wisdom &amp; Self-Kibitzer Arena</title>
 <style>
   :root {
@@ -747,7 +749,7 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
     </div>
 
     <button class="btn btn-chess-green" style="width:100%;padding:9px;font-size:12.5px;" onclick="runRemSleepNow()">
-      🌙 Run REM Sleep &amp; Consolidate Rules</button><button class="btn" style="width:100%;padding:6px;font-size:11.5px;" onclick="resetCleanSlateRules()">🧹 Clean Slate (Reset Chess Rules &amp; Elo)
+      🌙 Run REM Sleep &amp; Consolidate Rules
     </button>
     <label style="font-size:11px;display:flex;align-items:center;gap:6px;color:var(--text-1);">
       <input type="checkbox" id="auto-sleep-toggle" checked onchange="toggleAutoSleep(this.checked)" />
@@ -828,6 +830,13 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
       <strong>💬 Talk or Coach Anytime</strong><br/>
       Use the chat bar on the right to ask Celestriad 1.0 questions about the board (insightful questions automatically trigger 2–3 sentence deliberation), or check <strong>Show Routine Moves</strong> to inspect every individual ply and click <strong>Coach / Queue for Sleep</strong>.
     </div>
+    <details style="margin-top:10px;font-size:11px;color:var(--text-2);border-top:1px solid var(--border);padding-top:8px;">
+      <summary style="cursor:pointer;color:#f87171;">⚠️ Advanced Danger Zone (Factory Reset)</summary>
+      <div style="margin-top:6px;display:flex;justify-content:space-between;align-items:center;gap:8px;">
+        <span>Backs up your current state to <code>backups/</code> before resetting rules &amp; Elo to 1000.</span>
+        <button class="btn" style="padding:4px 10px;font-size:11px;border-color:#7f1d1d;color:#fca5a5;" onclick="resetCleanSlateRules()">🧹 Clean Slate (Reset Chess Rules &amp; Elo)</button>
+      </div>
+    </details>
     <div style="margin-top:14px;display:flex;justify-content:space-between;align-items:center;gap:8px;">
       <button class="btn" style="border-color:#9333ea;color:#e9d5ff;" onclick="closeTutorialModal();openSpaceCenterModal();">🚀 Take the Space Center Architecture Tour</button>
       <button class="btn btn-chess-green" style="padding:8px 18px;font-size:13px;" onclick="closeTutorialModal()">Got It — Let's Play!</button>
@@ -1987,7 +1996,11 @@ async function createNewThread() { await apiPost("/api/threads/create", {}); }
 async function switchThread(tid) { await apiPost("/api/threads/switch", { thread_id: tid }); }
 async function switchLineage(lin) { await apiPost("/api/lineage", { lineage: lin }); }
 async function runRemSleepNow() { await apiPost("/api/sleep/run", {}); }
-async function resetCleanSlateRules() { await apiPost("/api/rules/reset_clean_slate", {}); }
+async function resetCleanSlateRules() {
+  const ans = window.prompt("WARNING: This resets learned chess rules, sleeve weights, and Elo back to 1000.0 (an automatic backup will be saved in chess_kibitzer_state/backups/ first).\n\nType RESET in all caps to confirm:");
+  if (ans !== "RESET") return;
+  await apiPost("/api/rules/reset_clean_slate", {});
+}
 async function toggleAutoSleep(enabled) { await apiPost("/api/sleep/auto", { enabled: !!enabled }); }
 
 async function pollState() {

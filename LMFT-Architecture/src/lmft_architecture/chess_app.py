@@ -2234,6 +2234,17 @@ class ChessKibitzerRuntime:
 
     def reset_learned_chess_state(self) -> dict[str, Any]:
         """Reset chess-specific REM rules, BitboardIntuitionSleeve, Elo, and chat history to a clean foundational slate."""
+        try:
+            import shutil
+
+            if self.state_dir.exists():
+                backup_dir = self.state_dir / "backups" / f"pre_reset_{int(time.time())}"
+                backup_dir.mkdir(parents=True, exist_ok=True)
+                for item in self.state_dir.iterdir():
+                    if item.is_file():
+                        shutil.copy2(item, backup_dir / item.name)
+        except Exception:
+            pass
         base_seed = self.training_root / "outputs" / "sleep_consolidated_ruleset.json"
         if base_seed.exists():
             try:
@@ -3809,12 +3820,22 @@ def _wait_for_local_server_ready(url: str, *, timeout_sec: float = 3.0) -> bool:
 def launch_native_pywebview_window(title: str, url: str) -> bool:
     """Open `url` inside a native Windows desktop window (`pywebview`) with no browser chrome or 127.0.0.1 title."""
     try:
+        import ctypes
         import webview  # type: ignore[import-untyped]
-        from lmft_architecture.workspace_paths import resolve_training_root
+        from lmft_architecture.workspace_paths import resolve_arch_root, resolve_training_root
+
+        if sys.platform.startswith("win"):
+            try:
+                ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("LMFT.Celestriad.ChessApp.1")
+            except Exception:
+                pass
+
+        ico_path = resolve_arch_root() / "docs" / "assets" / "celestriad_spirit_particle.ico"
+        icon_str = str(ico_path) if ico_path.is_file() else None
 
         storage_dir = resolve_training_root() / "outputs" / ".chess_window_profile"
         storage_dir.mkdir(parents=True, exist_ok=True)
-        webview.create_window(
+        win = webview.create_window(
             title,
             url,
             width=1360,
@@ -3822,7 +3843,26 @@ def launch_native_pywebview_window(title: str, url: str) -> bool:
             min_size=(1020, 680),
             background_color="#0b1017",
         )
-        webview.start(private_mode=False, storage_path=str(storage_dir))
+        if sys.platform.startswith("win") and icon_str is not None and win is not None:
+            def _apply_win32_taskbar_icon() -> None:
+                try:
+                    user32 = ctypes.windll.user32
+                    hwnd = user32.FindWindowW(None, title)
+                    if hwnd:
+                        image_icon = 1
+                        lr_loadfromfile = 0x00000010
+                        wm_seticon = 0x0080
+                        hicon_big = user32.LoadImageW(0, icon_str, image_icon, 32, 32, lr_loadfromfile)
+                        hicon_small = user32.LoadImageW(0, icon_str, image_icon, 16, 16, lr_loadfromfile)
+                        if hicon_big:
+                            user32.SendMessageW(hwnd, wm_seticon, 1, hicon_big)
+                        if hicon_small:
+                            user32.SendMessageW(hwnd, wm_seticon, 0, hicon_small)
+                except Exception:
+                    pass
+
+            win.events.shown += _apply_win32_taskbar_icon
+        webview.start(private_mode=False, storage_path=str(storage_dir), icon=icon_str)
         return True
     except Exception:
         return False
