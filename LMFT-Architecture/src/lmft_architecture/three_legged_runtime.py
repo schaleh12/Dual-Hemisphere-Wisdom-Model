@@ -274,6 +274,80 @@ class _PersistentTurnStreamState:
     past_kv: Any = None
     active_gap_spans: list[tuple[int, int]] = field(default_factory=list)
     masked_gap_spans: list[tuple[int, int]] = field(default_factory=list)
+    generated_turn_token_ids: list[int] = field(default_factory=list)
+
+
+def _apply_repetition_and_ngram_penalty(
+    logits: Tensor,
+    prior_token_ids: Sequence[int],
+    *,
+    repetition_penalty: float = 1.22,
+    no_repeat_ngram_size: int = 3,
+) -> None:
+    """Apply standard HuggingFace repetition penalty and n-gram blocking to `logits` in-place (when `vocab_size > 1000`)."""
+    vocab_size = int(logits.size(0))
+    if vocab_size <= 1000 or not prior_token_ids:
+        return
+    if repetition_penalty > 1.0:
+        recent_32 = [int(t) for t in prior_token_ids[-32:]]
+        freq_32: dict[int, int] = {}
+        for t in recent_32:
+            freq_32[t] = freq_32.get(t, 0) + 1
+        for tok_id in set(int(t) for t in prior_token_ids[-96:]):
+            if 0 <= tok_id < vocab_size:
+                val = float(logits[tok_id].item())
+                pen = (repetition_penalty ** 2) if freq_32.get(tok_id, 0) >= 2 else repetition_penalty
+                if val > 0.0:
+                    logits[tok_id] = val / pen
+                else:
+                    logits[tok_id] = val * pen
+    if no_repeat_ngram_size >= 2 and len(prior_token_ids) >= no_repeat_ngram_size - 1:
+        prefix_len = no_repeat_ngram_size - 1
+        tail = tuple(int(t) for t in prior_token_ids[-prefix_len:])
+        limit = len(prior_token_ids) - prefix_len
+        for idx in range(limit):
+            if tuple(int(t) for t in prior_token_ids[idx : idx + prefix_len]) == tail:
+                banned_id = int(prior_token_ids[idx + prefix_len])
+                if 0 <= banned_id < vocab_size:
+                    logits[banned_id] = -1e4
+    recent_2gram_window = prior_token_ids[-48:]
+    if len(recent_2gram_window) >= 2:
+        last_tok = int(recent_2gram_window[-1])
+        for idx in range(len(recent_2gram_window) - 1):
+            if int(recent_2gram_window[idx]) == last_tok:
+                banned_2gram_id = int(recent_2gram_window[idx + 1])
+                if 0 <= banned_2gram_id < vocab_size:
+                    logits[banned_2gram_id] = -1e4
+
+
+def is_repetitive_sentence(sentence: str, *, max_word_repeats: int = 3) -> bool:
+    """Return True when any 4+ character content word appears `>= max_word_repeats` times in `sentence`."""
+    words = re.findall(r"[a-zA-Z]{4,}", str(sentence or "").lower())
+    if not words:
+        return False
+    counts: dict[str, int] = {}
+    for w in words:
+        c = counts.get(w, 0) + 1
+        if c >= max_word_repeats:
+            return True
+        counts[w] = c
+    return False
+
+
+def extract_dream_vow_sentence(dream_text: str, *, fallback: str = "") -> str:
+    """Return the final non-repetitive Executive vow/takeaway sentence from a REM dream stanza or chronicle."""
+    cleaned = " ".join(str(dream_text or "").split()).strip()
+    if not cleaned:
+        return str(fallback or "").strip()
+    sentences = [
+        s.strip()
+        for s in re.split(r"(?<=[.!?])\s+", cleaned)
+        if s and s.strip()
+    ]
+    for sent in reversed(sentences):
+        if not is_repetitive_sentence(sent):
+            return sent
+    return str(fallback or "").strip()
 
 
 def _mask_prior_virtual_gaps(state: _PersistentTurnStreamState) -> None:
@@ -633,6 +707,10 @@ class SubliminalGapLeftBrain:
             norm_override = normalize_clause_1_prefix(clause_1_override)
             if _stream_state is not None:
                 _append_pending_embeds(_stream_state, self._encode_continuation_embeds(norm_override))
+                if hasattr(self.tokenizer, "encode"):
+                    _stream_state.generated_turn_token_ids.extend(
+                        int(t) for t in self.tokenizer.encode(" " + norm_override, add_special_tokens=False)
+                    )
             return norm_override
 
         owns_stream = _stream_state is None
@@ -671,6 +749,10 @@ class SubliminalGapLeftBrain:
                         next_logits[bad_id] = -1e9
                 if step_idx == 0 and eos_id is not None and 0 <= int(eos_id) < next_logits.size(0):
                     next_logits[int(eos_id)] = -1e9
+                _apply_repetition_and_ngram_penalty(
+                    next_logits,
+                    (state.generated_turn_token_ids if state is not None else []) + generated_ids,
+                )
 
                 next_id = int(torch.argmax(next_logits).item())
                 if eos_id is not None and next_id == int(eos_id):
@@ -685,6 +767,8 @@ class SubliminalGapLeftBrain:
                 if step_idx >= 2 and ("," in decoded_so_far or ";" in decoded_so_far):
                     break
 
+            if state is not None and generated_ids:
+                state.generated_turn_token_ids.extend(generated_ids)
             raw_clause_1 = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
             norm_clause_1 = normalize_clause_1_prefix(raw_clause_1)
             if not owns_stream:
@@ -821,6 +905,10 @@ class SubliminalGapLeftBrain:
                         next_logits[bad_id] = -1e9
                 if step_idx == 0 and eos_id is not None and 0 <= int(eos_id) < next_logits.size(0):
                     next_logits[int(eos_id)] = -1e9
+                _apply_repetition_and_ngram_penalty(
+                    next_logits,
+                    (state.generated_turn_token_ids if state is not None else []) + generated_ids,
+                )
 
                 next_id = int(torch.argmax(next_logits).item())
                 if eos_id is not None and next_id == int(eos_id):
@@ -838,6 +926,8 @@ class SubliminalGapLeftBrain:
                 ):
                     break
 
+            if state is not None and generated_ids:
+                state.generated_turn_token_ids.extend(generated_ids)
             raw_post_gap = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
             cleaned_post_gap = clean_post_gap_continuation(raw_post_gap)
             if not prefix and cleaned_post_gap:
@@ -1101,7 +1191,7 @@ class SubliminalGapLeftBrain:
                                 if overlap >= 0.72:
                                     is_dup = True
                                     break
-                        if is_dup and stanza_sentences:
+                        if is_dup:
                             break
                     stanza_sentences.append(trace.full_thought)
                     all_traces.append(trace)

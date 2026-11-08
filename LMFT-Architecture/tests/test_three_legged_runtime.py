@@ -1028,3 +1028,101 @@ def test_auditor_fixes_pass3_residual_pivot_stanza_synthesis_and_kv_gap_masking(
     assert synth_turn.equilibrium.passes[-1].max_theory_delta == pytest.approx(0.36, abs=0.01)
 
 
+def test_repetition_and_ngram_penalty_and_stanza_start_duplicate_check() -> None:
+    """Verify `_apply_repetition_and_ngram_penalty` blocks repeated 2/3-grams ('sudden leap and sudden leap'), Stanza 2 `sent_idx == 0` duplicate sentences, and `extract_dream_vow_sentence` skips repetitive sentences."""
+    from lmft_architecture.three_legged_runtime import (
+        _apply_repetition_and_ngram_penalty,
+        extract_dream_vow_sentence,
+        is_repetitive_sentence,
+    )
+
+    # 1. Verify repetition penalty + 3-gram and local 2-gram blocking when `vocab_size > 1000`
+    logits = torch.zeros(2000, dtype=torch.float32)
+    logits[101] = 6.0  # "sudden" (appears twice in prior_ids -> penalized by 1.22 ** 2)
+    logits[102] = 9.0  # "leap"
+    logits[103] = 5.0  # "and" (appears once -> penalized by 1.22)
+    logits[104] = 4.0  # "strike"
+
+    # Prior sequence: [101 ("sudden"), 102 ("leap"), 103 ("and"), 101 ("sudden")]
+    prior_ids = [101, 102, 103, 101]
+    _apply_repetition_and_ngram_penalty(logits, prior_ids, repetition_penalty=1.22, no_repeat_ngram_size=3)
+
+    # Token 101 ("sudden") appeared 2 times in last 32 tokens -> divided by 1.22 ** 2
+    assert logits[101].item() == pytest.approx(6.0 / (1.22 ** 2), rel=1e-4)
+    # Token 103 ("and") appeared 1 time -> divided by 1.22
+    assert logits[103].item() == pytest.approx(5.0 / 1.22, rel=1e-4)
+    # Token 102 ("leap") after 101 ("sudden") is blocked by the 2-gram window (`-1e4`), so argmax picks 101/103/104 instead of repeating (101, 102)!
+    assert logits[102].item() <= -1000.0
+    assert int(torch.argmax(logits).item()) != 102
+
+    # Verify 3-gram blocking across longer history (> 48 tokens ago)
+    logits_3g = torch.zeros(2000, dtype=torch.float32)
+    logits_3g[500] = 10.0
+    logits_3g[501] = 8.0
+    long_history = [400, 401, 500] + list(range(10, 70)) + [400, 401]
+    _apply_repetition_and_ngram_penalty(logits_3g, long_history, repetition_penalty=1.22, no_repeat_ngram_size=3)
+    assert logits_3g[500].item() <= -1000.0
+    assert int(torch.argmax(logits_3g).item()) == 501
+
+    # 2. Verify `generate_multi_stanza_discourse` drops a duplicate sentence even when `sent_idx == 0` in Stanza 2
+    torch.manual_seed(29)
+
+    class _LargeVocabTokenizer(_WordLevelTestTokenizer):
+        def __len__(self) -> int:
+            return 5000
+
+    tok = _LargeVocabTokenizer()
+    gap_id = ensure_subliminal_gap_token(tok)
+    model = _MiniCausalLM(vocab_size=64, hidden_size=32, num_layers=2)
+    projector = SubliminalGapProjector(hidden_size=32)
+    left_brain = SubliminalGapLeftBrain(
+        model,
+        tok,
+        projector,
+        gap_token_id=gap_id,
+        device="cpu",
+        max_clause_1_tokens=4,
+        max_post_gap_tokens=6,
+    )
+    chord_a, _ = compile_chess_posture_chords(
+        queen_volition=0.80,
+        king_safety=0.75,
+        bishop_alignment=0.72,
+        knight_disruption=0.45,
+        pawn_chain_flow=0.76,
+        rook_bastion=0.74,
+    )
+
+    fixed_trace = SplicedThoughtTrace(
+        pass_index=2,
+        clause_1_prefix="In the quiet center,",
+        prompt_before_gap="User: Test\nAssistant: In the quiet center, <|subliminal_gap|>",
+        spliced_chord=chord_a,
+        post_gap_continuation="the king shelters behind the pawn wall.",
+        full_thought="In the quiet center, the king shelters behind the pawn wall.",
+    )
+    left_brain.generate_two_clause_thought = lambda *args, **kwargs: fixed_trace  # type: ignore[method-assign]
+
+    discourse, stanzas, traces = left_brain.generate_multi_stanza_discourse(
+        "Test duplicate stanza start.",
+        chord_a,
+        max_stanzas=3,
+        sentences_per_stanza=2,
+        lead_with_gap=True,
+    )
+    assert len(stanzas) == 1
+    assert len(traces) == 1
+    assert discourse == "In the quiet center, the king shelters behind the pawn wall."
+
+    # 3. Verify `extract_dream_vow_sentence` skips sentences with >= 3 repeated content words
+    loop_sent = "I leap forward with sudden leap and sudden leap to snatch the sudden leap and sudden leap."
+    clean_sent = "The enemy king bolts backward as we coordinate our rooks along the open file."
+    assert is_repetitive_sentence(loop_sent) is True
+    assert is_repetitive_sentence(clean_sent) is False
+    assert extract_dream_vow_sentence(f"{clean_sent} {loop_sent}") == clean_sent
+    assert extract_dream_vow_sentence(loop_sent, fallback="Guard king shelter before over-extending.") == (
+        "Guard king shelter before over-extending."
+    )
+
+
+

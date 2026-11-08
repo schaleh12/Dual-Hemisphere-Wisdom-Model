@@ -131,7 +131,6 @@ from .sleep_consolidation import (
     canonical_cluster_concept_name,
     consolidate_sleep_clusters_locally,
     entrain_existing_cluster_rule,
-    extract_dream_vow_sentence,
     run_sleep_consolidation,
 )
 from .subliminal_gap_splice import SubliminalChordVector
@@ -140,6 +139,8 @@ from .three_legged_runtime import (
     ThreeLeggedTurnResult,
     _compile_mid_sentence_comma_vibe,
     compute_stanza_residual_chord,
+    extract_dream_vow_sentence,
+    is_repetitive_sentence,
     run_three_legged_turn,
 )
 from .virgin_baseline import VIRGIN_FOUNDATIONAL_RULES, load_virgin_baseline_state
@@ -2703,7 +2704,7 @@ class ChessKibitzerRuntime:
         self._last_harvested_gap_pairs: list[ContrastiveGapPair] = []
         if not queued_snapshot or self.active_lineage == "virgin":
             return 0
-        clean_vow = " ".join(str(vow_sentence or "").split()).strip()
+        clean_vow = extract_dream_vow_sentence(str(vow_sentence or ""))
         if not clean_vow:
             return 0
         out_path = self.state_dir / "celestriad_gap_trajectories.jsonl"
@@ -3011,8 +3012,13 @@ class ChessKibitzerRuntime:
             vow_context_clause = ""
             conv_hist: list[tuple[str, str]] = []
             if prev_chronicle and prev_chronicle.get("vow_sentence"):
-                prev_vow_str = str(prev_chronicle["vow_sentence"]).strip()
-                conv_hist.append(("Previous REM Sleep Vow", prev_vow_str))
+                prev_vow_str = extract_dream_vow_sentence(str(prev_chronicle["vow_sentence"]).strip())
+                if not prev_vow_str and prev_chronicle.get("stanzas"):
+                    prev_vow_str = extract_dream_vow_sentence(
+                        " ".join(str(s) for s in prev_chronicle.get("stanzas", ()))
+                    )
+                if prev_vow_str and not is_repetitive_sentence(prev_vow_str):
+                    conv_hist.append(("Previous REM Sleep Vow", prev_vow_str))
                 if vow_outcome == "BROKEN" and vow_overlap_leaves:
                     leaf_words = [k.split("/")[-1].replace("-", " ") for k in vow_overlap_leaves[:3]]
                     if len(leaf_words) > 1:
@@ -3313,7 +3319,7 @@ class ChessKibitzerRuntime:
                         else f"Guard {', '.join(k.split('/')[-1] for k in cycle_vowed_leaves[:2]) or 'king shelter'} before over-extending."
                     )
                     vow_sentence = (
-                        extract_dream_vow_sentence(sleep_self_talk)
+                        extract_dream_vow_sentence(sleep_self_talk, fallback=fallback_vow)
                         if sleep_self_talk
                         else fallback_vow
                     )
