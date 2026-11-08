@@ -1803,6 +1803,71 @@ def test_zero_wire_clone_rule_ties_and_rem_vow_prompt_no_chat_bleed(tmp_path: Pa
     assert "Previous REM Sleep Vow" not in snap["last_rem_sleep_receipt"]
     assert "wastelessness<=0.25" in snap["last_rem_sleep_receipt"]
 
+    # 4. Verify all 29 queued scenes from Game #135 (`Scene #15545..#15651`) settle with `Clarity >= 0.50`,
+    #    preserved `rule_grounded_coordination` refinements survive `_ensure_foundational_rules`, and
+    #    cross-family (`hazard_` vs `coached_`) ties still collide (`Clarity == 0.00, is_confused == True`).
+    threads_path = repo_root / "LMFT-Training" / "outputs" / "chess_kibitzer_state" / "threads.json"
+    if threads_path.exists():
+        t_raw = json.loads(threads_path.read_text(encoding="utf-8"))
+        msgs_135 = (t_raw.get("threads") or [{}])[0].get("chat_messages", [])
+        scenes_135 = [
+            (
+                int(m["id"]),
+                ((m.get("telemetry") or {}).get("game_review") or {}).get("played_coordinates")
+                or (m.get("telemetry") or {}).get("fact_coordinates")
+                or {},
+                bool(((m.get("telemetry") or {}).get("game_review") or {}).get("is_hazard")),
+            )
+            for m in msgs_135
+            if isinstance(m.get("id"), int)
+            and 15545 <= int(m["id"]) <= 15651
+            and ((m.get("telemetry") or {}).get("game_review") or {}).get("should_queue_for_sleep")
+        ]
+        if scenes_135:
+            assert len(scenes_135) == 29
+            for sid, p_coords, is_haz in scenes_135:
+                sc_coords = {k: 0.50 for k in FOUNDATIONAL_LEAVES}
+                for rr in rules:
+                    for k in rr.target_leaves:
+                        sc_coords.setdefault(k, 0.0)
+                for k, v in p_coords.items():
+                    sc_coords[k] = float(v)
+                if is_haz:
+                    sc_coords["cultural/efficiency/wastelessness"] = min(
+                        0.25,
+                        float(sc_coords.get("cultural/efficiency/wastelessness", 0.25)),
+                    )
+                    sc_coords["cultural/freedom/needlessness"] = max(
+                        0.53,
+                        float(sc_coords.get("cultural/freedom/needlessness", 0.53)),
+                    )
+                sc_scores = _evaluate_rules_with_inhibition(tuple(rules), sc_coords)
+                c_val, conf_val, matched_name, is_conf, _ = compute_contemplation(sc_scores)
+                assert not is_conf, f"Scene #{sid} remained confused (Clarity={c_val:.2f})"
+                assert c_val >= 0.50
+                assert conf_val == pytest.approx(1.0)
+                assert matched_name is not None and matched_name.startswith(
+                    "hazard_" if is_haz else "coached_"
+                )
+
+    refined_grounded = FuzzyConceptRule(
+        rule_id="rule_grounded_coordination",
+        concept_name="grounded_coordination",
+        description="Refined grounded coordination with low chaos.",
+        target_leaves={
+            "philosophical/being/existence": 0.68,
+            "philosophical/structure/order": 0.65,
+            "philosophical/structure/chaos": 0.10,
+        },
+        low=0.60,
+        high=0.84,
+    )
+    ensured_refined = _ensure_foundational_rules((refined_grounded,))
+    by_c = {r.concept_name: r for r in ensured_refined}
+    assert "philosophical/structure/chaos" in by_c["grounded_coordination"].target_leaves
+    assert by_c["grounded_coordination"].high == pytest.approx(0.84)
+
+
 
 
 

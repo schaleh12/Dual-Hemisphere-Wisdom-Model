@@ -627,4 +627,96 @@ def test_core_weight_space_sculpting_upgrades_a_b_c() -> None:
     assert updated_leaves_by_id[frozen_leaf.leaf_id] == frozen_leaf
     assert updated_leaves_by_id[dyn_leaf.leaf_id].anchor_weights != dyn_leaf.anchor_weights
 
+    # 4. Verify Same-Family Cluster Archetype Winner-Take-All vs. Cross-Family Genuine Collision
+    from lmft_architecture.reflection_classifier import (
+        _evaluate_rules_with_inhibition,
+        compute_contemplation,
+    )
+    from lmft_architecture.three_legged_runtime import extract_dream_vow_sentence
+
+    haz_1 = FuzzyConceptRule(
+        rule_id="rule-sleep-hazard_low_wastelessness_agency",
+        concept_name="hazard_low_wastelessness_agency_cluster",
+        description="Hazard sub-facet 1",
+        target_leaves={
+            "cultural/efficiency/wastelessness": 0.25,
+            "cultural/freedom/needlessness": 0.53,
+            "philosophical/being/agency": 0.72,
+        },
+        low=0.58,
+        high=0.88,
+        polarity="repulsive",
+    )
+    haz_2 = FuzzyConceptRule(
+        rule_id="rule-sleep-hazard_high_power_agency",
+        concept_name="hazard_high_power_agency_cluster",
+        description="Hazard sub-facet 2",
+        target_leaves={
+            "cultural/efficiency/wastelessness": 0.25,
+            "cultural/efficiency/power": 0.68,
+            "philosophical/being/agency": 0.72,
+        },
+        low=0.58,
+        high=0.88,
+        polarity="repulsive",
+    )
+    coached_opp = FuzzyConceptRule(
+        rule_id="rule-sleep-coached_high_power_agency",
+        concept_name="coached_high_power_agency_cluster",
+        description="Opposing coached rule",
+        target_leaves={
+            "cultural/efficiency/wastelessness": 0.75,
+            "cultural/efficiency/power": 0.68,
+            "philosophical/being/agency": 0.72,
+        },
+        low=0.58,
+        high=0.88,
+        polarity="attractive",
+    )
+    blunder_coords = {
+        **base_coords,
+        "cultural/efficiency/wastelessness": 0.20,
+        "cultural/freedom/needlessness": 0.55,
+        "cultural/efficiency/power": 0.85,
+        "philosophical/being/agency": 0.73,
+    }
+    same_fam_scores = _evaluate_rules_with_inhibition((haz_1, haz_2, coached_opp), blunder_coords)
+    sf_clarity, sf_conf, sf_matched, sf_confused, _ = compute_contemplation(same_fam_scores)
+    assert not sf_confused
+    assert sf_clarity >= 0.50
+    assert sf_conf == pytest.approx(1.0)
+    assert sf_matched == "hazard_low_wastelessness_agency_cluster"
+
+    # Cross-family tie (`hazard_` at 1.00 vs `coached_` at 1.00) must still collide (`Clarity == 0.00, is_confused == True`)
+    coached_bad = FuzzyConceptRule(
+        rule_id="rule-sleep-coached_unanchored",
+        concept_name="coached_high_power_agency_cluster",
+        description="Synthetic cross-family tie probe",
+        target_leaves={
+            "cultural/efficiency/power": 0.68,
+            "philosophical/being/agency": 0.72,
+            "philosophical/structure/order": 0.50,
+        },
+        low=0.58,
+        high=0.88,
+        polarity="attractive",
+    )
+    cross_scores = _evaluate_rules_with_inhibition((haz_1, coached_bad), blunder_coords)
+    cr_clarity, cr_conf, cr_matched, cr_confused, _ = compute_contemplation(cross_scores)
+    assert cr_confused is True
+    assert cr_clarity == pytest.approx(0.0)
+    assert cr_conf == pytest.approx(1.0)
+    assert cr_matched is None
+
+    # Verify `extract_dream_vow_sentence` prefers explicit vow sentences over trailing meta-remarks
+    dream_with_meta_tail = (
+        "Looking back at my move Qe3 on the board, I rushed the queen sortie before castling. "
+        "My vow for the next game is to castle early and coordinate my rooks before attacking. "
+        "That's not quite right."
+    )
+    assert extract_dream_vow_sentence(dream_with_meta_tail) == (
+        "My vow for the next game is to castle early and coordinate my rooks before attacking."
+    )
+
+
 

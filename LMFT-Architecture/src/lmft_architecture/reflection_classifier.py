@@ -608,6 +608,61 @@ def _evaluate_rules_with_inhibition(
             val = round(val * (1.0 - 0.5 * max_deeper), 6)
         rule_activations[r.concept_name] = val
 
+    # Broad-vs-Specific Intra-Tier Inhibition: when a 3+-leaf specific rule in `deepest_active_tier`
+    # fires at `>= CONFUSION_THRESHOLD`, attenuate broader 1–2 leaf posture rules in the same tier
+    # so background 2-leaf rules (like `grounded_coordination`) do not tie 3-leaf learned rules.
+    max_specific = max(
+        (
+            rule_activations[r.concept_name]
+            for r in rules
+            if r.tier == deepest_active_tier and len(r.target_leaves) >= 3
+        ),
+        default=0.0,
+    )
+    if max_specific >= CONFUSION_THRESHOLD:
+        for r in rules:
+            if r.tier == deepest_active_tier and len(r.target_leaves) < 3:
+                rule_activations[r.concept_name] = round(
+                    rule_activations[r.concept_name] * (1.0 - 0.55 * max_specific),
+                    6,
+                )
+
+    # Same-Family Cluster Archetype Winner-Take-All (`hazard_*_cluster` and `coached_*_cluster`):
+    # Multiple `hazard_*_cluster` rules firing on the same blunder (or multiple `coached_*_cluster`
+    # rules firing on the same sound move) are sub-facets of the same verdict, not opposing concepts.
+    # Keep the closest-centroid archetype at full strength and laterally attenuate secondary co-firing
+    # sub-facets of the same family, while preserving genuine cross-family collisions (`hazard_` vs `coached_`).
+    for fam_prefix in ("hazard_", "coached_"):
+        fam_rules = [
+            r
+            for r in rules
+            if r.tier == deepest_active_tier
+            and r.concept_name.startswith(fam_prefix)
+            and re.sub(r"_s\d+$", "", r.concept_name).endswith("_cluster")
+            and rule_activations[r.concept_name] >= CONFUSION_THRESHOLD
+        ]
+        if len(fam_rules) >= 2:
+            def _cluster_rank_key(rule_obj: FuzzyConceptRule) -> tuple[float, int, float, float]:
+                exact_sims = [
+                    1.0 - abs(float(coords.get(k, 0.0)) - float(tv))
+                    for k, tv in rule_obj.target_leaves.items()
+                ]
+                mean_exact = sum(exact_sims) / max(1, len(exact_sims))
+                min_exact = min(exact_sims, default=0.0)
+                return (
+                    rule_activations[rule_obj.concept_name],
+                    len(rule_obj.target_leaves),
+                    round(mean_exact, 6),
+                    round(min_exact, 6),
+                )
+
+            ranked_fam = sorted(fam_rules, key=_cluster_rank_key, reverse=True)
+            winner = ranked_fam[0]
+            w_val = rule_activations[winner.concept_name]
+            for ru in ranked_fam[1:]:
+                ru_val = rule_activations[ru.concept_name]
+                rule_activations[ru.concept_name] = round(ru_val * (1.0 - 0.55 * w_val), 6)
+
     # Compensated Soft-Min tie-breaker (Upgrade #2): when 2+ active rules in the deepest tier
     # collide within CONFUSION_THRESHOLD on pure min_similarity, re-evaluate those colliding rules
     # with `soft_min=True` (0.85 * min_sim + 0.15 * mean_sim) so rules with stronger supporting

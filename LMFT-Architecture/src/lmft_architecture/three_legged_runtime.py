@@ -372,9 +372,23 @@ def extract_dream_vow_sentence(dream_text: str, *, fallback: str = "") -> str:
         for s in re.split(r"(?<=[.!?])\s+", cleaned)
         if s and s.strip()
     ]
-    for sent in reversed(sentences):
-        if sent.endswith("..") or is_repetitive_sentence(sent):
-            continue
+    valid_sents = [
+        sent
+        for sent in sentences
+        if not sent.endswith("..") and not is_repetitive_sentence(sent)
+    ]
+    for sent in reversed(valid_sents):
+        low = sent.lower()
+        if (
+            len(sent.split()) >= 5
+            and not low.startswith(("my previous vow", "our previous vow"))
+            and any(k in low for k in ("vow", "promise", "carry"))
+        ):
+            return sent
+    for sent in reversed(valid_sents):
+        if len(sent.split()) >= 5 and not sent.lower().startswith(("my previous vow", "our previous vow")):
+            return sent
+    for sent in reversed(valid_sents):
         return sent
     return _strip_chat_turn_bleed(str(fallback or "")).strip()
 

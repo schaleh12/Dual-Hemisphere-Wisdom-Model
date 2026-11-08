@@ -1304,6 +1304,38 @@ def consolidate_sleep_clusters_locally(
                         target_leaves.pop(k, None)
             if len(target_leaves) < 2:
                 target_leaves["cultural/freedom/needlessness"] = 0.53
+        else:
+            _, def_dir_tag, def_cult_leaf, def_phil_leaf = parse_cluster_defining_leaves(ckey)
+            if def_cult_leaf and def_phil_leaf:
+                target_leaves["cultural/efficiency/wastelessness"] = max(
+                    0.72,
+                    round(
+                        float(
+                            target_leaves.get(
+                                "cultural/efficiency/wastelessness",
+                                avg_coords.get("cultural/efficiency/wastelessness", 0.75),
+                            )
+                        ),
+                        2,
+                    ),
+                )
+                if def_cult_leaf not in target_leaves:
+                    target_leaves[def_cult_leaf] = (
+                        0.08
+                        if def_cult_leaf == "cultural/freedom/needlessness"
+                        else max(0.68, round(float(avg_coords.get(def_cult_leaf, 0.72)), 2))
+                    )
+                if def_phil_leaf not in target_leaves:
+                    target_leaves[def_phil_leaf] = (
+                        0.10
+                        if def_phil_leaf == "philosophical/structure/chaos"
+                        else max(0.64, round(float(avg_coords.get(def_phil_leaf, 0.68)), 2))
+                    )
+                if len(target_leaves) > 3:
+                    pinned_coached = {"cultural/efficiency/wastelessness", def_cult_leaf, def_phil_leaf}
+                    for k in list(target_leaves.keys()):
+                        if k not in pinned_coached and len(target_leaves) > 3:
+                            target_leaves.pop(k, None)
         rep = max(group, key=lambda s: float(s.salience))
         rep_scene = rep.scene_index
 

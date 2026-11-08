@@ -238,9 +238,20 @@ def _ensure_foundational_rules(rules: tuple[FuzzyConceptRule, ...]) -> tuple[Fuz
     seen_learned_sigs: dict[tuple[str, frozenset[str]], int] = {}
     for r in rules:
         if r.rule_id in foundational_by_id or r.concept_name in foundational_by_name:
+            virgin_rule = foundational_by_id.get(r.rule_id) or foundational_by_name.get(r.concept_name)
+            if virgin_rule is not None and (
+                len(r.target_leaves) > len(virgin_rule.target_leaves)
+                or float(r.low) > float(virgin_rule.low)
+                or float(r.high) > float(virgin_rule.high)
+            ):
+                for f_idx, m_r in enumerate(merged):
+                    if m_r.rule_id == virgin_rule.rule_id or m_r.concept_name == virgin_rule.concept_name:
+                        merged[f_idx] = r
+                        break
             continue
         if r.concept_name.startswith("hazard_") and (
             r.concept_name.startswith("hazard_high_wastelessness_")
+            or r.concept_name.startswith("hazard_high_self_sufficiency_")
             or "[!! BRILLIANCY" in r.description
             or "[! GREAT_MOVE" in r.description
             or "Board vs. Theory surprise after " in r.description
@@ -283,7 +294,11 @@ def _ensure_foundational_rules(rules: tuple[FuzzyConceptRule, ...]) -> tuple[Fuz
                 and def_cult is not None
                 and def_phil is not None
                 and not r.concept_name.startswith("hazard_high_self_sufficiency_")
-                and (not (def_cult in r.target_leaves and def_phil in r.target_leaves) or len(cleaned_haz_leaves) > 3)
+                and (
+                    not (def_cult in r.target_leaves and def_phil in r.target_leaves)
+                    or "cultural/efficiency/wastelessness" not in cleaned_haz_leaves
+                    or len(cleaned_haz_leaves) > 3
+                )
             )
             if needs_cluster_repair and def_cult is not None and def_phil is not None:
                 if def_cult not in cleaned_haz_leaves:
@@ -351,15 +366,26 @@ def _ensure_foundational_rules(rules: tuple[FuzzyConceptRule, ...]) -> tuple[Fuz
                 is_cluster_rule
                 and def_cult is not None
                 and def_phil is not None
-                and (not (def_cult in r.target_leaves and def_phil in r.target_leaves) or len(cleaned_coached_leaves) > 3)
+                and (
+                    not (def_cult in r.target_leaves and def_phil in r.target_leaves)
+                    or "cultural/efficiency/wastelessness" not in cleaned_coached_leaves
+                    or float(cleaned_coached_leaves.get("cultural/efficiency/wastelessness", 0.0)) < 0.68
+                    or len(cleaned_coached_leaves) > 3
+                )
             )
             if needs_coached_repair and def_cult is not None and def_phil is not None:
                 if def_cult not in cleaned_coached_leaves:
                     cleaned_coached_leaves[def_cult] = 0.08 if def_cult == "cultural/freedom/needlessness" else 0.72
                 if def_phil not in cleaned_coached_leaves:
                     cleaned_coached_leaves[def_phil] = 0.10 if def_phil == "philosophical/structure/chaos" else 0.68
-                if "cultural/efficiency/wastelessness" not in cleaned_coached_leaves:
-                    cleaned_coached_leaves["cultural/efficiency/wastelessness"] = 0.75
+                if (
+                    "cultural/efficiency/wastelessness" not in cleaned_coached_leaves
+                    or float(cleaned_coached_leaves.get("cultural/efficiency/wastelessness", 0.0)) < 0.68
+                ):
+                    cleaned_coached_leaves["cultural/efficiency/wastelessness"] = max(
+                        0.72,
+                        float(cleaned_coached_leaves.get("cultural/efficiency/wastelessness", 0.75)),
+                    )
                 second_cult = (
                     "cultural/freedom/needlessness"
                     if def_cult == "cultural/efficiency/wastelessness"
@@ -1853,7 +1879,11 @@ class ChessKibitzerRuntime:
         ):
             self.adjudicate_human_game_outcome(human_color=mover_color)
 
-        if self.board.is_game_over(claim_draw=True) or self.clock_flagged_loser is not None:
+        if (
+            not is_sparring_opponent_move
+            and not getattr(self, "_in_sparring_ai_move", False)
+            and (self.board.is_game_over(claim_draw=True) or self.clock_flagged_loser is not None)
+        ):
             self._maybe_trigger_auto_rem_sleep()
         return self.get_state_snapshot()
 
