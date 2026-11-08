@@ -627,3 +627,106 @@ def test_sparse_branch_signatures_contrastive_role_separation_and_coordinate_vot
             assert len(cl.signature_coords) <= 8
             assert "curfew" not in cl.text.lower()
 
+
+def test_foundational_clause_pinning_concept_tag_entrainment_and_three_directory_seeding():
+    """Verify `source_scene <= 8` pinning, MIT `concept_tag` entrainment (`<= 2` non-foundational clones), and balanced 3-Faculty seeding across Master Seed, Chess, and Bloodmoon."""
+    from collections import Counter
+
+    exec_arch = ThreeBranchArchives().executive
+    # 1. Record 6 foundational scenes (`source_scene` 1..6)
+    for s_idx in range(1, 7):
+        f_clause = BranchClauseEntry(
+            clause_id=f"exec-s{s_idx}-foundational",
+            branch=EXECUTIVE_BRANCH,
+            text=f"Foundational Sanctuary clause {s_idx}.",
+            signature_coords={**{k: 0.50 for k in WILL_CULTURAL_LEAVES}, "cultural/justice/fairness": 0.90},
+            source_scene=s_idx,
+            concept_tag="shared_open_access",
+        )
+        exec_arch = exec_arch.record_scene(
+            scene_index=s_idx,
+            coordinates=f_clause.signature_coords,
+            action_summary=f_clause.text,
+            harvested_clause=f_clause,
+        )
+
+    # 2. Record 3 non-foundational clauses sharing `concept_tag="low_wastelessness"` (Scenes 101, 102, 103)
+    w_values = [0.20, 0.40, 0.80]
+    for offset, w_val in enumerate(w_values, start=101):
+        nf_clause = BranchClauseEntry(
+            clause_id=f"exec-sleep-s{offset}-low_wastelessness",
+            branch=EXECUTIVE_BRANCH,
+            text=f"Chess wastelessness remedy at scene {offset}.",
+            signature_coords={**{k: 0.50 for k in WILL_CULTURAL_LEAVES}, "cultural/efficiency/wastelessness": w_val},
+            source_scene=offset,
+            concept_tag="low_wastelessness",
+        )
+        exec_arch = exec_arch.record_scene(
+            scene_index=offset,
+            coordinates=nf_clause.signature_coords,
+            action_summary=nf_clause.text,
+            harvested_clause=nf_clause,
+        )
+
+    non_found_waste = [
+        c for c in exec_arch.action_clauses if c.source_scene > 8 and c.concept_tag == "low_wastelessness"
+    ]
+    # Capped at 2 non-foundational slots (`Scene 102` and entrained `Scene 101 -> Scene 103`)
+    assert len(non_found_waste) == 2
+    assert [c.source_scene for c in non_found_waste] == [102, 103]
+    # Scene 103 blended `0.30 * 0.20 + 0.70 * 0.80 = 0.62`
+    assert abs(non_found_waste[-1].signature_coords["cultural/efficiency/wastelessness"] - 0.62) < 1e-4
+
+    # 3. Record 30 more non-foundational scenes with distinct tags -> Foundational Scenes 1..6 remain pinned!
+    for extra_idx in range(200, 230):
+        extra_cl = BranchClauseEntry(
+            clause_id=f"exec-sleep-s{extra_idx}-tag_{extra_idx}",
+            branch=EXECUTIVE_BRANCH,
+            text=f"Later clause at scene {extra_idx}.",
+            signature_coords={**{k: 0.50 for k in WILL_CULTURAL_LEAVES}},
+            source_scene=extra_idx,
+            concept_tag=f"tag_{extra_idx}",
+        )
+        exec_arch = exec_arch.record_scene(
+            scene_index=extra_idx,
+            coordinates=extra_cl.signature_coords,
+            action_summary=extra_cl.text,
+            harvested_clause=extra_cl,
+        )
+
+    assert len(exec_arch.action_clauses) == 24
+    assert len(exec_arch.precedents) == 24
+    assert [c.source_scene for c in exec_arch.action_clauses if c.source_scene <= 8] == [1, 2, 3, 4, 5, 6]
+    assert [p.scene_index for p in exec_arch.precedents if p.scene_index <= 8] == [1, 2, 3, 4, 5, 6]
+
+    # 4. Verify all 3 Schooled `branch_archives/` directories on disk have Foundational + Literary + Chess clauses
+    repo_root = Path(__file__).resolve().parents[2]
+    schooled_dirs = [
+        repo_root / "LMFT-Training" / "outputs" / "branch_archives",
+        repo_root / "LMFT-Training" / "outputs" / "chess_kibitzer_state" / "branch_archives",
+        repo_root / "LMFT-Training" / "outputs" / "impish_bloodmoon_state" / "branch_archives",
+    ]
+    for arch_dir in schooled_dirs:
+        assert arch_dir.exists(), f"Missing schooled branch_archives directory: {arch_dir}"
+        loaded = ThreeBranchArchives.load_all(arch_dir)
+        assert len([p for p in loaded.executive.precedents if p.scene_index <= 8]) == 8
+        assert len([s for s in loaded.legislative.diary_snapshots if s.scene_index <= 8]) == 8
+        for clause_list in (
+            loaded.executive.action_clauses,
+            loaded.legislative.feeling_clauses,
+            loaded.judicial.structural_clauses,
+        ):
+            assert len([c for c in clause_list if c.source_scene <= 8]) == 6
+            assert len([c for c in clause_list if 9 <= c.source_scene <= 12]) == 4
+            assert len([c for c in clause_list if c.source_scene > 12]) >= 10
+            nf_counts = Counter(c.concept_tag for c in clause_list if c.source_scene > 8)
+            assert max(nf_counts.values()) <= 2
+
+    virgin_arch_dir = repo_root / "LMFT-Architecture" / "baselines" / "virgin_dual_hemisphere_v1" / "branch_archives"
+    if virgin_arch_dir.exists():
+        virgin_loaded = ThreeBranchArchives.load_all(virgin_arch_dir)
+        assert len(virgin_loaded.executive.action_clauses) == 0
+        assert len(virgin_loaded.legislative.feeling_clauses) == 0
+        assert len(virgin_loaded.judicial.structural_clauses) == 0
+
+

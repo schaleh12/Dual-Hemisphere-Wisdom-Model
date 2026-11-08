@@ -2,8 +2,8 @@
   "schema_version": 1,
   "version": "0.2.0",
   "github_repo": "schaleh12/Dual-Hemisphere-Wisdom-Model",
-  "build_sha256": "ca11c395cc066d0c7a3df559b8ac2546a8bbb8e1867fb293d6aebf7785076fa6",
-  "build_short_hash": "ca11c395cc06",
+  "build_sha256": "2355a318859b3dc6a90df4ed4ee6531138c6a06b445d884c0dd5d0552de0fc84",
+  "build_short_hash": "2355a318859b",
   "files": {
     "src/lmft_architecture/__init__.py": {
       "sha256": "a89f56c2195e87129adbffa5065d8769ea096e13ba98783d217c4d120ee92623",
@@ -66,16 +66,16 @@
       "size_bytes": 5515
     },
     "src/lmft_architecture/bloodmoon_app.py": {
-      "sha256": "878f353e132d70b1e1a3d7ac9baa06adfe3b3ad57d6cd5467e207a492a96ed16",
-      "size_bytes": 135480
+      "sha256": "ebd735e4b38567cfcaf5a6caa76b13e48c5a84b351a00359377a7c5bf05f8447",
+      "size_bytes": 136342
     },
     "src/lmft_architecture/bloodmoon_ui.py": {
       "sha256": "35dc889b58af1867c20eec0645009f59a9dd5f613942646d1373e00bad95c7a0",
       "size_bytes": 20169
     },
     "src/lmft_architecture/branch_archives.py": {
-      "sha256": "eb87d923972775d092cec67ef0f63758c8b5362d07c7ba0088c83c790816e0f5",
-      "size_bytes": 48857
+      "sha256": "56a9e0b88831df985821c582ce119711b22cae88fc71ef6f21468b5f26f1d9b5",
+      "size_bytes": 53974
     },
     "src/lmft_architecture/capacity.py": {
       "sha256": "449918ce2fac765542adb456ae3eacedd004ea5c0038022fad5de3ec7f0512e2",
@@ -374,16 +374,16 @@
       "size_bytes": 1124
     },
     "outputs/branch_archives/cultural_history.json": {
-      "sha256": "ded6b2a369f3712cb0a363a513e4799497f321bf0a1eebe96bbeb5c068fb6735",
-      "size_bytes": 33462
+      "sha256": "4d226c9cf04e58895e33f79a30d586ed9dfaa5ecb2df8c5dbf42119210451f54",
+      "size_bytes": 25546
     },
     "outputs/branch_archives/experiential_felt_diary.json": {
-      "sha256": "f418918e043f198dadc1c388258127fc7ff77e88edefb8ef591b5b512500a3aa",
-      "size_bytes": 26261
+      "sha256": "c201c5cafd514ad3a3e02e92e0cd50132e2d90ca2de9a0ad6c037dbc9b1d4c39",
+      "size_bytes": 29295
     },
     "outputs/branch_archives/philosophical_lexicon.json": {
-      "sha256": "5c34940d177a50fb0f7f1d5975f7ff2573a5392272f86d42363a81fb61ea1c79",
-      "size_bytes": 22046
+      "sha256": "ebf947b0d52f960c845de91cbe7450cf5dc34167e0d8085aad54ca293b235a4f",
+      "size_bytes": 24485
     }
   }
 }

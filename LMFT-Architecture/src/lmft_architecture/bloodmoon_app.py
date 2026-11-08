@@ -63,6 +63,7 @@ from .branch_archives import (
     LEGISLATIVE_BRANCH,
     BranchClauseEntry,
     ThreeBranchArchives,
+    _sparse_branch_signature,
     harvest_into_branch_archives,
 )
 from .chess_kibitz_bridge import SANCTUARY_MODES
@@ -567,7 +568,15 @@ class BloodmoonClockRuntime:
         arch_dir = self.impish_state_dir / "branch_archives"
         if (arch_dir / "philosophical_lexicon.json").exists():
             try:
-                return ThreeBranchArchives.load_all(arch_dir)
+                loaded = ThreeBranchArchives.load_all(arch_dir)
+                if loaded.executive.action_clauses or loaded.judicial.structural_clauses:
+                    return loaded
+            except Exception:
+                pass
+        fallback_dir = self.training_root / "outputs" / "branch_archives"
+        if (fallback_dir / "philosophical_lexicon.json").exists():
+            try:
+                return ThreeBranchArchives.load_all(fallback_dir)
             except Exception:
                 pass
         return ThreeBranchArchives()
@@ -1991,12 +2000,19 @@ class BloodmoonClockRuntime:
                         avg_ref_coords,
                     )
 
-            cult_sig = {k: v for k, v in avg_coords.items() if k.startswith("cultural/")}
-            phil_sig = {k: v for k, v in avg_coords.items() if k.startswith("philosophical/")}
-            exp_sig = {k: v for k, v in avg_coords.items() if k.startswith("experiential/")}
-            exp_sig[SALIENCE_LEAF] = round(sum(s.salience for s in group) / len(group), 4)
-            exp_sig[VALENCE_LEAF] = round(sum(s.valence for s in group) / len(group), 4)
-            exp_sig[AROUSAL_LEAF] = round(sum(s.arousal for s in group) / len(group), 4)
+            exec_source_coords = dict(avg_coords)
+            if avg_ref_coords is not None:
+                for k, ref_v in avg_ref_coords.items():
+                    if k.startswith("cultural/"):
+                        raw_v = float(avg_coords.get(k, ref_v))
+                        exec_source_coords[k] = round(0.70 * float(ref_v) + 0.30 * raw_v, 4)
+            cult_sig = _sparse_branch_signature(exec_source_coords, "cultural/")
+            phil_sig = _sparse_branch_signature(avg_coords, "philosophical/")
+            raw_exp_sig = {k: v for k, v in avg_coords.items() if k.startswith("experiential/")}
+            raw_exp_sig[SALIENCE_LEAF] = round(sum(s.salience for s in group) / len(group), 4)
+            raw_exp_sig[VALENCE_LEAF] = round(sum(s.valence for s in group) / len(group), 4)
+            raw_exp_sig[AROUSAL_LEAF] = round(sum(s.arousal for s in group) / len(group), 4)
+            exp_sig = _sparse_branch_signature(raw_exp_sig, "experiential/")
 
             avg_fc = compile_felt_chord(
                 avg_coords,
@@ -2040,7 +2056,7 @@ class BloodmoonClockRuntime:
             cur_archives = ThreeBranchArchives(
                 executive=cur_archives.executive.record_scene(
                     scene_index=rep_scene,
-                    coordinates=avg_coords,
+                    coordinates=exec_source_coords,
                     action_summary=exec_text,
                     harvested_clause=exec_clause,
                 ),

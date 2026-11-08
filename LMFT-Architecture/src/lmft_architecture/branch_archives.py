@@ -262,6 +262,134 @@ class SocialDriftReport:
         }
 
 
+FOUNDATIONAL_MAX_SCENE_INDEX: int = 8
+MAX_NON_FOUNDATIONAL_CLONES_PER_TAG: int = 2
+
+_BRANCH_TO_PREFIX: dict[str, str] = {
+    EXECUTIVE_BRANCH: "cultural/",
+    LEGISLATIVE_BRANCH: "experiential/",
+    JUDICIAL_BRANCH: "philosophical/",
+}
+
+
+def _upsert_and_trim_clauses(
+    existing_clauses: Sequence[BranchClauseEntry],
+    new_clause: BranchClauseEntry,
+    *,
+    branch_prefix: str | None = None,
+    max_entries: int = 24,
+) -> tuple[BranchClauseEntry, ...]:
+    """Insert or entrain `new_clause` while pinning foundational `source_scene <= 8` clauses and capping duplicate `concept_tag` clones."""
+    prefix = branch_prefix or _BRANCH_TO_PREFIX.get(new_clause.branch, "cultural/")
+    sparse_new = replace(
+        new_clause,
+        signature_coords=_sparse_branch_signature(new_clause.signature_coords, prefix),
+    )
+    items = list(existing_clauses)
+    existing_id_indices = [i for i, c in enumerate(items) if c.clause_id == sparse_new.clause_id]
+    if existing_id_indices:
+        idx = existing_id_indices[0]
+        if sparse_new.source_scene <= FOUNDATIONAL_MAX_SCENE_INDEX:
+            items[idx] = sparse_new
+        else:
+            items.pop(idx)
+            items.append(sparse_new)
+    elif sparse_new.source_scene > FOUNDATIONAL_MAX_SCENE_INDEX:
+        non_found_matches = [
+            i
+            for i, c in enumerate(items)
+            if c.source_scene > FOUNDATIONAL_MAX_SCENE_INDEX and c.concept_tag == sparse_new.concept_tag
+        ]
+        if len(non_found_matches) >= MAX_NON_FOUNDATIONAL_CLONES_PER_TAG:
+            oldest_idx = non_found_matches[0]
+            old_clause = items.pop(oldest_idx)
+            all_keys = set(old_clause.signature_coords) | set(sparse_new.signature_coords)
+            blended_raw: dict[str, float] = {}
+            for k in all_keys:
+                if k in FOUNDING_BRANCH_LEAVES:
+                    old_v = float(old_clause.signature_coords.get(k, sparse_new.signature_coords.get(k, 0.0)))
+                    new_v = float(sparse_new.signature_coords.get(k, old_clause.signature_coords.get(k, 0.0)))
+                else:
+                    old_v = float(old_clause.signature_coords.get(k, 0.0))
+                    new_v = float(sparse_new.signature_coords.get(k, 0.0))
+                blended_raw[k] = round(0.30 * old_v + 0.70 * new_v, 4)
+            entrained_clause = replace(
+                sparse_new,
+                signature_coords=_sparse_branch_signature(blended_raw, prefix),
+            )
+            items.append(entrained_clause)
+        else:
+            items.append(sparse_new)
+    else:
+        items.append(sparse_new)
+
+    if max_entries <= 0:
+        return ()
+    if max_entries < FOUNDATIONAL_MAX_SCENE_INDEX:
+        return tuple(items[-max_entries:])
+
+    foundational = [c for c in items if c.source_scene <= FOUNDATIONAL_MAX_SCENE_INDEX][:FOUNDATIONAL_MAX_SCENE_INDEX]
+    non_foundational = [c for c in items if c.source_scene > FOUNDATIONAL_MAX_SCENE_INDEX]
+    keep_non_found = max(0, max_entries - len(foundational))
+    kept_later = non_foundational[-keep_non_found:] if keep_non_found > 0 else []
+    return tuple(foundational + kept_later)
+
+
+def _upsert_and_trim_scene_records(
+    existing_records: Sequence[Any],
+    new_record: Any,
+    *,
+    max_entries: int = 24,
+) -> tuple[Any, ...]:
+    """Upsert a scene-indexed precedent or diary snapshot while pinning foundational `scene_index <= 8` records."""
+    target_scene = int(new_record.scene_index)
+    items = [r for r in existing_records if int(r.scene_index) != target_scene]
+    items.append(new_record)
+    if max_entries <= 0:
+        return ()
+    if max_entries < FOUNDATIONAL_MAX_SCENE_INDEX:
+        return tuple(items[-max_entries:])
+
+    foundational = [r for r in items if int(r.scene_index) <= FOUNDATIONAL_MAX_SCENE_INDEX][:FOUNDATIONAL_MAX_SCENE_INDEX]
+    non_foundational = [r for r in items if int(r.scene_index) > FOUNDATIONAL_MAX_SCENE_INDEX]
+    keep_non_found = max(0, max_entries - len(foundational))
+    kept_later = non_foundational[-keep_non_found:] if keep_non_found > 0 else []
+    return tuple(foundational + kept_later)
+
+
+def _is_foundational_chord(rule: FuzzyConceptRule) -> bool:
+    if any(f"-s{i}-" in rule.rule_id for i in range(1, FOUNDATIONAL_MAX_SCENE_INDEX + 1)):
+        return True
+    return rule.concept_name in (
+        "shared_open_access_sealed_structural_enclosure",
+        "guarded_threshold_sealed_structural_enclosure",
+        "guarded_threshold_hollow_stillness",
+        "exclusionary_enclosure_cluster",
+        "shared_access_to_renewal",
+    )
+
+
+def _upsert_and_trim_ratified_chords(
+    existing_chords: Sequence[FuzzyConceptRule],
+    new_chord: FuzzyConceptRule,
+    *,
+    max_entries: int = 24,
+) -> tuple[FuzzyConceptRule, ...]:
+    """Upsert a ratified chord while pinning foundational Sanctuary Schooling chords."""
+    items = [r for r in existing_chords if r.concept_name != new_chord.concept_name]
+    items.append(new_chord)
+    if max_entries <= 0:
+        return ()
+    if max_entries < FOUNDATIONAL_MAX_SCENE_INDEX:
+        return tuple(items[-max_entries:])
+
+    foundational = [r for r in items if _is_foundational_chord(r)][:FOUNDATIONAL_MAX_SCENE_INDEX]
+    non_foundational = [r for r in items if not _is_foundational_chord(r)]
+    keep_non_found = max(0, max_entries - len(foundational))
+    kept_later = non_foundational[-keep_non_found:] if keep_non_found > 0 else []
+    return tuple(foundational + kept_later)
+
+
 @dataclass(frozen=True)
 class ExecutiveCulturalArchive:
     """Executive (`Do-er: Will <-> Cultural`) archive stored in `cultural_history.json`."""
@@ -336,19 +464,22 @@ class ExecutiveCulturalArchive:
             order_level=float(coordinates.get("philosophical/structure/order", 0.0)),
             discreteness_level=float(coordinates.get("philosophical/persistence/discreteness", 0.0)),
         )
-        kept_prec = tuple(p for p in self.precedents if p.scene_index != scene_index) + (entry,)
+        kept_prec = _upsert_and_trim_scene_records(
+            self.precedents,
+            entry,
+            max_entries=self.max_entries,
+        )
         kept_clauses = self.action_clauses
         if harvested_clause is not None:
-            sparse_clause = replace(
+            kept_clauses = _upsert_and_trim_clauses(
+                self.action_clauses,
                 harvested_clause,
-                signature_coords=_sparse_branch_signature(harvested_clause.signature_coords, "cultural/"),
+                branch_prefix="cultural/",
+                max_entries=self.max_entries,
             )
-            kept_clauses = tuple(
-                c for c in self.action_clauses if c.clause_id != sparse_clause.clause_id
-            ) + (sparse_clause,)
         return ExecutiveCulturalArchive(
-            precedents=kept_prec[-self.max_entries :],
-            action_clauses=kept_clauses[-self.max_entries :],
+            precedents=kept_prec,
+            action_clauses=kept_clauses,
             max_entries=self.max_entries,
         )
 
@@ -431,19 +562,22 @@ class LegislativeExperientialArchive:
             felt_chord=felt_chord,
             experiential_coords=exp_coords,
         )
-        kept_snaps = tuple(s for s in self.diary_snapshots if s.scene_index != scene_index) + (snap,)
+        kept_snaps = _upsert_and_trim_scene_records(
+            self.diary_snapshots,
+            snap,
+            max_entries=self.max_entries,
+        )
         kept_clauses = self.feeling_clauses
         if harvested_clause is not None:
-            sparse_clause = replace(
+            kept_clauses = _upsert_and_trim_clauses(
+                self.feeling_clauses,
                 harvested_clause,
-                signature_coords=_sparse_branch_signature(harvested_clause.signature_coords, "experiential/"),
+                branch_prefix="experiential/",
+                max_entries=self.max_entries,
             )
-            kept_clauses = tuple(
-                c for c in self.feeling_clauses if c.clause_id != sparse_clause.clause_id
-            ) + (sparse_clause,)
         return LegislativeExperientialArchive(
-            diary_snapshots=kept_snaps[-self.max_entries :],
-            feeling_clauses=kept_clauses[-self.max_entries :],
+            diary_snapshots=kept_snaps,
+            feeling_clauses=kept_clauses,
             max_entries=self.max_entries,
         )
 
@@ -487,21 +621,22 @@ class JudicialPhilosophicalArchive:
     ) -> "JudicialPhilosophicalArchive":
         kept_clauses = self.structural_clauses
         if harvested_clause is not None:
-            sparse_clause = replace(
+            kept_clauses = _upsert_and_trim_clauses(
+                self.structural_clauses,
                 harvested_clause,
-                signature_coords=_sparse_branch_signature(harvested_clause.signature_coords, "philosophical/"),
+                branch_prefix="philosophical/",
+                max_entries=self.max_entries,
             )
-            kept_clauses = tuple(
-                c for c in self.structural_clauses if c.clause_id != sparse_clause.clause_id
-            ) + (sparse_clause,)
         kept_chords = self.ratified_chords
         if ratified_chord is not None:
-            kept_chords = tuple(
-                r for r in self.ratified_chords if r.concept_name != ratified_chord.concept_name
-            ) + (ratified_chord,)
+            kept_chords = _upsert_and_trim_ratified_chords(
+                self.ratified_chords,
+                ratified_chord,
+                max_entries=self.max_entries,
+            )
         return JudicialPhilosophicalArchive(
-            structural_clauses=kept_clauses[-self.max_entries :],
-            ratified_chords=kept_chords[-self.max_entries :],
+            structural_clauses=kept_clauses,
+            ratified_chords=kept_chords,
             max_entries=self.max_entries,
         )
 
