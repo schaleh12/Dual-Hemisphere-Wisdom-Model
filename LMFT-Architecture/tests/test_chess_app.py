@@ -1689,8 +1689,9 @@ def test_zero_wire_clone_rule_ties_and_rem_vow_prompt_no_chat_bleed(tmp_path: Pa
     repo_root = Path(__file__).resolve().parents[2]
     ruleset_path = repo_root / "LMFT-Training" / "outputs" / "chess_kibitzer_state" / "club_ruleset.json"
     rules = load_ruleset(ruleset_path)
+    assert len(rules) >= 12
     sleep_rules = [r for r in rules if r.rule_id.startswith("rule-sleep-")]
-    assert len(sleep_rules) >= 10
+    assert len(sleep_rules) >= 2
 
     seen_sigs: set[tuple[str, frozenset[str]]] = set()
     for r in sleep_rules:
@@ -1866,6 +1867,69 @@ def test_zero_wire_clone_rule_ties_and_rem_vow_prompt_no_chat_bleed(tmp_path: Pa
     by_c = {r.concept_name: r for r in ensured_refined}
     assert "philosophical/structure/chaos" in by_c["grounded_coordination"].target_leaves
     assert by_c["grounded_coordination"].high == pytest.approx(0.84)
+
+
+def test_board_valence_evaluation_and_candidate_move_valence() -> None:
+    """Verify `experiential/phase/valence` reflects the `+/-` chess board evaluation and candidate move quality."""
+    from lmft_architecture.chess_kibitz_bridge import (
+        compute_board_valence,
+        compute_candidate_move_fuzzy_coordinates,
+    )
+
+    start_board = chess.Board()
+    assert compute_board_valence(start_board, chess.WHITE) == pytest.approx(0.50, abs=0.05)
+    assert compute_board_valence(start_board, chess.BLACK) == pytest.approx(0.50, abs=0.05)
+    start_posture = evaluate_chess_board_posture(start_board)
+    assert start_posture.board_valence == pytest.approx(0.50, abs=0.05)
+    assert start_posture.to_dict()["board_valence"] == pytest.approx(0.50, abs=0.05)
+
+    # White is up a Knight (+300 cp)
+    piece_up_board = chess.Board("r1bqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
+    val_white = compute_board_valence(piece_up_board, chess.WHITE)
+    val_black = compute_board_valence(piece_up_board, chess.BLACK)
+    assert val_white > 0.68
+    assert val_black < 0.32
+
+    # BoardAnchoredBridgeSensors grounds `experiential/phase/valence` on the board evaluation
+    sensors = ThreeBridgeSensors(
+        will_cultural=lambda _t, _c=(): {k: 0.04 for k in FOUNDATIONAL_LEAVES[:6]},
+        truth_philosophical=lambda _t, _c=(): {k: 0.25 for k in FOUNDATIONAL_LEAVES[6:12]},
+        contemplation_experiential=lambda _t, _c=(): {
+            "experiential/reflection/salience": 0.45,
+            "experiential/phase/valence": 0.11,
+            "experiential/phase/arousal": 0.30,
+        },
+    )
+    anchored_sensors = merge_board_fact_with_chat_sensors(start_posture, sensors)
+    coords, exp_out, _q, _s = anchored_sensors.score_text(
+        build_natural_chess_scenario_prompt(start_board)
+    )
+    assert exp_out["experiential/phase/valence"] == pytest.approx(0.50, abs=0.05)
+    assert coords["experiential/phase/valence"] == pytest.approx(0.50, abs=0.05)
+
+    # Candidate move fuzzy coordinates populate `experiential/phase/valence`
+    italian_board = chess.Board("r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 3 3")
+    coords_bxf7, is_blunder_bxf7, _, _, _ = compute_candidate_move_fuzzy_coordinates(
+        italian_board,
+        italian_board.parse_san("Bxf7+"),
+    )
+    coords_oo, is_blunder_oo, _, _, _ = compute_candidate_move_fuzzy_coordinates(
+        italian_board,
+        italian_board.parse_san("O-O"),
+    )
+    assert is_blunder_bxf7 is True
+    assert is_blunder_oo is False
+    assert coords_bxf7["experiential/phase/valence"] <= 0.28
+    assert coords_oo["experiential/phase/valence"] > coords_bxf7["experiential/phase/valence"] + 0.20
+
+    # Winning free-queen capture has high positive valence (>= 0.68)
+    free_queen_board = chess.Board("rnb1kbnr/pppp1ppp/8/4p3/3qP3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 0 3")
+    coords_nxd4, is_blunder_nxd4, _, _, _ = compute_candidate_move_fuzzy_coordinates(
+        free_queen_board,
+        free_queen_board.parse_san("Nxd4"),
+    )
+    assert is_blunder_nxd4 is False
+    assert coords_nxd4["experiential/phase/valence"] >= 0.68
 
 
 

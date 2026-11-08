@@ -76,6 +76,58 @@ def _lerp01(current: float, target: float, alpha: float) -> float:
     return _clamp01((1.0 - alpha) * float(current) + alpha * float(target))
 
 
+_PIECE_VALUES: dict[int, float] = {
+    chess.PAWN: 1.0,
+    chess.KNIGHT: 3.0,
+    chess.BISHOP: 3.15,
+    chess.ROOK: 5.0,
+    chess.QUEEN: 9.0,
+    chess.KING: 0.0,
+}
+
+
+def _static_centipawns_for_color(board: chess.Board, color: chess.Color) -> float:
+    """Fast objective centipawn evaluation (`100.0 == 1 pawn`) from `color`'s perspective."""
+    if board.is_checkmate():
+        return -9999.0 if board.turn == color else 9999.0
+    if board.is_stalemate() or board.is_insufficient_material() or board.is_repetition(3):
+        return 0.0
+    cp = 0.0
+    for pt, val in _PIECE_VALUES.items():
+        if val <= 0.0:
+            continue
+        cp += 100.0 * val * (len(board.pieces(pt, color)) - len(board.pieces(pt, not color)))
+    for sq in (chess.D4, chess.E4, chess.D5, chess.E5):
+        p = board.piece_at(sq)
+        if p is not None:
+            cp += 18.0 if p.color == color else -18.0
+    return round(cp, 1)
+
+
+def compute_board_valence(
+    board: chess.Board,
+    perspective: chess.Color | None = None,
+) -> float:
+    """Map the `+/-` centipawn board evaluation for `perspective` onto `experiential/phase/valence` in `[0.02, 0.98]`.
+
+    - Equal board (`0.0 cp`) -> `0.50`
+    - Winning advantage (`+300 cp`) -> `~0.74`, (`+900 cp`) -> `~0.93`, Checkmate delivered -> `0.98`
+    - Losing deficit (`-300 cp`) -> `~0.26`, (`-900 cp`) -> `~0.07`, Checkmated -> `0.02`
+    """
+    side = board.turn if perspective is None else perspective
+    if board.is_checkmate():
+        return 0.02 if board.turn == side else 0.98
+    if board.is_stalemate() or board.is_insufficient_material() or board.is_repetition(3):
+        return 0.50
+    cp = _static_centipawns_for_color(board, side)
+    clamped_cp = max(-2500.0, min(2500.0, float(cp)))
+    valence = 0.05 + 0.90 / (1.0 + math.exp(-clamped_cp / 250.0))
+    king_sq = board.king(side)
+    if king_sq is not None and board.is_attacked_by(not side, king_sq):
+        valence -= 0.08
+    return _clamp01(min(0.95, max(0.05, valence)))
+
+
 @dataclass(frozen=True)
 class ChessBoardPosture:
     """Real `python-chess` board evaluation mapped to the 6 Philosophical leaves & colors."""
@@ -93,6 +145,7 @@ class ChessBoardPosture:
     dominant_color: str
     dominant_element: str
     board_summary: str
+    board_valence: float = 0.50
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -109,6 +162,7 @@ class ChessBoardPosture:
             "dominant_color": self.dominant_color,
             "dominant_element": self.dominant_element,
             "board_summary": self.board_summary,
+            "board_valence": round(float(self.board_valence), 4),
         }
 
 
@@ -349,11 +403,12 @@ def evaluate_chess_board_posture(
     )
     top_row = ranked_rows[0]
 
+    board_val = compute_board_valence(board, perspective=us)
     check_tag = " (IN CHECK)" if board.is_check() else ""
     summary = (
         f"{turn_label} to move{check_tag} | Dominant: {top_row.chess_piece} "
         f"({top_row.color_name} / {top_row.element} = {phil_coords[top_row.leaf_id]:.2f}) | "
-        f"King Shelter={existence:.2f}, Attack Volition={agency:.2f}, Order={order:.2f}, Chaos={chaos:.2f}"
+        f"Valence={board_val:.2f}, King Shelter={existence:.2f}, Attack Volition={agency:.2f}, Order={order:.2f}, Chaos={chaos:.2f}"
     )
 
     return ChessBoardPosture(
@@ -370,6 +425,7 @@ def evaluate_chess_board_posture(
         dominant_color=top_row.color_name,
         dominant_element=top_row.element,
         board_summary=summary,
+        board_valence=board_val,
     )
 
 
@@ -383,16 +439,6 @@ _SAN_TOKEN_REGEX = re.compile(
     r")"
     r"(?=$|[\s,.;:!?)\]])(?![-A-Za-z0-9_])"
 )
-
-
-_PIECE_VALUES: dict[int, float] = {
-    chess.PAWN: 1.0,
-    chess.KNIGHT: 3.0,
-    chess.BISHOP: 3.15,
-    chess.ROOK: 5.0,
-    chess.QUEEN: 9.0,
-    chess.KING: 0.0,
-}
 
 _BB_EXTENDED_CENTER: int = (
     chess.BB_C3 | chess.BB_D3 | chess.BB_E3 | chess.BB_F3
@@ -1039,6 +1085,16 @@ def compute_candidate_move_fuzzy_coordinates(
         0.45 + 0.08 * net_capture_gain + 0.25 * float(sleeve_out["policy_prior"])
     )
     coords["experiential/phase/arousal"] = _clamp01(0.35 + 0.40 * agency + 0.25 * chaos)
+    raw_valence = (
+        0.55 * float(post_posture.board_valence)
+        + 0.45 * float(sleeve_out["value_prior"])
+        + 0.06 * min(8.5, max(-3.5, float(net_capture_gain)))
+        - 0.18 * min(3.5, float(blunder_penalty))
+    )
+    valence_coord = _clamp01(min(0.95, max(0.05, raw_valence)))
+    if is_blunder:
+        valence_coord = min(0.28, valence_coord)
+    coords["experiential/phase/valence"] = valence_coord
 
     # 4. `psychological/will/intention` via `RIGHT_BRAIN_WILL_EDGES` (`rb-will-0..3`)
     intention_coord = _clamp01(
@@ -1460,6 +1516,9 @@ def _enrich_move_coords_with_theory_rollout(
         coords["cultural/freedom/needlessness"] = _clamp01(
             max(float(coords.get("cultural/freedom/needlessness", 0.10)), 0.53)
         )
+        coords["experiential/phase/valence"] = min(
+            0.28, float(coords.get("experiential/phase/valence", 0.25))
+        )
     return coords, is_blunder, blunder_penalty
 
 
@@ -1534,6 +1593,7 @@ def evaluate_candidate_moves_with_right_brain(
             1.0 * float(coords.get("psychological/will/intention", 0.50))
             + 1.0 * float(coords.get("psychological/truth/fact", 0.50))
             + 0.5 * float(coords.get("psychological/truth/theory", 0.50))
+            + 0.35 * float(coords.get("experiential/phase/valence", 0.50))
             - 1.2 * blunder_penalty
             - (1.5 if is_rep else 0.0)
         )
@@ -1584,6 +1644,9 @@ def evaluate_candidate_moves_with_right_brain(
             c_dict["cultural/efficiency/wastelessness"] = 0.25
             c_dict["cultural/freedom/needlessness"] = _clamp01(
                 max(float(c_dict.get("cultural/freedom/needlessness", 0.10)), 0.53)
+            )
+            c_dict["experiential/phase/valence"] = min(
+                0.28, float(c_dict.get("experiential/phase/valence", 0.25))
             )
 
     rollout_k = max(10, int(limit))
@@ -2034,11 +2097,13 @@ class BoardAnchoredBridgeSensors:
         # Anchor the 6 Philosophical coordinates to the real python-chess board!
         if self.call_count == 1:
             anchored = dict(coords)
+            exp_out = dict(exp_raw)
             for leaf_id, board_val in self.board_posture.philosophical_coordinates.items():
                 anchored[leaf_id] = float(board_val)
             # When scoring an automatic board state prompt (no user story text), ground
-            # the 6 Cultural coordinates in the board's structural state instead of MiniLM's
-            # near-zero (~0.04) reading of the dry "Chess table — Move N..." header.
+            # the 6 Cultural coordinates and 3 Experiential sensor coordinates in the board's
+            # structural and +/- evaluation state instead of MiniLM's dry reading of the
+            # "Chess table — Move N..." header.
             if self.ground_cultural_on_board or clean_for_minilm.startswith("Chess table —"):
                 phil = self.board_posture.philosophical_coordinates
                 anchored["cultural/efficiency/power"] = _clamp01(
@@ -2052,7 +2117,27 @@ class BoardAnchoredBridgeSensors:
                     float(phil.get("philosophical/being/existence", 0.75))
                 )
                 anchored["cultural/freedom/needlessness"] = 0.08
-            return anchored, dict(exp_raw), queried, skipped
+                board_val_f = _clamp01(float(self.board_posture.board_valence))
+                board_arousal = _clamp01(
+                    0.35
+                    + 0.40 * float(phil.get("philosophical/being/agency", 0.50))
+                    + 0.25 * float(phil.get("philosophical/structure/chaos", 0.30))
+                )
+                board_salience = _clamp01(
+                    max(
+                        float(exp_raw.get("experiential/reflection/salience", 0.45)),
+                        0.48
+                        + 0.30 * abs(board_val_f - 0.50)
+                        + (0.18 if self.board_posture.board_shadow_warnings else 0.0),
+                    )
+                )
+                exp_out["experiential/phase/valence"] = board_val_f
+                exp_out["experiential/phase/arousal"] = board_arousal
+                exp_out["experiential/reflection/salience"] = board_salience
+                anchored["experiential/phase/valence"] = board_val_f
+                anchored["experiential/phase/arousal"] = board_arousal
+                anchored["experiential/reflection/salience"] = board_salience
+            return anchored, exp_out, queried, skipped
 
         # Subsequent calls (Clause 1 at comma and full-sentence Pass 2+ Theory) score
         # the proposed plan/chat text directly so any mismatch with the board triggers dissonance!
@@ -2178,24 +2263,6 @@ def compute_fide_elo_update(
     delta = round(float(k_factor) * (actual - expected), 2)
     new_elo = round(max(400.0, float(player_elo) + delta), 2)
     return new_elo, delta
-
-
-def _static_centipawns_for_color(board: chess.Board, color: chess.Color) -> float:
-    """Fast objective centipawn evaluation (`100.0 == 1 pawn`) from `color`'s perspective."""
-    if board.is_checkmate():
-        return -9999.0 if board.turn == color else 9999.0
-    if board.is_stalemate() or board.is_insufficient_material() or board.is_repetition(3):
-        return 0.0
-    cp = 0.0
-    for pt, val in _PIECE_VALUES.items():
-        if val <= 0.0:
-            continue
-        cp += 100.0 * val * (len(board.pieces(pt, color)) - len(board.pieces(pt, not color)))
-    for sq in (chess.D4, chess.E4, chess.D5, chess.E5):
-        p = board.piece_at(sq)
-        if p is not None:
-            cp += 18.0 if p.color == color else -18.0
-    return round(cp, 1)
 
 
 class ObjectiveCalibratedSparringEngine:

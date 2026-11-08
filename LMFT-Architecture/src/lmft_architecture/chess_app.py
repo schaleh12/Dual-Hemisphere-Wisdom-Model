@@ -2194,6 +2194,10 @@ class ChessKibitzerRuntime:
                     float(scene_coords.get("cultural/efficiency/wastelessness", 0.20)),
                     0.20,
                 )
+                scene_coords["experiential/phase/valence"] = min(
+                    float(scene_coords.get("experiential/phase/valence", vibe.valence)),
+                    0.28,
+                )
         else:
             self._hazard_scene_indices.discard(int(scene_index))
         sleep_scene = UnresolvedSleepScene(
@@ -2201,9 +2205,9 @@ class ChessKibitzerRuntime:
             scenario_text=f"{rec['scenario_text']}{note_suffix}",
             external_coordinates=scene_coords,
             felt_chord_notes=dict(vibe.felt_chord.complex_notes) if vibe.felt_chord is not None else {},
-            valence=vibe.valence,
-            salience=vibe.salience,
-            arousal=vibe.arousal,
+            valence=float(scene_coords.get("experiential/phase/valence", vibe.valence)),
+            salience=float(scene_coords.get("experiential/reflection/salience", vibe.salience)),
+            arousal=float(scene_coords.get("experiential/phase/arousal", vibe.arousal)),
             left_brain_hunch=turn.final_conscious_note or rec["scenario_text"],
             social_drift_detected=False,
             active_concept_collision=None if override_coordinates is not None else vibe.active_concept,

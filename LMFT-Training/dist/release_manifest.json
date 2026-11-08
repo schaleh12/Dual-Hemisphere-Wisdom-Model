@@ -2,8 +2,8 @@
   "schema_version": 1,
   "version": "0.2.0",
   "github_repo": "schaleh12/Dual-Hemisphere-Wisdom-Model",
-  "build_sha256": "6758d4daa4e21863eba97e063d4ea0fc8931d7d6dd14f7da339a6c01128a3113",
-  "build_short_hash": "6758d4daa4e2",
+  "build_sha256": "2eee1948a186b9fc0cd93e1e58ab427e86293f979ee75c6f0c3f0208627663dc",
+  "build_short_hash": "2eee1948a186",
   "files": {
     "src/lmft_architecture/__init__.py": {
       "sha256": "a89f56c2195e87129adbffa5065d8769ea096e13ba98783d217c4d120ee92623",
@@ -90,12 +90,12 @@
       "size_bytes": 3267
     },
     "src/lmft_architecture/chess_app.py": {
-      "sha256": "2f7b157828163c5f9fbf76ab77807bf006b6b738d5cccbf282d283ade23940f1",
-      "size_bytes": 183855
+      "sha256": "467f35db7b463d07f5dd69a78bcc2eeab394fa7c8b3b727e750c1513f1196cb2",
+      "size_bytes": 184225
     },
     "src/lmft_architecture/chess_kibitz_bridge.py": {
-      "sha256": "cff4d7010f1802ac6d4cde94ac330a74e7124fd9fbddbea3b3e474c6684ed5d4",
-      "size_bytes": 114955
+      "sha256": "e1d444c354e2ccc30ef4cdfd0ac81ce45a3aa8079e129d5203aacee6b45de697",
+      "size_bytes": 118237
     },
     "src/lmft_architecture/chess_ui.py": {
       "sha256": "091291bf4addab5ecc475b04be5e57eccdd8756ef5559c3532651743f272c712",
@@ -358,12 +358,12 @@
       "size_bytes": 105830
     },
     "outputs/rem_sleep_consolidated_ruleset.json": {
-      "sha256": "c03b9a57c6d0be1df33a354674cee9574c95c114d9893c7c8748d52c8101ee5a",
-      "size_bytes": 28797
+      "sha256": "4342f1a78b93893b059cfbb9f805d1e666c5a254f6af4e6a58db773e17579cdc",
+      "size_bytes": 13475
     },
     "outputs/sleep_consolidated_ruleset.json": {
-      "sha256": "c03b9a57c6d0be1df33a354674cee9574c95c114d9893c7c8748d52c8101ee5a",
-      "size_bytes": 28797
+      "sha256": "4342f1a78b93893b059cfbb9f805d1e666c5a254f6af4e6a58db773e17579cdc",
+      "size_bytes": 13475
     },
     "outputs/continuous_tiered_ruleset.json": {
       "sha256": "b6769f70249a4c68f599c0a7e5a0f8da7afe1487de1f2f3e8e4be26e776f0d0d",
@@ -374,16 +374,16 @@
       "size_bytes": 1124
     },
     "outputs/branch_archives/cultural_history.json": {
-      "sha256": "4d226c9cf04e58895e33f79a30d586ed9dfaa5ecb2df8c5dbf42119210451f54",
-      "size_bytes": 25546
+      "sha256": "47311c68e02dc6f2ffefe417ab223d1cb7dce5e8d6b3e0f35c0e2b10c6b08fc0",
+      "size_bytes": 13388
     },
     "outputs/branch_archives/experiential_felt_diary.json": {
-      "sha256": "c201c5cafd514ad3a3e02e92e0cd50132e2d90ca2de9a0ad6c037dbc9b1d4c39",
-      "size_bytes": 29295
+      "sha256": "e4761403a57f74d5da105c4a81d3517acb8f3075fe9fd681861bc29775a2deb8",
+      "size_bytes": 16563
     },
     "outputs/branch_archives/philosophical_lexicon.json": {
-      "sha256": "ebf947b0d52f960c845de91cbe7450cf5dc34167e0d8085aad54ca293b235a4f",
-      "size_bytes": 24485
+      "sha256": "9d89a5c331f4ef4739d25c4698ff3718d03131c31a0a0d09436aaefaebd1fd15",
+      "size_bytes": 12145
     }
   }
 }
