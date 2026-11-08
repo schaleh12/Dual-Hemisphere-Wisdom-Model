@@ -1190,6 +1190,31 @@ def test_repetition_and_ngram_penalty_and_stanza_start_duplicate_check() -> None
     assert observed_qk_vo[0][0] == pytest.approx(2.0 * 0.35)
     assert observed_qk_vo[0][1] == pytest.approx(2.0 * 0.08)
 
+    # 6. Verify `_strip_chat_turn_bleed`, `clean_post_gap_continuation`, `normalize_clause_1_prefix`,
+    #    and `extract_dream_vow_sentence` strip any `"User:"` / `"Assistant:"` turn boundary markers.
+    from lmft_architecture.three_legged_runtime import (
+        _strip_chat_turn_bleed,
+        clean_post_gap_continuation,
+        extract_dream_vow_sentence,
+        normalize_clause_1_prefix,
+    )
+
+    bleed_sample = (
+        "I coordinated rook and king to deliver checkmate. "
+        "Keep every piece's role clear. "
+        "User: Previous REM Sleep Vow Assistant: Okay, let me try again."
+    )
+    assert _strip_chat_turn_bleed(bleed_sample) == (
+        "I coordinated rook and king to deliver checkmate. Keep every piece's role clear."
+    )
+    assert "User:" not in clean_post_gap_continuation(bleed_sample)
+    assert "Assistant:" not in clean_post_gap_continuation(bleed_sample)
+    assert "User:" not in normalize_clause_1_prefix("Looking at the center, User: In first-person inner")
+    vow_clean = extract_dream_vow_sentence(bleed_sample)
+    assert vow_clean == "Keep every piece's role clear."
+    assert "User:" not in vow_clean and "Assistant:" not in vow_clean
+
+
 
 
 

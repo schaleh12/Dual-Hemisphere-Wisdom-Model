@@ -315,6 +315,7 @@ def _ensure_foundational_rules(rules: tuple[FuzzyConceptRule, ...]) -> tuple[Fuz
     foundational_by_name = {r.concept_name: r for r in VIRGIN_FOUNDATIONAL_RULES}
     merged: list[FuzzyConceptRule] = list(VIRGIN_FOUNDATIONAL_RULES)
     index_by_canonical: dict[str, int] = {}
+    seen_cluster_sigs: dict[tuple[str, frozenset[str]], int] = {}
     for r in rules:
         if r.rule_id in foundational_by_id or r.concept_name in foundational_by_name:
             continue
@@ -339,9 +340,17 @@ def _ensure_foundational_rules(rules: tuple[FuzzyConceptRule, ...]) -> tuple[Fuz
         if canon in index_by_canonical:
             idx = index_by_canonical[canon]
             merged[idx] = entrain_existing_cluster_rule(merged[idx], normalized, canon)
-        else:
-            index_by_canonical[canon] = len(merged)
-            merged.append(normalized)
+            continue
+        if canon.startswith(("hazard_", "coached_", "immunized_")) and canon.endswith("_cluster"):
+            prefix = canon.split("_", 1)[0]
+            sig = (prefix, frozenset(normalized.target_leaves.keys()))
+            if sig in seen_cluster_sigs:
+                idx = seen_cluster_sigs[sig]
+                merged[idx] = entrain_existing_cluster_rule(merged[idx], normalized, merged[idx].concept_name)
+                continue
+            seen_cluster_sigs[sig] = len(merged)
+        index_by_canonical[canon] = len(merged)
+        merged.append(normalized)
     return tuple(merged)
 
 
@@ -2339,14 +2348,15 @@ class BloodmoonClockRuntime:
                 clean_scenario = clean_scenario.split(" — ", 1)[-1].strip()
 
             vow_context_clause = ""
-            conv_hist: list[tuple[str, str]] = []
             if prev_chronicle and prev_chronicle.get("vow_sentence"):
                 prev_vow_str = str(prev_chronicle["vow_sentence"]).strip()
-                conv_hist.append(("Previous REM Sleep Vow", prev_vow_str))
+                prev_vow_snippet = f' My previous vow was "{prev_vow_str}".' if prev_vow_str else ""
                 if vow_outcome == "BROKEN":
-                    vow_context_clause = " Our earlier vow of lucid self-possession was tested by the cadence."
+                    vow_context_clause = f"{prev_vow_snippet} Our earlier vow of lucid self-possession was tested by the cadence."
                 elif vow_outcome == "HONORED":
-                    vow_context_clause = " Our earlier vow of lucid self-possession held steady."
+                    vow_context_clause = f"{prev_vow_snippet} Our earlier vow of lucid self-possession held steady."
+                else:
+                    vow_context_clause = prev_vow_snippet
 
             target_sents = max(1, min(6, int(num_sentences)))
             stanza_limit = max(1, min(3, int(max_stanzas)))
@@ -2487,7 +2497,7 @@ class BloodmoonClockRuntime:
                 max_stanzas=stanza_limit,
                 sentences_per_stanza=3,
                 num_sentences=target_sents,
-                conversation_history=tuple(conv_hist),
+                conversation_history=(),
                 chord_builder_at_comma=_build_sleep_comma_chord,
                 stanza_boundary_callback=_sleep_stanza_boundary if stanza_limit > 1 else None,
                 clause_1_override=sleep_clause_1,
@@ -2694,7 +2704,12 @@ class BloodmoonClockRuntime:
                     lines.append("\nNewly Forged Right-Brain Rules:")
                     for r in forged_rules_list:
                         leaves_str = ", ".join(
-                            f"{k.split('/')[-1]}>={v:.2f}" for k, v in r.target_leaves.items()
+                            (
+                                f"{k.split('/')[-1]}<={float(v):.2f}"
+                                if float(v) <= 0.30
+                                else f"{k.split('/')[-1]}>={float(v):.2f}"
+                            )
+                            for k, v in r.target_leaves.items()
                         )
                         lines.append(f"  • {r.concept_name} ({r.rule_id}): [{leaves_str}]")
                 if before_evals and after_evals:

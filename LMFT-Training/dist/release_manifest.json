@@ -2,8 +2,8 @@
   "schema_version": 1,
   "version": "0.2.0",
   "github_repo": "schaleh12/Dual-Hemisphere-Wisdom-Model",
-  "build_sha256": "f61ff2ce05fb37eb972a39ee0ab1d3d22705d638a9fbbc49d2fe49045ffd00a7",
-  "build_short_hash": "f61ff2ce05fb",
+  "build_sha256": "f9bde98dc82a1cac8dbe1e5091a4267e104616da88952eae0416b272684921bd",
+  "build_short_hash": "f9bde98dc82a",
   "files": {
     "src/lmft_architecture/__init__.py": {
       "sha256": "a89f56c2195e87129adbffa5065d8769ea096e13ba98783d217c4d120ee92623",
@@ -66,8 +66,8 @@
       "size_bytes": 5515
     },
     "src/lmft_architecture/bloodmoon_app.py": {
-      "sha256": "5097082f53889de4eb593f8fbf0b359646f3fb1423de906e97571c49569e48f6",
-      "size_bytes": 136720
+      "sha256": "b639606a2f316e68cd3e58cca80347f76a7d2cf323dbc787211de3f88bf47094",
+      "size_bytes": 137576
     },
     "src/lmft_architecture/bloodmoon_ui.py": {
       "sha256": "35dc889b58af1867c20eec0645009f59a9dd5f613942646d1373e00bad95c7a0",
@@ -90,8 +90,8 @@
       "size_bytes": 3267
     },
     "src/lmft_architecture/chess_app.py": {
-      "sha256": "ddc6db5ce972a94b3a5f85942e629fbbd9569fc7e2e58b04399e4feaa637c243",
-      "size_bytes": 177340
+      "sha256": "3743dfeb60fdadb9d7dac6e2401cc3f41c3be29f5968742d44df7d0458aaeae9",
+      "size_bytes": 182366
     },
     "src/lmft_architecture/chess_kibitz_bridge.py": {
       "sha256": "cff4d7010f1802ac6d4cde94ac330a74e7124fd9fbddbea3b3e474c6684ed5d4",
@@ -262,8 +262,8 @@
       "size_bytes": 2752
     },
     "src/lmft_architecture/sleep_consolidation.py": {
-      "sha256": "c75da03195f0966eded33bbf1aa3fe4355da17277b7134c9f84ce46220500da8",
-      "size_bytes": 65367
+      "sha256": "51291c6b5f0a022547733a6824a569a9d160cbfa879e792989c1aab1fbda88d0",
+      "size_bytes": 75105
     },
     "src/lmft_architecture/subliminal_gap_splice.py": {
       "sha256": "c82de8d9871f8e6ec840889e74b620eeb0fca4ceaca0885d5d74ce7e5ddba9fb",
@@ -290,8 +290,8 @@
       "size_bytes": 2802
     },
     "src/lmft_architecture/three_legged_runtime.py": {
-      "sha256": "0e02224d90934759c08f6f679eba2f7c8d4682d068948798df5af3173db3ecaf",
-      "size_bytes": 108145
+      "sha256": "c3064fdf59de1ee7dc4cd687261a3847da45a7f64d518aa065c2388cc9b91394",
+      "size_bytes": 109168
     },
     "src/lmft_architecture/train_left_brain_lora.py": {
       "sha256": "44e7670ec7fa0d100f22946b8e35fdacfd82fd9a1b3d19759c6711865d850b70",
@@ -358,32 +358,32 @@
       "size_bytes": 105830
     },
     "outputs/rem_sleep_consolidated_ruleset.json": {
-      "sha256": "a3b235767b874e2aa4ea631a3452dc5ccc24ac4517e12439775f27e509d41e7c",
-      "size_bytes": 44170
+      "sha256": "6429ae2d77b8808419656d9b7b5c9d3faaff24c808e67e1e492137c8eca81cb9",
+      "size_bytes": 29184
     },
     "outputs/sleep_consolidated_ruleset.json": {
-      "sha256": "a3b235767b874e2aa4ea631a3452dc5ccc24ac4517e12439775f27e509d41e7c",
-      "size_bytes": 44170
+      "sha256": "6429ae2d77b8808419656d9b7b5c9d3faaff24c808e67e1e492137c8eca81cb9",
+      "size_bytes": 29184
     },
     "outputs/continuous_tiered_ruleset.json": {
       "sha256": "b6769f70249a4c68f599c0a7e5a0f8da7afe1487de1f2f3e8e4be26e776f0d0d",
       "size_bytes": 6071
     },
     "outputs/bitboard_sleeve_weights.json": {
-      "sha256": "07f07819e79ce5f3287f3a45dcf14448465b614e567630aeef53cc3191a1be3c",
-      "size_bytes": 1161
+      "sha256": "c66ea9a96521821762765586f07a43c236d55547ee49ff4683d2f792e841d919",
+      "size_bytes": 1124
     },
     "outputs/branch_archives/cultural_history.json": {
-      "sha256": "03cc568039e0064526844064a1b1264bf4b0a5c9d427c321f915ebb19f7f8aa2",
-      "size_bytes": 27415
+      "sha256": "4d226c9cf04e58895e33f79a30d586ed9dfaa5ecb2df8c5dbf42119210451f54",
+      "size_bytes": 25546
     },
     "outputs/branch_archives/experiential_felt_diary.json": {
-      "sha256": "335af52689bb9939f17c61e074b1e18e6a68fafca9c9adfc4036e16099f9677b",
-      "size_bytes": 27788
+      "sha256": "c201c5cafd514ad3a3e02e92e0cd50132e2d90ca2de9a0ad6c037dbc9b1d4c39",
+      "size_bytes": 29295
     },
     "outputs/branch_archives/philosophical_lexicon.json": {
-      "sha256": "68f094ab6a945120dbe146f736af29f0f1df4a985f63766dc873f389929c03b3",
-      "size_bytes": 26137
+      "sha256": "ebf947b0d52f960c845de91cbe7450cf5dc34167e0d8085aad54ca293b235a4f",
+      "size_bytes": 24485
     }
   }
 }

@@ -150,9 +150,35 @@ def assert_zero_stage_directions_in_prompt(prompt_text: str) -> None:
             )
 
 
+_CHAT_TURN_BOUNDARY_MARKERS: tuple[str, ...] = (
+    "\nUser:",
+    " User:",
+    "\nAssistant:",
+    " Assistant:",
+    "User:",
+    "Assistant:",
+    "<|im_end|>",
+    "<|im_start|>",
+)
+
+
+def _strip_chat_turn_bleed(text: str) -> str:
+    """Truncate `text` immediately before any chat turn boundary marker (`User:`, `Assistant:`, `<|im_end|>`, `<|im_start|>`)."""
+    raw = str(text or "")
+    cut_idx: int | None = None
+    for marker in _CHAT_TURN_BOUNDARY_MARKERS:
+        pos = raw.find(marker)
+        if pos != -1 and (cut_idx is None or pos < cut_idx):
+            cut_idx = pos
+    if cut_idx is not None:
+        raw = raw[:cut_idx]
+    return raw
+
+
 def normalize_clause_1_prefix(raw_prefix: str) -> str:
     """Clean an opening clause so it stops at a comma boundary before `<|subliminal_gap|>`."""
-    cleaned = re.sub(r"<think>.*?</think>", "", raw_prefix, flags=re.DOTALL)
+    cleaned = _strip_chat_turn_bleed(raw_prefix)
+    cleaned = re.sub(r"<think>.*?</think>", "", cleaned, flags=re.DOTALL)
     cleaned = cleaned.replace("<think>", "").replace("</think>", "")
     cleaned = cleaned.replace(SUBLIMINAL_GAP_TOKEN, "")
     cleaned = " ".join(cleaned.replace("\n", " ").split()).strip()
@@ -175,7 +201,8 @@ def normalize_clause_1_prefix(raw_prefix: str) -> str:
 
 def clean_post_gap_continuation(raw_text: str) -> str:
     """Clean Clause-2 continuation and ensure it ends on a complete sentence boundary."""
-    text = re.sub(r"<think>.*?</think>", "", raw_text, flags=re.DOTALL)
+    text = _strip_chat_turn_bleed(raw_text)
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
     text = text.replace("<think>", "").replace("</think>", "")
     text = " ".join(text.replace("\n", " ").split()).strip()
     if not text:
@@ -337,18 +364,19 @@ def is_repetitive_sentence(sentence: str, *, max_word_repeats: int = 3) -> bool:
 
 def extract_dream_vow_sentence(dream_text: str, *, fallback: str = "") -> str:
     """Return the final non-repetitive Executive vow/takeaway sentence from a REM dream stanza or chronicle."""
-    cleaned = " ".join(str(dream_text or "").split()).strip()
+    cleaned = " ".join(_strip_chat_turn_bleed(str(dream_text or "")).split()).strip()
     if not cleaned:
-        return str(fallback or "").strip()
+        return _strip_chat_turn_bleed(str(fallback or "")).strip()
     sentences = [
         s.strip()
         for s in re.split(r"(?<=[.!?])\s+", cleaned)
         if s and s.strip()
     ]
     for sent in reversed(sentences):
-        if not is_repetitive_sentence(sent):
-            return sent
-    return str(fallback or "").strip()
+        if sent.endswith("..") or is_repetitive_sentence(sent):
+            continue
+        return sent
+    return _strip_chat_turn_bleed(str(fallback or "")).strip()
 
 
 class _AttenuatedLoRAScalingContext:
@@ -826,6 +854,8 @@ class SubliminalGapLeftBrain:
                 _append_pending_embeds(state, next_embed)
 
                 decoded_so_far = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
+                if any(m in decoded_so_far for m in _CHAT_TURN_BOUNDARY_MARKERS):
+                    break
                 # Stop as soon as a comma or semicolon appears after at least 3 generated tokens
                 if step_idx >= 2 and ("," in decoded_so_far or ";" in decoded_so_far):
                     break
@@ -982,6 +1012,8 @@ class SubliminalGapLeftBrain:
                 _append_pending_embeds(state, next_embed)
 
                 decoded_cont = self.tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
+                if any(m in decoded_cont for m in _CHAT_TURN_BOUNDARY_MARKERS):
+                    break
                 if (
                     step_idx >= 5
                     and decoded_cont.endswith((".", "!", "?"))
@@ -1321,7 +1353,7 @@ class SubliminalGapLeftBrain:
     ) -> str:
         """Generate REM sleep self-reflection with split-projection LoRA scaling (`qk_lora_scale` vs `vo_lora_scale`) and optional 1st-person `clause_1_override`."""
         clean_c1 = str(clause_1_override).strip() if clause_1_override else None
-        effective_lead_with_gap = False if clean_c1 else bool(lead_with_gap)
+        effective_lead_with_gap = bool(lead_with_gap)
         if lora_scale_factor is not None:
             ctx = attenuate_lora_scaling(self.model, factor=float(lora_scale_factor))
         else:
@@ -1400,7 +1432,7 @@ def generate_rem_dream_self_reflection(
             vo_lora_scale=vo_lora_scale,
         )
     clean_c1 = str(clause_1_override).strip() if clause_1_override else None
-    effective_lead_with_gap = False if clean_c1 else bool(lead_with_gap)
+    effective_lead_with_gap = bool(lead_with_gap)
     model_obj = getattr(left_brain, "model", None)
     if lora_scale_factor is not None:
         ctx = attenuate_lora_scaling(model_obj, factor=float(lora_scale_factor))

@@ -132,6 +132,7 @@ from .sleep_consolidation import (
     canonical_cluster_concept_name,
     consolidate_sleep_clusters_locally,
     entrain_existing_cluster_rule,
+    parse_cluster_defining_leaves,
     run_sleep_consolidation,
 )
 from .subliminal_gap_splice import SubliminalChordVector
@@ -234,7 +235,7 @@ def _ensure_foundational_rules(rules: tuple[FuzzyConceptRule, ...]) -> tuple[Fuz
     foundational_by_name = {r.concept_name: r for r in VIRGIN_FOUNDATIONAL_RULES}
     merged: list[FuzzyConceptRule] = list(VIRGIN_FOUNDATIONAL_RULES)
     seen_by_canonical_name: dict[str, int] = {}
-    seen_learned_sigs: dict[tuple[str, tuple[tuple[str, float], ...]], int] = {}
+    seen_learned_sigs: dict[tuple[str, frozenset[str]], int] = {}
     for r in rules:
         if r.rule_id in foundational_by_id or r.concept_name in foundational_by_name:
             continue
@@ -245,34 +246,81 @@ def _ensure_foundational_rules(rules: tuple[FuzzyConceptRule, ...]) -> tuple[Fuz
             or "Board vs. Theory surprise after " in r.description
         ):
             continue
+        if r.concept_name.startswith("coached_") and (
+            r.concept_name.startswith("coached_low_self_sufficiency_")
+            or r.concept_name.endswith("_chaos_cluster")
+        ):
+            continue
+        _, _, def_cult, def_phil = parse_cluster_defining_leaves(r.concept_name)
+        is_cluster_rule = canonical_cluster_concept_name(r.concept_name).endswith("_cluster")
         if r.concept_name.startswith("hazard_"):
-            # Strip inverted virtue, low-needlessness, cross-polarity coached_*, recursive, or low-shadow/hazard leaves
             shadow_ids = {l.leaf_id for l in PHILOSOPHICAL_SHADOW_LEAVES}
-            cleaned_haz_leaves = {
-                k: float(v)
-                for k, v in r.target_leaves.items()
-                if not (
-                    (k == "cultural/freedom/needlessness" and float(v) <= 0.30)
-                    or (k in shadow_ids and float(v) < 0.50)
-                    or (k in ("philosophical/being/existence", "cultural/freedom/self-sufficiency", "philosophical/structure/order") and float(v) >= 0.58)
-                    or k.split("/")[-1].startswith("coached_")
-                    or (k.split("/")[-1].startswith("hazard_") and float(v) < 0.50)
-                    or any(
-                        rec_tag in k.split("/")[-1]
-                        for rec_tag in ("hazard_high_hazard_", "hazard_low_hazard_", "coached_high_coached_", "coached_low_coached_")
+            cleaned_haz_leaves: dict[str, float] = {}
+            for k, v in r.target_leaves.items():
+                fv = float(v)
+                short_k = k.split("/")[-1]
+                if k == "cultural/freedom/needlessness" and fv <= 0.30:
+                    continue
+                if k in shadow_ids and fv < 0.50:
+                    continue
+                if short_k.startswith("coached_"):
+                    continue
+                if short_k.startswith("hazard_") and (is_cluster_rule or fv < 0.50):
+                    continue
+                if any(
+                    rec_tag in short_k
+                    for rec_tag in ("hazard_high_hazard_", "hazard_low_hazard_", "coached_high_coached_", "coached_low_coached_")
+                ):
+                    continue
+                if k in ("philosophical/being/existence", "cultural/freedom/self-sufficiency", "philosophical/structure/order") and fv >= 0.58:
+                    if k in (def_cult, def_phil):
+                        fv = 0.64
+                    else:
+                        continue
+                cleaned_haz_leaves[k] = fv
+            needs_cluster_repair = (
+                is_cluster_rule
+                and def_cult is not None
+                and def_phil is not None
+                and not r.concept_name.startswith("hazard_high_self_sufficiency_")
+                and (not (def_cult in r.target_leaves and def_phil in r.target_leaves) or len(cleaned_haz_leaves) > 3)
+            )
+            if needs_cluster_repair and def_cult is not None and def_phil is not None:
+                if def_cult not in cleaned_haz_leaves:
+                    cleaned_haz_leaves[def_cult] = 0.25 if def_cult == "cultural/efficiency/wastelessness" else 0.72
+                if def_phil not in cleaned_haz_leaves:
+                    cleaned_haz_leaves[def_phil] = (
+                        0.64 if def_phil in ("philosophical/structure/order", "philosophical/being/existence") else 0.72
                     )
+                if "cultural/efficiency/wastelessness" not in cleaned_haz_leaves and len(cleaned_haz_leaves) < 3:
+                    cleaned_haz_leaves["cultural/efficiency/wastelessness"] = 0.25
+                second_cult = (
+                    "cultural/freedom/needlessness"
+                    if def_cult == "cultural/efficiency/wastelessness"
+                    else def_cult
                 )
-            }
+                if second_cult not in cleaned_haz_leaves and len(cleaned_haz_leaves) < 3:
+                    cleaned_haz_leaves[second_cult] = float(r.target_leaves.get(second_cult, 0.75))
+                if len(cleaned_haz_leaves) > 3:
+                    pinned = {def_cult, def_phil, "cultural/efficiency/wastelessness", second_cult}
+                    for k in list(cleaned_haz_leaves.keys()):
+                        if k not in pinned and len(cleaned_haz_leaves) > 3:
+                            cleaned_haz_leaves.pop(k, None)
+                    for k in list(cleaned_haz_leaves.keys()):
+                        if k not in {def_cult, def_phil} and len(cleaned_haz_leaves) > 3:
+                            cleaned_haz_leaves.pop(k, None)
             if len(cleaned_haz_leaves) < 2:
                 continue
-            if cleaned_haz_leaves != dict(r.target_leaves):
+            new_high = max(float(r.high), 0.88) if is_cluster_rule else float(r.high)
+            new_low = min(float(r.low), new_high - 0.30) if is_cluster_rule else float(r.low)
+            if cleaned_haz_leaves != dict(r.target_leaves) or new_high != r.high or new_low != r.low:
                 r = FuzzyConceptRule(
                     rule_id=r.rule_id,
                     concept_name=r.concept_name,
                     description=r.description,
                     target_leaves=cleaned_haz_leaves,
-                    low=r.low,
-                    high=r.high,
+                    low=round(new_low, 4),
+                    high=round(new_high, 4),
                     polarity=r.polarity,
                 )
         elif r.concept_name.startswith("coached_"):
@@ -290,6 +338,7 @@ def _ensure_foundational_rules(rules: tuple[FuzzyConceptRule, ...]) -> tuple[Fuz
                 for k, v in r.target_leaves.items()
                 if k not in shadow_ids
                 and not k.split("/")[-1].startswith("hazard_")
+                and not (is_cluster_rule and k.split("/")[-1].startswith("coached_"))
                 and not any(
                     rec_tag in k.split("/")[-1]
                     for rec_tag in ("hazard_high_hazard_", "hazard_low_hazard_", "coached_high_coached_", "coached_low_coached_")
@@ -298,17 +347,42 @@ def _ensure_foundational_rules(rules: tuple[FuzzyConceptRule, ...]) -> tuple[Fuz
                 and not (k == "cultural/freedom/needlessness" and float(v) > 0.20)
                 and not (k in virtue_ids and float(v) < 0.55)
             }
+            needs_coached_repair = (
+                is_cluster_rule
+                and def_cult is not None
+                and def_phil is not None
+                and (not (def_cult in r.target_leaves and def_phil in r.target_leaves) or len(cleaned_coached_leaves) > 3)
+            )
+            if needs_coached_repair and def_cult is not None and def_phil is not None:
+                if def_cult not in cleaned_coached_leaves:
+                    cleaned_coached_leaves[def_cult] = 0.08 if def_cult == "cultural/freedom/needlessness" else 0.72
+                if def_phil not in cleaned_coached_leaves:
+                    cleaned_coached_leaves[def_phil] = 0.10 if def_phil == "philosophical/structure/chaos" else 0.68
+                if "cultural/efficiency/wastelessness" not in cleaned_coached_leaves:
+                    cleaned_coached_leaves["cultural/efficiency/wastelessness"] = 0.75
+                second_cult = (
+                    "cultural/freedom/needlessness"
+                    if def_cult == "cultural/efficiency/wastelessness"
+                    else def_cult
+                )
+                if second_cult not in cleaned_coached_leaves:
+                    cleaned_coached_leaves[second_cult] = 0.08 if second_cult == "cultural/freedom/needlessness" else 0.68
+                pinned_c = {"cultural/efficiency/wastelessness", second_cult, def_phil}
+                if len(cleaned_coached_leaves) > 3:
+                    cleaned_coached_leaves = {k: v for k, v in cleaned_coached_leaves.items() if k in pinned_c}
             min_req = 2 if len(r.target_leaves) >= 2 else 1
             if len(cleaned_coached_leaves) < min_req:
                 continue
-            if cleaned_coached_leaves != dict(r.target_leaves):
+            new_high = max(float(r.high), 0.88) if is_cluster_rule else float(r.high)
+            new_low = min(float(r.low), new_high - 0.30) if is_cluster_rule else float(r.low)
+            if cleaned_coached_leaves != dict(r.target_leaves) or new_high != r.high or new_low != r.low:
                 r = FuzzyConceptRule(
                     rule_id=r.rule_id,
                     concept_name=r.concept_name,
                     description=r.description,
                     target_leaves=cleaned_coached_leaves,
-                    low=r.low,
-                    high=r.high,
+                    low=round(new_low, 4),
+                    high=round(new_high, 4),
                     polarity=r.polarity,
                 )
         if "Played " in r.description and " instead of best move " in r.description:
@@ -325,6 +399,7 @@ def _ensure_foundational_rules(rules: tuple[FuzzyConceptRule, ...]) -> tuple[Fuz
                 target_leaves=dict(r.target_leaves),
                 low=r.low,
                 high=r.high,
+                polarity=r.polarity,
             )
         if canonical_name in seen_by_canonical_name:
             idx = seen_by_canonical_name[canonical_name]
@@ -332,7 +407,7 @@ def _ensure_foundational_rules(rules: tuple[FuzzyConceptRule, ...]) -> tuple[Fuz
             continue
         if canonical_name.startswith(("hazard_", "coached_")) and canonical_name.endswith("_cluster"):
             prefix = "hazard" if canonical_name.startswith("hazard_") else "coached"
-            sig = (prefix, tuple(sorted((k, round(float(v), 4)) for k, v in r.target_leaves.items())))
+            sig = (prefix, frozenset(r.target_leaves.keys()))
             if sig in seen_learned_sigs:
                 idx = seen_learned_sigs[sig]
                 merged[idx] = entrain_existing_cluster_rule(merged[idx], r, merged[idx].concept_name)
@@ -3033,15 +3108,15 @@ class ChessKibitzerRuntime:
             rep = sorted_scenes[0]
             moment_desc = _clean_rem_moment_text(rep, max_len=240)
             vow_context_clause = ""
-            conv_hist: list[tuple[str, str]] = []
             if prev_chronicle and prev_chronicle.get("vow_sentence"):
                 prev_vow_str = extract_dream_vow_sentence(str(prev_chronicle["vow_sentence"]).strip())
                 if not prev_vow_str and prev_chronicle.get("stanzas"):
                     prev_vow_str = extract_dream_vow_sentence(
                         " ".join(str(s) for s in prev_chronicle.get("stanzas", ()))
                     )
+                prev_vow_snippet = ""
                 if prev_vow_str and not is_repetitive_sentence(prev_vow_str):
-                    conv_hist.append(("Previous REM Sleep Vow", prev_vow_str))
+                    prev_vow_snippet = f' My previous vow was "{prev_vow_str}".'
                 if vow_outcome == "BROKEN" and vow_overlap_leaves:
                     leaf_words = [k.split("/")[-1].replace("-", " ") for k in vow_overlap_leaves[:3]]
                     if len(leaf_words) > 1:
@@ -3049,10 +3124,12 @@ class ChessKibitzerRuntime:
                     else:
                         short_leaves = leaf_words[0]
                     vow_context_clause = (
-                        f" Our previous vow was tested and faltered around {short_leaves}."
+                        f"{prev_vow_snippet} Our previous vow was tested and faltered around {short_leaves}."
                     )
                 elif vow_outcome == "HONORED":
-                    vow_context_clause = " Our previous positional vow held firm."
+                    vow_context_clause = f"{prev_vow_snippet} Our previous positional vow held firm."
+                else:
+                    vow_context_clause = prev_vow_snippet
 
             target_sents = max(1, min(6, int(num_sentences)))
             stanza_limit = max(1, min(3, int(max_stanzas)))
@@ -3254,7 +3331,7 @@ class ChessKibitzerRuntime:
                 max_stanzas=stanza_limit,
                 sentences_per_stanza=3,
                 num_sentences=target_sents,
-                conversation_history=tuple(conv_hist),
+                conversation_history=(),
                 chord_builder_at_comma=_build_sleep_comma_chord,
                 stanza_boundary_callback=_stanza_cb,
                 clause_1_override=sleep_clause_1,
@@ -3458,7 +3535,12 @@ class ChessKibitzerRuntime:
                     lines.append("\nNewly Forged Right-Brain Rules:")
                     for r in forged_rules_list:
                         leaves_str = ", ".join(
-                            f"{k.split('/')[-1]}>={v:.2f}" for k, v in r.target_leaves.items()
+                            (
+                                f"{k.split('/')[-1]}<={float(v):.2f}"
+                                if float(v) <= 0.30
+                                else f"{k.split('/')[-1]}>={float(v):.2f}"
+                            )
+                            for k, v in r.target_leaves.items()
                         )
                         lines.append(f"  • {r.concept_name} ({r.rule_id}): [{leaves_str}]")
                 if before_evals and after_evals:

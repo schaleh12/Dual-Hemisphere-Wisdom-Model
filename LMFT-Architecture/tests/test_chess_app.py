@@ -1673,6 +1673,138 @@ def test_chess_runtime_will_edges_persistence_and_virgin_lock(tmp_path: Path) ->
     assert "delivered the winning continuation" in brilliancy_prompt
 
 
+def test_zero_wire_clone_rule_ties_and_rem_vow_prompt_no_chat_bleed(tmp_path: Path) -> None:
+    """Verify (1) no two `rule-sleep-*` rules in `club_ruleset.json` share 3-wire clones or tie at `Clarity == 0.00`, (2) `<=` receipt formatting for low target centers, and (3) `prev_chronicle` vow is folded into `sleep_prompt` with `conversation_history=()`."""
+    from lmft_architecture.chess_app import _ensure_foundational_rules
+    from lmft_architecture.reflection_classifier import (
+        FOUNDATIONAL_LEAVES,
+        _evaluate_rules_with_inhibition,
+        compute_contemplation,
+        load_ruleset,
+    )
+    from lmft_architecture.sleep_consolidation import UnresolvedSleepScene, parse_cluster_defining_leaves
+
+    # 1. Verify `club_ruleset.json` on disk has zero duplicate `(prefix, frozenset(target_leaves.keys()))`
+    #    clones and zero `1.00 vs 1.00 -> Clarity 0.00` ties among `rule-sleep-*` rules on their target coordinates.
+    repo_root = Path(__file__).resolve().parents[2]
+    ruleset_path = repo_root / "LMFT-Training" / "outputs" / "chess_kibitzer_state" / "club_ruleset.json"
+    rules = load_ruleset(ruleset_path)
+    sleep_rules = [r for r in rules if r.rule_id.startswith("rule-sleep-")]
+    assert len(sleep_rules) >= 10
+
+    seen_sigs: set[tuple[str, frozenset[str]]] = set()
+    for r in sleep_rules:
+        prefix, _, def_cult, def_phil = parse_cluster_defining_leaves(r.concept_name)
+        if prefix in ("hazard", "coached") and def_cult and def_phil:
+            assert def_cult in r.target_leaves, f"{r.concept_name} missing defining cultural leaf {def_cult}"
+            assert def_phil in r.target_leaves, f"{r.concept_name} missing defining philosophical leaf {def_phil}"
+            sig = (prefix, frozenset(r.target_leaves.keys()))
+            assert sig not in seen_sigs, f"Duplicate 3-wire cluster clone {r.concept_name} on {sig}"
+            seen_sigs.add(sig)
+
+        probe_coords = {k: 0.40 for k in FOUNDATIONAL_LEAVES}
+        for rr in rules:
+            for k in rr.target_leaves:
+                probe_coords.setdefault(k, 0.0)
+        for k, v in r.target_leaves.items():
+            probe_coords[k] = float(v)
+        scores = _evaluate_rules_with_inhibition(tuple(sleep_rules), probe_coords)
+        clarity, confidence, *_ = compute_contemplation(scores)
+        assert confidence == pytest.approx(1.0)
+        assert clarity > 0.0, f"Rule {r.concept_name} tied at 1.00 vs 1.00 (Clarity == 0.00)"
+
+    # 2. Verify `_ensure_foundational_rules` deduplicates two differently named cluster rules that watch
+    #    the exact same 3 leaves into a single entrained rule.
+    clone_a = FuzzyConceptRule(
+        rule_id="rule-sleep-hazard_low_wastelessness_order_c",
+        concept_name="hazard_low_wastelessness_order_cluster",
+        description="Clone A",
+        target_leaves={
+            "cultural/efficiency/wastelessness": 0.25,
+            "cultural/freedom/needlessness": 0.75,
+            "philosophical/structure/order": 0.64,
+        },
+        low=0.58,
+        high=0.88,
+        polarity="repulsive",
+    )
+    clone_b = FuzzyConceptRule(
+        rule_id="rule-sleep-hazard_high_power_order_cluster",
+        concept_name="hazard_high_power_order_cluster",
+        description="Clone B with identical 3 wires before repair",
+        target_leaves={
+            "cultural/efficiency/wastelessness": 0.25,
+            "cultural/freedom/needlessness": 0.75,
+            "philosophical/structure/order": 0.64,
+        },
+        low=0.58,
+        high=0.88,
+        polarity="repulsive",
+    )
+    deduped = _ensure_foundational_rules((clone_a, clone_b))
+    sleep_deduped = [r for r in deduped if r.rule_id.startswith("rule-sleep-")]
+    assert len(sleep_deduped) == 2
+    by_name = {r.concept_name: r for r in sleep_deduped}
+    assert "cultural/efficiency/power" in by_name["hazard_high_power_order_cluster"].target_leaves
+    assert set(by_name["hazard_low_wastelessness_order_cluster"].target_leaves.keys()) != set(
+        by_name["hazard_high_power_order_cluster"].target_leaves.keys()
+    )
+
+    # 3. Verify `prev_chronicle` vow is folded into `sleep_prompt` with `conversation_history=()`
+    #    and `Newly Forged Right-Brain Rules` formats `<= 0.30` leaf targets with `<=`.
+    left_brain = _make_mini_left_brain()
+    runtime = ChessKibitzerRuntime(
+        state_dir=tmp_path / "no_bleed_state",
+        left_brain=left_brain,
+        lazy_load_gpu=False,
+    )
+    captured_hist: list[tuple[tuple[str, str], ...]] = []
+    captured_prompts: list[str] = []
+    orig_splice = left_brain.generate_with_subliminal_splice
+
+    def _spy_splice(prompt_text: str, chord, **kwargs):
+        captured_prompts.append(prompt_text)
+        captured_hist.append(tuple(kwargs.get("conversation_history") or ()))
+        return orig_splice(prompt_text, chord, **kwargs)
+
+    left_brain.generate_with_subliminal_splice = _spy_splice  # type: ignore[method-assign]
+    board = chess.Board("r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 3 3")
+    rev = runtime.sparring_engine.audit_played_move_for_game_review(board, "Bxf7+", perspective=chess.WHITE)
+    sc = UnresolvedSleepScene(
+        scene_index=99,
+        scenario_text="Move 3. White played Bxf7+.",
+        external_coordinates=rev["played_coordinates"],
+        felt_chord_notes={},
+        valence=0.22,
+        salience=0.84,
+        arousal=0.76,
+        left_brain_hunch="Test blunder",
+        is_hazard=True,
+        contrastive_reference_coordinates=rev["contrastive_reference_coordinates"],
+        game_review_annotation=rev["annotation_summary"],
+    )
+    runtime.rem_dream_chronicles.append(
+        {
+            "cycle_index": 1,
+            "game_number": 1,
+            "stanzas": ["Keep the king sheltered behind the castled pawns."],
+            "vow_sentence": "Keep the king sheltered behind the castled pawns.",
+            "vowed_leaves": ["cultural/efficiency/wastelessness"],
+            "vow_outcome": "NEW_VOW",
+            "vow_overlap_leaves": [],
+            "harvested_gap_pairs": 1,
+            "minted_leaves": [],
+        }
+    )
+    runtime.sleep_queue.append(sc)
+    snap = runtime.handle_run_rem_sleep()
+    assert captured_hist and all(h == () for h in captured_hist)
+    assert any('My previous vow was "Keep the king sheltered behind the castled pawns."' in p for p in captured_prompts)
+    assert "Previous REM Sleep Vow" not in snap["last_rem_sleep_receipt"]
+    assert "wastelessness<=0.25" in snap["last_rem_sleep_receipt"]
+
+
+
 
 
 
