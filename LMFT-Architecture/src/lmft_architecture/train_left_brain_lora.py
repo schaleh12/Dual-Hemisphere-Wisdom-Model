@@ -414,18 +414,20 @@ def compute_contrastive_pair_loss(
     *,
     gap_token_id: int,
     device: str | torch.device,
-    contrastive_weight: float = 1.5,
+    mle_weight: float = 0.25,
+    contrastive_weight: float = 2.0,
     margin_target: float = 0.35,
+    swap_margin_target: float = 1.20,
 ) -> tuple[Tensor, dict[str, float]]:
     """Compute matched post-gap MLE loss + chord-contrastive routing margin loss on one `ContrastiveGapPair`.
 
     Why both terms work together:
-    - `mle_loss` teaches the Left Brain to generate smooth post-gap continuations (`cont_a` under `chord_a`,
-      `cont_b` under `chord_b`) with `-100` masking on all pre-gap tokens.
-    - `contrast_loss` compares `(chord_a -> cont_a)` vs. `(chord_b -> cont_a)` and `(chord_b -> cont_b)` vs.
-      `(chord_a -> cont_b)`. Since all tokens except the 4 virtual `<|subliminal_gap|>` embeddings are 100%
-      identical in those comparisons, 100% of `contrast_loss` must flow through `SubliminalGapProjector`
-      and the LoRA attention weights attending to the 4 virtual gap tokens.
+    - `mle_weight * mle_loss` (`0.25 * mle_loss`) lightly anchors natural English post-gap fluency
+      without overwriting Qwen3's base vocabulary or memorizing rare words.
+    - `contrast_loss` focuses primarily on `chord_swap_margin_a = (nll_ba - nll_aa)` and
+      `chord_swap_margin_b = (nll_ab - nll_bb)` (`swap_margin_target = 1.20`), which compare the exact
+      same continuation under `chord_b` vs. `chord_a` so sentence-length and word-rarity bias cancel
+      out completely, alongside `branch_margin_target = 0.35` on `(nll_ab - nll_aa)` and `(nll_ba - nll_bb)`.
     """
     nll_aa = compute_post_gap_continuation_nll(
         model,
@@ -477,13 +479,19 @@ def compute_contrastive_pair_loss(
     chord_swap_margin_a = (nll_ba - nll_aa)
     chord_swap_margin_b = (nll_ab - nll_bb)
 
-    contrast_loss = 0.25 * (
-        F.relu(margin_target - branch_margin_a)
-        + F.relu(margin_target - branch_margin_b)
-        + F.relu(margin_target - chord_swap_margin_a)
-        + F.relu(margin_target - chord_swap_margin_b)
+    contrast_loss = (
+        0.35
+        * (
+            F.relu(float(swap_margin_target) - chord_swap_margin_a)
+            + F.relu(float(swap_margin_target) - chord_swap_margin_b)
+        )
+        + 0.15
+        * (
+            F.relu(float(margin_target) - branch_margin_a)
+            + F.relu(float(margin_target) - branch_margin_b)
+        )
     )
-    total_loss = mle_loss + float(contrastive_weight) * contrast_loss
+    total_loss = float(mle_weight) * mle_loss + float(contrastive_weight) * contrast_loss
 
     metrics = {
         "total_loss": float(total_loss.detach().item()),
@@ -491,6 +499,8 @@ def compute_contrastive_pair_loss(
         "contrast_loss": float(contrast_loss.detach().item()),
         "margin_a": float(branch_margin_a.detach().item()),
         "margin_b": float(branch_margin_b.detach().item()),
+        "swap_margin_a": float(chord_swap_margin_a.detach().item()),
+        "swap_margin_b": float(chord_swap_margin_b.detach().item()),
     }
     return total_loss, metrics
 
@@ -602,6 +612,7 @@ class HoldoutPairEvalResult:
     no_gap_calibrated_margin_under_chord_a: float = 0.0
     no_gap_calibrated_margin_under_chord_b: float = 0.0
     no_gap_calibrated_both_flipped: bool = False
+    generated_continuation_zero: str = ""
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -629,6 +640,7 @@ class HoldoutPairEvalResult:
             "unplugged_chord_swap_shift": self.unplugged_chord_swap_shift,
             "generated_continuation_a": self.generated_continuation_a,
             "generated_continuation_b": self.generated_continuation_b,
+            "generated_continuation_zero": self.generated_continuation_zero,
             "greedy_text_changed": self.greedy_text_changed,
             "generated_sensor_l2": self.generated_sensor_l2,
         }
@@ -854,6 +866,16 @@ def evaluate_holdout_pairs(
                 device=device,
                 max_new_tokens=max_new_tokens,
             )
+            gen_zero = generate_post_gap_continuation_greedy(
+                model,
+                tokenizer,
+                projector,
+                pair,
+                chord=zero_a,
+                gap_token_id=gap_token_id,
+                device=device,
+                max_new_tokens=max_new_tokens,
+            )
             text_changed = gen_a.strip().lower() != gen_b.strip().lower()
 
             if sensors is not None and gen_a.strip() and gen_b.strip():
@@ -895,6 +917,7 @@ def evaluate_holdout_pairs(
                     unplugged_chord_swap_shift=unplugged_shift,
                     generated_continuation_a=gen_a,
                     generated_continuation_b=gen_b,
+                    generated_continuation_zero=gen_zero,
                     greedy_text_changed=text_changed,
                     generated_sensor_l2=round(gen_l2, 6),
                     zero_chord_prior_bias=zero_prior_bias,
@@ -952,8 +975,10 @@ def train_left_brain_lora_and_callosum(
     lr_projector: float = 8e-4,
     lr_lora: float = 3e-4,
     weight_decay: float = 0.01,
-    contrastive_weight: float = 1.5,
+    mle_weight: float = 0.25,
+    contrastive_weight: float = 2.0,
     margin_target: float = 0.35,
+    swap_margin_target: float = 1.20,
     warmup_steps: int = 0,
 ) -> list[dict[str, float]]:
     """Train `SubliminalGapProjector` and `LoRALinear` adapters on `train_pairs` with `batch_size=1`."""
@@ -998,8 +1023,10 @@ def train_left_brain_lora_and_callosum(
                 pair,
                 gap_token_id=gap_token_id,
                 device=device,
+                mle_weight=mle_weight,
                 contrastive_weight=contrastive_weight,
                 margin_target=margin_target,
+                swap_margin_target=swap_margin_target,
             )
             loss.backward()
             torch.nn.utils.clip_grad_norm_(proj_params + lora_params, max_norm=1.0)

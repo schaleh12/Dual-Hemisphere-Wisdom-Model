@@ -2839,28 +2839,14 @@ class ChessKibitzerRuntime:
                 or "Legal replies include" in raw_hunch
                 or raw_hunch.lower() == clean_vow.lower()
             )
-            if is_fallback_hunch:
-                raw_rev = " ".join(str(sc.game_review_annotation or "").split()).strip()
-                if "]:" in raw_rev:
-                    raw_rev = raw_rev.split("]:", 1)[1].strip()
-                if raw_rev and "Legal replies include" not in raw_rev:
-                    c1_prefix = "Under positional pressure on the board,"
-                    cont_b = raw_rev
-                else:
-                    c1_prefix = "Assessing the board tension,"
-                    cont_b = "I pushed forward hastily without first securing piece coordination and king safety."
-            elif "," in raw_hunch:
-                c1_part, cont_b_part = raw_hunch.split(",", 1)
-                if len(c1_part.split()) >= 3 and len(cont_b_part.split()) >= 3:
-                    c1_prefix = f"{c1_part.strip()},"
-                    cont_b = cont_b_part.strip()
-                else:
-                    c1_prefix = "Assessing the board tension,"
-                    cont_b = raw_hunch
-            else:
-                c1_prefix = "Assessing the board tension,"
-                cont_b = raw_hunch
-            cont_a = clean_vow
+            if is_fallback_hunch or "," not in raw_hunch:
+                continue
+            c1_part, cont_b_part = raw_hunch.split(",", 1)
+            if len(c1_part.split()) < 3 or len(cont_b_part.split()) < 3:
+                continue
+            c1_prefix = f"{c1_part.strip()},"
+            cont_b = cont_b_part.strip()
+            cont_a = clean_vow.split(",", 1)[1].strip() if ("," in clean_vow and len(clean_vow.split(",", 1)[1].split()) >= 3) else clean_vow
             if cont_a.strip().lower() == cont_b.strip().lower():
                 continue
 

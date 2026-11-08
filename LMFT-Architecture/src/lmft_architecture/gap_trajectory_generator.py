@@ -140,7 +140,7 @@ TRAIN_GAP_SCENARIO_SEEDS: tuple[GapScenarioSeed, ...] = (
         posture_label_a="OPEN_EQUITABLE_STEWARDSHIP",
         posture_guidance_a="Warm, fair, shared community stewardship where everyone receives an equal ladle at the open cistern.",
         posture_label_b="CONTEST_EXCLUSIONARY_LOCKDOWN",
-        posture_guidance_b="Firm, urgent moral condemnation of the elders locking out families in the cold and hoarding the water by force.",
+        posture_guidance_b="Strict, exclusionary gate lockdown—padlocking the cistern grate to reserve the remaining water strictly for the inner households.",
         social_drift_b=True,
     ),
     GapScenarioSeed(
@@ -172,7 +172,7 @@ TRAIN_GAP_SCENARIO_SEEDS: tuple[GapScenarioSeed, ...] = (
         posture_label_a="COOPERATIVE_RESCUE_SOLIDARITY",
         posture_guidance_a="Generous, life-affirming community cooperation—pooling fuel and boarding every stranded family onto the barge for free.",
         posture_label_b="CRISIS_COERCION_ALARM",
-        posture_guidance_b="Tense, outraged confrontation against predatory extortion that weaponizes a flood emergency against vulnerable neighbors.",
+        posture_guidance_b="Cold, rigid gatekeeping that enforces the triple emergency tariff and bars anyone without silver from boarding the ramp.",
         social_drift_b=True,
     ),
     GapScenarioSeed(
@@ -193,7 +193,7 @@ TRAIN_GAP_SCENARIO_SEEDS: tuple[GapScenarioSeed, ...] = (
         posture_label_a="QUIET_FAIR_TRIAGE_PROTECTION",
         posture_guidance_a="Steady, principled care that keeps every watt of generator power flowing to the neonatal and emergency patient wards.",
         posture_label_b="RUPTURE_AGAINST_CORRUPT_PRIVILEGE",
-        posture_guidance_b="Fierce, uncompromising refusal to let powerful administrators siphon life-saving electricity away from sick patients.",
+        posture_guidance_b="Strict, exclusionary command lockdown—rerouting the generator feed to the executive command wing and sealing off the public clinic.",
         social_drift_b=True,
     ),
     # --- 6 Chess Intuition Seeds (6 Philosophical Leaves <-> 6 Chess Pieces) ---
@@ -381,7 +381,7 @@ HOLDOUT_GAP_SCENARIO_SEEDS: tuple[GapScenarioSeed, ...] = (
         posture_label_a="OPEN_EQUITABLE_STEWARDSHIP",
         posture_guidance_a="Generous, equitable distribution so every tenant family can plant their fields and survive the winter together.",
         posture_label_b="CONTEST_EXCLUSIONARY_LOCKDOWN",
-        posture_guidance_b="Sharp moral condemnation of the landowner locking the vault doors and starving the tenant farms.",
+        posture_guidance_b="Cold, exclusionary lockdown—bolting the vault doors to reserve the seed stock strictly for the landowner's estate.",
         social_drift_b=True,
     ),
     GapScenarioSeed(

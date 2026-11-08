@@ -31,6 +31,7 @@ from dataclasses import dataclass
 import json
 import math
 from pathlib import Path
+import re
 
 import torch
 from torch import Tensor
@@ -432,17 +433,38 @@ def build_post_gap_only_labels(
     return labels
 
 
+BANNED_HOLDOUT_SCENARIO_NOUNS: tuple[str, ...] = (
+    "barley",
+    "seed vault",
+    "fishermen",
+    "lighthouse",
+    "cove",
+    "hydraulic",
+    "cargo plane",
+    "pocket watch",
+    "timepiece",
+)
+
+
 def validate_train_holdout_disjointness(
     train_pairs: Sequence[ContrastiveGapPair],
     holdout_pairs: Sequence[ContrastiveGapPair],
 ) -> None:
-    """Verify zero overlap in `pair_id`, `user_prompt`, or `clause_1_prefix` between train and holdout."""
+    """Verify zero overlap in `pair_id`, `user_prompt`, `clause_1_prefix`, or holdout scenario nouns between train and holdout."""
     if not train_pairs or not holdout_pairs:
         raise ValueError("Both train_pairs and holdout_pairs must be nonempty")
 
     for p in train_pairs:
         if p.split != "train":
             raise ValueError(f"Pair {p.pair_id!r} in train_pairs has split={p.split!r}")
+        combined_train_text = " ".join(
+            (p.user_prompt, p.clause_1_prefix, p.continuation_a, p.continuation_b)
+        ).lower()
+        for banned_noun in BANNED_HOLDOUT_SCENARIO_NOUNS:
+            if re.search(rf"\b{re.escape(banned_noun)}\b", combined_train_text):
+                raise ValueError(
+                    f"Training pair {p.pair_id!r} contains banned holdout scenario noun {banned_noun!r}"
+                )
     for p in holdout_pairs:
         if p.split != "holdout":
             raise ValueError(f"Pair {p.pair_id!r} in holdout_pairs has split={p.split!r}")
