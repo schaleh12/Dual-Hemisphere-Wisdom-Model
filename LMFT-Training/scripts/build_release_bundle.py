@@ -11,7 +11,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import sys
 import zipfile
+
+_ARCH_SRC = Path(__file__).resolve().parents[2] / "LMFT-Architecture" / "src"
+if _ARCH_SRC.exists() and str(_ARCH_SRC) not in sys.path:
+    sys.path.insert(0, str(_ARCH_SRC))
 
 RELEASE_VERSION = "v0.1.0"
 BUNDLE_NAME = f"lmft-sanctuary-club-{RELEASE_VERSION}-win64.zip"
