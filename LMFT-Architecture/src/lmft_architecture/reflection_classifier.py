@@ -608,6 +608,23 @@ def _evaluate_rules_with_inhibition(
             val = round(val * (1.0 - 0.5 * max_deeper), 6)
         rule_activations[r.concept_name] = val
 
+    # Compensated Soft-Min tie-breaker (Upgrade #2): when 2+ active rules in the deepest tier
+    # collide within CONFUSION_THRESHOLD on pure min_similarity, re-evaluate those colliding rules
+    # with `soft_min=True` (0.85 * min_sim + 0.15 * mean_sim) BEFORE structural/lateral inhibition
+    # so rules with stronger supporting leaves break false ties without overwriting attenuated runner-ups.
+    sorted_vals = sorted(rule_activations.values(), reverse=True)
+    if len(sorted_vals) >= 2 and sorted_vals[0] >= CONFUSION_THRESHOLD and (sorted_vals[0] - sorted_vals[1]) < CONFUSION_THRESHOLD:
+        top_val = sorted_vals[0]
+        colliding = [
+            r for r in rules
+            if r.tier == deepest_active_tier
+            and rule_activations[r.concept_name] >= CONFUSION_THRESHOLD
+            and (top_val - rule_activations[r.concept_name]) < CONFUSION_THRESHOLD
+        ]
+        if len(colliding) >= 2:
+            for r in colliding:
+                rule_activations[r.concept_name] = r.evaluate(coords, soft_min=True)
+
     # Broad-vs-Specific Intra-Tier Inhibition: when a 3+-leaf specific rule in `deepest_active_tier`
     # fires at `>= CONFUSION_THRESHOLD`, attenuate broader 1–2 leaf posture rules in the same tier
     # so background 2-leaf rules (like `grounded_coordination`) do not tie 3-leaf learned rules.
@@ -620,12 +637,14 @@ def _evaluate_rules_with_inhibition(
         default=0.0,
     )
     if max_specific >= CONFUSION_THRESHOLD:
+        max_broad_allowed = round(max(0.0, max_specific - CONFUSION_THRESHOLD - 0.05), 6)
         for r in rules:
             if r.tier == deepest_active_tier and len(r.target_leaves) < 3:
-                rule_activations[r.concept_name] = round(
+                attenuated_broad = round(
                     rule_activations[r.concept_name] * (1.0 - 0.55 * max_specific),
                     6,
                 )
+                rule_activations[r.concept_name] = min(attenuated_broad, max_broad_allowed)
 
     # Same-Family Cluster Archetype Winner-Take-All (`hazard_*_cluster` and `coached_*_cluster`):
     # Multiple `hazard_*_cluster` rules firing on the same blunder (or multiple `coached_*_cluster`
@@ -639,9 +658,9 @@ def _evaluate_rules_with_inhibition(
             if r.tier == deepest_active_tier
             and r.concept_name.startswith(fam_prefix)
             and re.sub(r"_s\d+$", "", r.concept_name).endswith("_cluster")
-            and rule_activations[r.concept_name] >= CONFUSION_THRESHOLD
+            and rule_activations[r.concept_name] > 0.0
         ]
-        if len(fam_rules) >= 2:
+        if len(fam_rules) >= 2 and max(rule_activations[r.concept_name] for r in fam_rules) >= CONFUSION_THRESHOLD:
             def _cluster_rank_key(rule_obj: FuzzyConceptRule) -> tuple[float, int, float, float]:
                 exact_sims = [
                     1.0 - abs(float(coords.get(k, 0.0)) - float(tv))
@@ -659,24 +678,12 @@ def _evaluate_rules_with_inhibition(
             ranked_fam = sorted(fam_rules, key=_cluster_rank_key, reverse=True)
             winner = ranked_fam[0]
             w_val = rule_activations[winner.concept_name]
+            max_sub_allowed = round(max(0.0, w_val - CONFUSION_THRESHOLD - 0.05), 6)
             for ru in ranked_fam[1:]:
                 ru_val = rule_activations[ru.concept_name]
-                rule_activations[ru.concept_name] = round(ru_val * (1.0 - 0.55 * w_val), 6)
+                attenuated_ru = round(ru_val * (1.0 - 0.55 * w_val), 6)
+                rule_activations[ru.concept_name] = min(attenuated_ru, max_sub_allowed)
 
-    # Compensated Soft-Min tie-breaker (Upgrade #2): when 2+ active rules in the deepest tier
-    # collide within CONFUSION_THRESHOLD on pure min_similarity, re-evaluate those colliding rules
-    # with `soft_min=True` (0.85 * min_sim + 0.15 * mean_sim) so rules with stronger supporting
-    # leaves break false ties without ever inflating non-colliding runner-up rules.
-    sorted_vals = sorted(rule_activations.values(), reverse=True)
-    if len(sorted_vals) >= 2 and sorted_vals[0] >= CONFUSION_THRESHOLD and (sorted_vals[0] - sorted_vals[1]) < CONFUSION_THRESHOLD:
-        top_val = sorted_vals[0]
-        colliding = [
-            r for r in rules
-            if r.tier == deepest_active_tier and (top_val - rule_activations[r.concept_name]) < CONFUSION_THRESHOLD
-        ]
-        if len(colliding) >= 2:
-            for r in colliding:
-                rule_activations[r.concept_name] = r.evaluate(coords, soft_min=True)
     return rule_activations
 
 

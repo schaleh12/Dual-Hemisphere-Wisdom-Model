@@ -205,6 +205,10 @@ def clean_post_gap_continuation(raw_text: str) -> str:
     text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
     text = text.replace("<think>", "").replace("</think>", "")
     text = " ".join(text.replace("\n", " ").split()).strip()
+    if text.count("(") > text.count(")"):
+        last_open = text.rfind("(")
+        if last_open > 0:
+            text = text[:last_open].rstrip(",;:- ").strip()
     if not text:
         return "we hold steady and observe the unfolding tension."
 
@@ -1032,6 +1036,7 @@ class SubliminalGapLeftBrain:
                     step_idx >= 5
                     and decoded_cont.endswith((".", "!", "?"))
                     and not re.search(r"\b\d+\.$", decoded_cont)
+                    and decoded_cont.count("(") <= decoded_cont.count(")")
                 ):
                     break
 
@@ -1044,6 +1049,14 @@ class SubliminalGapLeftBrain:
             post_gap_text = cleaned_post_gap
             if not prefix and post_gap_text and post_gap_text[0].islower():
                 post_gap_text = post_gap_text[0].upper() + post_gap_text[1:]
+            elif (
+                prefix
+                and prefix.rstrip().endswith((",", ";"))
+                and len(post_gap_text) >= 2
+                and post_gap_text[0].isupper()
+                and post_gap_text[1].islower()
+            ):
+                post_gap_text = post_gap_text[0].lower() + post_gap_text[1:]
 
             if not owns_stream and state is not None:
                 raw_post_compact = " ".join(raw_post_gap.replace("\n", " ").split()).strip()
@@ -1227,6 +1240,7 @@ class SubliminalGapLeftBrain:
         pass_index: int = 2,
         clause_1_prefix: str | None = None,
         clause_1_override: str | None = None,
+        stanza_clause_1_overrides: Sequence[str | None] | None = None,
         conversation_history: Sequence[tuple[str, str]] = (),
         max_context_chars: int = DEFAULT_MAX_CONTEXT_CHARS,
         chord_builder_at_comma: Callable[
@@ -1272,7 +1286,12 @@ class SubliminalGapLeftBrain:
                     if stanza_sentences:
                         prior_parts.append(" ".join(stanza_sentences))
                     prior_text = "\n\n".join(prior_parts).strip()
-                    override_c1 = clause_1_prefix if (stanza_idx == 0 and sent_idx == 0) else None
+                    override_c1: str | None = None
+                    if sent_idx == 0:
+                        if stanza_clause_1_overrides is not None and stanza_idx < len(stanza_clause_1_overrides):
+                            override_c1 = stanza_clause_1_overrides[stanza_idx]
+                        elif stanza_idx == 0:
+                            override_c1 = clause_1_prefix
                     use_rotated_chord = (
                         stanza_idx > 0
                         and chord_rotated_for_stanza
@@ -1360,6 +1379,7 @@ class SubliminalGapLeftBrain:
         ]
         | None = None,
         clause_1_override: str | None = None,
+        stanza_clause_1_overrides: Sequence[str | None] | None = None,
         lead_with_gap: bool = True,
         lora_scale_factor: float | None = None,
         qk_lora_scale: float | None = 0.35,
@@ -1368,6 +1388,24 @@ class SubliminalGapLeftBrain:
         """Generate REM sleep self-reflection with split-projection LoRA scaling (`qk_lora_scale` vs `vo_lora_scale`) and optional 1st-person `clause_1_override`."""
         clean_c1 = str(clause_1_override).strip() if clause_1_override else None
         effective_lead_with_gap = bool(lead_with_gap)
+        resolved_stanza_overrides: tuple[str | None, ...] | None = None
+        if int(max_stanzas) > 1:
+            if stanza_clause_1_overrides is not None:
+                resolved_stanza_overrides = tuple(
+                    str(s).strip() if s else None for s in stanza_clause_1_overrides
+                )
+            elif clean_c1:
+                if int(max_stanzas) == 2:
+                    resolved_stanza_overrides = (
+                        clean_c1,
+                        "Carrying this vow into our next game,",
+                    )
+                else:
+                    resolved_stanza_overrides = (
+                        clean_c1,
+                        "Weighing how the board's structure shifted across the game,",
+                        "Carrying this vow into our next game,",
+                    )
         if lora_scale_factor is not None:
             ctx = attenuate_lora_scaling(self.model, factor=float(lora_scale_factor))
         else:
@@ -1388,6 +1426,7 @@ class SubliminalGapLeftBrain:
                     chord_builder_at_comma=chord_builder_at_comma,
                     stanza_boundary_callback=stanza_boundary_callback,
                     clause_1_override=clean_c1,
+                    stanza_clause_1_overrides=resolved_stanza_overrides,
                     lead_with_gap=effective_lead_with_gap,
                 )
                 return dream_text
@@ -1423,6 +1462,7 @@ def generate_rem_dream_self_reflection(
     ]
     | None = None,
     clause_1_override: str | None = None,
+    stanza_clause_1_overrides: Sequence[str | None] | None = None,
     lead_with_gap: bool = True,
     lora_scale_factor: float | None = None,
     qk_lora_scale: float | None = 0.35,
@@ -1440,6 +1480,7 @@ def generate_rem_dream_self_reflection(
             chord_builder_at_comma=chord_builder_at_comma,
             stanza_boundary_callback=stanza_boundary_callback,
             clause_1_override=clause_1_override,
+            stanza_clause_1_overrides=stanza_clause_1_overrides,
             lead_with_gap=lead_with_gap,
             lora_scale_factor=lora_scale_factor,
             qk_lora_scale=qk_lora_scale,
@@ -1447,6 +1488,24 @@ def generate_rem_dream_self_reflection(
         )
     clean_c1 = str(clause_1_override).strip() if clause_1_override else None
     effective_lead_with_gap = bool(lead_with_gap)
+    resolved_stanza_overrides: tuple[str | None, ...] | None = None
+    if int(max_stanzas) > 1:
+        if stanza_clause_1_overrides is not None:
+            resolved_stanza_overrides = tuple(
+                str(s).strip() if s else None for s in stanza_clause_1_overrides
+            )
+        elif clean_c1:
+            if int(max_stanzas) == 2:
+                resolved_stanza_overrides = (
+                    clean_c1,
+                    "Carrying this vow into our next game,",
+                )
+            else:
+                resolved_stanza_overrides = (
+                    clean_c1,
+                    "Weighing how the board's structure shifted across the game,",
+                    "Carrying this vow into our next game,",
+                )
     model_obj = getattr(left_brain, "model", None)
     if lora_scale_factor is not None:
         ctx = attenuate_lora_scaling(model_obj, factor=float(lora_scale_factor))
@@ -1468,6 +1527,7 @@ def generate_rem_dream_self_reflection(
                 chord_builder_at_comma=chord_builder_at_comma,
                 stanza_boundary_callback=stanza_boundary_callback,
                 clause_1_override=clean_c1,
+                stanza_clause_1_overrides=resolved_stanza_overrides,
                 lead_with_gap=effective_lead_with_gap,
             )
             return dream_text

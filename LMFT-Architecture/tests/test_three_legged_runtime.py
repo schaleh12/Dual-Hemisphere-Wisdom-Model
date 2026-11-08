@@ -1214,6 +1214,39 @@ def test_repetition_and_ngram_penalty_and_stanza_start_duplicate_check() -> None
     assert vow_clean == "Keep every piece's role clear."
     assert "User:" not in vow_clean and "Assistant:" not in vow_clean
 
+    # 7. Verify unclosed parenthetical trimming in `clean_post_gap_continuation` and per-stanza
+    #    1st-person `stanza_clause_1_overrides` in multi-stanza `generate_rem_dream_self_reflection`
+    unclosed_paren = "Black played Rxc3+, and White's move was bxc4 (assuming it's bxa6?"
+    assert clean_post_gap_continuation(unclosed_paren) == "Black played Rxc3+, and White's move was bxc4."
+
+    observed_stanza_overrides: list[tuple[str | None, ...] | None] = []
+
+    def _spy_multi_stanza(*args, **kwargs):
+        observed_stanza_overrides.append(kwargs.get("stanza_clause_1_overrides"))
+        return (
+            "Savoring how my move bxc3 harmonized the board, the vow holds.\n\n"
+            "Recalling how my move Rd1 sustained that momentum, our pieces stayed linked.\n\n"
+            "Carrying this vow into our next game, I will preserve structural order.",
+            ("stanza1", "stanza2", "stanza3"),
+            (fixed_trace,),
+        )
+
+    left_brain.generate_multi_stanza_discourse = _spy_multi_stanza  # type: ignore[method-assign]
+    dream_multi = generate_rem_dream_self_reflection(
+        left_brain,
+        "Reflect across 3 stanzas.",
+        chord_a,
+        max_stanzas=3,
+        sentences_per_stanza=3,
+        clause_1_override="Savoring how my move bxc3 harmonized the board,",
+    )
+    assert "Savoring how my move bxc3 harmonized the board, the vow holds." in dream_multi
+    assert len(observed_stanza_overrides) == 1
+    assert observed_stanza_overrides[0] is not None
+    assert len(observed_stanza_overrides[0]) == 3
+    assert all(s is not None and s.endswith(",") for s in observed_stanza_overrides[0])
+
+
 
 
 

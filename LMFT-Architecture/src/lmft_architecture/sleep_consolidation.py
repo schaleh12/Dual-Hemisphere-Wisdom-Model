@@ -380,6 +380,8 @@ def normalize_contrastive_target_leaves_and_thresholds(
         "philosophical/persistence/continuity",
         "cultural/efficiency/wastelessness",
         "cultural/freedom/self-sufficiency",
+        "cultural/justice/honor",
+        "cultural/justice/fairness",
     }
     has_wastelessness = "cultural/efficiency/wastelessness" in avg_coords
     wastelessness_val = float(avg_coords.get("cultural/efficiency/wastelessness", 0.50))
@@ -413,7 +415,7 @@ def normalize_contrastive_target_leaves_and_thresholds(
             # A `coached_` rule must never target shadow pathologies, hazard_* leaves, or low virtue leaves
             if k in shadow_leaf_set or leaf_short.startswith(("hazard_", "coached_")):
                 continue
-            if k in virtue_leaf_set and (v_act < 0.55 or v_act < v_ref):
+            if k in virtue_leaf_set and (v_act < 0.55 or v_act < v_ref) and k not in (def_cult_leaf, def_phil_leaf):
                 continue
             if k == "cultural/freedom/needlessness" and v_act > 0.20:
                 continue
@@ -425,7 +427,7 @@ def normalize_contrastive_target_leaves_and_thresholds(
                 continue
             if leaf_short.startswith("hazard_") and (v_act < 0.50 or v_act <= v_ref):
                 continue
-            if k in virtue_leaf_set and (v_act >= 0.58 or v_act >= v_ref) and k != def_phil_leaf:
+            if k in virtue_leaf_set and (v_act >= 0.58 or v_act >= v_ref) and k not in (def_cult_leaf, def_phil_leaf):
                 continue
             if k in shadow_leaf_set and (v_act < 0.50 or v_act <= v_ref):
                 continue

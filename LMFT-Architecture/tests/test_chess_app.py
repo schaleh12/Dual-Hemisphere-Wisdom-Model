@@ -2013,6 +2013,89 @@ def test_board_valence_evaluation_and_candidate_move_valence() -> None:
     assert coords_ng5["cultural/freedom/needlessness"] > coords_bc4["cultural/freedom/needlessness"] + 0.15
     assert coords_bc4["experiential/synchronization/resonance"] > coords_ng5["experiential/synchronization/resonance"]
 
+    # Non-chess socio-political rules (`violent_resource_seizure`) are stripped by `_ensure_foundational_rules`,
+    # spurious high `honor >= 0.58` is stripped from `hazard_low_wastelessness_chaos_cluster` and repaired to 3 wires,
+    # and Same-Family Cluster Winner-Take-All is never overwritten by the Soft-Min tie-breaker when `w_val < 0.90`.
+    from lmft_architecture.chess_app import _ensure_foundational_rules
+    from lmft_architecture.reflection_classifier import (
+        FuzzyConceptRule,
+        _evaluate_rules_with_inhibition,
+        compute_contemplation,
+    )
+
+    polluted_rules = (
+        FuzzyConceptRule(
+            rule_id="rule-socio-1",
+            concept_name="violent_resource_seizure",
+            description="Non-chess socio-political rule from sleep consolidation test.",
+            target_leaves={"cultural/efficiency/power": 0.85, "philosophical/being/agency": 0.95},
+            low=0.55,
+            high=0.85,
+        ),
+        FuzzyConceptRule(
+            rule_id="rule-sleep-hazard_low_wastelessness_chaos_c",
+            concept_name="hazard_low_wastelessness_chaos_cluster",
+            description="Blunder cluster with spurious high honor wire.",
+            target_leaves={
+                "cultural/efficiency/wastelessness": 0.25,
+                "cultural/justice/honor": 0.69,
+                "philosophical/structure/chaos": 0.35,
+            },
+            low=0.58,
+            high=0.88,
+        ),
+        FuzzyConceptRule(
+            rule_id="rule-sleep-coached_high_power_agency_cluste",
+            concept_name="coached_high_power_agency_cluster",
+            description="Coached power agency cluster.",
+            target_leaves={
+                "cultural/efficiency/wastelessness": 0.85,
+                "cultural/efficiency/power": 0.91,
+                "philosophical/being/agency": 0.95,
+            },
+            low=0.58,
+            high=0.88,
+        ),
+        FuzzyConceptRule(
+            rule_id="rule-sleep-coached_high_wastelessness_agenc",
+            concept_name="coached_high_wastelessness_agency_cluster",
+            description="Coached wastelessness agency cluster.",
+            target_leaves={
+                "cultural/efficiency/wastelessness": 0.94,
+                "cultural/justice/honor": 0.61,
+                "philosophical/being/agency": 0.95,
+            },
+            low=0.58,
+            high=0.88,
+        ),
+    )
+    cleaned_polluted = _ensure_foundational_rules(polluted_rules)
+    cleaned_names = {r.concept_name for r in cleaned_polluted}
+    assert "violent_resource_seizure" not in cleaned_names
+    haz_chaos = next(r for r in cleaned_polluted if r.concept_name == "hazard_low_wastelessness_chaos_cluster")
+    assert "cultural/justice/honor" not in haz_chaos.target_leaves
+    assert len(haz_chaos.target_leaves) == 3
+
+    scene_15902_coords = {k: 0.50 for k in FOUNDATIONAL_LEAVES}
+    scene_15902_coords.update(
+        {
+            "cultural/efficiency/wastelessness": 0.80,
+            "cultural/efficiency/power": 0.88,
+            "cultural/freedom/needlessness": 0.08,
+            "cultural/justice/honor": 0.61,
+            "philosophical/being/agency": 0.95,
+            "philosophical/being/existence": 0.68,
+            "philosophical/structure/order": 0.65,
+            "philosophical/structure/chaos": 0.15,
+        }
+    )
+    acts_15902 = _evaluate_rules_with_inhibition(cleaned_polluted, scene_15902_coords)
+    clarity_15902, conf_15902, matched_15902, confused_15902, _ = compute_contemplation(acts_15902)
+    assert confused_15902 is False
+    assert clarity_15902 >= 0.50
+    assert matched_15902 == "coached_high_power_agency_cluster"
+
+
 
 
 

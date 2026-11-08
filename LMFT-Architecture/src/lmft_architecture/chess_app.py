@@ -249,6 +249,8 @@ def _ensure_foundational_rules(rules: tuple[FuzzyConceptRule, ...]) -> tuple[Fuz
                         merged[f_idx] = r
                         break
             continue
+        if not r.concept_name.startswith(("hazard_", "coached_", "blunder_", "avoid_")):
+            continue
         if r.concept_name.startswith("hazard_") and (
             r.concept_name.startswith("hazard_high_wastelessness_")
             or r.concept_name.startswith("hazard_high_self_sufficiency_")
@@ -283,7 +285,13 @@ def _ensure_foundational_rules(rules: tuple[FuzzyConceptRule, ...]) -> tuple[Fuz
                     for rec_tag in ("hazard_high_hazard_", "hazard_low_hazard_", "coached_high_coached_", "coached_low_coached_")
                 ):
                     continue
-                if k in ("philosophical/being/existence", "cultural/freedom/self-sufficiency", "philosophical/structure/order") and fv >= 0.58:
+                if k in (
+                    "philosophical/being/existence",
+                    "cultural/freedom/self-sufficiency",
+                    "philosophical/structure/order",
+                    "cultural/justice/honor",
+                    "cultural/justice/fairness",
+                ) and fv >= 0.58:
                     if k in (def_cult, def_phil):
                         fv = 0.64
                     else:
@@ -303,7 +311,7 @@ def _ensure_foundational_rules(rules: tuple[FuzzyConceptRule, ...]) -> tuple[Fuz
                 and (
                     not (def_cult in r.target_leaves and def_phil in r.target_leaves)
                     or "cultural/efficiency/wastelessness" not in cleaned_haz_leaves
-                    or len(cleaned_haz_leaves) > 3
+                    or len(cleaned_haz_leaves) != 3
                 )
             )
             if needs_cluster_repair and def_cult is not None and def_phil is not None:
@@ -353,6 +361,8 @@ def _ensure_foundational_rules(rules: tuple[FuzzyConceptRule, ...]) -> tuple[Fuz
                 "philosophical/persistence/discreteness",
                 "cultural/efficiency/wastelessness",
                 "cultural/freedom/self-sufficiency",
+                "cultural/justice/honor",
+                "cultural/justice/fairness",
             }
             cleaned_coached_leaves = {
                 k: float(v)
@@ -376,7 +386,7 @@ def _ensure_foundational_rules(rules: tuple[FuzzyConceptRule, ...]) -> tuple[Fuz
                     not (def_cult in r.target_leaves and def_phil in r.target_leaves)
                     or "cultural/efficiency/wastelessness" not in cleaned_coached_leaves
                     or float(cleaned_coached_leaves.get("cultural/efficiency/wastelessness", 0.0)) < 0.68
-                    or len(cleaned_coached_leaves) > 3
+                    or len(cleaned_coached_leaves) != 3
                 )
             )
             if needs_coached_repair and def_cult is not None and def_phil is not None:
@@ -610,13 +620,6 @@ class ChessKibitzerRuntime:
             except Exception:
                 user_loaded = ()
         if user_loaded:
-            if is_live:
-                for seed_p in seed_candidates[1:3]:
-                    if seed_p.exists():
-                        try:
-                            user_loaded = _merge_rulesets(user_loaded, load_ruleset(seed_p))
-                        except Exception:
-                            pass
             return _ensure_foundational_rules(user_loaded)
         for p in seed_candidates:
             if p.exists():
@@ -3204,6 +3207,44 @@ class ChessKibitzerRuntime:
                     else "Savoring how our pieces coordinated at that decisive turn,"
                 )
 
+            sleep_stanza_overrides: list[str | None] = [sleep_clause_1]
+            if stanza_limit >= 2:
+                if stanza_limit == 2:
+                    sleep_stanza_overrides.append("Carrying this vow into our next game,")
+                else:
+                    sc2 = sorted_scenes[min(1, len(sorted_scenes) - 1)]
+                    annot2 = (sc2.game_review_annotation or "").strip()
+                    mv2 = ""
+                    m_mv2 = re.search(
+                        r"\b(?:played|found)\s+(?:\d+\.\.\.\s*|\d+\.\s*)?([A-Za-z0-9+#=\-]+)",
+                        annot2 or sc2.scenario_text,
+                        flags=re.IGNORECASE,
+                    )
+                    if m_mv2:
+                        mv2 = m_mv2.group(1).rstrip(".,;:")
+                    haz2 = (
+                        float(sc2.external_coordinates.get("cultural/efficiency/wastelessness", 0.50)) <= 0.35
+                        or "blunder" in annot2.lower()
+                        or "mistake" in annot2.lower()
+                        or "instead of best move" in annot2.lower()
+                    )
+                    if "found " in annot2.lower() and "instead of best move" not in annot2.lower():
+                        haz2 = False
+                    if haz2:
+                        c1_s2 = (
+                            f"Turning to my move {mv2} later in the game,"
+                            if (mv2 and mv2 != played_move)
+                            else "Weighing how the board's structural balance shifted across the game,"
+                        )
+                    else:
+                        c1_s2 = (
+                            f"Recalling how my move {mv2} sustained that momentum,"
+                            if (mv2 and mv2 != played_move)
+                            else "Tracing how our pieces maintained their coordination across the game,"
+                        )
+                    sleep_stanza_overrides.append(c1_s2)
+                    sleep_stanza_overrides.append("Carrying this vow into our next game,")
+
             if target_sents >= 4 or stanza_limit >= 2:
                 extra_moments = [
                     _clean_rem_moment_text(s, max_len=110)
@@ -3375,6 +3416,7 @@ class ChessKibitzerRuntime:
                 chord_builder_at_comma=_build_sleep_comma_chord,
                 stanza_boundary_callback=_stanza_cb,
                 clause_1_override=sleep_clause_1,
+                stanza_clause_1_overrides=sleep_stanza_overrides,
                 qk_lora_scale=0.35,
                 vo_lora_scale=0.08,
             )
