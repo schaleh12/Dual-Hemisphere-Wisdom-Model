@@ -350,6 +350,34 @@ def extract_dream_vow_sentence(dream_text: str, *, fallback: str = "") -> str:
     return str(fallback or "").strip()
 
 
+class _AttenuatedLoRAScalingContext:
+    """Context manager that temporarily scales `LoRALinear.scaling` by `factor` (e.g. `0.0` or `0.15`) and restores it on exit."""
+
+    def __init__(self, model: Any, factor: float = 0.0) -> None:
+        self.model = model
+        self.factor = float(factor)
+        self._saved: list[tuple[Any, float]] = []
+
+    def __enter__(self) -> _AttenuatedLoRAScalingContext:
+        if self.model is not None and hasattr(self.model, "modules"):
+            for mod in self.model.modules():
+                if hasattr(mod, "lora_a") and hasattr(mod, "lora_b") and hasattr(mod, "scaling"):
+                    orig = float(getattr(mod, "scaling"))
+                    self._saved.append((mod, orig))
+                    setattr(mod, "scaling", orig * self.factor)
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        for mod, orig in self._saved:
+            setattr(mod, "scaling", orig)
+        self._saved.clear()
+
+
+def attenuate_lora_scaling(model: Any, factor: float = 0.0) -> _AttenuatedLoRAScalingContext:
+    """Return a context manager that temporarily multiplies `LoRALinear.scaling` across `model` by `factor`."""
+    return _AttenuatedLoRAScalingContext(model, factor=factor)
+
+
 def _mask_prior_virtual_gaps(state: _PersistentTurnStreamState) -> None:
     """Zero out `cur_mask` over prior sentences' 4 virtual `<|subliminal_gap|>` tokens while keeping all English words unmasked."""
     if not state.active_gap_spans:
@@ -1225,6 +1253,112 @@ class SubliminalGapLeftBrain:
                         torch.cuda.empty_cache()
                 except Exception:
                     pass
+
+    def generate_rem_dream_self_reflection(
+        self,
+        sleep_prompt: str,
+        sleep_chord: SubliminalChordVector,
+        *,
+        max_stanzas: int = 1,
+        num_sentences: int = 4,
+        sentences_per_stanza: int = 3,
+        conversation_history: Sequence[tuple[str, str]] = (),
+        chord_builder_at_comma: Callable[
+            [str],
+            tuple[SubliminalChordVector, str, tuple[str, ...]] | SubliminalChordVector,
+        ]
+        | None = None,
+        stanza_boundary_callback: Callable[
+            [int, str, str],
+            tuple[bool, SubliminalChordVector | None],
+        ]
+        | None = None,
+        lead_with_gap: bool = True,
+        lora_scale_factor: float = 0.0,
+    ) -> str:
+        """Generate REM sleep self-reflection with `LoRALinear.scaling` attenuated while keeping Corpus Callosum soft tokens active."""
+        with attenuate_lora_scaling(self.model, factor=lora_scale_factor):
+            if int(max_stanzas) > 1 and hasattr(self, "generate_multi_stanza_discourse"):
+                dream_text, _, _ = self.generate_multi_stanza_discourse(
+                    sleep_prompt,
+                    sleep_chord,
+                    max_stanzas=int(max_stanzas),
+                    sentences_per_stanza=int(sentences_per_stanza),
+                    conversation_history=conversation_history,
+                    chord_builder_at_comma=chord_builder_at_comma,
+                    stanza_boundary_callback=stanza_boundary_callback,
+                    lead_with_gap=bool(lead_with_gap),
+                )
+                return dream_text
+            dream_text, _ = self.generate_with_subliminal_splice(
+                sleep_prompt,
+                sleep_chord,
+                num_sentences=int(num_sentences),
+                conversation_history=conversation_history,
+                chord_builder_at_comma=chord_builder_at_comma,
+                lead_with_gap=bool(lead_with_gap),
+            )
+            return dream_text
+
+
+def generate_rem_dream_self_reflection(
+    left_brain: Any,
+    sleep_prompt: str,
+    sleep_chord: SubliminalChordVector,
+    *,
+    max_stanzas: int = 1,
+    num_sentences: int = 4,
+    sentences_per_stanza: int = 3,
+    conversation_history: Sequence[tuple[str, str]] = (),
+    chord_builder_at_comma: Callable[
+        [str],
+        tuple[SubliminalChordVector, str, tuple[str, ...]] | SubliminalChordVector,
+    ]
+    | None = None,
+    stanza_boundary_callback: Callable[
+        [int, str, str],
+        tuple[bool, SubliminalChordVector | None],
+    ]
+    | None = None,
+    lead_with_gap: bool = True,
+    lora_scale_factor: float = 0.0,
+) -> str:
+    """Generate REM sleep self-reflection on `left_brain` with `LoRALinear.scaling` attenuated."""
+    if hasattr(left_brain, "generate_rem_dream_self_reflection"):
+        return left_brain.generate_rem_dream_self_reflection(
+            sleep_prompt,
+            sleep_chord,
+            max_stanzas=max_stanzas,
+            num_sentences=num_sentences,
+            sentences_per_stanza=sentences_per_stanza,
+            conversation_history=conversation_history,
+            chord_builder_at_comma=chord_builder_at_comma,
+            stanza_boundary_callback=stanza_boundary_callback,
+            lead_with_gap=lead_with_gap,
+            lora_scale_factor=lora_scale_factor,
+        )
+    with attenuate_lora_scaling(getattr(left_brain, "model", None), factor=lora_scale_factor):
+        if int(max_stanzas) > 1 and hasattr(left_brain, "generate_multi_stanza_discourse"):
+            dream_text, _, _ = left_brain.generate_multi_stanza_discourse(
+                sleep_prompt,
+                sleep_chord,
+                max_stanzas=int(max_stanzas),
+                sentences_per_stanza=int(sentences_per_stanza),
+                conversation_history=conversation_history,
+                chord_builder_at_comma=chord_builder_at_comma,
+                stanza_boundary_callback=stanza_boundary_callback,
+                lead_with_gap=bool(lead_with_gap),
+            )
+            return dream_text
+        dream_text, _ = left_brain.generate_with_subliminal_splice(
+            sleep_prompt,
+            sleep_chord,
+            num_sentences=int(num_sentences),
+            conversation_history=conversation_history,
+            chord_builder_at_comma=chord_builder_at_comma,
+            lead_with_gap=bool(lead_with_gap),
+        )
+        return dream_text
 
 
 @dataclass(frozen=True)

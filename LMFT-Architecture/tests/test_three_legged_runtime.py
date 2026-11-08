@@ -1124,5 +1124,39 @@ def test_repetition_and_ngram_penalty_and_stanza_start_duplicate_check() -> None
         "Guard king shelter before over-extending."
     )
 
+    # 4. Verify `attenuate_lora_scaling` & `generate_rem_dream_self_reflection` temporarily attenuate `LoRALinear.scaling`
+    from lmft_architecture.train_left_brain_lora import LoRALinear
+    from lmft_architecture.three_legged_runtime import (
+        attenuate_lora_scaling,
+        generate_rem_dream_self_reflection,
+    )
+
+    model.lora_test = LoRALinear(torch.nn.Linear(16, 16), rank=4, lora_alpha=8.0)
+    orig_scaling = model.lora_test.scaling
+    assert orig_scaling == pytest.approx(2.0)
+
+    observed_scalings: list[float] = []
+
+    def _spy_multi_stanza(*args, **kwargs):
+        observed_scalings.append(float(model.lora_test.scaling))
+        return "In the quiet center, the king shelters behind the pawn wall.", ("In the quiet center, the king shelters behind the pawn wall.",), (fixed_trace,)
+
+    left_brain.generate_multi_stanza_discourse = _spy_multi_stanza  # type: ignore[method-assign]
+    dream_out = generate_rem_dream_self_reflection(
+        left_brain,
+        "Reflect on the game.",
+        chord_a,
+        max_stanzas=2,
+        lora_scale_factor=0.0,
+    )
+    assert dream_out == "In the quiet center, the king shelters behind the pawn wall."
+    assert observed_scalings == [0.0]
+    assert model.lora_test.scaling == pytest.approx(orig_scaling)
+
+    with attenuate_lora_scaling(model, factor=0.15):
+        assert model.lora_test.scaling == pytest.approx(orig_scaling * 0.15)
+    assert model.lora_test.scaling == pytest.approx(orig_scaling)
+
+
 
 

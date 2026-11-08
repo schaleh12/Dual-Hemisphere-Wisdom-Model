@@ -1543,6 +1543,7 @@ def test_weight_space_circuit_sculpting_homeostatic_decay_and_clean_cluster_nami
 def test_chess_runtime_will_edges_persistence_and_virgin_lock(tmp_path: Path) -> None:
     """Verify D066: ChessKibitzerRuntime sculpts and persists `will_edges.json` in Schooled mode while keeping Virgin locked."""
     from lmft_architecture.right_brain_equilibrium import RIGHT_BRAIN_WILL_EDGES
+    from lmft_architecture.sleep_consolidation import UnresolvedSleepScene
 
     state_dir = tmp_path / "d066_will_state"
     runtime = ChessKibitzerRuntime(
@@ -1583,6 +1584,47 @@ def test_chess_runtime_will_edges_persistence_and_virgin_lock(tmp_path: Path) ->
     assert runtime.will_edges == RIGHT_BRAIN_WILL_EDGES
     runtime.switch_brain_lineage("schooled")
     assert runtime.will_edges == sculpted_snapshot
+
+    # Verify mid-game board moves (`handle_chess_move`) do NOT trigger mid-game Auto-REM sleep while game is active,
+    # and `_harvest_rem_contrastive_gap_pairs` never splits fallback `"Legal replies include ..."` strings on a comma
+    runtime.handle_set_fen("r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 3 3")
+    runtime.flag_turn_for_coaching(
+        last_id,
+        user_note=rev["annotation_summary"],
+        check_auto_sleep=False,
+        is_hazard=True,
+        override_coordinates=rev["played_coordinates"],
+        contrastive_reference_coordinates=rev["contrastive_reference_coordinates"],
+        game_review_annotation=rev["annotation_summary"],
+    )
+    runtime.auto_rem_sleep = True
+    runtime.auto_sleep_threshold = 1
+    assert len(runtime.sleep_queue) == 1
+    # Playing a mid-game move while `not board.is_game_over()` must NOT trigger auto-REM sleep mid-game
+    runtime.handle_chess_move("O-O")
+    assert len(runtime.sleep_queue) == 1
+
+    # Running REM sleep harvests a clean `continuation_b` from `game_review_annotation` instead of `"Rg4, Rf4..."`
+    runtime.sleep_queue[-1] = UnresolvedSleepScene(
+        scene_index=runtime.sleep_queue[-1].scene_index,
+        scenario_text="Chess table — Move 3. White to move. Legal replies include Bxf7+, O-O, d3, Nc3.",
+        external_coordinates=rev["played_coordinates"],
+        felt_chord_notes={},
+        valence=0.25,
+        salience=0.85,
+        arousal=0.72,
+        left_brain_hunch="Unresolved scene tension: Chess table — Move 3. Legal replies include Ra4, Rg4, Qd2, Qe3.",
+        is_hazard=True,
+        contrastive_reference_coordinates=rev["contrastive_reference_coordinates"],
+        game_review_annotation=rev["annotation_summary"],
+    )
+    runtime.handle_run_rem_sleep()
+    assert len(runtime._last_harvested_gap_pairs) >= 1
+    for pair in runtime._last_harvested_gap_pairs:
+        assert "Legal replies include" not in pair.clause_1_prefix
+        assert "Legal replies include" not in pair.continuation_b
+        assert not pair.continuation_b.startswith("Rg4")
+
 
 
 

@@ -140,6 +140,7 @@ from .three_legged_runtime import (
     _compile_mid_sentence_comma_vibe,
     compute_stanza_residual_chord,
     extract_dream_vow_sentence,
+    generate_rem_dream_self_reflection,
     is_repetitive_sentence,
     run_three_legged_turn,
 )
@@ -1284,7 +1285,7 @@ class ChessKibitzerRuntime:
         self.ledger = turn.next_ledger
         self.chord_memory = turn.next_chord_memory
         self.archives = turn.next_archives
-        if turn.unresolved_sleep_scene is not None:
+        if turn.unresolved_sleep_scene is not None and not skip_left_brain:
             self.sleep_queue.append(turn.unresolved_sleep_scene)
 
         vibe = turn.final_vibe
@@ -1776,7 +1777,8 @@ class ChessKibitzerRuntime:
         ):
             self.adjudicate_human_game_outcome(human_color=mover_color)
 
-        self._maybe_trigger_auto_rem_sleep()
+        if self.board.is_game_over(claim_draw=True) or self.clock_flagged_loser is not None:
+            self._maybe_trigger_auto_rem_sleep()
         return self.get_state_snapshot()
 
     def handle_chess_undo(self) -> dict[str, Any]:
@@ -2527,9 +2529,7 @@ class ChessKibitzerRuntime:
                     self.flag_turn_for_coaching(
                         last_scene_id,
                         user_note=review["annotation_summary"],
-                        check_auto_sleep=(
-                            self.clock_flagged_loser is None and not self.board.is_game_over(claim_draw=True)
-                        ),
+                        check_auto_sleep=False,
                         is_hazard=bool(review["is_hazard"]),
                         override_coordinates=review["played_coordinates"],
                         contrastive_reference_coordinates=review["contrastive_reference_coordinates"],
@@ -2713,12 +2713,30 @@ class ChessKibitzerRuntime:
         harvested_now = 0
         for sc in queued_snapshot:
             raw_hunch = " ".join(str(sc.left_brain_hunch or "").split()).strip()
-            if not raw_hunch or raw_hunch.lower() == clean_vow.lower():
-                raw_hunch = "I pushed forward hastily without first securing piece coordination and king safety."
-            if "," in raw_hunch:
+            is_fallback_hunch = (
+                not raw_hunch
+                or raw_hunch.startswith("Unresolved scene tension:")
+                or "Legal replies include" in raw_hunch
+                or raw_hunch.lower() == clean_vow.lower()
+            )
+            if is_fallback_hunch:
+                raw_rev = " ".join(str(sc.game_review_annotation or "").split()).strip()
+                if "]:" in raw_rev:
+                    raw_rev = raw_rev.split("]:", 1)[1].strip()
+                if raw_rev and "Legal replies include" not in raw_rev:
+                    c1_prefix = "Under positional pressure on the board,"
+                    cont_b = raw_rev
+                else:
+                    c1_prefix = "Assessing the board tension,"
+                    cont_b = "I pushed forward hastily without first securing piece coordination and king safety."
+            elif "," in raw_hunch:
                 c1_part, cont_b_part = raw_hunch.split(",", 1)
-                c1_prefix = f"{c1_part.strip()},"
-                cont_b = cont_b_part.strip() or raw_hunch
+                if len(c1_part.split()) >= 3 and len(cont_b_part.split()) >= 3:
+                    c1_prefix = f"{c1_part.strip()},"
+                    cont_b = cont_b_part.strip()
+                else:
+                    c1_prefix = "Assessing the board tension,"
+                    cont_b = raw_hunch
             else:
                 c1_prefix = "Assessing the board tension,"
                 cont_b = raw_hunch
@@ -2976,6 +2994,7 @@ class ChessKibitzerRuntime:
             sorted_scenes = rep_sorted + [s for s in raw_sorted if s.scene_index not in archive_scene_ids] if rep_sorted else raw_sorted
             def _clean_rem_moment_text(sc: UnresolvedSleepScene, max_len: int = 240) -> str:
                 raw_scen = sc.scenario_text.split("[Coach note:", 1)[0].strip()
+                raw_scen = raw_scen.removeprefix("Unresolved scene tension:").strip()
                 if "[Board context:" in raw_scen:
                     before_bc, after_bc = raw_scen.split("[Board context:", 1)
                     after_bc = (
@@ -2986,6 +3005,8 @@ class ChessKibitzerRuntime:
                         .strip()
                     )
                     raw_scen = f"{before_bc.strip()} On the board right now, {after_bc}".strip()
+                if "Legal replies include" in raw_scen:
+                    raw_scen = raw_scen.split("Legal replies include", 1)[0].strip().rstrip(".")
                 raw_rev = (sc.game_review_annotation or "").strip()
                 if raw_rev:
                     if "]:" in raw_rev:
@@ -3002,7 +3023,7 @@ class ChessKibitzerRuntime:
                             cleaned_parts.append(seg)
                     raw_rev = " ".join(" ".join(cleaned_parts).split()).strip().rstrip(".")
                 if raw_rev and raw_rev not in raw_scen:
-                    combined = f"{raw_scen[:170].rstrip('.')} — {raw_rev[:150]}"
+                    combined = f"{raw_rev[:160].rstrip('.')} ({raw_scen[:120].rstrip('.')})"
                 else:
                     combined = raw_rev or raw_scen
                 return combined[:max_len].rstrip(".")
@@ -3142,7 +3163,8 @@ class ChessKibitzerRuntime:
                     c_vibe.self_registry.dissonance_notes,
                 )
 
-            if stanza_limit > 1 and hasattr(self._qwen_left_brain, "generate_multi_stanza_discourse"):
+            _stanza_cb = None
+            if stanza_limit > 1:
                 def _sleep_stanza_boundary(
                     stanza_idx: int,
                     stanza_text: str,
@@ -3177,26 +3199,21 @@ class ChessKibitzerRuntime:
                         learned_leaves=self.learned_leaves,
                     )
                     return False, next_chord
+                _stanza_cb = _sleep_stanza_boundary
 
-                dream_text, _, _ = self._qwen_left_brain.generate_multi_stanza_discourse(
-                    sleep_prompt,
-                    sleep_chord,
-                    max_stanzas=stanza_limit,
-                    sentences_per_stanza=3,
-                    conversation_history=tuple(conv_hist),
-                    chord_builder_at_comma=_build_sleep_comma_chord,
-                    stanza_boundary_callback=_sleep_stanza_boundary,
-                    lead_with_gap=True,
-                )
-            else:
-                dream_text, _ = self._qwen_left_brain.generate_with_subliminal_splice(
-                    sleep_prompt,
-                    sleep_chord,
-                    num_sentences=target_sents,
-                    conversation_history=tuple(conv_hist),
-                    chord_builder_at_comma=_build_sleep_comma_chord,
-                    lead_with_gap=True,
-                )
+            dream_text = generate_rem_dream_self_reflection(
+                self._qwen_left_brain,
+                sleep_prompt,
+                sleep_chord,
+                max_stanzas=stanza_limit,
+                sentences_per_stanza=3,
+                num_sentences=target_sents,
+                conversation_history=tuple(conv_hist),
+                chord_builder_at_comma=_build_sleep_comma_chord,
+                stanza_boundary_callback=_stanza_cb,
+                lead_with_gap=True,
+                lora_scale_factor=0.0,
+            )
             return dream_text.strip() or None
         except Exception:
             return None
