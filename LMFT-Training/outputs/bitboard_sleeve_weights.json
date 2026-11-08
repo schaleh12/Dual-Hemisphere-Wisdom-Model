@@ -1,36 +1,36 @@
 {
   "schema_version": 1,
   "value_weights": {
-    "material_balance_norm": 1.2329,
-    "attack_control_share": 0.7885,
-    "center_bitboard_control": 0.5696,
-    "king_shield_safety": 0.8647,
-    "piece_coordination_ratio": 0.6791,
-    "development_progress": 0.5156,
-    "move_net_safety": 1.8544,
-    "move_positional_gain": 0.833
+    "material_balance_norm": 1.2937,
+    "attack_control_share": 0.9045,
+    "center_bitboard_control": 0.626,
+    "king_shield_safety": 0.9739,
+    "piece_coordination_ratio": 0.9547,
+    "development_progress": 0.7456,
+    "move_net_safety": 1.3335,
+    "move_positional_gain": 1.1871
   },
   "policy_weights": {
-    "material_balance_norm": 0.5568,
-    "attack_control_share": 0.7535,
-    "center_bitboard_control": 0.9707,
-    "king_shield_safety": 0.6205,
-    "piece_coordination_ratio": 0.7909,
-    "development_progress": 0.9899,
-    "move_net_safety": 1.649,
-    "move_positional_gain": 1.8784
+    "material_balance_norm": 0.4937,
+    "attack_control_share": 0.8545,
+    "center_bitboard_control": 1.076,
+    "king_shield_safety": 0.6739,
+    "piece_coordination_ratio": 1.0547,
+    "development_progress": 1.2456,
+    "move_net_safety": 0.9335,
+    "move_positional_gain": 2.2371
   },
   "leaf_weights": {
-    "philosophical/being/existence": 0.7587,
-    "philosophical/structure/order": 0.7343,
-    "philosophical/persistence/continuity": 0.55,
-    "philosophical/persistence/discreteness": 0.413,
-    "philosophical/being/agency": 0.3544,
-    "philosophical/structure/chaos": -0.4977,
-    "cultural/efficiency/wastelessness": 1.209,
-    "cultural/freedom/self-sufficiency": 0.9122
+    "philosophical/being/existence": 0.702,
+    "philosophical/structure/order": 0.6461,
+    "philosophical/persistence/continuity": 0.5404,
+    "philosophical/persistence/discreteness": 0.5034,
+    "philosophical/being/agency": 0.3401,
+    "philosophical/structure/chaos": -0.3608,
+    "cultural/efficiency/wastelessness": 0.8409,
+    "cultural/freedom/self-sufficiency": 0.5264
   },
   "value_bias": -0.55,
   "policy_bias": -0.45,
-  "steps_distilled": 32
+  "steps_distilled": 24
 }

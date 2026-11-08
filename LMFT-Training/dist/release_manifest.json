@@ -2,8 +2,8 @@
   "schema_version": 1,
   "version": "0.2.0",
   "github_repo": "schaleh12/Dual-Hemisphere-Wisdom-Model",
-  "build_sha256": "376d0435f2c27a0dbb844a3b0e23733817d400c4b02d81b308e4ff6277eea49f",
-  "build_short_hash": "376d0435f2c2",
+  "build_sha256": "161ff4cd488500f868fbdccf58011783dfa77593c70bb052f8b7025b15b0bb99",
+  "build_short_hash": "161ff4cd4885",
   "files": {
     "src/lmft_architecture/__init__.py": {
       "sha256": "a89f56c2195e87129adbffa5065d8769ea096e13ba98783d217c4d120ee92623",
@@ -94,8 +94,8 @@
       "size_bytes": 186774
     },
     "src/lmft_architecture/chess_kibitz_bridge.py": {
-      "sha256": "86900b298d00cff7d7decafda5804eb53f6b8a87abc276e630827130356a26e9",
-      "size_bytes": 132157
+      "sha256": "5c26e784cbb1f62c6059a8345781d0a600bf4067a1b24ceeb99d838050e5d613",
+      "size_bytes": 127308
     },
     "src/lmft_architecture/chess_ui.py": {
       "sha256": "e55ec74960ba8cbc7ef44ebcc4f479accc238dd96e6a6171c1234bee96730cee",
@@ -370,8 +370,8 @@
       "size_bytes": 6071
     },
     "outputs/bitboard_sleeve_weights.json": {
-      "sha256": "2965f8f0b2ac9259e10807d60b50f07d91fc8f55943e7a2520b3d6dd241c39c8",
-      "size_bytes": 1161
+      "sha256": "be3dec54237af5b1149b56510a7ba2e352c0bfda39c329b731c1fe1b345b42b8",
+      "size_bytes": 1164
     },
     "outputs/branch_archives/cultural_history.json": {
       "sha256": "769d6f6f396502ca1df017fcc41491db00bf4c521a330e5bcba2b15b722296af",

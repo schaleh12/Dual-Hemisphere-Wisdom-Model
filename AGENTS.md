@@ -26,6 +26,11 @@ Because `AGENTS.md`, `PROJECT_STATE.md`, and `DECISIONS.md` are read into the AI
 5. **Let Experiments Fail Openly (Overrides `/goal` Scoreboard Pressure)**:
    - If a model output is inadmissible, a rule fails to generalize, or a benchmark settles `4/8`, `5/8`, `7/8`, or `0/4`, report that exact score plainly and stop. Never move the goalposts or add runtime workarounds to turn a scoreboard green.
    - **Important for `/goal` commands**: When the user runs `/goal`, "achieving the goal" means building the requested code cleanly and reporting the true, un-rigged benchmark numbers—it **never** means forcing a `100%` (`8/8` or `4/4`) pass rate. An honest partial score is a complete success; a rigged perfect score is a failure. Always assume an independent Auditor AI window will inspect your git diff.
+6. **Red-Team Gatekeeper Standard (What Counts as an Improvement)**:
+   - Passing unit tests or a clean `git diff` does not prove an improvement. Before declaring any change an improvement, verify the raw files in `LMFT-Training/outputs/` and `LMFT-Training/models/` against three questions:
+     - **(a) Did raw behavior improve on unseen holdout situations?** Check actual greedy generated text, uncalibrated flip counts, and move rankings on unseen inputs—not prior-adjusted margins or training-set scores.
+     - **(b) Did learned rules/weights do the work, or did a hand-picked Python formula do it?** Reject manual blends (like `0.70 * a + 0.30 * b`) or one-way ratchets that pin weights against a ceiling and call it "plasticity."
+     - **(c) Did it earn its complexity?** If a new pass, tier, or circuit adds complexity without a clear jump in raw unseen output, cut it.
 
 ## 2. Startup and Completion Handoff
 

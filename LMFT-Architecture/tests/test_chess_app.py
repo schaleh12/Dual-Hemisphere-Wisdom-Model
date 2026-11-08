@@ -2098,7 +2098,10 @@ def test_board_valence_evaluation_and_candidate_move_valence() -> None:
 
 def test_clean_machine_installer_crlf_sync_and_signed_contrastive_bitboard_sleeve(tmp_path: Path) -> None:
     """Verify all 6 clean-machine installer fixes and signed contrastive BitboardIntuitionSleeve updates."""
-    from lmft_architecture.chess_kibitz_bridge import BitboardIntuitionSleeve
+    from lmft_architecture.chess_kibitz_bridge import (
+        BitboardIntuitionSleeve,
+        compute_candidate_move_fuzzy_coordinates,
+    )
     from lmft_architecture.github_auto_sync import (
         PRETRAINED_MODEL_CHECKPOINT_PATHS,
         compute_file_sha256,
@@ -2186,10 +2189,29 @@ def test_clean_machine_installer_crlf_sync_and_signed_contrastive_bitboard_sleev
     assert sleeve.value_weights["king_shield_safety"] > 0.95
 
     train_root = resolve_training_root()
-    saved_weights = json.loads((train_root / "outputs" / "bitboard_sleeve_weights.json").read_text(encoding="utf-8"))
+    saved_path = train_root / "outputs" / "bitboard_sleeve_weights.json"
+    saved_weights = json.loads(saved_path.read_text(encoding="utf-8"))
     assert all(float(v) < 2.25 for v in saved_weights["value_weights"].values())
     assert all(float(v) < 2.25 for v in saved_weights["policy_weights"].values())
     assert all(abs(float(v)) < 2.25 for v in saved_weights["leaf_weights"].values())
+
+    # Verify unseen holdout board move ranking flips from poisoned-pawn grab `Qb6xb2?` to safe development `Ne7`
+    holdout_board = chess.Board("r1b1k1nr/pppp1ppp/1qn5/2b1p3/2B1P2B/2NP1N2/PPP2PPP/R2QK2R b KQkq - 5 5")
+    m_greedy = chess.Move.from_uci("b6b2")
+    m_safe = chess.Move.from_uci("g8e7")
+    birth_sleeve = BitboardIntuitionSleeve()
+    distilled_sleeve = BitboardIntuitionSleeve.load(saved_path)
+    cg0, _, bpg0, _, _ = compute_candidate_move_fuzzy_coordinates(holdout_board, m_greedy, bitboard_sleeve=birth_sleeve)
+    cs0, _, bps0, _, _ = compute_candidate_move_fuzzy_coordinates(holdout_board, m_safe, bitboard_sleeve=birth_sleeve)
+    cg1, _, bpg1, _, _ = compute_candidate_move_fuzzy_coordinates(holdout_board, m_greedy, bitboard_sleeve=distilled_sleeve)
+    cs1, _, bps1, _, _ = compute_candidate_move_fuzzy_coordinates(holdout_board, m_safe, bitboard_sleeve=distilled_sleeve)
+    before_greedy = birth_sleeve.evaluate_move(holdout_board, m_greedy, leaf_coords=cg0, blunder_penalty=bpg0, captured_val=1.0)
+    before_safe = birth_sleeve.evaluate_move(holdout_board, m_safe, leaf_coords=cs0, blunder_penalty=bps0, captured_val=0.0)
+    after_greedy = distilled_sleeve.evaluate_move(holdout_board, m_greedy, leaf_coords=cg1, blunder_penalty=bpg1, captured_val=1.0)
+    after_safe = distilled_sleeve.evaluate_move(holdout_board, m_safe, leaf_coords=cs1, blunder_penalty=bps1, captured_val=0.0)
+    assert before_greedy["sleeve_confidence"] > before_safe["sleeve_confidence"]
+    assert after_safe["sleeve_confidence"] > after_greedy["sleeve_confidence"]
+    assert after_safe["value_prior"] > after_greedy["value_prior"]
 
 
 
