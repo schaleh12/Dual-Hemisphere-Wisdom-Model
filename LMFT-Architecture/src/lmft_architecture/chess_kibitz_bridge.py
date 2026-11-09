@@ -1708,29 +1708,8 @@ def _enrich_move_coords_with_theory_rollout(
         0.40 * float(coords.get("psychological/contemplation/clarity", 0.60)) + 0.60 * r_clarity
     )
     if r_loss >= 0.8:
-        was_blunder = is_blunder
         is_blunder = True
         blunder_penalty = max(float(blunder_penalty), r_loss)
-        coords["cultural/efficiency/wastelessness"] = 0.25
-        coords["cultural/freedom/needlessness"] = _clamp01(
-            max(float(coords.get("cultural/freedom/needlessness", 0.10)), 0.53)
-        )
-        coords["experiential/phase/valence"] = min(
-            0.28, float(coords.get("experiential/phase/valence", 0.25))
-        )
-        coords["cultural/justice/fairness"] = min(
-            0.30, float(coords.get("cultural/justice/fairness", 0.30))
-        )
-        if not was_blunder:
-            coords["cultural/justice/honor"] = _clamp01(
-                float(coords.get("cultural/justice/honor", 0.50)) - 0.22
-            )
-            coords["experiential/synchronization/resonance"] = _clamp01(
-                float(coords.get("experiential/synchronization/resonance", 0.50)) - 0.25
-            )
-            coords["experiential/synchronization/entrainment"] = _clamp01(
-                float(coords.get("experiential/synchronization/entrainment", 0.50)) - 0.25
-            )
     return coords, is_blunder, blunder_penalty
 
 
@@ -1857,29 +1836,8 @@ def evaluate_candidate_moves_with_right_brain(
             0.40 * float(c_dict.get("psychological/contemplation/clarity", 0.60)) + 0.60 * r_clarity
         )
         if r_loss >= 0.8:
-            was_blunder = bool(cand["is_blunder"])
             cand["is_blunder"] = True
             cand["blunder_penalty"] = max(float(cand["blunder_penalty"]), r_loss)
-            c_dict["cultural/efficiency/wastelessness"] = 0.25
-            c_dict["cultural/freedom/needlessness"] = _clamp01(
-                max(float(c_dict.get("cultural/freedom/needlessness", 0.10)), 0.53)
-            )
-            c_dict["experiential/phase/valence"] = min(
-                0.28, float(c_dict.get("experiential/phase/valence", 0.25))
-            )
-            c_dict["cultural/justice/fairness"] = min(
-                0.30, float(c_dict.get("cultural/justice/fairness", 0.30))
-            )
-            if not was_blunder:
-                c_dict["cultural/justice/honor"] = _clamp01(
-                    float(c_dict.get("cultural/justice/honor", 0.50)) - 0.22
-                )
-                c_dict["experiential/synchronization/resonance"] = _clamp01(
-                    float(c_dict.get("experiential/synchronization/resonance", 0.50)) - 0.25
-                )
-                c_dict["experiential/synchronization/entrainment"] = _clamp01(
-                    float(c_dict.get("experiential/synchronization/entrainment", 0.50)) - 0.25
-                )
 
     rollout_k = max(10, int(limit))
     for cand in pending_candidates[:rollout_k]:

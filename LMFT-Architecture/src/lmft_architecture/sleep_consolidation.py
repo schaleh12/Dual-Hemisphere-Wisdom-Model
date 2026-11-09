@@ -1200,15 +1200,6 @@ def consolidate_sleep_clusters_locally(
             or "[! GREAT_MOVE" in s.game_review_annotation
         ):
             is_s_haz = False
-        if is_s_haz:
-            s.external_coordinates["cultural/efficiency/wastelessness"] = min(
-                0.25,
-                float(s.external_coordinates.get("cultural/efficiency/wastelessness", 0.25)),
-            )
-            s.external_coordinates["cultural/freedom/needlessness"] = max(
-                0.53,
-                float(s.external_coordinates.get("cultural/freedom/needlessness", 0.53)),
-            )
         ckey = _cluster_key_for_unresolved(s)
         if ckey is not None:
             clusters.setdefault((ckey, is_s_haz), []).append(s)
@@ -1241,15 +1232,6 @@ def consolidate_sleep_clusters_locally(
     for (ckey, is_group_hazard), group in clusters.items():
         avg_coords = _average_cluster_coordinates(group)
         avg_ref_coords = _average_contrastive_reference_coordinates(group)
-        if is_group_hazard:
-            avg_coords["cultural/efficiency/wastelessness"] = min(
-                0.25,
-                float(avg_coords.get("cultural/efficiency/wastelessness", 0.25)),
-            )
-            avg_coords["cultural/freedom/needlessness"] = max(
-                0.53,
-                float(avg_coords.get("cultural/freedom/needlessness", 0.53)),
-            )
         target_leaves, rule_low, rule_high = normalize_contrastive_target_leaves_and_thresholds(
             ckey,
             avg_coords,
@@ -1272,78 +1254,6 @@ def consolidate_sleep_clusters_locally(
             }
             rule_low = 0.65
             rule_high = 0.82
-        elif is_group_hazard:
-            _, def_dir_tag, def_cult_leaf, def_phil_leaf = parse_cluster_defining_leaves(ckey)
-            target_leaves["cultural/efficiency/wastelessness"] = min(
-                0.25,
-                float(target_leaves.get("cultural/efficiency/wastelessness", 0.25)),
-            )
-            for bad_k in (
-                "cultural/freedom/needlessness",
-                "philosophical/being/existence",
-                "cultural/freedom/self-sufficiency",
-                "philosophical/structure/order",
-            ):
-                if bad_k == "cultural/freedom/needlessness" and float(target_leaves.get(bad_k, 1.0)) <= 0.30:
-                    target_leaves[bad_k] = 0.53
-                elif bad_k != "cultural/freedom/needlessness" and float(target_leaves.get(bad_k, 0.0)) >= 0.65:
-                    if bad_k in (def_cult_leaf, def_phil_leaf):
-                        target_leaves[bad_k] = 0.64
-                    else:
-                        target_leaves.pop(bad_k, None)
-            if def_cult_leaf and def_cult_leaf not in target_leaves and not (
-                def_cult_leaf in ("cultural/efficiency/wastelessness", "cultural/freedom/self-sufficiency")
-                and def_dir_tag == "high"
-            ):
-                target_leaves[def_cult_leaf] = (
-                    0.20 if def_dir_tag == "low" else max(0.64, round(float(avg_coords.get(def_cult_leaf, 0.68)), 2))
-                )
-            if def_phil_leaf and def_phil_leaf not in target_leaves:
-                v_p = round(float(avg_coords.get(def_phil_leaf, 0.64)), 2)
-                if def_phil_leaf in ("philosophical/structure/order", "philosophical/being/existence") and v_p >= 0.58:
-                    v_p = 0.64
-                elif 0.36 < v_p < 0.64:
-                    v_p = 0.64 if v_p >= 0.50 else 0.35
-                target_leaves[def_phil_leaf] = v_p
-            if len(target_leaves) > 3 and def_cult_leaf and def_phil_leaf:
-                pinned = {"cultural/efficiency/wastelessness", def_cult_leaf, def_phil_leaf}
-                for k in list(target_leaves.keys()):
-                    if k not in pinned and len(target_leaves) > 3:
-                        target_leaves.pop(k, None)
-            if len(target_leaves) < 2:
-                target_leaves["cultural/freedom/needlessness"] = 0.53
-        else:
-            _, def_dir_tag, def_cult_leaf, def_phil_leaf = parse_cluster_defining_leaves(ckey)
-            if def_cult_leaf and def_phil_leaf:
-                target_leaves["cultural/efficiency/wastelessness"] = max(
-                    0.72,
-                    round(
-                        float(
-                            target_leaves.get(
-                                "cultural/efficiency/wastelessness",
-                                avg_coords.get("cultural/efficiency/wastelessness", 0.75),
-                            )
-                        ),
-                        2,
-                    ),
-                )
-                if def_cult_leaf not in target_leaves:
-                    target_leaves[def_cult_leaf] = (
-                        0.08
-                        if def_cult_leaf == "cultural/freedom/needlessness"
-                        else max(0.68, round(float(avg_coords.get(def_cult_leaf, 0.72)), 2))
-                    )
-                if def_phil_leaf not in target_leaves:
-                    target_leaves[def_phil_leaf] = (
-                        0.10
-                        if def_phil_leaf == "philosophical/structure/chaos"
-                        else max(0.64, round(float(avg_coords.get(def_phil_leaf, 0.68)), 2))
-                    )
-                if len(target_leaves) > 3:
-                    pinned_coached = {"cultural/efficiency/wastelessness", def_cult_leaf, def_phil_leaf}
-                    for k in list(target_leaves.keys()):
-                        if k not in pinned_coached and len(target_leaves) > 3:
-                            target_leaves.pop(k, None)
         rep = max(group, key=lambda s: float(s.salience))
         rep_scene = rep.scene_index
 
@@ -1365,15 +1275,14 @@ def consolidate_sleep_clusters_locally(
             target_leaves=target_leaves,
             low=rule_low,
             high=rule_high,
+            polarity="repulsive" if is_group_hazard else "attractive",
         )
         if new_rule.tier == 1:
             probe_coords = dict(calm_book_coords)
             for req_leaf in new_rule.target_leaves:
                 probe_coords.setdefault(req_leaf, 0.0)
             if new_rule.evaluate(probe_coords) >= 0.35:
-                adjusted_leaves = dict(target_leaves)
                 if is_group_hazard:
-                    adjusted_leaves["cultural/efficiency/wastelessness"] = 0.20
                     rule_low = max(rule_low, 0.68)
                     rule_high = max(rule_high, 0.84)
                 else:
@@ -1383,9 +1292,10 @@ def consolidate_sleep_clusters_locally(
                     rule_id=new_rule.rule_id,
                     concept_name=new_rule.concept_name,
                     description=new_rule.description,
-                    target_leaves=adjusted_leaves,
+                    target_leaves=dict(target_leaves),
                     low=rule_low,
                     high=rule_high,
+                    polarity="repulsive" if is_group_hazard else "attractive",
                 )
 
         # Authentic Discriminative Tier-2 LearnedLeaf Birth (Fix #5):
@@ -1414,25 +1324,20 @@ def consolidate_sleep_clusters_locally(
             if parent_branch in FOUNDING_PARENT_BRANCHES:
                 raw_val = float(avg_coords.get(dominant_leaf, 0.50))
                 calm_val = float(calm_book_coords.get(dominant_leaf, 0.50))
+                calm_deviation = abs(raw_val - calm_val)
                 if is_group_hazard and raw_val < 0.50:
                     cluster_signal = min(1.0, round(0.50 + (0.50 - raw_val) + 0.5 * max_contrastive_delta, 4))
-                    calm_baseline_score = round(max(0.0, 0.50 - calm_val), 4)
-                elif is_group_hazard:
-                    cluster_signal = min(1.0, round(max(raw_val, 0.50 + max_contrastive_delta), 4))
-                    calm_baseline_score = round(calm_val, 4)
                 else:
                     cluster_signal = min(1.0, round(max(raw_val, 0.50 + max_contrastive_delta), 4))
-                    calm_baseline_score = (
-                        round(calm_val, 4)
-                        if (max_contrastive_delta < 0.08 and abs(raw_val - calm_val) < 0.05 and len(group) < 2)
-                        else round(
-                            max(
-                                float(calm_book_coords.get("philosophical/structure/chaos", 0.22)),
-                                float(calm_book_coords.get("cultural/freedom/needlessness", 0.09)),
-                            ),
-                            4,
-                        )
+                # Genuine anti-tautology check on dominant_leaf deviation (`abs(raw_val - calm_val) >= 0.12`)
+                # or strong contrastive divergence (`max_contrastive_delta >= 0.20`)
+                if calm_deviation >= 0.12 or max_contrastive_delta >= 0.20:
+                    calm_baseline_score = round(
+                        max(0.0, 0.35 - max(calm_deviation - 0.12, max_contrastive_delta - 0.20)),
+                        4,
                     )
+                else:
+                    calm_baseline_score = round(0.50 + (0.12 - calm_deviation), 4)
                 clean_slug_tail = re.sub(r"[^a-z0-9_]+", "_", ckey.replace("_cluster", "").lower()).strip("_")
                 leaf_slug = f"{prefix}_{clean_slug_tail}"[:36].strip("_")
                 if not re.fullmatch(r"[a-z][a-z0-9_-]{2,40}", leaf_slug):
@@ -1453,47 +1358,12 @@ def consolidate_sleep_clusters_locally(
                             f"Harmonious positional coordination and sustainable initiative across {human_theme} "
                             f"reinforcing long-term structural balance."
                         )
-                    base_scored = score_leaf_anchor_weights_at_birth(
+                    scored_leaf = score_leaf_anchor_weights_at_birth(
                         LearnedLeaf(
                             parent_branch=parent_branch,
                             leaf_name=leaf_slug,
                             description=leaf_desc,
                         )
-                    )
-                    dept_root = parent_branch.split("/")[0]
-                    if dept_root == "cultural":
-                        dept_keys = FOUNDATIONAL_LEAVES[:6] + (
-                            "psychological/will/intention",
-                            "psychological/will/execution",
-                        )
-                    elif dept_root == "philosophical":
-                        dept_keys = FOUNDATIONAL_LEAVES[6:12] + (
-                            "psychological/truth/theory",
-                            "psychological/truth/fact",
-                        )
-                    else:
-                        dept_keys = (
-                            NOVELTY_LEAF,
-                            SALIENCE_LEAF,
-                            VALENCE_LEAF,
-                            AROUSAL_LEAF,
-                            RESONANCE_LEAF,
-                            RETENTION_LEAF,
-                            "psychological/contemplation/clarity",
-                            "psychological/contemplation/confidence",
-                        )
-                    topo_w = base_scored.anchor_weights or (0.50,) * 8
-                    blended_w = [
-                        max(0.05, min(1.0, 0.55 * float(topo_w[i]) + 0.45 * float(avg_coords.get(dept_keys[i], 0.50))))
-                        for i in range(8)
-                    ]
-                    peak_bw = max(blended_w)
-                    norm_w = tuple(round(v / peak_bw, 6) for v in blended_w)
-                    scored_leaf = LearnedLeaf(
-                        parent_branch=parent_branch,
-                        leaf_name=leaf_slug,
-                        description=leaf_desc,
-                        anchor_weights=norm_w,
                     )
                     active_learned_leaves.append(scored_leaf)
                     minted_leaves.append(scored_leaf)

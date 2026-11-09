@@ -748,4 +748,89 @@ def test_core_weight_space_sculpting_upgrades_a_b_c() -> None:
     )
 
 
+def test_round2_no_coordinate_stamping_and_genuine_tier2_gate() -> None:
+    """Verify Round 2 fixes: no 0.25/0.53 stamping, genuine calm_deviation gate, and unblended birth anchor_weights."""
+    from lmft_architecture.reflection_classifier import FOUNDATIONAL_LEAVES
+    from lmft_architecture.sleep_consolidation import consolidate_sleep_clusters_locally
+    from lmft_architecture.subliminal_gap_splice import score_leaf_anchor_weights_at_birth
+
+    base_coords = {k: 0.50 for k in FOUNDATIONAL_LEAVES}
+    # 1. Hazard scene with genuine non-0.25 wastelessness (0.34) and non-0.53 needlessness (0.41)
+    genuine_hazard = UnresolvedSleepScene(
+        scene_index=31,
+        scenario_text="Premature flank push on move 11.",
+        external_coordinates={
+            **base_coords,
+            "cultural/efficiency/wastelessness": 0.34,
+            "cultural/freedom/needlessness": 0.41,
+            "philosophical/structure/chaos": 0.76,
+            "cultural/efficiency/power": 0.74,
+        },
+        felt_chord_notes={},
+        valence=0.32,
+        salience=0.80,
+        arousal=0.78,
+        left_brain_hunch="Pushed too early on the flank.",
+        is_hazard=True,
+        contrastive_reference_coordinates={
+            **base_coords,
+            "cultural/efficiency/wastelessness": 0.78,
+            "cultural/freedom/needlessness": 0.18,
+            "philosophical/structure/chaos": 0.28,
+            "cultural/efficiency/power": 0.54,
+        },
+    )
+    report = consolidate_sleep_clusters_locally(
+        queued_scenes=(genuine_hazard,),
+        rules=(),
+        learned_leaves=(),
+        archives=ThreeBranchArchives(),
+        ledger=ContemplationLedger(),
+    )
+    # Raw scene external_coordinates must not be mutated/stamped to 0.25 or 0.53
+    assert genuine_hazard.external_coordinates["cultural/efficiency/wastelessness"] == pytest.approx(0.34)
+    assert genuine_hazard.external_coordinates["cultural/freedom/needlessness"] == pytest.approx(0.41)
+    assert len(report.forged_rules) == 1
+    forged = report.forged_rules[0]
+    assert forged.target_leaves.get("cultural/efficiency/wastelessness") == pytest.approx(0.34)
+    assert forged.target_leaves.get("cultural/efficiency/wastelessness") != pytest.approx(0.25)
+
+    # Verify minted Tier-2 leaf uses score_leaf_anchor_weights_at_birth directly without 45% raw-coordinate blend
+    assert len(report.minted_leaves) == 1
+    minted = report.minted_leaves[0]
+    expected_birth_leaf = score_leaf_anchor_weights_at_birth(minted)
+    assert minted.anchor_weights == expected_birth_leaf.anchor_weights
+
+    # 2. Calm scene whose coordinates barely deviate from calm baseline (< 0.12) and have tiny contrastive delta (< 0.20)
+    near_calm_scene = UnresolvedSleepScene(
+        scene_index=32,
+        scenario_text="Quiet positional maneuvering.",
+        external_coordinates={
+            **base_coords,
+            "cultural/efficiency/power": 0.45,  # calm baseline is 0.42 -> diff 0.03 < 0.12
+            "cultural/efficiency/wastelessness": 0.68,  # calm baseline is 0.72 -> diff 0.04 < 0.12
+        },
+        felt_chord_notes={},
+        valence=0.52,
+        salience=0.55,
+        arousal=0.35,
+        left_brain_hunch="Quiet developing move.",
+        is_hazard=False,
+        contrastive_reference_coordinates={
+            **base_coords,
+            "cultural/efficiency/power": 0.52,  # delta 0.07 < 0.20
+            "cultural/efficiency/wastelessness": 0.72,  # delta 0.04 < 0.20
+        },
+    )
+    calm_report = consolidate_sleep_clusters_locally(
+        queued_scenes=(near_calm_scene,),
+        rules=(),
+        learned_leaves=(),
+        archives=ThreeBranchArchives(),
+        ledger=ContemplationLedger(),
+    )
+    assert len(calm_report.minted_leaves) == 0
+
+
+
 

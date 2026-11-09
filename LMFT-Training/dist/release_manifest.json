@@ -2,8 +2,8 @@
   "schema_version": 1,
   "version": "0.2.0",
   "github_repo": "schaleh12/Dual-Hemisphere-Wisdom-Model",
-  "build_sha256": "df73a32aaa1a10454e85a779df96b955e25bc11fb0b2ab6f15d83435e93c33e3",
-  "build_short_hash": "df73a32aaa1a",
+  "build_sha256": "5803d87c0ecc2a999f25b48f2f054cb4040548d07058c442356c1baa0a5a7b5f",
+  "build_short_hash": "5803d87c0ecc",
   "files": {
     "src/lmft_architecture/__init__.py": {
       "sha256": "a89f56c2195e87129adbffa5065d8769ea096e13ba98783d217c4d120ee92623",
@@ -66,8 +66,8 @@
       "size_bytes": 5515
     },
     "src/lmft_architecture/bloodmoon_app.py": {
-      "sha256": "e042947a68f0806c36afcc17bacdfd65b7446e4b310f724193e832baaa1235b3",
-      "size_bytes": 137858
+      "sha256": "055fe2249b67fe6138d3dd2aa62cd0772b8b8a2270fd097480b747947dbdf567",
+      "size_bytes": 137208
     },
     "src/lmft_architecture/bloodmoon_ui.py": {
       "sha256": "35dc889b58af1867c20eec0645009f59a9dd5f613942646d1373e00bad95c7a0",
@@ -90,12 +90,12 @@
       "size_bytes": 3267
     },
     "src/lmft_architecture/chess_app.py": {
-      "sha256": "8aef8b9b00b354f7d2d1a20fe18b774f855e0d5dcfced95cf5e11405dc033574",
-      "size_bytes": 167980
+      "sha256": "55b17a5e828720182f1990cc412d7ab5843766d60759fdb4f8e17bb2249b8cc7",
+      "size_bytes": 167079
     },
     "src/lmft_architecture/chess_kibitz_bridge.py": {
-      "sha256": "d112e3a49f0ee21a136b970a4ff943b4e32d284eeb1dd1ca5dba2f7171a8a126",
-      "size_bytes": 130736
+      "sha256": "0a1b34c7c584f9cad936ae14bcc5b7ffbea9cd11abb138a74166db4fcf5ab4ff",
+      "size_bytes": 128566
     },
     "src/lmft_architecture/chess_ui.py": {
       "sha256": "dae3b41d4dca0854991fd84c23e6ea25f5149d42a462d27214d3a51638a95cb6",
@@ -262,8 +262,8 @@
       "size_bytes": 2752
     },
     "src/lmft_architecture/sleep_consolidation.py": {
-      "sha256": "ead2fb10c37b768c98a2c90d0ed468aa6c6e5946ac24cb71735104c7ec0d4dbc",
-      "size_bytes": 77053
+      "sha256": "f9446072b930ba5776b3f91ccbdbc13ed138a6c3ba5a5982ac72284277806c04",
+      "size_bytes": 70307
     },
     "src/lmft_architecture/subliminal_gap_splice.py": {
       "sha256": "5ec68c2990a918f065450df00ba5e209e5f45d663869a3902c9b85bb26841810",
@@ -358,12 +358,12 @@
       "size_bytes": 105830
     },
     "outputs/rem_sleep_consolidated_ruleset.json": {
-      "sha256": "00913cf93d01334e6c73aceb2b72e9bfccba43d6ff534cc726e71ec15dac5db1",
-      "size_bytes": 13475
+      "sha256": "9494ae69a01fd4427850085d4dd18eb4e7d4f7e5bfe4191db18b828b02f0836c",
+      "size_bytes": 6349
     },
     "outputs/sleep_consolidated_ruleset.json": {
-      "sha256": "00913cf93d01334e6c73aceb2b72e9bfccba43d6ff534cc726e71ec15dac5db1",
-      "size_bytes": 13475
+      "sha256": "9494ae69a01fd4427850085d4dd18eb4e7d4f7e5bfe4191db18b828b02f0836c",
+      "size_bytes": 6349
     },
     "outputs/continuous_tiered_ruleset.json": {
       "sha256": "ee5147d72247e441ef0192051da06c69f01fe11f824c2f42bc229e0155cc86bb",
@@ -374,16 +374,16 @@
       "size_bytes": 1111
     },
     "outputs/branch_archives/cultural_history.json": {
-      "sha256": "769d6f6f396502ca1df017fcc41491db00bf4c521a330e5bcba2b15b722296af",
-      "size_bytes": 13388
+      "sha256": "ea072ce495ab3d95980eba539e3d1a9facf8f63ade96dd7877e7fa0a3608f725",
+      "size_bytes": 112
     },
     "outputs/branch_archives/experiential_felt_diary.json": {
-      "sha256": "ae0a0f3592cfd3c766ae97a5184263a6984b59e7d40e58c712162599215d8b63",
-      "size_bytes": 16563
+      "sha256": "2a772c9122b83fc10503c4f5530cd935af05a054997927b25c3326da9fa0a8ee",
+      "size_bytes": 124
     },
     "outputs/branch_archives/philosophical_lexicon.json": {
-      "sha256": "500f59dcb21a0e438026e661c94650008519b5435edb72dc2478684fc2625cfa",
-      "size_bytes": 12145
+      "sha256": "0b8830b4218a302220645d8b7a30aa5ddaa864b7daac3720432c42d58f170731",
+      "size_bytes": 125
     }
   }
 }

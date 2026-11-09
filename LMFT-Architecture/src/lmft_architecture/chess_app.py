@@ -3194,18 +3194,6 @@ class ChessKibitzerRuntime:
                         num_sentences=dream_sentences,
                         max_stanzas=dream_stanzas,
                     )
-                    sorted_queued = sorted(queued_snapshot, key=lambda s: float(s.salience), reverse=True)
-                    archive_scene_ids = {c.source_scene for c in self.archives.executive.action_clauses}
-                    rep_queued = [s for s in sorted_queued if s.scene_index in archive_scene_ids] or sorted_queued
-                    if sleep_self_talk:
-                        stanza_blocks = [b.strip() for b in sleep_self_talk.split("\n\n") if b.strip()]
-                        for idx, st_block in enumerate(stanza_blocks):
-                            target_sc = rep_queued[min(idx, len(rep_queued) - 1)]
-                            self.archives = apply_dream_reflection_to_archives(
-                                self.archives,
-                                scene_index=target_sc.scene_index,
-                                dream_text=st_block,
-                            )
                 else:
                     refined_ids = ()
                     self._last_minted_leaves = ()
