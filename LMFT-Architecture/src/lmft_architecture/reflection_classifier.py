@@ -637,7 +637,6 @@ def _evaluate_rules_with_inhibition(
         default=0.0,
     )
     if max_specific >= CONFUSION_THRESHOLD:
-        max_broad_allowed = round(0.15 * max_specific, 6)
         for r in rules:
             if (
                 r.tier == deepest_active_tier
@@ -652,17 +651,14 @@ def _evaluate_rules_with_inhibition(
                     )
                 )
             ):
-                attenuated_broad = round(
-                    rule_activations[r.concept_name] * (1.0 - 0.85 * max_specific),
-                    6,
-                )
-                rule_activations[r.concept_name] = min(attenuated_broad, max_broad_allowed)
+                rule_activations[r.concept_name] = 0.0
 
     # Same-Family Cluster Archetype Winner-Take-All (`hazard_*_cluster` and `coached_*_cluster`):
     # Multiple `hazard_*_cluster` rules firing on the same blunder (or multiple `coached_*_cluster`
     # rules firing on the same sound move) are sub-facets of the same verdict, not opposing concepts.
-    # Keep the closest-centroid archetype at full strength and laterally attenuate secondary co-firing
-    # sub-facets of the same family, while preserving genuine cross-family collisions (`hazard_` vs `coached_`).
+    # Keep the closest-centroid archetype at full strength (`max` over the family) and zero out
+    # redundant co-firing sub-facets of the same family, while preserving genuine cross-family
+    # collisions (`hazard_` vs `coached_`).
     for fam_prefix in ("hazard_", "coached_"):
         fam_rules = [
             r
@@ -688,13 +684,8 @@ def _evaluate_rules_with_inhibition(
                 )
 
             ranked_fam = sorted(fam_rules, key=_cluster_rank_key, reverse=True)
-            winner = ranked_fam[0]
-            w_val = rule_activations[winner.concept_name]
-            max_sub_allowed = round(0.15 * w_val, 6)
             for ru in ranked_fam[1:]:
-                ru_val = rule_activations[ru.concept_name]
-                attenuated_ru = round(ru_val * (1.0 - 0.85 * w_val), 6)
-                rule_activations[ru.concept_name] = min(attenuated_ru, max_sub_allowed)
+                rule_activations[ru.concept_name] = 0.0
 
     return rule_activations
 
