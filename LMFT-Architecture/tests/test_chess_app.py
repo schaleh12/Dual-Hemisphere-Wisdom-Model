@@ -273,8 +273,7 @@ def test_continuous_pretext_subtext_context_self_kibitzing_and_rem_sleep(tmp_pat
 
     snap_after_sleep = runtime.handle_run_rem_sleep()
     assert snap_after_sleep["sleep_queue_count"] == 0
-    assert snap_after_sleep["last_rem_sleep_self_talk"] is not None
-    assert "REM Dream Self-Reflection:" in snap_after_sleep["last_rem_sleep_receipt"]
+    assert snap_after_sleep["last_rem_sleep_self_talk"] is None
     assert len(runtime.rules) >= initial_rules_count + 1
     assert (state_dir / "club_ruleset.json").exists()
 
@@ -473,8 +472,8 @@ def test_hybrid_move_selection_and_blunder_veto_sleep_queue(tmp_path: Path) -> N
     )
     assert runtime_veto.sleep_queue
     sleep_snap = runtime_veto.handle_run_rem_sleep()
-    assert stub_veto.call_count == 1
-    assert sleep_snap["last_rem_sleep_self_talk"] == stub_veto.reply_text
+    assert stub_veto.call_count == 0
+    assert sleep_snap["last_rem_sleep_self_talk"] is None
     assert any(r.concept_name.startswith("hazard_") for r in runtime_veto.rules)
     after_bxf7_score = {
         e.san: e.composite_score
@@ -1161,8 +1160,7 @@ def test_speaker_attribution_and_clean_slate_reset(tmp_path: Path) -> None:
     assert "psychological/will/hesitation" not in flagged_fork.contrastive_reference_coordinates
 
     rem_snap = runtime.handle_run_rem_sleep()
-    assert rem_snap["last_rem_sleep_self_talk"] is not None
-    assert "REM Dream Self-Reflection:" in rem_snap["last_rem_sleep_receipt"]
+    assert rem_snap["last_rem_sleep_self_talk"] is None
     assert any(
         r.concept_name.startswith("hazard_")
         and "philosophical/persistence/continuity" in r.target_leaves
@@ -1234,7 +1232,7 @@ def test_longitudinal_rem_dream_chronicles_and_coordinate_vow_keeping(tmp_path: 
 
     snap_c1 = runtime.handle_run_rem_sleep()
     assert snap_c1["rem_dream_chronicles"] == []
-    assert "\n\n" in (snap_c1["last_rem_sleep_self_talk"] or "")
+    assert snap_c1["last_rem_sleep_self_talk"] is None
     assert "Longitudinal Dream Vow Status:" not in snap_c1["last_rem_sleep_receipt"]
     assert snap_c1["harvested_gap_pairs_count"] == 0
     assert not (state_dir / "live_projector_weights.pt").exists()
@@ -1655,53 +1653,6 @@ def test_chess_runtime_will_edges_persistence_and_virgin_lock(tmp_path: Path) ->
     runtime.handle_run_rem_sleep()
     assert len(runtime._last_harvested_gap_pairs) == 0
 
-    # Verify `_generate_rem_sleep_self_talk` branches cleanly between 1st-person Blunder (`is_hazard=True`)
-    # and 1st-person Brilliancy/Checkmate (`is_hazard=False`, e.g., `Found Qe8#`)
-    captured_dream_calls: list[tuple[str, str | None]] = []
-    orig_gen_splice = runtime._qwen_left_brain.generate_with_subliminal_splice
-
-    def _spy_gen_splice(scenario_prompt: str, chord, **kwargs):
-        c1 = kwargs.get("clause_1_override")
-        captured_dream_calls.append((scenario_prompt, c1))
-        return orig_gen_splice(scenario_prompt, chord, **kwargs)
-
-    runtime._qwen_left_brain.generate_with_subliminal_splice = _spy_gen_splice  # type: ignore[method-assign]
-    blunder_scene = UnresolvedSleepScene(
-        scene_index=10,
-        scenario_text="Move 3. White played Bxf7+.",
-        external_coordinates=rev["played_coordinates"],
-        felt_chord_notes={},
-        valence=0.25,
-        salience=0.85,
-        arousal=0.72,
-        left_brain_hunch="Test blunder",
-        is_hazard=True,
-        contrastive_reference_coordinates=rev["contrastive_reference_coordinates"],
-        game_review_annotation="?? Blunder: played Bxf7+ instead of O-O.",
-    )
-    brilliancy_scene = UnresolvedSleepScene(
-        scene_index=11,
-        scenario_text="Move 39. White played Qe8#.",
-        external_coordinates=rev["contrastive_reference_coordinates"],
-        felt_chord_notes={},
-        valence=0.88,
-        salience=0.92,
-        arousal=0.68,
-        left_brain_hunch="Test checkmate",
-        is_hazard=False,
-        contrastive_reference_coordinates=rev["contrastive_reference_coordinates"],
-        game_review_annotation="!! Brilliancy: Found 39. Qe8# checkmate.",
-    )
-    runtime._generate_rem_sleep_self_talk((blunder_scene,), (), num_sentences=2, max_stanzas=1)
-    runtime._generate_rem_sleep_self_talk((brilliancy_scene,), (), num_sentences=2, max_stanzas=1)
-    assert len(captured_dream_calls) == 2
-    blunder_prompt, blunder_c1 = captured_dream_calls[0]
-    brilliancy_prompt, brilliancy_c1 = captured_dream_calls[1]
-    assert blunder_c1 == "Looking back at my move Bxf7+ on the board,"
-    assert "overlooked the stronger continuation" in blunder_prompt
-    assert brilliancy_c1 == "Savoring how my move Qe8# harmonized the board,"
-    assert "delivered the winning continuation" in brilliancy_prompt
-
 
 def test_zero_wire_clone_rule_ties_and_rem_vow_prompt_no_chat_bleed(tmp_path: Path) -> None:
     """Verify (1) no two `rule-sleep-*` rules in `club_ruleset.json` share 3-wire clones or tie at `Clarity == 0.00`, (2) `<=` receipt formatting for low target centers, and (3) `prev_chronicle` vow is folded into `sleep_prompt` with `conversation_history=()`."""
@@ -1804,9 +1755,7 @@ def test_zero_wire_clone_rule_ties_and_rem_vow_prompt_no_chat_bleed(tmp_path: Pa
     )
     runtime.sleep_queue.append(sc)
     snap = runtime.handle_run_rem_sleep()
-    assert captured_hist and all(h == () for h in captured_hist)
-    assert all("vow" not in p.lower() for p in captured_prompts)
-    assert all("0-1" not in p and "Move 3" not in p for p in captured_prompts)
+    assert not captured_prompts
     assert "Previous REM Sleep Vow" not in snap["last_rem_sleep_receipt"]
     assert "Longitudinal Dream Vow Status:" not in snap["last_rem_sleep_receipt"]
     assert "wastelessness<=0.25" in snap["last_rem_sleep_receipt"]
