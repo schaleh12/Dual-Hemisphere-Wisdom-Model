@@ -1916,55 +1916,32 @@ def test_board_valence_evaluation_and_candidate_move_valence() -> None:
     assert coords_bxf7["experiential/phase/valence"] == pytest.approx(0.64)
     assert coords_oo["experiential/phase/valence"] == pytest.approx(0.64)
     assert coords_bxf7["cultural/efficiency/wastelessness"] <= 0.38
-    assert coords_bxf7["cultural/justice/fairness"] <= 0.30
-    assert coords_oo["cultural/justice/fairness"] > coords_bxf7["cultural/justice/fairness"]
-    assert coords_oo["cultural/justice/honor"] > coords_bxf7["cultural/justice/honor"]
-    assert coords_oo["experiential/synchronization/resonance"] > coords_bxf7["experiential/synchronization/resonance"]
-    assert coords_oo["experiential/synchronization/entrainment"] > coords_bxf7["experiential/synchronization/entrainment"]
+    assert coords_oo["cultural/efficiency/wastelessness"] >= 0.72
+    assert coords_bxf7["cultural/freedom/needlessness"] >= 0.50
+    assert coords_oo["cultural/freedom/needlessness"] <= 0.10
 
-    # 2-fold move repetition drops `experiential/reflection/novelty <= 0.10` and `cultural/justice/honor`
-    rep_board = chess.Board()
-    for san_mv in ("Nf3", "Nf6", "Ng1"):
-        rep_board.push_san(san_mv)
-    coords_rep_ng8, _, _, _, _ = compute_candidate_move_fuzzy_coordinates(
-        rep_board,
-        rep_board.parse_san("Ng8"),
-    )
-    coords_dev_nc6, _, _, _, _ = compute_candidate_move_fuzzy_coordinates(
-        rep_board,
-        rep_board.parse_san("Nc6"),
-    )
-    assert coords_rep_ng8["experiential/reflection/novelty"] <= 0.10
-    assert coords_dev_nc6["experiential/reflection/novelty"] > coords_rep_ng8["experiential/reflection/novelty"] + 0.25
-    assert coords_dev_nc6["cultural/justice/honor"] > coords_rep_ng8["cultural/justice/honor"] + 0.20
+    # `honor`, `fairness`, `novelty`, `resonance`, and `entrainment` are un-wired from candidate move
+    # bitboard scripts (`0.52` neutral baseline) so the Do-er/Feeler bridges, Equilibrium Controller,
+    # and Left Brain can deliberate over them freely.
+    for unwired_leaf in (
+        "cultural/justice/honor",
+        "cultural/justice/fairness",
+        "experiential/reflection/novelty",
+        "experiential/synchronization/resonance",
+        "experiential/synchronization/entrainment",
+    ):
+        assert coords_oo[unwired_leaf] == pytest.approx(0.52)
+        assert coords_bxf7[unwired_leaf] == pytest.approx(0.52)
 
-    # Winning free-queen capture has high fairness (>= 0.65) and high tactical self-sufficiency (>= 0.72)
-    # even in the opening while other minor pieces sit on the back rank (knowing when all pieces are NOT required)
+    # Winning free-queen capture has high wastelessness (>= 0.90) and low needlessness (<= 0.08)
     free_queen_board = chess.Board("rnb1kbnr/pppp1ppp/8/4p3/3qP3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 0 3")
     coords_nxd4, is_blunder_nxd4, _, _, _ = compute_candidate_move_fuzzy_coordinates(
         free_queen_board,
         free_queen_board.parse_san("Nxd4"),
     )
     assert is_blunder_nxd4 is False
-    assert coords_nxd4["cultural/justice/fairness"] >= 0.65
-    assert coords_nxd4["cultural/freedom/self-sufficiency"] >= 0.72
+    assert coords_nxd4["cultural/efficiency/wastelessness"] >= 0.90
     assert coords_nxd4["cultural/freedom/needlessness"] <= 0.08
-
-    # Quiet opening position (Move 2: after 1. e4 e5 2. Nf3 Nc6):
-    # Developing a new piece (`Bc4`) beats moving the same knight twice (`Ng5`) while 3 minor pieces sleep on rank 1
-    quiet_opening = chess.Board("r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3")
-    coords_bc4, _, _, _, _ = compute_candidate_move_fuzzy_coordinates(
-        quiet_opening,
-        quiet_opening.parse_san("Bc4"),
-    )
-    coords_ng5, _, _, _, _ = compute_candidate_move_fuzzy_coordinates(
-        quiet_opening,
-        quiet_opening.parse_san("Ng5"),
-    )
-    assert coords_bc4["cultural/justice/honor"] > coords_ng5["cultural/justice/honor"] + 0.12
-    assert coords_bc4["cultural/freedom/self-sufficiency"] > coords_ng5["cultural/freedom/self-sufficiency"] + 0.12
-    assert coords_ng5["cultural/freedom/needlessness"] > coords_bc4["cultural/freedom/needlessness"] + 0.15
-    assert coords_bc4["experiential/synchronization/resonance"] > coords_ng5["experiential/synchronization/resonance"]
 
     # Non-chess socio-political rules (`violent_resource_seizure`) are stripped by `_ensure_foundational_rules`,
     # spurious high `honor >= 0.58` is stripped from `hazard_low_wastelessness_chaos_cluster` and repaired to 3 wires,

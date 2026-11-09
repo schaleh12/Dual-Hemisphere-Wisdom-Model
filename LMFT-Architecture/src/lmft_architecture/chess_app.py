@@ -1954,7 +1954,7 @@ class ChessKibitzerRuntime:
                 pre_sensors = merge_board_fact_with_chat_sensors(
                     self.board_posture,
                     self.sensors,
-                    ground_cultural_on_board=True,
+                    ground_cultural_on_board=False,
                 )
                 fact_coords, fact_exp, queried_1, skipped_1 = pre_sensors.score_text(
                     pre_prompt,

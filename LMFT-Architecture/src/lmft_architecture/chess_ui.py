@@ -900,14 +900,11 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
           </ul>
         </div>
         <div class="tutorial-step">
-          <strong>2. Cultural Department (6 Leaves — Move Stewardship, Development &amp; Whole-Army Sufficiency)</strong><br/>
+          <strong>2. Cultural Department (6 Leaves — Basic Action Guardrails &amp; Collaborative Do-er Values)</strong><br/>
           <ul style="margin:6px 0 0 18px;padding:0;line-height:1.45;">
-            <li><strong><code>cultural/efficiency/power</code></strong>: Combined heavy/attacking force projection (<code>Agency + Discreteness</code>).</li>
-            <li><strong><code>cultural/efficiency/wastelessness</code></strong>: Material stewardship and move economy—high (<code>&ge; 0.72</code>) when pieces are protected across the 3-ply rollout; drops sharply when a move hangs material or walks into a tactic.</li>
-            <li><strong><code>cultural/justice/honor</code> (Principled Development &amp; Whole-Army Play)</strong>: Rewards developing Knights and Bishops off the back rank, castling, and mobilizing the whole army; penalizes premature solo attacks while minor pieces sleep on the back rank, blunders, or cheap 2-fold move repetitions.</li>
-            <li><strong><code>cultural/justice/fairness</code> (Trade Parity &amp; Exchange Equity)</strong>: Tracks whether exchanges and positional trades keep material and structural balance fair rather than giving away pieces for nothing.</li>
-            <li><strong><code>cultural/freedom/self-sufficiency</code> (Knowing When All Pieces Are Required vs. When Local Force Is Enough)</strong>: In a quiet strategic battle, high <code>Self-Sufficiency</code> requires <strong>whole-army mobilization + King shelter + mutual piece defense</strong>; when a concrete tactical conversion or simplified endgame is on the board, the local strike force is immediately self-sufficient.</li>
-            <li><strong><code>cultural/freedom/needlessness</code> (Freedom from Wasted / Unprovoked Blunders)</strong>: Stays low (<code>0.06–0.10</code>) on clean developing moves, castling, or direct tactical conversions; rises when moving the same piece repeatedly in the opening, repeating moves, or blundering across the 3-ply rollout.</li>
+            <li><strong><code>cultural/efficiency/power</code> &amp; <code>cultural/efficiency/wastelessness</code></strong>: <code>Power</code> tracks force projection (<code>Agency + Discreteness</code>, feeding <code>rb-will-2</code>); <code>Wastelessness</code> guards against hanging material across the 1-ply and 3-ply rollout.</li>
+            <li><strong><code>cultural/freedom/self-sufficiency</code> &amp; <code>cultural/freedom/needlessness</code></strong>: <code>Self-Sufficiency</code> reflects King and army survival (<code>Existence</code>); <code>Needlessness</code> inhibits blunders and Shadow Pathologies via synapses <code>rb-will-3</code> and <code>rb-will-8</code>.</li>
+            <li><strong><code>cultural/justice/honor</code> &amp; <code>cultural/justice/fairness</code> (Un-Wired for Do-er &amp; Left-Brain Collaboration)</strong>: Left open for the Do-er neural bridge (<code>will_cultural</code>), Executive archive precedents, and conscious Left-Brain deliberation rather than locked to a static opening script.</li>
           </ul>
         </div>
         <div class="tutorial-step">
