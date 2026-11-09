@@ -693,6 +693,14 @@ class BitboardIntuitionSleeve:
         lr = max(0.005, min(0.25, float(learning_rate)))
         decay = 0.25 * lr
         step_lr = 0.30 * lr
+        for lk, def_l in DEFAULT_SLEEVE_LEAF_WEIGHTS.items():
+            cur_l = float(self.leaf_weights.get(lk, def_l))
+            blended_l = cur_l + decay * (float(def_l) - cur_l)
+            if lk == "philosophical/structure/chaos":
+                self.leaf_weights[lk] = round(max(-2.5, min(-0.10, blended_l)), 4)
+            else:
+                self.leaf_weights[lk] = round(max(0.10, min(2.5, blended_l)), 4)
+
         updated_keys: list[str] = []
         updated_circuit_keys: list[str] = []
         ref_map = reference_coordinates or {}
@@ -701,15 +709,6 @@ class BitboardIntuitionSleeve:
                 p_val = float(played_coordinates[lk])
                 r_val = float(ref_map[lk])
                 delta = (r_val - p_val) if is_hazard else (p_val - r_val)
-                if abs(delta) < 0.05:
-                    continue
-                def_l = float(DEFAULT_SLEEVE_LEAF_WEIGHTS.get(lk, 0.50))
-                cur_l = float(self.leaf_weights.get(lk, def_l))
-                blended_l = cur_l + decay * (def_l - cur_l)
-                if lk == "philosophical/structure/chaos":
-                    self.leaf_weights[lk] = round(max(-2.5, min(-0.10, blended_l)), 4)
-                else:
-                    self.leaf_weights[lk] = round(max(0.10, min(2.5, blended_l)), 4)
                 if abs(delta) >= 0.15:
                     if lk == "philosophical/structure/chaos":
                         # Higher chaos on a blunder (`r_val < p_val` -> `delta < 0`) makes chaos penalty more negative

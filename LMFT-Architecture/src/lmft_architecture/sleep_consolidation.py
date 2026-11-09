@@ -494,16 +494,21 @@ def normalize_contrastive_target_leaves_and_thresholds(
         target_leaves[k] = t_val
 
     if explicit_hazard:
-        if "cultural/efficiency/wastelessness" in avg_coords and float(avg_coords["cultural/efficiency/wastelessness"]) <= 0.38:
-            target_leaves["cultural/efficiency/wastelessness"] = round(
-                min(0.38, max(0.05, float(avg_coords["cultural/efficiency/wastelessness"]))),
-                2,
-            )
-        if "cultural/freedom/needlessness" in avg_coords and float(avg_coords["cultural/freedom/needlessness"]) >= 0.38:
-            target_leaves["cultural/freedom/needlessness"] = round(
-                min(0.95, max(0.38, float(avg_coords["cultural/freedom/needlessness"]))),
-                2,
-            )
+        has_move_blunder_anchor = (
+            ("cultural/efficiency/wastelessness" in target_leaves and float(target_leaves["cultural/efficiency/wastelessness"]) <= 0.38)
+            or ("cultural/freedom/needlessness" in target_leaves and float(target_leaves["cultural/freedom/needlessness"]) >= 0.38)
+        )
+        if not has_move_blunder_anchor:
+            if "cultural/efficiency/wastelessness" in avg_coords and float(avg_coords["cultural/efficiency/wastelessness"]) <= 0.38:
+                target_leaves["cultural/efficiency/wastelessness"] = round(
+                    min(0.38, max(0.05, float(avg_coords["cultural/efficiency/wastelessness"]))),
+                    2,
+                )
+            elif "cultural/freedom/needlessness" in avg_coords and float(avg_coords["cultural/freedom/needlessness"]) >= 0.38:
+                target_leaves["cultural/freedom/needlessness"] = round(
+                    min(0.95, max(0.38, float(avg_coords["cultural/freedom/needlessness"]))),
+                    2,
+                )
 
     if is_named_cluster and def_cult_leaf and def_phil_leaf:
         if def_cult_leaf not in target_leaves and def_cult_leaf in avg_coords:
@@ -545,24 +550,23 @@ def normalize_contrastive_target_leaves_and_thresholds(
             and (not explicit_hazard or float(target_leaves["cultural/efficiency/wastelessness"]) <= 0.38)
         ):
             pinned.add("cultural/efficiency/wastelessness")
-        if (
+        elif (
             explicit_hazard
             and "cultural/freedom/needlessness" in target_leaves
             and float(target_leaves["cultural/freedom/needlessness"]) >= 0.38
         ):
             pinned.add("cultural/freedom/needlessness")
+        if (
+            "philosophical/persistence/continuity" in target_leaves
+            and float(target_leaves["philosophical/persistence/continuity"]) <= 0.20
+            and "philosophical/persistence/discreteness" in target_leaves
+        ):
+            pinned.add("philosophical/persistence/continuity")
         if is_named_cluster and def_cult_leaf and def_phil_leaf:
             if len(pinned) < 3 and def_phil_leaf in target_leaves:
                 pinned.add(def_phil_leaf)
             if len(pinned) < 3 and def_cult_leaf in target_leaves:
                 pinned.add(def_cult_leaf)
-        if (
-            len(pinned) < 3
-            and "philosophical/persistence/continuity" in target_leaves
-            and float(target_leaves["philosophical/persistence/continuity"]) <= 0.20
-            and "philosophical/persistence/discreteness" in target_leaves
-        ):
-            pinned.add("philosophical/persistence/continuity")
         for k in list(target_leaves.keys()):
             if k not in pinned and len(target_leaves) > 3:
                 target_leaves.pop(k, None)
