@@ -1330,6 +1330,10 @@ def consolidate_sleep_clusters_locally(
         )
         if is_time_forfeit_hazard:
             target_leaves = {
+                "cultural/efficiency/wastelessness": round(
+                    min(0.38, max(0.05, float(avg_coords.get("cultural/efficiency/wastelessness", 0.20)))),
+                    2,
+                ),
                 "philosophical/persistence/continuity": round(
                     min(0.15, max(0.05, float(avg_coords.get("philosophical/persistence/continuity", 0.05)))),
                     2,
