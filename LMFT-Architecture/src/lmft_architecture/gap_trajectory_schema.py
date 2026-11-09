@@ -412,12 +412,8 @@ def build_post_gap_only_labels(
 ) -> Tensor:
     """Mask all tokens up to and including `<|subliminal_gap|>` with `-100` (`ignore_index`).
 
-    Why this matters for Stage 3 LoRA training:
-    - Because `user_prompt` and `clause_1_prefix` before `<|subliminal_gap|>` are 100%
-      identical in Branch A and Branch B, grading pre-gap tokens would waste gradient
-      descent on words that do not depend on the Right Brain.
-    - Masking all pre-gap tokens with `-100` ensures 100% of the causal LM loss grades
-      ONLY the post-gap continuation tokens (`continuation_a` vs. `continuation_b`).
+    Used strictly for the contrastive chord-routing margin (`chord_a` vs. `chord_b`)
+    so branch log-probability differences measure only the post-gap continuation tokens.
     """
     if input_ids.ndim != 2:
         raise ValueError(f"input_ids must have shape [batch, seq_len], got {tuple(input_ids.shape)}")
@@ -430,6 +426,37 @@ def build_post_gap_only_labels(
             raise ValueError(f"Row {b} of input_ids contains no gap_token_id ({gap_token_id})")
         first_gap_idx = int(gap_positions[0].item())
         labels[b, : first_gap_idx + 1] = ignore_index
+    return labels
+
+
+def build_full_assistant_turn_labels(
+    input_ids: Tensor,
+    *,
+    user_header_len: int,
+    gap_token_id: int,
+    ignore_index: int = IGNORE_LABEL_INDEX,
+) -> Tensor:
+    """Mask only the `User: ...\\nAssistant:` prompt header and `<|subliminal_gap|>` with `-100`.
+
+    Leaves both `clause_1_prefix` (before the gap) and `continuation` (after the gap)
+    active in the MLE causal language modeling loss so the LoRA learns to generate a
+    clean `Clause 1,` up to the comma and pivot after `<|subliminal_gap|>` from the get-go.
+    """
+    if input_ids.ndim != 2:
+        raise ValueError(f"input_ids must have shape [batch, seq_len], got {tuple(input_ids.shape)}")
+    if user_header_len < 0:
+        raise ValueError(f"user_header_len must be >= 0, got {user_header_len}")
+
+    labels = input_ids.clone()
+    batch_size, seq_len = labels.shape
+    header_cutoff = min(int(user_header_len), seq_len)
+    labels[:, :header_cutoff] = ignore_index
+    for b in range(batch_size):
+        gap_positions = (input_ids[b] == gap_token_id).nonzero(as_tuple=False).flatten()
+        if gap_positions.numel() == 0:
+            raise ValueError(f"Row {b} of input_ids contains no gap_token_id ({gap_token_id})")
+        for gap_idx in gap_positions.tolist():
+            labels[b, int(gap_idx)] = ignore_index
     return labels
 
 

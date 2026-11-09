@@ -1937,6 +1937,12 @@ class ChessKibitzerRuntime:
         gear_2_steered: dict[str, Any] = {"evals": None, "receipt": None}
         top_san_set = {c.san for c in top_candidates[:4]}
 
+        det_trace = right_brain_choice.detective_trace
+        det_verdict = (
+            str(det_trace.get("detective_verdict", "stabilized"))
+            if isinstance(det_trace, dict)
+            else "stabilized"
+        )
         should_wake_gear_2 = (
             self._qwen_left_brain is not None
             and not self.rem_sleep_in_progress
@@ -1947,6 +1953,7 @@ class ChessKibitzerRuntime:
                 or bool(right_brain_choice.is_blunder)
                 or bool(right_brain_choice.shadow_warnings)
                 or (self.board.is_check() and float(right_brain_choice.clarity) < 0.58)
+                or det_verdict in ("strained", "unraveled_blunder")
             )
         )
         if should_wake_gear_2 and hasattr(self._qwen_left_brain, "generate_with_subliminal_splice"):
@@ -1954,6 +1961,7 @@ class ChessKibitzerRuntime:
                 pre_prompt = build_natural_chess_scenario_prompt(
                     self.board,
                     self.move_history_san,
+                    candidate_moves_san=[c.san for c in top_candidates[:6]],
                 )
                 self.board_posture = evaluate_chess_board_posture(self.board, perspective=ai_mover_color)
                 pre_sensors = merge_board_fact_with_chat_sensors(
@@ -2064,7 +2072,7 @@ class ChessKibitzerRuntime:
                     self.board,
                     move_history_san=self.move_history_san,
                 )["legal_moves_mentioned"]
-                if gear_2_steered["evals"] is None and gear_2_delib_text:
+                if gear_2_delib_text:
                     c_coords_full, _, _, _ = pre_sensors.score_text(
                         gear_2_delib_text,
                         learned_leaves=self.learned_leaves,
@@ -2270,8 +2278,14 @@ class ChessKibitzerRuntime:
                         round(float(x), 4) for x in delib_trace.spliced_chord.feeler_vector[:8]
                     ],
                 }
-            if gear_2_delib_text and selection_mode == "gear_2_left_brain_deliberation":
-                g2_txt = f"Played {chosen_san} — {gear_2_delib_text}"
+            if gear_2_delib_text and selection_mode in (
+                "gear_2_left_brain_deliberation",
+                "right_brain_blunder_veto_queued_for_sleep",
+            ):
+                if selection_mode == "right_brain_blunder_veto_queued_for_sleep" and left_brain_proposed_san:
+                    g2_txt = f"Played {chosen_san} (Right-Brain veto of {left_brain_proposed_san}) — {gear_2_delib_text}"
+                else:
+                    g2_txt = f"Played {chosen_san} — {gear_2_delib_text}"
                 last_msg["text"] = g2_txt
                 last_msg["clean_reply"] = g2_txt
                 last_msg["is_gear_1_fallback"] = False

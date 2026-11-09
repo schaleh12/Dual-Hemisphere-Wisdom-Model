@@ -43,6 +43,7 @@ from .birth import BirthState, create_birth_state
 from .gap_trajectory_generator import score_continuation_to_chord
 from .gap_trajectory_schema import (
     ContrastiveGapPair,
+    build_full_assistant_turn_labels,
     build_post_gap_only_labels,
     chord_l2_distance,
 )
@@ -313,7 +314,7 @@ def tokenize_pre_gap_and_continuation(
     return full_ids, attn_mask, post_gap_labels
 
 
-def compute_post_gap_continuation_nll(
+def _compute_spliced_branch_nlls(
     model: nn.Module,
     tokenizer,
     projector: SubliminalGapProjector,
@@ -324,8 +325,9 @@ def compute_post_gap_continuation_nll(
     gap_token_id: int,
     device: str | torch.device,
     lead_with_gap: bool = False,
-) -> Tensor:
-    """Compute the mean per-token negative log-likelihood on `continuation_text` given `chord` at `<|subliminal_gap|>`."""
+    include_full_turn_mle: bool = False,
+) -> tuple[Tensor, Tensor]:
+    """Compute `(post_gap_nll, full_assistant_turn_nll)` in a single forward pass."""
     input_ids, attn_mask, post_gap_labels = tokenize_pre_gap_and_continuation(
         tokenizer,
         pair,
@@ -351,17 +353,67 @@ def compute_post_gap_continuation_nll(
         labels=spliced.labels,
         use_cache=False,
     )
-    if out.loss is not None:
-        return out.loss
-
-    # Fallback if a custom test model returns logits without computing `.loss`
+    assert spliced.labels is not None
     logits = out.logits[:, :-1, :].contiguous()
-    shift_labels = spliced.labels[:, 1:].contiguous()
-    return F.cross_entropy(
+    if out.loss is not None:
+        post_gap_nll = out.loss
+    else:
+        shift_labels = spliced.labels[:, 1:].contiguous()
+        post_gap_nll = F.cross_entropy(
+            logits.view(-1, logits.size(-1)),
+            shift_labels.view(-1),
+            ignore_index=IGNORE_LABEL_INDEX,
+        )
+
+    if not include_full_turn_mle or lead_with_gap:
+        return post_gap_nll, post_gap_nll
+
+    user_header = f"User: {pair.user_prompt.strip()}\nAssistant:"
+    user_header_len = len(tokenizer.encode(user_header, add_special_tokens=True))
+    full_pre_splice_labels = build_full_assistant_turn_labels(
+        input_ids,
+        user_header_len=user_header_len,
+        gap_token_id=gap_token_id,
+    )
+    gap_positions = (input_ids[0] == gap_token_id).nonzero(as_tuple=False).flatten()
+    first_gap_idx = int(gap_positions[0].item())
+    spliced_full_labels = spliced.labels.clone()
+    spliced_full_labels[:, :first_gap_idx] = full_pre_splice_labels[:, :first_gap_idx]
+    full_shift_labels = spliced_full_labels[:, 1:].contiguous()
+    full_turn_nll = F.cross_entropy(
         logits.view(-1, logits.size(-1)),
-        shift_labels.view(-1),
+        full_shift_labels.view(-1),
         ignore_index=IGNORE_LABEL_INDEX,
     )
+    return post_gap_nll, full_turn_nll
+
+
+def compute_post_gap_continuation_nll(
+    model: nn.Module,
+    tokenizer,
+    projector: SubliminalGapProjector,
+    pair: ContrastiveGapPair,
+    *,
+    chord: SubliminalChordVector,
+    continuation_text: str,
+    gap_token_id: int,
+    device: str | torch.device,
+    lead_with_gap: bool = False,
+) -> Tensor:
+    """Compute the mean per-token negative log-likelihood on `continuation_text` given `chord` at `<|subliminal_gap|>`."""
+    post_gap_nll, _ = _compute_spliced_branch_nlls(
+        model,
+        tokenizer,
+        projector,
+        pair,
+        chord=chord,
+        continuation_text=continuation_text,
+        gap_token_id=gap_token_id,
+        device=device,
+        lead_with_gap=lead_with_gap,
+        include_full_turn_mle=False,
+    )
+    return post_gap_nll
 
 
 def compute_no_gap_continuation_nll(
@@ -429,7 +481,7 @@ def compute_contrastive_pair_loss(
       same continuation under `chord_b` vs. `chord_a` so sentence-length and word-rarity bias cancel
       out completely, alongside `branch_margin_target = 0.35` on `(nll_ab - nll_aa)` and `(nll_ba - nll_bb)`.
     """
-    nll_aa = compute_post_gap_continuation_nll(
+    nll_aa, full_nll_aa = _compute_spliced_branch_nlls(
         model,
         tokenizer,
         projector,
@@ -438,8 +490,9 @@ def compute_contrastive_pair_loss(
         continuation_text=pair.continuation_a,
         gap_token_id=gap_token_id,
         device=device,
+        include_full_turn_mle=True,
     )
-    nll_bb = compute_post_gap_continuation_nll(
+    nll_bb, full_nll_bb = _compute_spliced_branch_nlls(
         model,
         tokenizer,
         projector,
@@ -448,6 +501,7 @@ def compute_contrastive_pair_loss(
         continuation_text=pair.continuation_b,
         gap_token_id=gap_token_id,
         device=device,
+        include_full_turn_mle=True,
     )
     nll_ab = compute_post_gap_continuation_nll(
         model,
@@ -470,7 +524,7 @@ def compute_contrastive_pair_loss(
         device=device,
     )
 
-    mle_loss = 0.5 * (nll_aa + nll_bb)
+    mle_loss = 0.5 * (full_nll_aa + full_nll_bb)
 
     # Under chord_a, nll_aa should be lower than nll_ab AND lower than nll_ba
     # Under chord_b, nll_bb should be lower than nll_ba AND lower than nll_ab

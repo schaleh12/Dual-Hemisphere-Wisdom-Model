@@ -2697,6 +2697,7 @@ def reweight_suspects_with_left_brain_theory(
     updated_list.sort(key=lambda item: (-item.composite_score, item.san))
     steered_winner_san = updated_list[0].san
     receipt = {
+        "steered": bool(suspect_deltas),
         "priority_leaves": list(priority_leaves),
         "prior_winner_san": prior_winner_san,
         "steered_winner_san": steered_winner_san,
@@ -2729,12 +2730,17 @@ def build_natural_chess_scenario_prompt(
     move_history_san: Sequence[str] = (),
     *,
     user_note: str | None = None,
+    candidate_moves_san: Sequence[str] | None = None,
 ) -> str:
     """Build a natural-English chess scenario prompt with ZERO float telemetry and real legal move candidates."""
     turn_label = "White" if board.turn == chess.WHITE else "Black"
     check_clause = " (King is in check)" if board.is_check() else ""
     history_str = format_move_history_pgn_snippet(move_history_san)
-    legal_candidates = [c.san for c in evaluate_candidate_moves_with_right_brain(board, limit=6)]
+    legal_candidates = (
+        [str(s) for s in candidate_moves_san if str(s).strip()]
+        if candidate_moves_san is not None
+        else [c.san for c in evaluate_candidate_moves_with_right_brain(board, limit=6)]
+    )
     legal_clause = (
         f"Legal replies include {', '.join(legal_candidates)}."
         if legal_candidates

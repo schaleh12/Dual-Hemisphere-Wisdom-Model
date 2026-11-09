@@ -1,36 +1,36 @@
 {
   "schema_version": 1,
   "value_weights": {
-    "material_balance_norm": 1.35,
+    "material_balance_norm": 1.4817,
     "attack_control_share": 0.9,
-    "center_bitboard_control": 0.65,
-    "king_shield_safety": 0.95,
-    "piece_coordination_ratio": 0.7,
-    "development_progress": 0.45,
-    "move_net_safety": 1.55,
-    "move_positional_gain": 0.4
+    "center_bitboard_control": 0.6828,
+    "king_shield_safety": 0.9469,
+    "piece_coordination_ratio": 0.7091,
+    "development_progress": 0.4948,
+    "move_net_safety": 1.6643,
+    "move_positional_gain": 0.4652
   },
   "policy_weights": {
-    "material_balance_norm": 0.55,
+    "material_balance_norm": 0.6816,
     "attack_control_share": 0.85,
-    "center_bitboard_control": 1.1,
-    "king_shield_safety": 0.65,
-    "piece_coordination_ratio": 0.8,
-    "development_progress": 0.95,
-    "move_net_safety": 1.15,
-    "move_positional_gain": 1.45
+    "center_bitboard_control": 1.1327,
+    "king_shield_safety": 0.6469,
+    "piece_coordination_ratio": 0.8091,
+    "development_progress": 0.9948,
+    "move_net_safety": 1.2643,
+    "move_positional_gain": 1.5152
   },
   "leaf_weights": {
-    "philosophical/being/existence": 0.65,
-    "philosophical/structure/order": 0.6,
-    "philosophical/persistence/continuity": 0.55,
-    "philosophical/persistence/discreteness": 0.45,
-    "philosophical/being/agency": 0.35,
-    "philosophical/structure/chaos": -0.35,
-    "cultural/efficiency/wastelessness": 0.8,
-    "cultural/freedom/self-sufficiency": 0.45
+    "philosophical/being/existence": 0.6846,
+    "philosophical/structure/order": 0.5985,
+    "philosophical/persistence/continuity": 0.5434,
+    "philosophical/persistence/discreteness": 0.4652,
+    "philosophical/being/agency": 0.3722,
+    "philosophical/structure/chaos": -0.3433,
+    "cultural/efficiency/wastelessness": 0.8276,
+    "cultural/freedom/self-sufficiency": 0.4505
   },
   "value_bias": -0.55,
   "policy_bias": -0.45,
-  "steps_distilled": 0
+  "steps_distilled": 81
 }
