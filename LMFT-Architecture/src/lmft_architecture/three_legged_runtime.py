@@ -834,69 +834,66 @@ class SubliminalGapLeftBrain:
                     )
             return norm_override
 
-        owns_stream = _stream_state is None
         was_training = self.model.training
         self.model.eval()
-        state = _stream_state
+        c1_state: _PersistentTurnStreamState | None = None
         try:
-            if state is None:
-                history_prefix = format_sliding_conversation_history(
-                    conversation_history,
-                    max_context_chars=max_context_chars,
-                )
-                history_block = f"{history_prefix}\n" if history_prefix else ""
-                base_prompt = f"{history_block}User: {scenario_text.strip()}\nAssistant:"
-                state = self._init_turn_stream_state(
-                    base_prompt,
-                    prior_assistant_text=prior_assistant_text,
-                )
-                if state is None:
-                    return "Weighing the situation before us,"
-
-            c1_start_cached_len = int(state.cur_embeds.size(1))
+            history_prefix = format_sliding_conversation_history(
+                conversation_history,
+                max_context_chars=max_context_chars,
+            )
+            history_block = f"{history_prefix}\n" if history_prefix else ""
+            if _tokenizer_has_single_think_token(self.tokenizer) and not prior_assistant_text.strip():
+                c1_base_prompt = f"{history_block}User: {scenario_text.strip()}\nAssistant:\n<think>\n\n</think>"
+            else:
+                c1_base_prompt = f"{history_block}User: {scenario_text.strip()}\nAssistant:"
+            c1_state = self._init_turn_stream_state(
+                c1_base_prompt,
+                prior_assistant_text=prior_assistant_text,
+            )
+            if c1_state is None:
+                return "Weighing the situation before us,"
 
             embed_layer = self.model.get_input_embeddings()
             embed_dtype = next(embed_layer.parameters()).dtype
             eos_id = getattr(self.tokenizer, "eos_token_id", None)
             suppressed_ids = self._suppressed_token_ids()
             generated_ids: list[int] = []
+            prior_turn_ids = list(_stream_state.generated_turn_token_ids) if _stream_state is not None else []
 
             max_base_steps = int(self.max_clause_1_tokens)
-            for step_idx in range(max_base_steps + 12):
-                next_logits = self._step_stream_state(state)
-                if step_idx == 0:
-                    c1_start_cached_len = int(state.cur_embeds.size(1))
-                for bad_id in suppressed_ids:
-                    if 0 <= bad_id < next_logits.size(0):
-                        next_logits[bad_id] = -1e9
-                if step_idx == 0 and eos_id is not None and 0 <= int(eos_id) < next_logits.size(0):
-                    next_logits[int(eos_id)] = -1e9
-                _apply_repetition_and_ngram_penalty(
-                    next_logits,
-                    (state.generated_turn_token_ids if state is not None else []) + generated_ids,
-                )
+            with attenuate_lora_scaling(self.model, factor=0.0):
+                for step_idx in range(max_base_steps + 12):
+                    next_logits = self._step_stream_state(c1_state)
+                    for bad_id in suppressed_ids:
+                        if 0 <= bad_id < next_logits.size(0):
+                            next_logits[bad_id] = -1e9
+                    if step_idx == 0 and eos_id is not None and 0 <= int(eos_id) < next_logits.size(0):
+                        next_logits[int(eos_id)] = -1e9
+                    _apply_repetition_and_ngram_penalty(
+                        next_logits,
+                        prior_turn_ids + generated_ids,
+                    )
 
-                next_id = int(torch.argmax(next_logits).item())
-                if eos_id is not None and next_id == int(eos_id):
-                    break
-                generated_ids.append(next_id)
-                next_tok_tensor = torch.tensor([[next_id]], dtype=torch.long, device=self.device)
-                next_embed = embed_layer(next_tok_tensor).to(dtype=embed_dtype)
-                _append_pending_embeds(state, next_embed)
+                    next_id = int(torch.argmax(next_logits).item())
+                    if eos_id is not None and next_id == int(eos_id):
+                        break
+                    generated_ids.append(next_id)
+                    next_tok_tensor = torch.tensor([[next_id]], dtype=torch.long, device=self.device)
+                    next_embed = embed_layer(next_tok_tensor).to(dtype=embed_dtype)
+                    _append_pending_embeds(c1_state, next_embed)
 
-                decoded_so_far = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
-                if any(m in decoded_so_far for m in _CHAT_TURN_BOUNDARY_MARKERS):
-                    break
-                # Stop as soon as a comma, semicolon, or sentence-ending punctuation appears after at least 3 generated tokens
-                if step_idx >= 2 and (
-                    "," in decoded_so_far
-                    or ";" in decoded_so_far
-                    or re.search(r"(?<!\b\d)[.!?](?=\s|$)", decoded_so_far) is not None
-                ):
-                    break
+                    decoded_so_far = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
+                    if any(m in decoded_so_far for m in _CHAT_TURN_BOUNDARY_MARKERS):
+                        break
+                    # Stop as soon as a comma, semicolon, or sentence-ending punctuation appears after at least 3 generated tokens
+                    if step_idx >= 2 and (
+                        "," in decoded_so_far
+                        or ";" in decoded_so_far
+                        or re.search(r"(?<!\b\d)[.!?](?=\s|$)", decoded_so_far) is not None
+                    ):
+                        break
 
-            if state is not None and generated_ids:
-                state.generated_turn_token_ids.extend(generated_ids)
             raw_clause_1 = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
             if (
                 "," not in raw_clause_1
@@ -926,15 +923,16 @@ class SubliminalGapLeftBrain:
                 ):
                     raw_clause_1 = re.sub(r"\s+[A-Za-z]{1,2}$", "", raw_clause_1.rstrip())
                 norm_clause_1 = normalize_clause_1_prefix(raw_clause_1)
-            if not owns_stream:
-                raw_compact = " ".join(raw_clause_1.replace("\n", " ").split()).strip()
-                if raw_compact != norm_clause_1:
-                    _crop_stream_state(state, c1_start_cached_len, None)
-                    _append_pending_embeds(state, self._encode_continuation_embeds(norm_clause_1))
+            if _stream_state is not None:
+                _append_pending_embeds(_stream_state, self._encode_continuation_embeds(norm_clause_1))
+                if hasattr(self.tokenizer, "encode"):
+                    _stream_state.generated_turn_token_ids.extend(
+                        int(t) for t in self.tokenizer.encode(" " + norm_clause_1, add_special_tokens=False)
+                    )
             return norm_clause_1
         finally:
-            if owns_stream and state is not None:
-                state.past_kv = None
+            if c1_state is not None:
+                c1_state.past_kv = None
             if was_training:
                 self.model.train()
 
