@@ -1580,8 +1580,28 @@ def compute_candidate_move_fuzzy_coordinates(
             ply1_features=sleeve_feats,
             blunder_penalty=blunder_penalty,
         )
+    _evaluate_learned_leaves_into_coords(
+        coords,
+        learned_leaves,
+        is_blunder=is_blunder,
+        move_sub_sensors=move_sub_sensors,
+        active_shadow_ids=active_shadow_ids,
+    )
+    return coords, is_blunder, blunder_penalty, post_posture, shadow_names
+
+
+def _evaluate_learned_leaves_into_coords(
+    coords: dict[str, float],
+    learned_leaves: Sequence[LearnedLeaf],
+    *,
+    is_blunder: bool,
+    move_sub_sensors: Sequence[float] | None = None,
+    active_shadow_ids: set[str] | None = None,
+) -> None:
+    """Populate Tier-2 and Tier-3 `LearnedLeaf` activations in `coords` from `move_sub_sensors` and updated `coords`."""
+    shadow_set = active_shadow_ids or set()
     for leaf in sorted(learned_leaves, key=lambda lf: lf.tier):
-        if leaf.leaf_id in active_shadow_ids:
+        if leaf.leaf_id in shadow_set:
             continue
         if leaf.sub_sensor_weights is not None and move_sub_sensors is not None:
             sub_val = leaf.evaluate_sub_sensors(move_sub_sensors)
@@ -1619,7 +1639,7 @@ def compute_candidate_move_fuzzy_coordinates(
             coords[leaf.leaf_id] = _clamp01(0.65 * strain + 0.35 * proj + (0.22 if is_blunder else -0.10))
         else:
             coords[leaf.leaf_id] = _clamp01(proj * (0.45 if is_blunder else 1.0))
-    return coords, is_blunder, blunder_penalty, post_posture, shadow_names
+
 
 
 def _material_balance_for_side(board: chess.Board, side: chess.Color) -> float:
@@ -1783,6 +1803,7 @@ def _rollout_intention_into_theory_and_confidence(
     rule_tuple: tuple[FuzzyConceptRule, ...],
     sleeve: BitboardIntuitionSleeve,
     base_coords: dict[str, float],
+    out_rollout_phil: dict[str, float] | None = None,
 ) -> tuple[float, float, float, float]:
     """Project a candidate `intention` through the opponent's best replies (`Ply 2`) and our best response (`Ply 3`) to ground `theory`, `confidence`, and `clarity`."""
     us = perspective
@@ -1885,6 +1906,7 @@ def _rollout_intention_into_theory_and_confidence(
         net_mat_delta = best_eff_mat_3 - mat_before
         branch_loss = max(0.0, -net_mat_delta) if net_mat_delta <= -0.8 else 0.0
 
+        phil_3: Mapping[str, float] = {}
         if best_board_3.is_checkmate():
             branch_theory = 0.98
             branch_conf = 0.98
@@ -1918,6 +1940,14 @@ def _rollout_intention_into_theory_and_confidence(
                 coords_3 = dict(base_coords)
                 for k, v in phil_3.items():
                     coords_3[k] = float(v)
+                if branch_loss >= 0.8:
+                    coords_3["cultural/efficiency/wastelessness"] = min(
+                        float(coords_3.get("cultural/efficiency/wastelessness", 0.72)),
+                        round(max(0.08, 0.42 - 0.08 * min(4.0, branch_loss)), 4),
+                    )
+                    coords_3["cultural/freedom/needlessness"] = _clamp01(
+                        max(float(coords_3.get("cultural/freedom/needlessness", 0.08)), 0.53)
+                    )
                 coords_3["psychological/truth/fact"] = _clamp01(
                     0.55 * float(best_sleeve_3["value_prior"])
                     + 0.45 * exist_3
@@ -1948,8 +1978,68 @@ def _rollout_intention_into_theory_and_confidence(
             rollout_conf = branch_conf
             rollout_clarity = branch_clarity
             rollout_loss = max(rollout_loss, branch_loss)
+            if out_rollout_phil is not None and phil_3:
+                out_rollout_phil.clear()
+                for k, v in phil_3.items():
+                    out_rollout_phil[k] = float(v)
 
     return rollout_theory, rollout_conf, rollout_clarity, rollout_loss
+
+
+def _sync_coords_and_learned_leaves_after_rollout(
+    board_before: chess.Board,
+    move: chess.Move,
+    next_board: chess.Board,
+    coords: dict[str, float],
+    *,
+    was_1ply_blunder: bool,
+    is_blunder: bool,
+    blunder_penalty: float,
+    r_loss: float,
+    forced_mate_rollout: bool,
+    rollout_phil_3: Mapping[str, float],
+    perspective: chess.Color,
+    learned_leaves: Sequence[LearnedLeaf] = (),
+) -> tuple[float, ...]:
+    """Propagate 3-ply rollout discoveries (`r_loss`, `rollout_phil_3`) into `wastelessness`, `needlessness`, `sub_sensors`, and `LearnedLeaf` activations."""
+    if not forced_mate_rollout and rollout_phil_3:
+        for k, v in rollout_phil_3.items():
+            if k in coords:
+                coords[k] = _clamp01(0.45 * float(coords.get(k, 0.50)) + 0.55 * float(v))
+    if r_loss >= 0.8 or is_blunder:
+        coords["cultural/efficiency/wastelessness"] = min(
+            float(coords.get("cultural/efficiency/wastelessness", 0.72)),
+            round(max(0.08, 0.42 - 0.08 * min(4.0, blunder_penalty)), 4),
+        )
+        coords["cultural/freedom/needlessness"] = _clamp01(
+            max(float(coords.get("cultural/freedom/needlessness", 0.08)), 0.53)
+        )
+        coords["cultural/justice/fairness"] = min(
+            0.30, float(coords.get("cultural/justice/fairness", 0.50))
+        )
+        coords["experiential/phase/valence"] = min(
+            0.28, float(coords.get("experiential/phase/valence", 0.50))
+        )
+        if r_loss >= 0.8 and not was_1ply_blunder:
+            coords["psychological/truth/fact"] = _clamp01(
+                float(coords.get("psychological/truth/fact", 0.50))
+                - 0.18 * min(3.0, blunder_penalty)
+            )
+    updated_sub_sensors = compute_move_sub_sensors(
+        board_before,
+        move,
+        perspective=perspective,
+        next_board=next_board,
+        blunder_penalty=blunder_penalty,
+    )
+    if learned_leaves:
+        _evaluate_learned_leaves_into_coords(
+            coords,
+            learned_leaves,
+            is_blunder=is_blunder,
+            move_sub_sensors=updated_sub_sensors,
+        )
+    return updated_sub_sensors
 
 
 def _enrich_move_coords_with_theory_rollout(
@@ -1962,12 +2052,15 @@ def _enrich_move_coords_with_theory_rollout(
     perspective: chess.Color,
     sleeve: BitboardIntuitionSleeve,
     rule_tuple: tuple[FuzzyConceptRule, ...] = (),
+    learned_leaves: Sequence[LearnedLeaf] = (),
 ) -> tuple[dict[str, float], bool, float]:
     """Enrich 1-ply candidate coordinates with the `Ply 2-3` `Theory`, `Confidence`, and `Clarity` rollout."""
     nb = board_before.copy()
     nb.push(move)
     if nb.is_checkmate():
         return coords, False, 0.0
+    was_1ply_blunder = bool(is_blunder)
+    rollout_phil_3: dict[str, float] = {}
     r_theory, r_conf, r_clarity, r_loss = _rollout_intention_into_theory_and_confidence(
         board_before,
         nb,
@@ -1975,8 +2068,10 @@ def _enrich_move_coords_with_theory_rollout(
         rule_tuple=rule_tuple,
         sleeve=sleeve,
         base_coords=coords,
+        out_rollout_phil=rollout_phil_3,
     )
-    if r_theory >= 0.97 and r_conf >= 0.97 and r_loss == 0.0:
+    forced_mate_rollout = bool(r_theory >= 0.97 and r_conf >= 0.97 and r_loss == 0.0)
+    if forced_mate_rollout:
         coords["psychological/truth/theory"] = 0.98
         coords["psychological/contemplation/confidence"] = 0.98
         coords["psychological/contemplation/clarity"] = 0.98
@@ -1993,6 +2088,20 @@ def _enrich_move_coords_with_theory_rollout(
     if r_loss >= 0.8:
         is_blunder = True
         blunder_penalty = max(float(blunder_penalty), r_loss)
+    _sync_coords_and_learned_leaves_after_rollout(
+        board_before,
+        move,
+        nb,
+        coords,
+        was_1ply_blunder=was_1ply_blunder,
+        is_blunder=is_blunder,
+        blunder_penalty=blunder_penalty,
+        r_loss=r_loss,
+        forced_mate_rollout=forced_mate_rollout,
+        rollout_phil_3=rollout_phil_3,
+        perspective=perspective,
+        learned_leaves=learned_leaves,
+    )
     return coords, is_blunder, blunder_penalty
 
 
@@ -2108,6 +2217,8 @@ def evaluate_candidate_moves_with_right_brain(
         if cand["rolled_out"]:
             return
         cand["rolled_out"] = True
+        was_1ply_blunder = bool(cand["is_blunder"])
+        rollout_phil_3: dict[str, float] = {}
         r_theory, r_conf, r_clarity, r_loss = _rollout_intention_into_theory_and_confidence(
             board,
             cand["next_board"],
@@ -2115,9 +2226,11 @@ def evaluate_candidate_moves_with_right_brain(
             rule_tuple=rule_tuple,
             sleeve=sleeve,
             base_coords=cand["coords"],
+            out_rollout_phil=rollout_phil_3,
         )
         c_dict = cand["coords"]
-        if r_theory >= 0.97 and r_conf >= 0.97 and r_loss == 0.0:
+        forced_mate_rollout = bool(r_theory >= 0.97 and r_conf >= 0.97 and r_loss == 0.0)
+        if forced_mate_rollout:
             cand["forced_mate_rollout"] = True
             c_dict["psychological/truth/theory"] = 0.98
             c_dict["psychological/contemplation/confidence"] = 0.98
@@ -2135,6 +2248,23 @@ def evaluate_candidate_moves_with_right_brain(
         if r_loss >= 0.8:
             cand["is_blunder"] = True
             cand["blunder_penalty"] = max(float(cand["blunder_penalty"]), r_loss)
+        cand["sub_sensors"] = _sync_coords_and_learned_leaves_after_rollout(
+            board,
+            cand["move"],
+            cand["next_board"],
+            c_dict,
+            was_1ply_blunder=was_1ply_blunder,
+            is_blunder=bool(cand["is_blunder"]),
+            blunder_penalty=float(cand["blunder_penalty"]),
+            r_loss=r_loss,
+            forced_mate_rollout=forced_mate_rollout,
+            rollout_phil_3=rollout_phil_3,
+            perspective=us,
+            learned_leaves=learned_tuple,
+        )
+        for r in rule_tuple:
+            for req_leaf in r.target_leaves:
+                c_dict.setdefault(req_leaf, 0.0)
 
     rollout_k = max(10, int(limit))
     for cand in pending_candidates[:rollout_k]:
@@ -3058,6 +3188,7 @@ class ObjectiveCalibratedSparringEngine:
             played_b_pen,
             perspective=us,
             sleeve=sleeve,
+            learned_leaves=learned_tuple,
         )
 
         cp_before = _static_centipawns_for_color(board_before, us)
@@ -3120,6 +3251,7 @@ class ObjectiveCalibratedSparringEngine:
             _best_pen,
             perspective=us,
             sleeve=sleeve,
+            learned_leaves=learned_tuple,
         )
 
         # Find the second-best move (for `!`/`!!` edge detection) AND an inferior move (for REM Sleep coordinate contrast)
@@ -3150,6 +3282,7 @@ class ObjectiveCalibratedSparringEngine:
             _alt_pen,
             perspective=us,
             sleeve=sleeve,
+            learned_leaves=learned_tuple,
         )
 
         if not board_after_played.is_checkmate() and cp_after > -9000.0:

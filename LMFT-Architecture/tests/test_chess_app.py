@@ -2228,6 +2228,144 @@ def test_clean_machine_installer_crlf_sync_and_signed_contrastive_bitboard_sleev
     assert not review["should_queue_for_sleep"]
 
 
+def test_three_ply_rollout_updates_leaves_and_gear_2_move_arbitration(tmp_path: Path) -> None:
+    """Verify 3-ply rollout updates `wastelessness`, `needlessness`, `sub_sensors`, & `LearnedLeaf` activations, and verify Gear-2 move arbitration."""
+    from lmft_architecture.chess_kibitz_bridge import (
+        ObjectiveCalibratedSparringEngine,
+        compute_candidate_move_fuzzy_coordinates,
+        evaluate_candidate_moves_with_right_brain,
+    )
+    from lmft_architecture.reflection_classifier import FuzzyConceptRule, LearnedLeaf
+
+    # 1. On the 2-ply Knight royal fork board (`a4?? -> Nc2+! Kd2 Nxa1`), `a4` is NOT a 1-ply blunder,
+    #    so 1-ply `wastelessness` starts at 0.72. After the 3-ply rollout, `wastelessness` must drop <= 0.35,
+    #    `needlessness` must rise >= 0.50, and a Tier-2 `LearnedLeaf` / `hazard_` rule must fire on `a4`!
+    royal_fork_board = chess.Board("4k3/8/8/8/3n4/P6P/1P4P1/R3K3 w - - 0 30")
+    c_1ply, b_1ply, pen_1ply, _, _ = compute_candidate_move_fuzzy_coordinates(
+        royal_fork_board,
+        royal_fork_board.parse_san("a4"),
+    )
+    assert b_1ply is False and pen_1ply == 0.0
+    assert c_1ply["cultural/efficiency/wastelessness"] >= 0.70
+
+    safety_leaf = LearnedLeaf(
+        parent_branch="cultural/efficiency",
+        leaf_name="hazard_fork_net_safety_drop",
+        description="Detects multi-ply net safety drop on delayed forks.",
+        sub_sensor_weights=(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+        sub_sensor_midpoints=(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.20, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+    )
+    fork_hazard_rule = FuzzyConceptRule(
+        rule_id="rule-fork-hazard-t2",
+        concept_name="hazard_delayed_fork_blunder",
+        description="Repel delayed 2-ply fork blunders caught by 3-ply rollout.",
+        target_leaves={
+            "cultural/efficiency/wastelessness": 0.20,
+            safety_leaf.leaf_id: 0.85,
+        },
+        low=0.55,
+        high=0.80,
+        polarity="repulsive",
+    )
+
+    referee = ObjectiveCalibratedSparringEngine(use_stockfish_uci=False)
+    rev_a4 = referee.audit_played_move_for_game_review(
+        royal_fork_board,
+        "a4",
+        perspective=chess.WHITE,
+        learned_leaves=(safety_leaf,),
+    )
+    assert rev_a4["played_coordinates"]["cultural/efficiency/wastelessness"] <= 0.35
+    assert rev_a4["played_coordinates"]["cultural/freedom/needlessness"] >= 0.50
+    assert rev_a4["played_coordinates"][safety_leaf.leaf_id] >= 0.75
+    assert rev_a4["best_move_coordinates"][safety_leaf.leaf_id] <= 0.35
+
+    evals_with_rule = {
+        e.san: e
+        for e in evaluate_candidate_moves_with_right_brain(
+            royal_fork_board,
+            rules=(fork_hazard_rule,),
+            learned_leaves=(safety_leaf,),
+            limit=25,
+        )
+    }
+    assert evals_with_rule["a4"].matched_concept == "hazard_delayed_fork_blunder"
+    assert evals_with_rule["Rd1"].matched_concept != "hazard_delayed_fork_blunder"
+
+    # 2. Verify Gear-2 Left-Brain deliberation & blunder veto in `handle_chess_ai_move` when Gear 1 is unsettled
+    class _StubGear2LeftBrain:
+        def __init__(self, reply_text: str) -> None:
+            self.reply_text = reply_text
+            self.callosum_metadata = None
+            self.call_count = 0
+
+        def generate_with_subliminal_splice(self, prompt: str, chord, **kwargs):
+            _ = (prompt, kwargs)
+            self.call_count += 1
+
+            class _Trace:
+                clause_1_prefix = ""
+                post_gap_continuation = self.reply_text
+                comma_scored_live = True
+                comma_vibe_posture = "settled"
+                comma_dissonance_notes: tuple[str, ...] = ()
+                spliced_chord = chord
+
+            return self.reply_text, _Trace()
+
+    # Create a rule collision on the board so `right_brain_choice.settled` is False (`clarity < 0.45`)
+    colliding_rule_a = FuzzyConceptRule(
+        rule_id="rule-col-a",
+        concept_name="coached_opening_plan_alpha",
+        description="Competing opening plan A.",
+        target_leaves={"philosophical/structure/order": 0.65},
+        low=0.30,
+        high=0.55,
+    )
+    colliding_rule_b = FuzzyConceptRule(
+        rule_id="rule-col-b",
+        concept_name="coached_opening_plan_beta",
+        description="Competing opening plan B.",
+        target_leaves={"philosophical/being/existence": 0.65},
+        low=0.30,
+        high=0.55,
+    )
+
+    stub_sound = _StubGear2LeftBrain("Under competing strategic plans, we castle safely with O-O.")
+    rt_sound = ChessKibitzerRuntime(
+        state_dir=tmp_path / "gear2_sound_state",
+        left_brain=stub_sound,  # type: ignore[arg-type]
+        lazy_load_gpu=False,
+    )
+    rt_sound.rules = (*rt_sound.rules, colliding_rule_a, colliding_rule_b)
+    rt_sound.handle_set_fen("r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 3 3")
+    snap_g2 = rt_sound.handle_chess_ai_move()
+    arb_g2 = snap_g2["last_hybrid_move_arbitration"]
+    assert stub_sound.call_count == 1
+    assert arb_g2["left_brain_proposed_san"] == "O-O"
+    assert arb_g2["chosen_move_san"] == "O-O"
+    assert arb_g2["selection_mode"] == "gear_2_left_brain_deliberation"
+    assert snap_g2["chat_messages"][-1]["is_gear_1_fallback"] is False
+
+    stub_blunder = _StubGear2LeftBrain("We lash out immediately with Bxf7+ torip open the King.")
+    rt_veto = ChessKibitzerRuntime(
+        state_dir=tmp_path / "gear2_veto_state",
+        left_brain=stub_blunder,  # type: ignore[arg-type]
+        lazy_load_gpu=False,
+    )
+    rt_veto.rules = (*rt_veto.rules, colliding_rule_a, colliding_rule_b)
+    rt_veto.handle_set_fen("r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 3 3")
+    snap_veto = rt_veto.handle_chess_ai_move()
+    arb_veto = snap_veto["last_hybrid_move_arbitration"]
+    assert stub_blunder.call_count == 1
+    assert arb_veto["left_brain_proposed_san"] == "Bxf7+"
+    assert arb_veto["chosen_move_san"] != "Bxf7+"
+    assert arb_veto["selection_mode"] == "right_brain_blunder_veto_queued_for_sleep"
+    assert arb_veto["veto_queued_for_sleep"] is True
+    assert len(rt_veto.sleep_queue) == 1
+    assert rt_veto.sleep_queue[-1].played_sub_sensors is not None
+
+
 
 
 

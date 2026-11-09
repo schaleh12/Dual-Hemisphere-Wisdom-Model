@@ -69,11 +69,14 @@ from .chess_kibitz_bridge import (
     BitboardIntuitionSleeve,
     ChessBoardPosture,
     ObjectiveCalibratedSparringEngine,
+    _enrich_move_coords_with_theory_rollout,
     _static_centipawns_for_color,
     build_human_move_coaching_report,
     build_natural_chess_scenario_prompt,
+    compute_candidate_move_fuzzy_coordinates,
     compute_estimated_game_elo,
     compute_fide_elo_update,
+    compute_move_sub_sensors,
     evaluate_candidate_moves_with_right_brain,
     evaluate_chess_board_posture,
     format_move_history_pgn_snippet,
@@ -114,6 +117,7 @@ from .reflection_classifier import (
     LearnedLeaf,
     _evaluate_rules_with_inhibition,
     compute_contemplation,
+    leaf_tier,
     load_learned_leaves,
     load_ruleset,
     save_ruleset,
@@ -306,7 +310,7 @@ def _ensure_foundational_rules(rules: tuple[FuzzyConceptRule, ...]) -> tuple[Fuz
                     continue
                 cleaned_haz_leaves[k] = fv
             if len(cleaned_haz_leaves) > 3:
-                pinned_haz: set[str] = {k for k in cleaned_haz_leaves if k.count("/") >= 2 and k not in shadow_ids}
+                pinned_haz: set[str] = {k for k in cleaned_haz_leaves if leaf_tier(k) >= 2 and k not in shadow_ids}
                 if (
                     "cultural/efficiency/wastelessness" in cleaned_haz_leaves
                     and float(cleaned_haz_leaves["cultural/efficiency/wastelessness"]) <= 0.38
@@ -1876,7 +1880,7 @@ class ChessKibitzerRuntime:
         return self.get_state_snapshot()
 
     def handle_chess_ai_move(self, *, in_sparring_mode: bool = False) -> dict[str, Any]:
-        """Select and play Celestriad's move silently via fast Gear-1 Right-Brain 40-node + bitboard sleeve intuition."""
+        """Select and play Celestriad's move via the 3-Gear Policy (Gear-1 Right-Brain intuition -> Gear-2 `<|subliminal_gap|>` deliberation when unsettled)."""
         if self.board.is_game_over() or self.clock_flagged_loser is not None:
             raise ValueError("The game is already over.")
         t_ai_start = time.perf_counter()
@@ -1895,6 +1899,7 @@ class ChessKibitzerRuntime:
             raise ValueError("No legal moves available.")
 
         top_candidates = all_evals[:6]
+        eval_by_san = {c.san: c for c in all_evals}
         right_brain_choice = top_candidates[0]
         if (
             self.games_completed_count > 0
@@ -1919,7 +1924,171 @@ class ChessKibitzerRuntime:
             if right_brain_choice.guided_by_vow
             else "gear_1_right_brain_intuition"
         )
+        left_brain_proposed_san: str | None = None
+        veto_reason: str | None = None
+        vetoed_coords: dict[str, float] | None = None
+        safe_choice_coords: dict[str, float] | None = None
+        vetoed_sub_sensors: tuple[float, ...] | None = None
+        safe_sub_sensors: tuple[float, ...] | None = None
+        gear_2_delib_text: str | None = None
+        top_san_set = {c.san for c in top_candidates[:4]}
 
+        should_wake_gear_2 = (
+            self._qwen_left_brain is not None
+            and not self.rem_sleep_in_progress
+            and len(all_evals) > 1
+            and (
+                not right_brain_choice.settled
+                or float(right_brain_choice.clarity) < 0.45
+                or bool(right_brain_choice.is_blunder)
+                or bool(right_brain_choice.shadow_warnings)
+                or (self.board.is_check() and float(right_brain_choice.clarity) < 0.58)
+            )
+        )
+        if should_wake_gear_2 and hasattr(self._qwen_left_brain, "generate_with_subliminal_splice"):
+            try:
+                pre_prompt = build_natural_chess_scenario_prompt(
+                    self.board,
+                    self.move_history_san,
+                )
+                self.board_posture = evaluate_chess_board_posture(self.board, perspective=ai_mover_color)
+                pre_sensors = merge_board_fact_with_chat_sensors(
+                    self.board_posture,
+                    self.sensors,
+                    ground_cultural_on_board=True,
+                )
+                fact_coords, fact_exp, queried_1, skipped_1 = pre_sensors.score_text(
+                    pre_prompt,
+                    learned_leaves=self.learned_leaves,
+                )
+                pre_vibe, _ = compile_right_brain_vibe(
+                    self.birth_state,
+                    fact_coords,
+                    fact_exp,
+                    self.rules,
+                    pass_index=1,
+                    event_id=f"pre_move_{self.scene_counter + 1}",
+                    prior_memory=self.memory,
+                    learned_leaves=self.learned_leaves,
+                    queried_child_leaves=queried_1,
+                    skipped_child_leaves=skipped_1,
+                )
+                pre_chord = SubliminalChordVector.from_right_brain_vibe(
+                    pre_vibe,
+                    learned_leaves=self.learned_leaves,
+                )
+                with self.gpu_lock:
+                    delib_text, delib_trace = self._qwen_left_brain.generate_with_subliminal_splice(
+                        pre_prompt,
+                        pre_chord,
+                        num_sentences=1,
+                        conversation_history=(),
+                        lead_with_gap=True,
+                    )
+                gear_2_delib_text = str(delib_text or "").strip() or None
+                post_gap_mentioned = (
+                    inspect_chess_moves_in_reply(
+                        getattr(delib_trace, "post_gap_continuation", ""),
+                        self.board,
+                        move_history_san=self.move_history_san,
+                    )["legal_moves_mentioned"]
+                    if delib_trace is not None and getattr(delib_trace, "post_gap_continuation", "")
+                    else []
+                )
+                mentioned = post_gap_mentioned or inspect_chess_moves_in_reply(
+                    gear_2_delib_text or "",
+                    self.board,
+                    move_history_san=self.move_history_san,
+                )["legal_moves_mentioned"]
+                if mentioned:
+                    left_brain_proposed_san = str(mentioned[0])
+                    cand_eval = eval_by_san.get(left_brain_proposed_san)
+                    if cand_eval is not None:
+                        if left_brain_proposed_san == right_brain_choice.san:
+                            chosen_san = left_brain_proposed_san
+                            selection_mode = "gear_2_left_brain_deliberation"
+                        else:
+                            is_suboptimal = (
+                                left_brain_proposed_san not in top_san_set
+                                or (right_brain_choice.composite_score - cand_eval.composite_score) > 0.40
+                            )
+                            has_new_shadow = bool(
+                                cand_eval.shadow_warnings and not right_brain_choice.shadow_warnings
+                            )
+                            if (
+                                cand_eval.is_blunder
+                                or cand_eval.is_repetition
+                                or has_new_shadow
+                                or is_suboptimal
+                            ):
+                                selection_mode = "right_brain_blunder_veto_queued_for_sleep"
+                                veto_reason = (
+                                    f"Left-Brain proposed {left_brain_proposed_san} "
+                                    f"(blunder={cand_eval.is_blunder}, repetition={cand_eval.is_repetition}, "
+                                    f"shadows={list(cand_eval.shadow_warnings)}, score={cand_eval.composite_score:.2f}); "
+                                    f"Right-Brain played {right_brain_choice.san} (score={right_brain_choice.composite_score:.2f})."
+                                )
+                                try:
+                                    prop_mv = self.board.parse_san(left_brain_proposed_san)
+                                    safe_mv = self.board.parse_san(right_brain_choice.san)
+                                    v_c, v_b, v_pen, _, _ = compute_candidate_move_fuzzy_coordinates(
+                                        self.board,
+                                        prop_mv,
+                                        perspective=ai_mover_color,
+                                        learned_leaves=self.learned_leaves,
+                                        bitboard_sleeve=self.bitboard_sleeve,
+                                    )
+                                    v_c, v_b, v_pen = _enrich_move_coords_with_theory_rollout(
+                                        self.board,
+                                        prop_mv,
+                                        v_c,
+                                        v_b,
+                                        v_pen,
+                                        perspective=ai_mover_color,
+                                        sleeve=self.bitboard_sleeve,
+                                        learned_leaves=self.learned_leaves,
+                                    )
+                                    s_c, s_b, s_pen, _, _ = compute_candidate_move_fuzzy_coordinates(
+                                        self.board,
+                                        safe_mv,
+                                        perspective=ai_mover_color,
+                                        learned_leaves=self.learned_leaves,
+                                        bitboard_sleeve=self.bitboard_sleeve,
+                                    )
+                                    s_c, s_b, s_pen = _enrich_move_coords_with_theory_rollout(
+                                        self.board,
+                                        safe_mv,
+                                        s_c,
+                                        s_b,
+                                        s_pen,
+                                        perspective=ai_mover_color,
+                                        sleeve=self.bitboard_sleeve,
+                                        learned_leaves=self.learned_leaves,
+                                    )
+                                    vetoed_coords = v_c
+                                    safe_choice_coords = s_c
+                                    vetoed_sub_sensors = compute_move_sub_sensors(
+                                        self.board,
+                                        prop_mv,
+                                        perspective=ai_mover_color,
+                                        blunder_penalty=v_pen,
+                                    )
+                                    safe_sub_sensors = compute_move_sub_sensors(
+                                        self.board,
+                                        safe_mv,
+                                        perspective=ai_mover_color,
+                                        blunder_penalty=s_pen,
+                                    )
+                                except Exception:
+                                    vetoed_coords = None
+                                    safe_choice_coords = None
+                            else:
+                                chosen_san = left_brain_proposed_san
+                                selection_mode = "gear_2_left_brain_deliberation"
+            except Exception:
+                pass
+
+        chosen_eval = eval_by_san.get(chosen_san, right_brain_choice)
         self._in_sparring_ai_move = bool(in_sparring_mode)
         try:
             snap = self.handle_chess_move(
@@ -1931,41 +2100,77 @@ class ChessKibitzerRuntime:
             self._in_sparring_ai_move = False
         if not in_sparring_mode:
             self._sync_active_thread_record(persist=True)
+        veto_queued = bool(
+            veto_reason
+            and self.chat_messages
+            and vetoed_coords is not None
+            and float(vetoed_coords.get("cultural/efficiency/wastelessness", 0.72)) <= 0.38
+        )
         arbitration_record = {
             "selection_mode": selection_mode,
             "chosen_move_san": chosen_san,
             "right_brain_top_san": right_brain_choice.san,
-            "left_brain_proposed_san": None,
-            "veto_reason": None,
-            "veto_queued_for_sleep": False,
+            "left_brain_proposed_san": left_brain_proposed_san,
+            "veto_reason": veto_reason,
+            "veto_queued_for_sleep": veto_queued,
             "guided_by_vow": False,
             "vow_alignment_delta": 0.0,
             "active_vow_leaves": [],
             "top_candidates": [c.to_dict() for c in top_candidates[:5]],
         }
         self.last_hybrid_move_arbitration = arbitration_record
-        rollout_clarity = round(float(right_brain_choice.clarity), 4)
-        if self.chat_messages and self.chat_messages[-1].get("is_gear_1_fallback"):
+        rollout_clarity = round(float(chosen_eval.clarity), 4)
+        if self.chat_messages:
             last_msg = self.chat_messages[-1]
-            updated_txt = re.sub(
-                r"clarity \d+\.\d+",
-                f"clarity {right_brain_choice.clarity:.2f}",
-                str(last_msg.get("text", "")),
-            )
-            last_msg["text"] = updated_txt
-            last_msg["clean_reply"] = updated_txt
-            tel = last_msg.get("telemetry")
-            if isinstance(tel, dict):
-                tel["clarity"] = rollout_clarity
-                psc = tel.get("pretext_subtext_context")
-                if isinstance(psc, dict):
-                    psc["context_reply"] = updated_txt
+            if gear_2_delib_text and selection_mode == "gear_2_left_brain_deliberation":
+                g2_txt = f"Played {chosen_san} — {gear_2_delib_text}"
+                last_msg["text"] = g2_txt
+                last_msg["clean_reply"] = g2_txt
+                last_msg["is_gear_1_fallback"] = False
+                tel = last_msg.get("telemetry")
+                if isinstance(tel, dict):
+                    tel["gear_used"] = "GEAR_2_LEFT_BRAIN_BOARD_TUG"
+                    tel["gear_2_board_tug"] = True
+                    tel["clarity"] = rollout_clarity
+                    psc = tel.get("pretext_subtext_context")
+                    if isinstance(psc, dict):
+                        psc["context_reply"] = g2_txt
+                if self.last_board_reflex is not None:
+                    self.last_board_reflex["gear_used"] = "GEAR_2_LEFT_BRAIN_BOARD_TUG"
+            elif last_msg.get("is_gear_1_fallback"):
+                updated_txt = re.sub(
+                    r"clarity \d+\.\d+",
+                    f"clarity {chosen_eval.clarity:.2f}",
+                    str(last_msg.get("text", "")),
+                )
+                last_msg["text"] = updated_txt
+                last_msg["clean_reply"] = updated_txt
+                tel = last_msg.get("telemetry")
+                if isinstance(tel, dict):
+                    tel["clarity"] = rollout_clarity
+                    psc = tel.get("pretext_subtext_context")
+                    if isinstance(psc, dict):
+                        psc["context_reply"] = updated_txt
         if self.last_board_reflex is not None:
             if not self.chat_messages or self.chat_messages[-1].get("is_gear_1_fallback"):
                 self.last_board_reflex["clarity"] = rollout_clarity
             self.last_board_reflex["guided_by_vow"] = False
             self.last_board_reflex["vow_alignment_delta"] = 0.0
             self.last_board_reflex["hybrid_arbitration"] = arbitration_record
+        if veto_queued:
+            last_scene_id = int(self.chat_messages[-1].get("id", self.scene_counter))
+            self.flag_turn_for_coaching(
+                last_scene_id,
+                user_note=veto_reason or "",
+                check_auto_sleep=False,
+                is_hazard=True,
+                override_coordinates=vetoed_coords,
+                contrastive_reference_coordinates=safe_choice_coords,
+                game_review_annotation=veto_reason,
+                played_sub_sensors=vetoed_sub_sensors,
+                reference_sub_sensors=safe_sub_sensors,
+            )
+            snap = self.get_state_snapshot()
         if not in_sparring_mode:
             self._sync_active_thread_record(persist=True)
         if (
