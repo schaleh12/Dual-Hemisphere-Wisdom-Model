@@ -411,18 +411,26 @@ def test_hybrid_move_selection_and_blunder_veto_sleep_queue(tmp_path: Path) -> N
             self.call_count = 0
 
         def generate_with_subliminal_splice(self, prompt: str, chord, **kwargs):
-            _ = (prompt, kwargs)
+            _ = prompt
+            assert kwargs.get("lead_with_gap") is False
             self.call_count += 1
+            c1 = "Under competing strategic plans,"
+            cb = kwargs.get("chord_builder_at_comma")
+            if cb is not None:
+                built = cb(c1)
+                active_chord = built[0] if isinstance(built, tuple) else built
+            else:
+                active_chord = chord
 
             class _Trace:
-                clause_1_prefix = ""
+                clause_1_prefix = c1
                 post_gap_continuation = self.reply_text
-                comma_scored_live = True
+                comma_scored_live = cb is not None
                 comma_vibe_posture = "settled"
                 comma_dissonance_notes: tuple[str, ...] = ()
-                spliced_chord = chord
+                spliced_chord = active_chord
 
-            return self.reply_text, _Trace()
+            return f"{c1} {self.reply_text}", _Trace()
 
     stub_commit = _StubLeftBrain("During sleep we see that premature f7 sacrifices leave our King exposed.")
     runtime_commit = ChessKibitzerRuntime(
@@ -1121,7 +1129,7 @@ def test_speaker_attribution_and_clean_slate_reset(tmp_path: Path) -> None:
     msg_delib = s_human["chat_messages"][-1]
     assert msg_delib["sender"] == "companion"
     assert msg_delib["telemetry"]["insightful_inquiry_deliberation"] is True
-    assert msg_delib["telemetry"]["spliced_trace"].get("clause_1_prefix") == ""
+    assert msg_delib["telemetry"]["spliced_trace"].get("clause_1_prefix", "").endswith(",")
     assert msg_delib["telemetry"]["spliced_trace"].get("sentence_count", 0) >= 2
     assert msg_delib["telemetry"]["spliced_trace"].get("comma_scored_live") is True
     hist_pairs = runtime._extract_clean_conversation_history()
@@ -2223,18 +2231,26 @@ def test_three_ply_rollout_updates_leaves_and_gear_2_move_arbitration(tmp_path: 
             self.call_count = 0
 
         def generate_with_subliminal_splice(self, prompt: str, chord, **kwargs):
-            _ = (prompt, kwargs)
+            _ = prompt
+            assert kwargs.get("lead_with_gap") is False
             self.call_count += 1
+            c1 = "Under competing strategic plans,"
+            cb = kwargs.get("chord_builder_at_comma")
+            if cb is not None:
+                built = cb(c1)
+                active_chord = built[0] if isinstance(built, tuple) else built
+            else:
+                active_chord = chord
 
             class _Trace:
-                clause_1_prefix = ""
+                clause_1_prefix = c1
                 post_gap_continuation = self.reply_text
-                comma_scored_live = True
+                comma_scored_live = cb is not None
                 comma_vibe_posture = "settled"
                 comma_dissonance_notes: tuple[str, ...] = ()
-                spliced_chord = chord
+                spliced_chord = active_chord
 
-            return self.reply_text, _Trace()
+            return f"{c1} {self.reply_text}", _Trace()
 
     # Create a rule collision on the board so `right_brain_choice.settled` is False (`clarity < 0.45`)
     colliding_rule_a = FuzzyConceptRule(
@@ -2269,6 +2285,9 @@ def test_three_ply_rollout_updates_leaves_and_gear_2_move_arbitration(tmp_path: 
     assert arb_g2["chosen_move_san"] == "O-O"
     assert arb_g2["selection_mode"] == "gear_2_left_brain_deliberation"
     assert snap_g2["chat_messages"][-1]["is_gear_1_fallback"] is False
+    g2_trace = snap_g2["chat_messages"][-1]["telemetry"]["spliced_trace"]
+    assert g2_trace["clause_1_prefix"] == "Under competing strategic plans,"
+    assert g2_trace["comma_scored_live"] is True
 
     stub_blunder = _StubGear2LeftBrain("We lash out immediately with Bxf7+ torip open the King.")
     rt_veto = ChessKibitzerRuntime(

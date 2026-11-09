@@ -1339,7 +1339,7 @@ class ChessKibitzerRuntime:
                 sentences_per_stanza=int(sentences_per_stanza),
                 comma_chord_transform=comma_chord_transform,
                 conversation_history=conv_history,
-                lead_with_gap=(room == "chess" and not clause_1_prefix),
+                lead_with_gap=False,
                 will_edges=self.will_edges,
             )
         finally:
@@ -1930,6 +1930,7 @@ class ChessKibitzerRuntime:
         vetoed_sub_sensors: tuple[float, ...] | None = None
         safe_sub_sensors: tuple[float, ...] | None = None
         gear_2_delib_text: str | None = None
+        delib_trace: Any = None
         top_san_set = {c.san for c in top_candidates[:4]}
 
         should_wake_gear_2 = (
@@ -1971,18 +1972,55 @@ class ChessKibitzerRuntime:
                     learned_leaves=self.learned_leaves,
                     queried_child_leaves=queried_1,
                     skipped_child_leaves=skipped_1,
+                    will_edges=self.will_edges,
                 )
                 pre_chord = SubliminalChordVector.from_right_brain_vibe(
                     pre_vibe,
                     learned_leaves=self.learned_leaves,
                 )
+
+                def _build_gear_2_comma_chord(comma_prefix: str):
+                    if comma_prefix.strip():
+                        c_coords, c_exp, _, _ = pre_sensors.score_text(
+                            comma_prefix,
+                            learned_leaves=self.learned_leaves,
+                        )
+                        raw_c_vibe, _ = compile_right_brain_vibe(
+                            self.birth_state,
+                            fact_coords,
+                            fact_exp,
+                            self.rules,
+                            pass_index=2,
+                            event_id=f"pre_move_{self.scene_counter + 1}_comma",
+                            prior_memory=self.memory,
+                            learned_leaves=self.learned_leaves,
+                            internal_theory_coords=c_coords,
+                            internal_theory_experiential=c_exp,
+                            queried_child_leaves=queried_1,
+                            skipped_child_leaves=skipped_1,
+                            will_edges=self.will_edges,
+                        )
+                        c_vibe = _compile_mid_sentence_comma_vibe(pre_vibe, raw_c_vibe)
+                    else:
+                        c_vibe = pre_vibe
+                    c_chord = SubliminalChordVector.from_right_brain_vibe(
+                        c_vibe,
+                        learned_leaves=self.learned_leaves,
+                    )
+                    return (
+                        c_chord,
+                        c_vibe.posture,
+                        c_vibe.self_registry.dissonance_notes,
+                    )
+
                 with self.gpu_lock:
                     delib_text, delib_trace = self._qwen_left_brain.generate_with_subliminal_splice(
                         pre_prompt,
                         pre_chord,
                         num_sentences=1,
                         conversation_history=(),
-                        lead_with_gap=True,
+                        chord_builder_at_comma=_build_gear_2_comma_chord,
+                        lead_with_gap=False,
                     )
                 gear_2_delib_text = str(delib_text or "").strip() or None
                 post_gap_mentioned = (
@@ -2126,12 +2164,31 @@ class ChessKibitzerRuntime:
         rollout_clarity = round(float(chosen_eval.clarity), 4)
         if self.chat_messages:
             last_msg = self.chat_messages[-1]
+            tel = last_msg.get("telemetry")
+            if delib_trace is not None and isinstance(tel, dict):
+                tel["spliced_trace"] = {
+                    "sentence_count": 1,
+                    "stanza_count": 1,
+                    "clause_1_prefix": getattr(delib_trace, "clause_1_prefix", ""),
+                    "post_gap_continuation": getattr(delib_trace, "post_gap_continuation", ""),
+                    "comma_scored_live": bool(getattr(delib_trace, "comma_scored_live", False)),
+                    "comma_vibe_posture": getattr(delib_trace, "comma_vibe_posture", None),
+                    "comma_dissonance_notes": list(getattr(delib_trace, "comma_dissonance_notes", ())),
+                    "spliced_cadence_vector": [
+                        round(float(x), 4) for x in delib_trace.spliced_chord.cadence_vector
+                    ],
+                    "spliced_thinker_vector": [
+                        round(float(x), 4) for x in delib_trace.spliced_chord.thinker_vector[:8]
+                    ],
+                    "spliced_feeler_vector": [
+                        round(float(x), 4) for x in delib_trace.spliced_chord.feeler_vector[:8]
+                    ],
+                }
             if gear_2_delib_text and selection_mode == "gear_2_left_brain_deliberation":
                 g2_txt = f"Played {chosen_san} — {gear_2_delib_text}"
                 last_msg["text"] = g2_txt
                 last_msg["clean_reply"] = g2_txt
                 last_msg["is_gear_1_fallback"] = False
-                tel = last_msg.get("telemetry")
                 if isinstance(tel, dict):
                     tel["gear_used"] = "GEAR_2_LEFT_BRAIN_BOARD_TUG"
                     tel["gear_2_board_tug"] = True

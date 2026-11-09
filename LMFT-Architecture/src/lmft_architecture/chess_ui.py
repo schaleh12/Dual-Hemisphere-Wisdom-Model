@@ -1879,14 +1879,6 @@ function renderState(s) {
         const subHtml = sub
           ? `<div class="subtext-strip"><span>Pretext turns: ${sub.pretext_turns || 0}</span><span>Subtext Dominant: ${escapeHtml(sub.dominant_piece || "")} (${escapeHtml(sub.dominant_color || "")})</span><span>${escapeHtml(gearLabel)}</span></div>`
           : "";
-        const traj = Array.isArray(t.stanza_chord_trajectory) && t.stanza_chord_trajectory.length >= 2 ? t.stanza_chord_trajectory : null;
-        const stanzaTrajHtml = traj
-          ? `<div class="subtext-strip" style="margin-top:4px;"><span><strong>Stanza Chord Pivot:</strong> ${traj.map(st => `S${st.stanza_index} ${escapeHtml(st.role)}: ${(st.top_leaves || []).map(escapeHtml).join(", ")}`).join(" → ")}</span></div>`
-          : "";
-        const archRes = t.archive_resonance && t.archive_resonance.resonating_vow_text ? t.archive_resonance : null;
-        const archiveEchoHtml = archRes
-          ? `<div class="subtext-strip" style="margin-top:4px;"><span><strong>3-Branch Archive Echo (${Number(archRes.top_resonance_score || 0).toFixed(2)}):</strong> ${escapeHtml(archRes.resonating_vow_text)}</span></div>`
-          : "";
         const pc = t.player_coaching;
         const nonSolidCompGr = (!pc && t.game_review && (t.game_review.is_hazard || t.game_review.glyph || (t.game_review.classification && !String(t.game_review.classification).startsWith("SOLID")))) ? t.game_review : null;
         const gr = m.sender === "sparring_opponent" ? (t.sparring_referee_review || t.game_review) : nonSolidCompGr;
@@ -1913,8 +1905,6 @@ function renderState(s) {
             </div>
             <div class="msg-text">${escapeHtml(m.text)}</div>
             ${subHtml}
-            ${stanzaTrajHtml}
-            ${archiveEchoHtml}
             ${coachStripHtml}
             ${autoSleepHtml}
             ${actionsHtml}
