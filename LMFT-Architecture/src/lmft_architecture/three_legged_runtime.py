@@ -905,7 +905,8 @@ class SubliminalGapLeftBrain:
                 state.generated_turn_token_ids.extend(generated_ids)
             raw_clause_1 = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
             if (
-                "," not in raw_clause_1
+                owns_state
+                and "," not in raw_clause_1
                 and ";" not in raw_clause_1
                 and re.search(r"(?<!\b\d)[.!?](?=\s|$)", raw_clause_1) is not None
             ):

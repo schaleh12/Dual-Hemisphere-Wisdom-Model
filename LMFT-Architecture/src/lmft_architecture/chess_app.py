@@ -1187,11 +1187,6 @@ class ChessKibitzerRuntime:
         return self.get_state_snapshot()
 
     def _resolve_checkpoint_dir(self) -> Path | None:
-        c_8b = self.training_root / "models" / "left_brain_qwen3_8b"
-        if (c_8b / "corpus_callosum_meta.json").exists():
-            self.active_checkpoint_label = "Cycle 2 (Qwen3-8B · models/left_brain_qwen3_8b)"
-            self.sleep_cycle_index = 2
-            return c_8b
         c2 = self.training_root / "models" / "left_brain_lora_cycle2"
         if (c2 / "corpus_callosum_meta.json").exists():
             self.active_checkpoint_label = "Cycle 2 (models/left_brain_lora_cycle2)"
@@ -1202,6 +1197,11 @@ class ChessKibitzerRuntime:
             self.active_checkpoint_label = "Cycle 1 (models/left_brain_lora)"
             self.sleep_cycle_index = 1
             return c1
+        c_8b = self.training_root / "models" / "left_brain_qwen3_8b"
+        if (c_8b / "corpus_callosum_meta.json").exists():
+            self.active_checkpoint_label = "Cycle 2 (Qwen3-8B · models/left_brain_qwen3_8b)"
+            self.sleep_cycle_index = 2
+            return c_8b
         return None
 
     def _load_qwen_locked(self) -> None:
@@ -1967,7 +1967,7 @@ class ChessKibitzerRuntime:
                 pre_sensors = merge_board_fact_with_chat_sensors(
                     self.board_posture,
                     self.sensors,
-                    ground_cultural_on_board=False,
+                    ground_cultural_on_board=True,
                 )
                 fact_coords, fact_exp, queried_1, skipped_1 = pre_sensors.score_text(
                     pre_prompt,
