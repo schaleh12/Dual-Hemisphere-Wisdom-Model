@@ -1936,10 +1936,30 @@ class ChessKibitzerRuntime:
             "top_candidates": [c.to_dict() for c in top_candidates[:5]],
         }
         self.last_hybrid_move_arbitration = arbitration_record
+        rollout_clarity = round(float(right_brain_choice.clarity), 4)
+        if self.chat_messages and self.chat_messages[-1].get("is_gear_1_fallback"):
+            last_msg = self.chat_messages[-1]
+            updated_txt = re.sub(
+                r"clarity \d+\.\d+",
+                f"clarity {right_brain_choice.clarity:.2f}",
+                str(last_msg.get("text", "")),
+            )
+            last_msg["text"] = updated_txt
+            last_msg["clean_reply"] = updated_txt
+            tel = last_msg.get("telemetry")
+            if isinstance(tel, dict):
+                tel["clarity"] = rollout_clarity
+                psc = tel.get("pretext_subtext_context")
+                if isinstance(psc, dict):
+                    psc["context_reply"] = updated_txt
         if self.last_board_reflex is not None:
+            if not self.chat_messages or self.chat_messages[-1].get("is_gear_1_fallback"):
+                self.last_board_reflex["clarity"] = rollout_clarity
             self.last_board_reflex["guided_by_vow"] = False
             self.last_board_reflex["vow_alignment_delta"] = 0.0
             self.last_board_reflex["hybrid_arbitration"] = arbitration_record
+        if not in_sparring_mode:
+            self._sync_active_thread_record(persist=True)
         if (
             self.player_move_accuracies
             and (self.board.is_game_over(claim_draw=True) or self.clock_flagged_loser is not None)
