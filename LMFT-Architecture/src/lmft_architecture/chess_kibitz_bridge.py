@@ -2652,7 +2652,7 @@ class ObjectiveCalibratedSparringEngine:
                                     and not _allows_mate_in_one_or_queen_hang(board, mv_cand)
                                 )
                             ]
-                            pick_idx = (len(board.move_stack) // 2 + board.fullmove_number) % len(safe_pv_moves)
+                            pick_idx = (self.opponent_moves_played + len(board.move_stack) // 2 + board.fullmove_number) % len(safe_pv_moves)
                             chosen_move = safe_pv_moves[pick_idx]
                         else:
                             chosen_move = None

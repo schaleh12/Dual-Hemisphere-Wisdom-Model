@@ -2415,19 +2415,8 @@ class ChessKibitzerRuntime:
                 lmft_score = 0.0
                 result_label = "LOSS"
         else:
-            cp = self.sparring_engine.evaluate_position_centipawns(
-                self.board,
-                perspective=lmft_color,
-            )
-            if cp >= 300.0:
-                lmft_score = 1.0
-                result_label = "WIN (Endgame Material Adjudication)"
-            elif cp <= -300.0:
-                lmft_score = 0.0
-                result_label = "LOSS (Endgame Material Adjudication)"
-            else:
-                lmft_score = 0.5
-                result_label = "DRAW (Endgame Cap)"
+            lmft_score = 0.5
+            result_label = "DRAW"
 
         prev_elo = self.lmft_elo
         opp_elo = self.opponent_target_elo
@@ -2571,7 +2560,6 @@ class ChessKibitzerRuntime:
         if (
             self.board.is_game_over(claim_draw=True)
             or self.clock_flagged_loser is not None
-            or len(self.move_history_san) >= 160
         ):
             if not getattr(self, "_current_game_adjudicated", False):
                 self._adjudicate_and_record_game_outcome()
