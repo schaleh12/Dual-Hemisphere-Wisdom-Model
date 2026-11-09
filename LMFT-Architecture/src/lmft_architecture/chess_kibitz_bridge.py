@@ -576,6 +576,255 @@ def extract_bitboard_features(
     }
 
 
+SUB_SENSOR_FEATURE_NAMES: tuple[str, ...] = (
+    "material_balance_norm",
+    "attack_control_share",
+    "center_bitboard_control",
+    "king_shield_safety",
+    "piece_coordination_ratio",
+    "development_progress",
+    "move_net_safety",
+    "move_positional_gain",
+    "min_friendly_minor_escape_squares_norm",
+    "ply3_material_delta_norm",
+    "ply3_safety_drop",
+    "ply3_mobility_drop",
+    "ply3_king_shield_drop",
+    "ply3_hanging_pieces_jump",
+    "unanswered_enemy_threat_norm",
+    "passed_pawn_push_norm",
+)
+
+
+def _count_safe_minor_escape_squares(
+    board: chess.Board,
+    sq: chess.Square,
+    us: chess.Color,
+    *,
+    attacker_sq: chess.Square | None = None,
+) -> int:
+    """Count safe escape squares for a friendly minor piece at `sq` on `board`."""
+    them = not us
+    safe_cnt = 0
+    for to_sq in board.attacks(sq):
+        occ_color = board.color_at(to_sq)
+        if occ_color == us:
+            continue
+        # If capturing the attacker itself on a square not defended by the enemy, it is a safe escape
+        if attacker_sq is not None and to_sq == attacker_sq and not board.is_attacked_by(them, to_sq):
+            safe_cnt += 1
+            continue
+        if not board.is_attacked_by(them, to_sq):
+            safe_cnt += 1
+            continue
+        # Attacked by enemy pawn is never safe for a minor piece
+        if board.attackers_mask(them, to_sq) & board.pieces_mask(chess.PAWN, them):
+            continue
+        # If capturing an enemy piece of >= 3.0 value and defended by us, count as safe
+        cap_pt = board.piece_type_at(to_sq)
+        if cap_pt is not None and _PIECE_VALUES.get(cap_pt, 0.0) >= 3.0 and board.is_attacked_by(us, to_sq):
+            safe_cnt += 1
+    return safe_cnt
+
+
+def compute_move_sub_sensors(
+    board: chess.Board,
+    move: chess.Move,
+    *,
+    perspective: chess.Color | None = None,
+    next_board: chess.Board | None = None,
+    ply1_features: Mapping[str, float] | None = None,
+    blunder_penalty: float = 0.0,
+) -> tuple[float, ...]:
+    """Compute the 16-float Sub-Sensor Bank (`z`) for a candidate move.
+
+    - Slots 0..7: 8 Ply-1 `extract_bitboard_features` values.
+    - Slots 8..15: 8 Ply-1-to-Ply-3 Rollout & Tactical Sub-Probes:
+      (8) `min_friendly_minor_escape_squares_norm` (detects trapped bishops/knights like `b3` after `a5-a4`),
+      (9) `ply3_material_delta_norm`,
+      (10) `ply3_safety_drop`,
+      (11) `ply3_mobility_drop`,
+      (12) `ply3_king_shield_drop`,
+      (13) `ply3_hanging_pieces_jump`,
+      (14) `unanswered_enemy_threat_norm`,
+      (15) `passed_pawn_push_norm`.
+    """
+    us = board.turn if perspective is None else perspective
+    them = not us
+    nb = next_board if next_board is not None else board.copy()
+    if next_board is None:
+        nb.push(move)
+
+    p1 = (
+        ply1_features
+        if ply1_features is not None
+        else extract_bitboard_features(
+            board,
+            move,
+            perspective=us,
+            next_board=nb,
+            blunder_penalty=blunder_penalty,
+        )
+    )
+    slots_0_7 = [round(float(p1[k]), 4) for k in SUB_SENSOR_FEATURE_NAMES[:8]]
+
+    # Slot 8: `min_friendly_minor_escape_squares_norm` (checks both Ply 1 and opponent's Ply-2 pawn/piece threats)
+    our_minors = list(nb.pieces(chess.KNIGHT, us)) + list(nb.pieces(chess.BISHOP, us))
+    home_rank = 0 if us == chess.WHITE else 7
+    active_minors = [sq for sq in our_minors if chess.square_rank(sq) != home_rank] or our_minors
+    min_escape = 4
+    if active_minors:
+        for m_sq in active_minors:
+            esc_now = _count_safe_minor_escape_squares(nb, m_sq, us)
+            # If the minor piece is already attacked by a pawn on nb, check its immediate safe escapes
+            if nb.attackers_mask(them, m_sq) & nb.pieces_mask(chess.PAWN, them):
+                min_escape = min(min_escape, esc_now)
+            else:
+                min_escape = min(min_escape, max(1, esc_now) if esc_now > 0 else 0)
+
+        # Check opponent's 1-ply pawn/minor pushes on `nb` that attack any of `active_minors`
+        for opp_mv in nb.legal_moves:
+            opp_pt = nb.piece_type_at(opp_mv.from_square)
+            if opp_pt not in (chess.PAWN, chess.KNIGHT, chess.BISHOP):
+                continue
+            # Check if `opp_mv` attacks one of our active minors on `to_square`
+            attacked_targets = [
+                m_sq
+                for m_sq in active_minors
+                if m_sq != opp_mv.to_square
+                and (
+                    (
+                        opp_pt == chess.PAWN
+                        and (chess.BB_PAWN_ATTACKS[them][opp_mv.to_square] & chess.BB_SQUARES[m_sq])
+                    )
+                    or (
+                        opp_pt == chess.KNIGHT
+                        and (chess.BB_KNIGHT_ATTACKS[opp_mv.to_square] & chess.BB_SQUARES[m_sq])
+                    )
+                )
+            ]
+            if not attacked_targets:
+                continue
+            b2 = nb.copy()
+            b2.push(opp_mv)
+            # Only count the threat if the attacking pawn/piece is defended or not freely capturable
+            attacker_safe = b2.is_attacked_by(them, opp_mv.to_square) or not b2.is_attacked_by(us, opp_mv.to_square)
+            if not attacker_safe:
+                continue
+            for m_sq in attacked_targets:
+                esc_after = _count_safe_minor_escape_squares(
+                    b2,
+                    m_sq,
+                    us,
+                    attacker_sq=opp_mv.to_square,
+                )
+                min_escape = min(min_escape, esc_after)
+    min_minor_escape_norm = round(_clamp01(min_escape / 4.0), 4)
+
+    # Slots 9-14: Ply-1 to Ply-3 tactical/positional deltas
+    our_non_king_before = [
+        sq
+        for pt in (chess.PAWN, chess.KNIGHT, chess.BISHOP, chess.ROOK, chess.QUEEN)
+        for sq in board.pieces(pt, us)
+    ]
+    hanging_before = sum(
+        1
+        for sq in our_non_king_before
+        if board.is_attacked_by(them, sq) and not board.is_attacked_by(us, sq)
+    )
+    our_non_king_nb = [
+        sq
+        for pt in (chess.PAWN, chess.KNIGHT, chess.BISHOP, chess.ROOK, chess.QUEEN)
+        for sq in nb.pieces(pt, us)
+    ]
+    hanging_nb = 0
+    max_unanswered_threat = 0.0
+    for sq in our_non_king_nb:
+        pt = nb.piece_type_at(sq) or chess.PAWN
+        p_val = _PIECE_VALUES.get(pt, 1.0)
+        if nb.is_attacked_by(them, sq):
+            if not nb.is_attacked_by(us, sq):
+                hanging_nb += 1
+                max_unanswered_threat = max(max_unanswered_threat, p_val)
+            else:
+                att_mask = nb.attackers_mask(them, sq)
+                min_att_val = min(
+                    (
+                        _PIECE_VALUES.get(nb.piece_type_at(a_sq) or chess.KING, 99.0)
+                        for a_sq in chess.scan_forward(att_mask)
+                    ),
+                    default=99.0,
+                )
+                if p_val > min_att_val:
+                    max_unanswered_threat = max(max_unanswered_threat, p_val - min_att_val)
+
+    # If a minor piece is trapped at Ply 2 (`min_escape == 0`), reflect the pending minor-piece loss in ply3 deltas
+    trapped_minor_loss = 2.5 if min_escape == 0 else (1.0 if min_escape == 1 and max_unanswered_threat < 1.0 else 0.0)
+    worst_loss = max(float(blunder_penalty), max_unanswered_threat, trapped_minor_loss)
+    mat_before = sum(
+        val * (chess.popcount(board.pieces_mask(pt, us)) - chess.popcount(board.pieces_mask(pt, them)))
+        for pt, val in _PIECE_VALUES.items()
+        if val > 0.0
+    )
+    mat_nb = sum(
+        val * (chess.popcount(nb.pieces_mask(pt, us)) - chess.popcount(nb.pieces_mask(pt, them)))
+        for pt, val in _PIECE_VALUES.items()
+        if val > 0.0
+    )
+    ply3_mat_delta_norm = round(max(-1.0, min(1.0, ((mat_nb - worst_loss) - mat_before) / 6.0)), 4)
+    ply3_safety_drop = round(_clamp01(worst_loss / 3.5), 4)
+
+    our_att_before = chess.popcount(_union_attacks_bb(board, us))
+    our_att_nb = chess.popcount(_union_attacks_bb(nb, us))
+    mob_drop_raw = max(0.0, float(our_att_before - our_att_nb) + (4.0 if min_escape == 0 else 0.0))
+    ply3_mobility_drop = round(_clamp01(mob_drop_raw / 12.0), 4)
+
+    king_sq_before = board.king(us)
+    if king_sq_before is not None:
+        kr_b = chess.BB_KING_ATTACKS[king_sq_before]
+        sh_b = chess.popcount(board.pieces_mask(chess.PAWN, us) & kr_b)
+        att_b = chess.popcount(_union_attacks_bb(board, them) & kr_b)
+        ks_before = _clamp01(0.52 + 0.14 * min(3, sh_b) - 0.10 * min(4, att_b))
+    else:
+        ks_before = 0.50
+    ply3_king_shield_drop = round(_clamp01(max(0.0, ks_before - float(p1["king_shield_safety"]))), 4)
+
+    hanging_jump = max(0, hanging_nb - hanging_before) + (1 if min_escape == 0 else 0)
+    ply3_hanging_pieces_jump = round(_clamp01(hanging_jump / 2.0), 4)
+    unanswered_enemy_threat_norm = round(_clamp01(max(max_unanswered_threat, trapped_minor_loss) / 3.5), 4)
+
+    # Slot 15: `passed_pawn_push_norm`
+    moved_pt = board.piece_type_at(move.from_square)
+    passed_push = 0.0
+    if moved_pt == chess.PAWN:
+        f_to = chess.square_file(move.to_square)
+        r_to = chess.square_rank(move.to_square)
+        ahead_ranks = range(r_to + 1, 8) if us == chess.WHITE else range(0, r_to)
+        their_pawns = list(nb.pieces(chess.PAWN, them))
+        is_passed = not any(
+            abs(chess.square_file(ep) - f_to) <= 1 and chess.square_rank(ep) in ahead_ranks
+            for ep in their_pawns
+        )
+        if is_passed:
+            passed_push = 1.0
+        elif chess.BB_SQUARES[move.to_square] & _BB_EXTENDED_CENTER:
+            passed_push = 0.5
+
+    return tuple(
+        slots_0_7
+        + [
+            min_minor_escape_norm,
+            ply3_mat_delta_norm,
+            ply3_safety_drop,
+            ply3_mobility_drop,
+            ply3_king_shield_drop,
+            ply3_hanging_pieces_jump,
+            unanswered_enemy_threat_norm,
+            round(float(passed_push), 4),
+        ]
+    )
+
+
 DEFAULT_SLEEVE_VALUE_WEIGHTS: dict[str, float] = {
     "material_balance_norm": 1.35,
     "attack_control_share": 0.90,
@@ -838,6 +1087,7 @@ class CandidateMoveEvaluation:
     intention: float = 0.5
     vow_alignment_delta: float = 0.0
     guided_by_vow: bool = False
+    sub_sensors: tuple[float, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -1320,8 +1570,26 @@ def compute_candidate_move_fuzzy_coordinates(
         / pos_exec_denom
     )
     active_shadow_ids = {w.shadow_leaf_id for w in all_warnings if w.shadow_leaf_id}
-    for leaf in learned_leaves:
-        if leaf.leaf_id in active_shadow_ids or not leaf.leaf_name.startswith(("hazard_", "coached_")):
+    move_sub_sensors: tuple[float, ...] | None = None
+    if any(leaf.sub_sensor_weights is not None for leaf in learned_leaves):
+        move_sub_sensors = compute_move_sub_sensors(
+            board,
+            move,
+            perspective=us,
+            next_board=next_board,
+            ply1_features=sleeve_feats,
+            blunder_penalty=blunder_penalty,
+        )
+    for leaf in sorted(learned_leaves, key=lambda lf: lf.tier):
+        if leaf.leaf_id in active_shadow_ids:
+            continue
+        if leaf.sub_sensor_weights is not None and move_sub_sensors is not None:
+            sub_val = leaf.evaluate_sub_sensors(move_sub_sensors)
+            if leaf.tier >= 3 and leaf.parent_branch in coords:
+                sub_val = round(sub_val * float(coords.get(leaf.parent_branch, 1.0)), 6)
+            coords[leaf.leaf_id] = sub_val
+            continue
+        if not leaf.leaf_name.startswith(("hazard_", "coached_")):
             continue
         dept_root = leaf.parent_branch.split("/")[0]
         if dept_root == "cultural":
@@ -1797,6 +2065,13 @@ def evaluate_candidate_moves_with_right_brain(
                 will_edges=will_tuple,
             )
         )
+        sub_sensors = compute_move_sub_sensors(
+            board,
+            move,
+            perspective=us,
+            next_board=next_board,
+            blunder_penalty=blunder_penalty,
+        )
         for r in rule_tuple:
             for req_leaf in r.target_leaves:
                 coords.setdefault(req_leaf, 0.0)
@@ -1817,6 +2092,7 @@ def evaluate_candidate_moves_with_right_brain(
                 "next_board": next_board,
                 "is_rep": is_rep,
                 "coords": coords,
+                "sub_sensors": sub_sensors,
                 "is_blunder": is_blunder,
                 "blunder_penalty": blunder_penalty,
                 "post_posture": post_posture,
@@ -2033,6 +2309,7 @@ def evaluate_candidate_moves_with_right_brain(
                 intention=intention_val,
                 vow_alignment_delta=vow_delta,
                 guided_by_vow=guided_by_vow,
+                sub_sensors=tuple(cand.get("sub_sensors", ())),
             )
         )
 
@@ -2928,11 +3205,28 @@ class ObjectiveCalibratedSparringEngine:
             perspective=us,
             blunder_penalty=played_b_pen,
         )
+        ref_move_obj = best_move if is_hazard else alt_move
+        ref_pen_val = _best_pen if is_hazard else _alt_pen
         reference_bitboard_features = extract_bitboard_features(
             board_before,
-            best_move if is_hazard else alt_move,
+            ref_move_obj,
             perspective=us,
-            blunder_penalty=_best_pen if is_hazard else _alt_pen,
+            blunder_penalty=ref_pen_val,
+        )
+        played_sub_sensors = compute_move_sub_sensors(
+            board_before,
+            played_move,
+            perspective=us,
+            next_board=board_after_played,
+            ply1_features=played_bitboard_features,
+            blunder_penalty=played_b_pen,
+        )
+        reference_sub_sensors = compute_move_sub_sensors(
+            board_before,
+            ref_move_obj,
+            perspective=us,
+            ply1_features=reference_bitboard_features,
+            blunder_penalty=ref_pen_val,
         )
         bitboard_feature_delta: dict[str, float] = {}
         for fk, fv in played_bitboard_features.items():
@@ -2982,6 +3276,8 @@ class ObjectiveCalibratedSparringEngine:
             "coordinate_delta": coord_delta,
             "played_bitboard_features": played_bitboard_features,
             "reference_bitboard_features": reference_bitboard_features,
+            "played_sub_sensors": list(played_sub_sensors),
+            "reference_sub_sensors": list(reference_sub_sensors),
             "bitboard_feature_delta": bitboard_feature_delta,
             "annotation_summary": summary,
         }

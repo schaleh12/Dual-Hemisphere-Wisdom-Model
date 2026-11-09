@@ -87,6 +87,8 @@ class UnresolvedSleepScene:
     game_review_annotation: str | None = None
     played_bitboard_features: dict[str, float] | None = None
     reference_bitboard_features: dict[str, float] | None = None
+    played_sub_sensors: tuple[float, ...] | None = None
+    reference_sub_sensors: tuple[float, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -279,6 +281,31 @@ def _average_contrastive_reference_coordinates(
         ]
         avg_ref[k] = round(sum(vals) / len(vals), 4)
     return avg_ref
+
+
+def _average_sub_sensors(
+    scenes: Sequence[UnresolvedSleepScene],
+) -> tuple[tuple[float, ...] | None, tuple[float, ...] | None]:
+    """Average 16-float `played_sub_sensors` and `reference_sub_sensors` across scenes in a cluster."""
+    sub_scenes = [
+        s
+        for s in scenes
+        if s.played_sub_sensors is not None
+        and s.reference_sub_sensors is not None
+        and len(s.played_sub_sensors) >= 16
+        and len(s.reference_sub_sensors) >= 16
+    ]
+    if not sub_scenes:
+        return None, None
+    avg_p = tuple(
+        round(sum(float(s.played_sub_sensors[i]) for s in sub_scenes) / len(sub_scenes), 6)
+        for i in range(16)
+    )
+    avg_r = tuple(
+        round(sum(float(s.reference_sub_sensors[i]) for s in sub_scenes) / len(sub_scenes), 6)
+        for i in range(16)
+    )
+    return avg_p, avg_r
 
 
 def _raw_rule_min_similarity(
@@ -1179,6 +1206,9 @@ def entrain_existing_cluster_rule(
     if len(merged_leaves) > cap:
         _, _, def_cult_leaf, def_phil_leaf = parse_cluster_defining_leaves(canonical_name)
         pinned_keys = {k for k in (def_cult_leaf, def_phil_leaf) if k}
+        for k in merged_leaves:
+            if leaf_tier(k) >= 2:
+                pinned_keys.add(k)
         if "cultural/efficiency/wastelessness" in merged_leaves:
             pinned_keys.add("cultural/efficiency/wastelessness")
         ranked_keys = sorted(
@@ -1317,47 +1347,11 @@ def consolidate_sleep_clusters_locally(
     for (ckey, is_group_hazard), group in clusters.items():
         avg_coords = _average_cluster_coordinates(group)
         avg_ref_coords = _average_contrastive_reference_coordinates(group)
+        avg_played_z, avg_ref_z = _average_sub_sensors(group)
         prefix = "hazard" if is_group_hazard else "coached"
         base_name = f"{prefix}_{ckey}"
-        target_leaves, rule_low, rule_high = normalize_contrastive_target_leaves_and_thresholds(
-            base_name,
-            avg_coords,
-            avg_ref_coords,
-        )
-        is_time_forfeit_hazard = is_group_hazard and (
-            any("[?? TIME_FORFEIT" in (s.game_review_annotation or "") for s in group)
-            or float(avg_coords.get("philosophical/persistence/continuity", 0.50)) <= 0.10
-        )
-        if is_time_forfeit_hazard:
-            target_leaves = {
-                "cultural/efficiency/wastelessness": round(
-                    min(0.38, max(0.05, float(avg_coords.get("cultural/efficiency/wastelessness", 0.20)))),
-                    2,
-                ),
-                "philosophical/persistence/continuity": round(
-                    min(0.15, max(0.05, float(avg_coords.get("philosophical/persistence/continuity", 0.05)))),
-                    2,
-                ),
-                "philosophical/persistence/discreteness": round(
-                    max(0.85, min(0.95, float(avg_coords.get("philosophical/persistence/discreteness", 0.95)))),
-                    2,
-                ),
-            }
-            rule_low = 0.65
-            rule_high = 0.82
-        if is_group_hazard and (
-            len(target_leaves) < 2 or not has_genuine_hazard_pathology_leaf(target_leaves)
-        ):
-            for s in group:
-                resolved_scene_indices.append(s.scene_index)
-            continue
-        if not target_leaves:
-            for s in group:
-                resolved_scene_indices.append(s.scene_index)
-            continue
         rep = max(group, key=lambda s: float(s.salience))
         rep_scene = rep.scene_index
-        concept_name = base_name
         human_theme = ckey.replace("_cluster", "").replace("_", " ").strip() or "board balance"
         raw_desc_src = " ".join((rep.game_review_annotation or rep.scenario_text or "").split())
         clean_desc_src = re.sub(r"Game Review\s*\[[^\]]+\]:\s*", "", raw_desc_src)
@@ -1366,107 +1360,252 @@ def consolidate_sleep_clusters_locally(
             f"Consolidated REM chess wisdom rule for {human_theme}: "
             f"{clean_desc_src[:140]}"
         )
-        new_rule = FuzzyConceptRule(
-            rule_id=f"rule-sleep-{concept_name[:32]}",
-            concept_name=concept_name,
-            description=description,
-            target_leaves=target_leaves,
-            low=rule_low,
-            high=rule_high,
-            polarity="repulsive" if is_group_hazard else "attractive",
+        is_time_forfeit_hazard = is_group_hazard and (
+            any("[?? TIME_FORFEIT" in (s.game_review_annotation or "") for s in group)
+            or float(avg_coords.get("philosophical/persistence/continuity", 0.50)) <= 0.10
         )
-        if new_rule.tier == 1:
-            probe_coords = dict(calm_book_coords)
-            for req_leaf in new_rule.target_leaves:
-                probe_coords.setdefault(req_leaf, 0.0)
-            if new_rule.evaluate(probe_coords) >= 0.35:
-                if is_group_hazard:
-                    rule_low = max(rule_low, 0.68)
-                    rule_high = max(rule_high, 0.84)
-                else:
-                    rule_low = max(rule_low, 0.76)
-                    rule_high = max(rule_high, 0.88)
-                new_rule = FuzzyConceptRule(
-                    rule_id=new_rule.rule_id,
-                    concept_name=new_rule.concept_name,
-                    description=new_rule.description,
-                    target_leaves=dict(target_leaves),
-                    low=rule_low,
-                    high=rule_high,
-                    polarity="repulsive" if is_group_hazard else "attractive",
-                )
 
-        # Authentic Discriminative Tier-2 LearnedLeaf Birth (Fix #5):
-        # When a recurring cluster (len >= 2), a strong contrastive delta (>= 0.25), or a Tier-1 collision
-        # is consolidated, test whether a Tier-2 LearnedLeaf under the dominant parent branch passes
-        # the strict anti-tautology gate (cluster_signal >= 0.55 and calm_baseline_score <= 0.35).
-        max_contrastive_delta = 0.0
-        if avg_ref_coords:
-            max_contrastive_delta = max(
+        # Tier-1 Sensor Blindness Gate:
+        # When contrastive reference coordinates exist and `max_t1_delta < 0.12`, Tier 1 is blind
+        # to the difference between `played` and `ref`. Do NOT mint or entrain a Tier-1 rule;
+        # instead, grow a Tier-2/3 sub-sensor leaf + rule if the 16 sub-sensors separate them (`>= 0.15`).
+        max_t1_delta = (
+            max(
                 (
-                    abs(float(avg_ref_coords.get(k, 0.50)) - float(avg_coords.get(k, 0.50)))
-                    for k in set(avg_ref_coords) | set(avg_coords)
-                    if k in FOUNDATIONAL_LEAVES
+                    abs(float(avg_coords.get(k, 0.50)) - float(avg_ref_coords.get(k, 0.50)))
+                    for k in FOUNDATIONAL_LEAVES
                 ),
                 default=0.0,
             )
-        has_tier1_collision = bool(refined_ids) or any(bool(s.active_concept_collision) for s in group)
+            if avg_ref_coords
+            else 1.0
+        )
         candidate_leaf_id: str | None = None
-        if len(group) >= 2 or max_contrastive_delta >= 0.25 or has_tier1_collision:
-            dominant_leaf = max(
-                new_rule.target_leaves.items(),
-                key=lambda kv: abs(float(avg_coords.get(kv[0], 0.50)) - 0.50) + max_contrastive_delta,
-                default=("cultural/efficiency/wastelessness", 0.50),
-            )[0]
-            parent_branch = dominant_leaf.rsplit("/", 1)[0]
-            if parent_branch in FOUNDING_PARENT_BRANCHES:
-                raw_val = float(avg_coords.get(dominant_leaf, 0.50))
-                calm_val = float(calm_book_coords.get(dominant_leaf, 0.50))
-                calm_deviation = abs(raw_val - calm_val)
-                if is_group_hazard and raw_val < 0.50:
-                    cluster_signal = min(1.0, round(0.50 + (0.50 - raw_val) + 0.5 * max_contrastive_delta, 4))
-                else:
-                    cluster_signal = min(1.0, round(max(raw_val, 0.50 + max_contrastive_delta), 4))
-                # Genuine anti-tautology check on dominant_leaf deviation (`abs(raw_val - calm_val) >= 0.12`)
-                # or strong contrastive divergence (`max_contrastive_delta >= 0.20`)
-                if calm_deviation >= 0.12 or max_contrastive_delta >= 0.20:
-                    calm_baseline_score = round(
-                        max(0.0, 0.35 - max(calm_deviation - 0.12, max_contrastive_delta - 0.20)),
-                        4,
+        if avg_ref_coords and not is_time_forfeit_hazard and max_t1_delta < 0.12:
+            if avg_played_z is None or avg_ref_z is None:
+                continue
+            sub_sensor_deltas = [float(avg_played_z[i]) - float(avg_ref_z[i]) for i in range(16)]
+            max_sub_delta = max((abs(d) for d in sub_sensor_deltas), default=0.0)
+            if max_sub_delta < 0.15:
+                # Rule #5: neither Tier 1 nor the 16 sub-sensors separate played from ref; leave unconsolidated.
+                continue
+
+            from .chess_kibitz_bridge import SUB_SENSOR_FEATURE_NAMES
+
+            top3_idx = sorted(range(16), key=lambda i: (abs(sub_sensor_deltas[i]), -i), reverse=True)[:3]
+            active_top_idx = [i for i in top3_idx if abs(sub_sensor_deltas[i]) >= 0.05] or [top3_idx[0]]
+            raw_w = [sub_sensor_deltas[i] if i in active_top_idx else 0.0 for i in range(16)]
+            peak_abs_w = max(abs(x) for x in raw_w) or 1.0
+            sub_w = tuple(round(x / peak_abs_w, 6) for x in raw_w)
+            sub_m = tuple(round(0.5 * (float(avg_played_z[i]) + float(avg_ref_z[i])), 6) for i in range(16))
+
+            _, _, def_cult_t1, def_phil_t1 = parse_cluster_defining_leaves(base_name)
+            ctx_t1_leaves = [k for k in (def_phil_t1, def_cult_t1) if k is not None]
+            if not ctx_t1_leaves:
+                ctx_t1_leaves = [
+                    max(
+                        FOUNDATIONAL_LEAVES,
+                        key=lambda k: abs(float(avg_coords.get(k, 0.50)) - 0.50),
                     )
+                ]
+            base_parent_branch = ctx_t1_leaves[0].rsplit("/", 1)[0]
+            # Check if an existing Tier-2 leaf under `base_parent_branch` is already active (`>= 0.50`)
+            active_t2_parent: LearnedLeaf | None = None
+            for lf in active_learned_leaves:
+                if lf.tier == 2 and lf.parent_branch == base_parent_branch:
+                    lf_val = (
+                        lf.evaluate_sub_sensors(avg_played_z)
+                        if lf.sub_sensor_weights is not None
+                        else float(avg_coords.get(lf.leaf_id, 0.0))
+                    )
+                    if lf_val >= 0.50:
+                        active_t2_parent = lf
+                        break
+            leaf_parent_branch = active_t2_parent.leaf_id if active_t2_parent is not None else base_parent_branch
+            probe_tag = SUB_SENSOR_FEATURE_NAMES[active_top_idx[0]].replace("_norm", "")
+            leaf_slug = re.sub(r"[^a-z0-9_]+", "_", f"{prefix}_{probe_tag}".lower())[:36].strip("_")
+            if not re.fullmatch(r"[a-z][a-z0-9_-]{2,40}", leaf_slug):
+                leaf_slug = f"{prefix}_sub_probe"
+            if f"{leaf_parent_branch}/{leaf_slug}" in existing_leaf_ids:
+                leaf_slug = f"{leaf_slug[:28]}_s{rep_scene}"[:36].strip("_")
+            leaf_desc = (
+                f"Sub-sensor tactical/positional detector on {probe_tag.replace('_', ' ')} "
+                f"separating {human_theme} when Tier-1 coordinates tie."
+            )
+            scored_leaf = score_leaf_anchor_weights_at_birth(
+                LearnedLeaf(
+                    parent_branch=leaf_parent_branch,
+                    leaf_name=leaf_slug,
+                    description=leaf_desc,
+                    sub_sensor_weights=sub_w,
+                    sub_sensor_midpoints=sub_m,
+                )
+            )
+            active_learned_leaves.append(scored_leaf)
+            minted_leaves.append(scored_leaf)
+            existing_leaf_ids.add(scored_leaf.leaf_id)
+            candidate_leaf_id = scored_leaf.leaf_id
+            played_leaf_val = scored_leaf.evaluate_sub_sensors(avg_played_z)
+            ref_leaf_val = scored_leaf.evaluate_sub_sensors(avg_ref_z)
+            avg_coords[scored_leaf.leaf_id] = played_leaf_val
+            avg_ref_coords[scored_leaf.leaf_id] = ref_leaf_val
+            for s in group:
+                if s.played_sub_sensors is not None and len(s.played_sub_sensors) >= 16:
+                    s.external_coordinates[scored_leaf.leaf_id] = scored_leaf.evaluate_sub_sensors(s.played_sub_sensors)
                 else:
-                    calm_baseline_score = round(0.50 + (0.12 - calm_deviation), 4)
-                clean_slug_tail = re.sub(r"[^a-z0-9_]+", "_", ckey.replace("_cluster", "").lower()).strip("_")
-                leaf_slug = f"{prefix}_{clean_slug_tail}"[:36].strip("_")
-                if not re.fullmatch(r"[a-z][a-z0-9_-]{2,40}", leaf_slug):
-                    leaf_slug = f"{prefix}_pattern"
-                candidate_leaf_id = f"{parent_branch}/{leaf_slug}"
-                if (
-                    cluster_signal >= 0.55
-                    and calm_baseline_score <= 0.35
-                    and candidate_leaf_id not in existing_leaf_ids
-                ):
+                    s.external_coordinates[scored_leaf.leaf_id] = played_leaf_val
+
+            target_leaves = {
+                ctx_k: round(float(avg_coords.get(ctx_k, 0.50)), 2)
+                for ctx_k in ctx_t1_leaves[:2]
+            }
+            target_leaves[scored_leaf.leaf_id] = 0.80
+            concept_name = f"{prefix}_sub_{probe_tag}"
+            if any(r.concept_name == concept_name for r in active_rules):
+                concept_name = f"{concept_name}_s{rep_scene}"
+            new_rule = FuzzyConceptRule(
+                rule_id=f"rule-sleep-{concept_name[:32]}",
+                concept_name=concept_name,
+                description=description,
+                target_leaves=target_leaves,
+                low=0.55,
+                high=0.78,
+                polarity="repulsive" if is_group_hazard else "attractive",
+            )
+        else:
+            target_leaves, rule_low, rule_high = normalize_contrastive_target_leaves_and_thresholds(
+                base_name,
+                avg_coords,
+                avg_ref_coords,
+            )
+            if is_time_forfeit_hazard:
+                target_leaves = {
+                    "cultural/efficiency/wastelessness": round(
+                        min(0.38, max(0.05, float(avg_coords.get("cultural/efficiency/wastelessness", 0.20)))),
+                        2,
+                    ),
+                    "philosophical/persistence/continuity": round(
+                        min(0.15, max(0.05, float(avg_coords.get("philosophical/persistence/continuity", 0.05)))),
+                        2,
+                    ),
+                    "philosophical/persistence/discreteness": round(
+                        max(0.85, min(0.95, float(avg_coords.get("philosophical/persistence/discreteness", 0.95)))),
+                        2,
+                    ),
+                }
+                rule_low = 0.65
+                rule_high = 0.82
+            if is_group_hazard and (
+                len(target_leaves) < 2 or not has_genuine_hazard_pathology_leaf(target_leaves)
+            ):
+                for s in group:
+                    resolved_scene_indices.append(s.scene_index)
+                continue
+            if not target_leaves:
+                for s in group:
+                    resolved_scene_indices.append(s.scene_index)
+                continue
+            concept_name = base_name
+            new_rule = FuzzyConceptRule(
+                rule_id=f"rule-sleep-{concept_name[:32]}",
+                concept_name=concept_name,
+                description=description,
+                target_leaves=target_leaves,
+                low=rule_low,
+                high=rule_high,
+                polarity="repulsive" if is_group_hazard else "attractive",
+            )
+            if new_rule.tier == 1:
+                probe_coords = dict(calm_book_coords)
+                for req_leaf in new_rule.target_leaves:
+                    probe_coords.setdefault(req_leaf, 0.0)
+                if new_rule.evaluate(probe_coords) >= 0.35:
                     if is_group_hazard:
-                        leaf_desc = (
-                            f"Tactical overextension or structural vulnerability across {human_theme} "
-                            f"requiring careful piece coordination and resource stewardship."
+                        rule_low = max(rule_low, 0.68)
+                        rule_high = max(rule_high, 0.84)
+                    else:
+                        rule_low = max(rule_low, 0.76)
+                        rule_high = max(rule_high, 0.88)
+                    new_rule = FuzzyConceptRule(
+                        rule_id=new_rule.rule_id,
+                        concept_name=new_rule.concept_name,
+                        description=new_rule.description,
+                        target_leaves=dict(target_leaves),
+                        low=rule_low,
+                        high=rule_high,
+                        polarity="repulsive" if is_group_hazard else "attractive",
+                    )
+
+            # Authentic Discriminative Tier-2 LearnedLeaf Birth (Fix #5):
+            # When a recurring cluster (len >= 2), a strong contrastive delta (>= 0.25), or a Tier-1 collision
+            # is consolidated, test whether a Tier-2 LearnedLeaf under the dominant parent branch passes
+            # the strict anti-tautology gate (cluster_signal >= 0.55 and calm_baseline_score <= 0.35).
+            max_contrastive_delta = 0.0
+            if avg_ref_coords:
+                max_contrastive_delta = max(
+                    (
+                        abs(float(avg_ref_coords.get(k, 0.50)) - float(avg_coords.get(k, 0.50)))
+                        for k in set(avg_ref_coords) | set(avg_coords)
+                        if k in FOUNDATIONAL_LEAVES
+                    ),
+                    default=0.0,
+                )
+            has_tier1_collision = bool(refined_ids) or any(bool(s.active_concept_collision) for s in group)
+            if len(group) >= 2 or max_contrastive_delta >= 0.25 or has_tier1_collision:
+                dominant_leaf = max(
+                    new_rule.target_leaves.items(),
+                    key=lambda kv: abs(float(avg_coords.get(kv[0], 0.50)) - 0.50) + max_contrastive_delta,
+                    default=("cultural/efficiency/wastelessness", 0.50),
+                )[0]
+                parent_branch = dominant_leaf.rsplit("/", 1)[0]
+                if parent_branch in FOUNDING_PARENT_BRANCHES:
+                    raw_val = float(avg_coords.get(dominant_leaf, 0.50))
+                    calm_val = float(calm_book_coords.get(dominant_leaf, 0.50))
+                    calm_deviation = abs(raw_val - calm_val)
+                    if is_group_hazard and raw_val < 0.50:
+                        cluster_signal = min(1.0, round(0.50 + (0.50 - raw_val) + 0.5 * max_contrastive_delta, 4))
+                    else:
+                        cluster_signal = min(1.0, round(max(raw_val, 0.50 + max_contrastive_delta), 4))
+                    # Genuine anti-tautology check on dominant_leaf deviation (`abs(raw_val - calm_val) >= 0.12`)
+                    # or strong contrastive divergence (`max_contrastive_delta >= 0.20`)
+                    if calm_deviation >= 0.12 or max_contrastive_delta >= 0.20:
+                        calm_baseline_score = round(
+                            max(0.0, 0.35 - max(calm_deviation - 0.12, max_contrastive_delta - 0.20)),
+                            4,
                         )
                     else:
-                        leaf_desc = (
-                            f"Harmonious positional coordination and sustainable initiative across {human_theme} "
-                            f"reinforcing long-term structural balance."
+                        calm_baseline_score = round(0.50 + (0.12 - calm_deviation), 4)
+                    clean_slug_tail = re.sub(r"[^a-z0-9_]+", "_", ckey.replace("_cluster", "").lower()).strip("_")
+                    leaf_slug = f"{prefix}_{clean_slug_tail}"[:36].strip("_")
+                    if not re.fullmatch(r"[a-z][a-z0-9_-]{2,40}", leaf_slug):
+                        leaf_slug = f"{prefix}_pattern"
+                    candidate_leaf_id = f"{parent_branch}/{leaf_slug}"
+                    if (
+                        cluster_signal >= 0.55
+                        and calm_baseline_score <= 0.35
+                        and candidate_leaf_id not in existing_leaf_ids
+                    ):
+                        if is_group_hazard:
+                            leaf_desc = (
+                                f"Tactical overextension or structural vulnerability across {human_theme} "
+                                f"requiring careful piece coordination and resource stewardship."
+                            )
+                        else:
+                            leaf_desc = (
+                                f"Harmonious positional coordination and sustainable initiative across {human_theme} "
+                                f"reinforcing long-term structural balance."
+                            )
+                        scored_leaf = score_leaf_anchor_weights_at_birth(
+                            LearnedLeaf(
+                                parent_branch=parent_branch,
+                                leaf_name=leaf_slug,
+                                description=leaf_desc,
+                            )
                         )
-                    scored_leaf = score_leaf_anchor_weights_at_birth(
-                        LearnedLeaf(
-                            parent_branch=parent_branch,
-                            leaf_name=leaf_slug,
-                            description=leaf_desc,
-                        )
-                    )
-                    active_learned_leaves.append(scored_leaf)
-                    minted_leaves.append(scored_leaf)
-                    existing_leaf_ids.add(scored_leaf.leaf_id)
-                    avg_coords[scored_leaf.leaf_id] = cluster_signal
+                        active_learned_leaves.append(scored_leaf)
+                        minted_leaves.append(scored_leaf)
+                        existing_leaf_ids.add(scored_leaf.leaf_id)
+                        avg_coords[scored_leaf.leaf_id] = cluster_signal
 
         minted_ids_set = {m.leaf_id for m in minted_leaves}
         for lf_idx, lf in enumerate(active_learned_leaves):
@@ -1481,25 +1620,46 @@ def consolidate_sleep_clusters_locally(
                     avg_ref_coords,
                 )
 
-        dup_idx = next(
-            (
-                idx
-                for idx, r in enumerate(active_rules)
-                if canonical_cluster_concept_name(r.concept_name) == base_name
-                or (
-                    r.concept_name.startswith(f"{prefix}_")
-                    and canonical_cluster_concept_name(r.concept_name).endswith("_cluster")
-                    and set(r.target_leaves.keys()) == set(new_rule.target_leaves.keys())
-                )
-            ),
-            None,
-        )
+        if new_rule.tier >= 2:
+            dup_idx = next(
+                (
+                    idx
+                    for idx, r in enumerate(active_rules)
+                    if r.tier == new_rule.tier
+                    and (
+                        r.concept_name == new_rule.concept_name
+                        or set(r.target_leaves.keys()) == set(new_rule.target_leaves.keys())
+                    )
+                ),
+                None,
+            )
+        else:
+            dup_idx = next(
+                (
+                    idx
+                    for idx, r in enumerate(active_rules)
+                    if r.tier == 1
+                    and (
+                        canonical_cluster_concept_name(r.concept_name) == base_name
+                        or (
+                            r.concept_name.startswith(f"{prefix}_")
+                            and canonical_cluster_concept_name(r.concept_name).endswith("_cluster")
+                            and set(r.target_leaves.keys()) == set(new_rule.target_leaves.keys())
+                        )
+                    )
+                ),
+                None,
+            )
         if dup_idx is not None:
             matched_existing = active_rules[dup_idx]
             entrain_name = (
-                base_name
-                if canonical_cluster_concept_name(matched_existing.concept_name) == base_name
-                else canonical_cluster_concept_name(matched_existing.concept_name)
+                new_rule.concept_name
+                if new_rule.tier >= 2
+                else (
+                    base_name
+                    if canonical_cluster_concept_name(matched_existing.concept_name) == base_name
+                    else canonical_cluster_concept_name(matched_existing.concept_name)
+                )
             )
             entrained_rule = entrain_existing_cluster_rule(
                 matched_existing,

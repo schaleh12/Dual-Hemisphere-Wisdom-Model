@@ -319,6 +319,8 @@ def score_leaf_anchor_weights_at_birth(
         leaf_name=leaf.leaf_name,
         description=leaf.description,
         anchor_weights=weights,
+        sub_sensor_weights=leaf.sub_sensor_weights,
+        sub_sensor_midpoints=leaf.sub_sensor_midpoints,
     )
 
 
@@ -386,6 +388,8 @@ def sculpt_learned_leaf_anchor_weights(
         leaf_name=leaf.leaf_name,
         description=leaf.description,
         anchor_weights=norm_w,
+        sub_sensor_weights=leaf.sub_sensor_weights,
+        sub_sensor_midpoints=leaf.sub_sensor_midpoints,
     )
 
 
@@ -434,11 +438,17 @@ def pool_departmental_child_chord(
     if not active_children:
         return (0.0,) * DEPARTMENT_CHILD_CHORD_DIM
 
-    total_weight = sum(weight for _, weight in active_children)
-    peak_activation = max(weight for _, weight in active_children)
+    # Top-3 convex / fuzzy-max pooling across active child leaves so growing 50-100+ Tier-2/3/4
+    # leaves never dilutes the active child chord or blows up the virtual token norm outside [0.0, 1.0].
+    top_children = sorted(
+        active_children,
+        key=lambda kv: (-kv[1], -leaf_tier(kv[0]), kv[0]),
+    )[:3]
+    total_weight = sum(weight for _, weight in top_children)
+    peak_activation = max(weight for _, weight in top_children)
 
     blended = [0.0] * DEPARTMENT_CHILD_CHORD_DIM
-    for leaf_id, weight in active_children:
+    for leaf_id, weight in top_children:
         basis = semantic_child_drawer_signature(
             leaf_id,
             department_prefix=department_prefix,

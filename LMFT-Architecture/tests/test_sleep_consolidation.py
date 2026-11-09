@@ -900,6 +900,179 @@ def test_round2_no_coordinate_stamping_and_genuine_tier2_gate() -> None:
     assert 33 in mistake_report.resolved_scene_indices
 
 
+def test_tier1_blindness_gate_and_trapped_bishop_sub_sensor_genesis() -> None:
+    """Verify Tier-1 Blindness Gate mints Tier-2/3 sub-sensor leaves & rules and avoids trapped-bishop blunders."""
+    import chess
+    from lmft_architecture.chess_kibitz_bridge import (
+        SUB_SENSOR_FEATURE_NAMES,
+        compute_move_sub_sensors,
+        evaluate_candidate_moves_with_right_brain,
+    )
+    from lmft_architecture.reflection_classifier import FOUNDATIONAL_LEAVES, LearnedLeaf
+    from lmft_architecture.sleep_consolidation import consolidate_sleep_clusters_locally
+    from lmft_architecture.subliminal_gap_splice import pool_departmental_child_chord
+
+    assert len(SUB_SENSOR_FEATURE_NAMES) == 16
+    assert SUB_SENSOR_FEATURE_NAMES[8] == "min_friendly_minor_escape_squares_norm"
+
+    # White has a Bishop on b3 boxed in by a2, Qc2, and c4 facing Black's a5+b5 pawns;
+    # 11. Bf4?? allows 11... a4! trapping Bb3 (0 safe escape squares), whereas 11. a4!
+    # stops a5-a4 and opens a2 as a retreat square.
+    fen = "r1bq1rk1/2p1ppbp/2np1np1/pp6/2PPP3/1B3N1P/PPQ2PP1/RNB1R1K1 w - - 0 11"
+    board = chess.Board(fen)
+    move_bf4 = chess.Move.from_uci("c1f4")
+    move_a4 = chess.Move.from_uci("a2a4")
+
+    sub_bf4 = compute_move_sub_sensors(board, move_bf4)
+    sub_a4 = compute_move_sub_sensors(board, move_a4)
+    assert len(sub_bf4) == 16
+    assert len(sub_a4) == 16
+    # Sub-sensor 8 (min_friendly_minor_escape_squares_norm) detects Bb3 getting trapped after 11... a4
+    assert sub_bf4[8] == 0.0
+    assert sub_a4[8] >= 0.25
+
+    # Construct a sleep scene where Tier-1 Founding Leaves are blind (max_t1_delta < 0.12)
+    tied_t1_played = {leaf: 0.50 for leaf in FOUNDATIONAL_LEAVES}
+    tied_t1_played.update({
+        "cultural/efficiency/power": 0.56,
+        "cultural/efficiency/wastelessness": 0.72,
+        "cultural/freedom/needlessness": 0.10,
+        "philosophical/being/agency": 0.65,
+        "philosophical/structure/order": 0.87,
+        "philosophical/structure/chaos": 0.25,
+        "philosophical/persistence/continuity": 0.85,
+    })
+    tied_t1_ref = dict(tied_t1_played)
+    tied_t1_ref["philosophical/structure/order"] = 0.89  # delta = 0.02 (< 0.12)
+
+    trapped_bishop_scene = UnresolvedSleepScene(
+        scene_index=41,
+        scenario_text="[Opening - Move 11] Played Bf4 allowing a4 trapping the b3 bishop instead of a4.",
+        external_coordinates=tied_t1_played,
+        felt_chord_notes={},
+        valence=0.35,
+        salience=0.84,
+        arousal=0.72,
+        left_brain_hunch="Develop the dark-squared bishop to f4.",
+        is_hazard=True,
+        contrastive_reference_coordinates=tied_t1_ref,
+        game_review_annotation="Game Review [?? BLUNDER_??]: Played Bf4 (-2.40 pawns) instead of best move a4.",
+        played_sub_sensors=sub_bf4,
+        reference_sub_sensors=sub_a4,
+    )
+
+    report = consolidate_sleep_clusters_locally(
+        queued_scenes=(trapped_bishop_scene,),
+        rules=(),
+        learned_leaves=(),
+        archives=ThreeBranchArchives(),
+        ledger=ContemplationLedger(),
+    )
+    assert len(report.minted_leaves) == 1
+    assert len(report.forged_rules) == 1
+    minted_t2_leaf = report.minted_leaves[0]
+    forged_t2_rule = report.forged_rules[0]
+    assert minted_t2_leaf.tier == 2
+    assert minted_t2_leaf.sub_sensor_weights is not None
+    assert minted_t2_leaf.sub_sensor_midpoints is not None
+    assert minted_t2_leaf.evaluate_sub_sensors(sub_bf4) > 0.65
+    assert minted_t2_leaf.evaluate_sub_sensors(sub_a4) < 0.35
+    assert forged_t2_rule.tier == 2
+    assert minted_t2_leaf.leaf_id in forged_t2_rule.target_leaves
+
+    # Verify a second Tier-1-blind scene under that active Tier-2 leaf mints a Tier-3 leaf & rule
+    sub_t3_played = list(sub_bf4)
+    sub_t3_ref = list(sub_a4)
+    sub_t3_played[10] = 0.75  # ply3_safety_drop spike
+    sub_t3_ref[10] = 0.05
+    t3_scene = UnresolvedSleepScene(
+        scene_index=42,
+        scenario_text="[Middlegame - Move 16] Played Bf4 allowing tactical safety drop on the trapped minor piece.",
+        external_coordinates=tied_t1_played,
+        felt_chord_notes={},
+        valence=0.32,
+        salience=0.86,
+        arousal=0.74,
+        left_brain_hunch="Repeat bishop sortie.",
+        is_hazard=True,
+        contrastive_reference_coordinates=tied_t1_ref,
+        game_review_annotation="Game Review [?? BLUNDER_??]: Played Bf4 (-2.80 pawns) instead of best move a4.",
+        played_sub_sensors=tuple(sub_t3_played),
+        reference_sub_sensors=tuple(sub_t3_ref),
+    )
+    report_t3 = consolidate_sleep_clusters_locally(
+        queued_scenes=(t3_scene,),
+        rules=report.forged_rules,
+        learned_leaves=report.minted_leaves,
+        archives=ThreeBranchArchives(),
+        ledger=ContemplationLedger(),
+    )
+    assert len(report_t3.minted_leaves) == 1
+    minted_t3_leaf = report_t3.minted_leaves[0]
+    assert minted_t3_leaf.tier == 3
+    assert len(report_t3.forged_rules) == 1
+    assert report_t3.forged_rules[0].tier == 3
+
+    # Verify that when BOTH Tier-1 (< 0.12) and sub-sensors (< 0.15) are blind, zero fake rules are minted
+    blind_scene = UnresolvedSleepScene(
+        scene_index=43,
+        scenario_text="[Opening - Move 12] Quiet positional equality.",
+        external_coordinates=tied_t1_played,
+        felt_chord_notes={},
+        valence=0.50,
+        salience=0.75,
+        arousal=0.65,
+        left_brain_hunch="Quiet move.",
+        is_hazard=True,
+        contrastive_reference_coordinates=tied_t1_ref,
+        game_review_annotation="Game Review [?? BLUNDER_??]: Synthetic tie test.",
+        played_sub_sensors=sub_a4,
+        reference_sub_sensors=sub_a4,
+    )
+    blind_report = consolidate_sleep_clusters_locally(
+        queued_scenes=(blind_scene,),
+        rules=(),
+        learned_leaves=(),
+        archives=ThreeBranchArchives(),
+        ledger=ContemplationLedger(),
+    )
+    assert len(blind_report.forged_rules) == 0
+    assert len(blind_report.minted_leaves) == 0
+    assert 43 not in blind_report.resolved_scene_indices
+
+    # Verify Right-Brain candidate evaluation fires the Tier-2 hazard rule on Bf4 and ranks a4 above Bf4
+    evals = evaluate_candidate_moves_with_right_brain(
+        board,
+        rules=report.forged_rules,
+        learned_leaves=report.minted_leaves,
+        limit=40,
+    )
+    by_uci = {ev.uci: ev for ev in evals}
+    assert by_uci["a2a4"].composite_score > by_uci["c1f4"].composite_score
+    assert str(by_uci["c1f4"].matched_concept or "").startswith("hazard_")
+
+    # Verify bounded Top-3 child pooling in pool_departmental_child_chord stays strictly in [0.0, 1.0]
+    many_leaves = tuple(
+        LearnedLeaf(
+            parent_branch="philosophical/structure",
+            leaf_name=f"leaf_{idx}",
+            description=f"Test leaf {idx}",
+            anchor_weights=(1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+        )
+        for idx in range(25)
+    )
+    active_vals = {lf.leaf_id: 0.90 for lf in many_leaves}
+    pooled = pool_departmental_child_chord(
+        active_vals,
+        learned_leaves=many_leaves,
+        department_prefix="philosophical/",
+    )
+    assert len(pooled) == 8
+    assert all(0.0 <= v <= 1.0 for v in pooled)
+    assert pooled[0] >= 0.85
+
+
+
 
 
 

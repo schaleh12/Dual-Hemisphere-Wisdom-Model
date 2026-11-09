@@ -267,6 +267,7 @@ def _ensure_foundational_rules(rules: tuple[FuzzyConceptRule, ...]) -> tuple[Fuz
             continue
         _, _, def_cult, def_phil = parse_cluster_defining_leaves(r.concept_name)
         is_cluster_rule = canonical_cluster_concept_name(r.concept_name).endswith("_cluster")
+        has_deep_leaf = r.tier >= 2
         if r.concept_name.startswith("hazard_"):
             from .sleep_consolidation import has_genuine_hazard_pathology_leaf
 
@@ -288,19 +289,24 @@ def _ensure_foundational_rules(rules: tuple[FuzzyConceptRule, ...]) -> tuple[Fuz
                     for rec_tag in ("hazard_high_hazard_", "hazard_low_hazard_", "coached_high_coached_", "coached_low_coached_")
                 ):
                     continue
-                if k in (
-                    "philosophical/being/existence",
-                    "philosophical/structure/order",
-                    "philosophical/persistence/continuity",
-                    "cultural/efficiency/wastelessness",
-                    "cultural/freedom/self-sufficiency",
-                    "cultural/justice/honor",
-                    "cultural/justice/fairness",
-                ) and fv > 0.48:
+                if (
+                    not has_deep_leaf
+                    and k
+                    in (
+                        "philosophical/being/existence",
+                        "philosophical/structure/order",
+                        "philosophical/persistence/continuity",
+                        "cultural/efficiency/wastelessness",
+                        "cultural/freedom/self-sufficiency",
+                        "cultural/justice/honor",
+                        "cultural/justice/fairness",
+                    )
+                    and fv > 0.48
+                ):
                     continue
                 cleaned_haz_leaves[k] = fv
             if len(cleaned_haz_leaves) > 3:
-                pinned_haz: set[str] = set()
+                pinned_haz: set[str] = {k for k in cleaned_haz_leaves if k.count("/") >= 2 and k not in shadow_ids}
                 if (
                     "cultural/efficiency/wastelessness" in cleaned_haz_leaves
                     and float(cleaned_haz_leaves["cultural/efficiency/wastelessness"]) <= 0.38
@@ -1840,6 +1846,8 @@ class ChessKibitzerRuntime:
                 game_review_annotation=human_review.get("annotation_summary"),
                 played_bitboard_features=human_review.get("played_bitboard_features"),
                 reference_bitboard_features=human_review.get("reference_bitboard_features"),
+                played_sub_sensors=human_review.get("played_sub_sensors"),
+                reference_sub_sensors=human_review.get("reference_sub_sensors"),
             )
 
         if (
@@ -2167,6 +2175,8 @@ class ChessKibitzerRuntime:
         game_review_annotation: str | None = None,
         played_bitboard_features: dict[str, float] | None = None,
         reference_bitboard_features: dict[str, float] | None = None,
+        played_sub_sensors: Sequence[float] | None = None,
+        reference_sub_sensors: Sequence[float] | None = None,
     ) -> dict[str, Any]:
         rec = self._turn_records_by_id.get(int(scene_index))
         if rec is None:
@@ -2205,6 +2215,16 @@ class ChessKibitzerRuntime:
             reference_bitboard_features=(
                 dict(reference_bitboard_features)
                 if reference_bitboard_features is not None
+                else None
+            ),
+            played_sub_sensors=(
+                tuple(float(x) for x in played_sub_sensors)
+                if played_sub_sensors is not None
+                else None
+            ),
+            reference_sub_sensors=(
+                tuple(float(x) for x in reference_sub_sensors)
+                if reference_sub_sensors is not None
                 else None
             ),
         )
@@ -2637,6 +2657,8 @@ class ChessKibitzerRuntime:
                         game_review_annotation=review["annotation_summary"],
                         played_bitboard_features=review.get("played_bitboard_features"),
                         reference_bitboard_features=review.get("reference_bitboard_features"),
+                        played_sub_sensors=review.get("played_sub_sensors"),
+                        reference_sub_sensors=review.get("reference_sub_sensors"),
                     )
                 elif not veto_queued:
                     self._hazard_scene_indices.discard(last_scene_id)
@@ -2803,6 +2825,13 @@ class ChessKibitzerRuntime:
         coords: dict[str, float] = {k: 0.50 for k in FOUNDATIONAL_LEAVES}
         coords.update(scene.external_coordinates)
         coords.update(scene.felt_chord_notes)
+        if scene.played_sub_sensors is not None and len(scene.played_sub_sensors) >= 16:
+            for lf in sorted(self.learned_leaves, key=lambda l_obj: l_obj.tier):
+                if lf.sub_sensor_weights is not None:
+                    sub_v = lf.evaluate_sub_sensors(scene.played_sub_sensors)
+                    if lf.tier >= 3 and lf.parent_branch in coords:
+                        sub_v = round(sub_v * float(coords.get(lf.parent_branch, 1.0)), 6)
+                    coords[lf.leaf_id] = sub_v
         for r in rules:
             for req_leaf in r.target_leaves:
                 coords.setdefault(req_leaf, 0.0)

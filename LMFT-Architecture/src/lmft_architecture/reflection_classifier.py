@@ -28,7 +28,7 @@ How the full loop works in plain English:
      needing the Teacher LLM.
 """
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 import json
 import math
@@ -158,6 +158,8 @@ class LearnedLeaf:
     leaf_name: str
     description: str
     anchor_weights: tuple[float, ...] | None = None
+    sub_sensor_weights: tuple[float, ...] | None = None
+    sub_sensor_midpoints: tuple[float, ...] | None = None
 
     def __post_init__(self):
         if self.parent_branch not in ALL_GROWABLE_PARENT_BRANCHES and leaf_tier(self.parent_branch) != 2:
@@ -175,6 +177,16 @@ class LearnedLeaf:
             if len(weights) != 8 or any(not math.isfinite(w) or not (0.0 <= w <= 1.0) for w in weights):
                 raise ValueError("anchor_weights must be a sequence of 8 finite floats in [0.0, 1.0]")
             object.__setattr__(self, "anchor_weights", weights)
+        if self.sub_sensor_weights is not None:
+            sub_w = tuple(round(float(w), 6) for w in self.sub_sensor_weights)
+            if len(sub_w) != 16 or any(not math.isfinite(w) or not (-1.0 <= w <= 1.0) for w in sub_w):
+                raise ValueError("sub_sensor_weights must be a sequence of 16 finite floats in [-1.0, 1.0]")
+            object.__setattr__(self, "sub_sensor_weights", sub_w)
+        if self.sub_sensor_midpoints is not None:
+            sub_m = tuple(round(float(m), 6) for m in self.sub_sensor_midpoints)
+            if len(sub_m) != 16 or any(not math.isfinite(m) or not (-1.0 <= m <= 1.0) for m in sub_m):
+                raise ValueError("sub_sensor_midpoints must be a sequence of 16 finite floats in [-1.0, 1.0]")
+            object.__setattr__(self, "sub_sensor_midpoints", sub_m)
 
     @property
     def leaf_id(self) -> str:
@@ -183,6 +195,22 @@ class LearnedLeaf:
     @property
     def tier(self) -> int:
         return leaf_tier(self.leaf_id)
+
+    def evaluate_sub_sensors(self, sub_sensors: Sequence[float]) -> float:
+        """Evaluate the leaf from a 16-float `sub_sensors` vector `z` via midpoint-centered sigmoid."""
+        if self.sub_sensor_weights is None or len(sub_sensors) < 16:
+            return 0.0
+        mids = (
+            self.sub_sensor_midpoints
+            if (self.sub_sensor_midpoints is not None and len(self.sub_sensor_midpoints) == 16)
+            else (0.0,) * 16
+        )
+        dot_val = sum(
+            float(w_i) * (float(z_i) - float(m_i))
+            for w_i, z_i, m_i in zip(self.sub_sensor_weights, sub_sensors[:16], mids)
+        )
+        x_clamped = max(-12.0, min(12.0, 6.0 * dot_val))
+        return round(min(1.0, max(0.0, 1.0 / (1.0 + math.exp(-x_clamped)))), 6)
 
     def to_dict(self) -> dict:
         out = {
@@ -193,16 +221,24 @@ class LearnedLeaf:
         }
         if self.anchor_weights is not None:
             out["anchor_weights"] = list(self.anchor_weights)
+        if self.sub_sensor_weights is not None:
+            out["sub_sensor_weights"] = list(self.sub_sensor_weights)
+        if self.sub_sensor_midpoints is not None:
+            out["sub_sensor_midpoints"] = list(self.sub_sensor_midpoints)
         return out
 
     @classmethod
     def from_dict(cls, data: dict) -> "LearnedLeaf":
         raw_weights = data.get("anchor_weights")
+        raw_sub_w = data.get("sub_sensor_weights")
+        raw_sub_m = data.get("sub_sensor_midpoints")
         return cls(
             parent_branch=data["parent_branch"],
             leaf_name=data["leaf_name"],
             description=data["description"],
             anchor_weights=tuple(float(w) for w in raw_weights) if raw_weights is not None else None,
+            sub_sensor_weights=tuple(float(w) for w in raw_sub_w) if raw_sub_w is not None else None,
+            sub_sensor_midpoints=tuple(float(m) for m in raw_sub_m) if raw_sub_m is not None else None,
         )
 
 
@@ -586,26 +622,74 @@ class ReflectionEvaluation:
         return self.propagation_result.direct_frame
 
 
+def _rule_parent_branches(rule: FuzzyConceptRule) -> set[str]:
+    """Return the founding 2-segment parent branches (`<dept>/<branch>`) referenced by `rule.target_leaves`."""
+    branches: set[str] = set()
+    for leaf_id in rule.target_leaves:
+        parts = leaf_id.split("/")
+        if len(parts) >= 2:
+            branches.add(f"{parts[0]}/{parts[1]}")
+    return branches
+
+
 def _evaluate_rules_with_inhibition(
     rules: tuple[FuzzyConceptRule, ...],
     coords: Mapping[str, float],
 ) -> dict[str, float]:
-    """Evaluate rules and apply multi-tier Specificity Inhibition (Tier 3 > Tier 2 > Tier 1)."""
+    """Evaluate rules and apply branch-scoped multi-tier Specificity Inhibition (Tier 3 > Tier 2 > Tier 1)."""
     raw_activations = {
         r.concept_name: r.evaluate(coords)
         for r in rules
     }
-    active_tiers = [r.tier for r in rules if raw_activations[r.concept_name] >= CONFUSION_THRESHOLD]
+    wastelessness_val = float(coords.get("cultural/efficiency/wastelessness", 0.50))
+    low_wastelessness_guard = wastelessness_val <= 0.38
+
+    active_rules = [r for r in rules if raw_activations[r.concept_name] >= CONFUSION_THRESHOLD]
+    active_tiers = [r.tier for r in active_rules]
     deepest_active_tier = max(active_tiers, default=1)
-    max_deeper = max(
-        (raw_activations[r.concept_name] for r in rules if r.tier == deepest_active_tier),
-        default=0.0,
-    )
-    rule_activations = {}
+
+    rule_branches = {r.concept_name: _rule_parent_branches(r) for r in rules}
+    rule_activations: dict[str, float] = {}
     for r in rules:
         val = raw_activations[r.concept_name]
-        if r.tier < deepest_active_tier and max_deeper >= CONFUSION_THRESHOLD:
-            val = round(val * (1.0 - 0.5 * max_deeper), 6)
+        is_r_hazard = r.polarity == "repulsive" or r.concept_name.startswith(("hazard_", "blunder_", "avoid_"))
+        is_r_coached = r.concept_name.startswith("coached_")
+        if r.tier < deepest_active_tier and val > 0.0:
+            r_br = rule_branches[r.concept_name]
+            deeper_inhibitors: list[FuzzyConceptRule] = []
+            for d_r in active_rules:
+                if d_r.tier <= r.tier:
+                    continue
+                is_d_coached = d_r.concept_name.startswith("coached_")
+                is_d_hazard = d_r.polarity == "repulsive" or d_r.concept_name.startswith(("hazard_", "blunder_", "avoid_"))
+                # Never allow a coached_* rule to inhibit a hazard_* rule when wastelessness <= 0.38
+                if is_r_hazard and is_d_coached and low_wastelessness_guard:
+                    continue
+                shares_branch = bool(r_br & rule_branches[d_r.concept_name])
+                if shares_branch or (is_d_hazard and not is_r_hazard) or len(r.target_leaves) < 3:
+                    deeper_inhibitors.append(d_r)
+            if deeper_inhibitors:
+                max_deeper = max(raw_activations[d_r.concept_name] for d_r in deeper_inhibitors)
+                has_deeper_hazard_override = any(
+                    (d_r.polarity == "repulsive" or d_r.concept_name.startswith(("hazard_", "blunder_", "avoid_")))
+                    for d_r in deeper_inhibitors
+                ) and not is_r_hazard
+                if has_deeper_hazard_override or len(r.target_leaves) < 3:
+                    val = 0.0
+                else:
+                    val = round(val * (1.0 - 0.5 * max_deeper), 6)
+        # Never allow a coached_* rule to tie/inhibit an active hazard_* rule when wastelessness <= 0.38
+        if is_r_coached and low_wastelessness_guard:
+            has_active_hazard = any(
+                (h_r.polarity == "repulsive" or h_r.concept_name.startswith(("hazard_", "blunder_", "avoid_")))
+                and raw_activations[h_r.concept_name] >= CONFUSION_THRESHOLD
+                and h_r.tier >= r.tier
+                and bool(rule_branches[h_r.concept_name] & rule_branches[r.concept_name])
+                and raw_activations[h_r.concept_name] > raw_activations[r.concept_name]
+                for h_r in active_rules
+            )
+            if has_active_hazard:
+                val = 0.0
         rule_activations[r.concept_name] = val
 
     # Compensated Soft-Min tie-breaker (Upgrade #2): when 2+ active rules in the deepest tier
