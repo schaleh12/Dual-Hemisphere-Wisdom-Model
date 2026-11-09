@@ -2592,7 +2592,11 @@ class ChessKibitzerRuntime:
         }
         self.active_thread_id = "thread-1"
         if self._is_default_live_state_dir():
-            for seed_rel in ("outputs/rem_sleep_consolidated_ruleset.json", "outputs/club_user_state/club_ruleset.json"):
+            for seed_rel in (
+                "outputs/sleep_consolidated_ruleset.json",
+                "outputs/rem_sleep_consolidated_ruleset.json",
+                "outputs/club_user_state/club_ruleset.json",
+            ):
                 sp = self.training_root / seed_rel
                 if sp.exists():
                     try:
