@@ -2669,7 +2669,7 @@ class ChessKibitzerRuntime:
                 clean_rules = tuple(
                     r
                     for r in load_ruleset(base_seed)
-                    if not r.concept_name.startswith(("hazard_", "coached_"))
+                    if not r.concept_name.startswith(("hazard_", "coached_", "detective_"))
                 )
             except Exception:
                 clean_rules = VIRGIN_FOUNDATIONAL_RULES
@@ -2679,7 +2679,8 @@ class ChessKibitzerRuntime:
         self.learned_leaves = tuple(
             lf
             for lf in self.learned_leaves
-            if not lf.leaf_name.startswith(("hazard_", "coached_", "immunized_"))
+            if not lf.leaf_name.startswith(("hazard_", "coached_", "immunized_", "detective_"))
+            and lf.sub_sensor_weights is None
         )
         self.bitboard_sleeve = BitboardIntuitionSleeve()
         self.will_edges = RIGHT_BRAIN_WILL_EDGES
