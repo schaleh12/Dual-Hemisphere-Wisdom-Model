@@ -394,7 +394,7 @@ def has_genuine_hazard_pathology_leaf(target_leaves: Mapping[str, float]) -> boo
             return True
         if k in shadow_ids and fv >= 0.50:
             return True
-        if k.count("/") >= 2 and k.rsplit("/", 1)[-1].startswith(("hazard_", "blunder_", "avoid_")) and fv >= 0.50:
+        if leaf_tier(k) >= 2 and k.rsplit("/", 1)[-1].startswith(("hazard_", "blunder_", "avoid_")) and fv >= 0.50:
             return True
     return False
 

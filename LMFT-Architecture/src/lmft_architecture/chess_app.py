@@ -1926,6 +1926,7 @@ class ChessKibitzerRuntime:
         )
         left_brain_proposed_san: str | None = None
         veto_reason: str | None = None
+        vetoed_is_hazard = False
         vetoed_coords: dict[str, float] | None = None
         safe_choice_coords: dict[str, float] | None = None
         vetoed_sub_sensors: tuple[float, ...] | None = None
@@ -2022,6 +2023,11 @@ class ChessKibitzerRuntime:
                                 or is_suboptimal
                             ):
                                 selection_mode = "right_brain_blunder_veto_queued_for_sleep"
+                                vetoed_is_hazard = bool(
+                                    cand_eval.is_blunder
+                                    or has_new_shadow
+                                    or str(cand_eval.matched_concept or "").startswith("hazard_")
+                                )
                                 veto_reason = (
                                     f"Left-Brain proposed {left_brain_proposed_san} "
                                     f"(blunder={cand_eval.is_blunder}, repetition={cand_eval.is_repetition}, "
@@ -2104,7 +2110,7 @@ class ChessKibitzerRuntime:
             veto_reason
             and self.chat_messages
             and vetoed_coords is not None
-            and float(vetoed_coords.get("cultural/efficiency/wastelessness", 0.72)) <= 0.38
+            and vetoed_is_hazard
         )
         arbitration_record = {
             "selection_mode": selection_mode,
