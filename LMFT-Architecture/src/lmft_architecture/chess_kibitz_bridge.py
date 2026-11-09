@@ -1112,7 +1112,9 @@ def compute_candidate_move_fuzzy_coordinates(
     for leaf_id, val in post_posture.philosophical_coordinates.items():
         coords[leaf_id] = float(val)
     coords["cultural/efficiency/wastelessness"] = (
-        0.25 if is_blunder else round(min(0.95, 0.72 + 0.06 * net_capture_gain), 4)
+        round(max(0.08, 0.42 - 0.08 * min(4.0, blunder_penalty)), 4)
+        if is_blunder
+        else round(min(0.95, 0.72 + 0.06 * net_capture_gain), 4)
     )
     coords["cultural/freedom/self-sufficiency"] = float(
         post_posture.philosophical_coordinates.get("philosophical/being/existence", 0.55)

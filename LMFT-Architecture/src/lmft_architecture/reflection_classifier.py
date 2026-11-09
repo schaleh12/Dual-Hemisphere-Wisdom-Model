@@ -639,7 +639,19 @@ def _evaluate_rules_with_inhibition(
     if max_specific >= CONFUSION_THRESHOLD:
         max_broad_allowed = round(max(0.0, max_specific - CONFUSION_THRESHOLD - 0.05), 6)
         for r in rules:
-            if r.tier == deepest_active_tier and len(r.target_leaves) < 3:
+            if (
+                r.tier == deepest_active_tier
+                and len(r.target_leaves) < 3
+                and (
+                    r.rule_id in ("rule_1", "rule_2", "rule_grounded_coordination", "rule_sanctuary_equilibrium")
+                    or r.concept_name in (
+                        "grounded_coordination",
+                        "sanctuary_equilibrium",
+                        "balanced_cooperation",
+                        "mutual_respect",
+                    )
+                )
+            ):
                 attenuated_broad = round(
                     rule_activations[r.concept_name] * (1.0 - 0.55 * max_specific),
                     6,

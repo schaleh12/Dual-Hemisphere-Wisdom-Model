@@ -254,6 +254,7 @@ def _ensure_foundational_rules(rules: tuple[FuzzyConceptRule, ...]) -> tuple[Fuz
         if r.concept_name.startswith("hazard_") and (
             r.concept_name.startswith("hazard_high_wastelessness_")
             or r.concept_name.startswith("hazard_high_self_sufficiency_")
+            or r.concept_name.startswith("hazard_low_needlessness_")
             or "[!! BRILLIANCY" in r.description
             or "[! GREAT_MOVE" in r.description
             or "Board vs. Theory surprise after " in r.description
@@ -267,12 +268,14 @@ def _ensure_foundational_rules(rules: tuple[FuzzyConceptRule, ...]) -> tuple[Fuz
         _, _, def_cult, def_phil = parse_cluster_defining_leaves(r.concept_name)
         is_cluster_rule = canonical_cluster_concept_name(r.concept_name).endswith("_cluster")
         if r.concept_name.startswith("hazard_"):
+            from .sleep_consolidation import has_genuine_hazard_pathology_leaf
+
             shadow_ids = {l.leaf_id for l in PHILOSOPHICAL_SHADOW_LEAVES}
             cleaned_haz_leaves: dict[str, float] = {}
             for k, v in r.target_leaves.items():
                 fv = float(v)
                 short_k = k.split("/")[-1]
-                if k == "cultural/freedom/needlessness" and fv <= 0.30:
+                if k == "cultural/freedom/needlessness" and fv < 0.35:
                     continue
                 if k in shadow_ids and fv < 0.50:
                     continue
@@ -287,22 +290,26 @@ def _ensure_foundational_rules(rules: tuple[FuzzyConceptRule, ...]) -> tuple[Fuz
                     continue
                 if k in (
                     "philosophical/being/existence",
-                    "cultural/freedom/self-sufficiency",
                     "philosophical/structure/order",
+                    "philosophical/persistence/continuity",
+                    "cultural/efficiency/wastelessness",
+                    "cultural/freedom/self-sufficiency",
                     "cultural/justice/honor",
                     "cultural/justice/fairness",
-                ) and fv >= 0.58 and k not in (def_cult, def_phil):
+                ) and fv > 0.48:
                     continue
                 cleaned_haz_leaves[k] = fv
             if len(cleaned_haz_leaves) > 3:
                 pinned_haz = {x for x in (def_cult, def_phil) if x is not None}
+                if "cultural/efficiency/wastelessness" in cleaned_haz_leaves:
+                    pinned_haz.add("cultural/efficiency/wastelessness")
                 sorted_haz_keys = sorted(
                     cleaned_haz_leaves.keys(),
                     key=lambda key: (key in pinned_haz, abs(cleaned_haz_leaves[key] - 0.50)),
                     reverse=True,
                 )[:3]
                 cleaned_haz_leaves = {k: cleaned_haz_leaves[k] for k in sorted_haz_keys}
-            if len(cleaned_haz_leaves) < 2:
+            if len(cleaned_haz_leaves) < 2 or not has_genuine_hazard_pathology_leaf(cleaned_haz_leaves):
                 continue
             new_high = min(0.90, max(0.55, float(r.high)))
             new_low = min(0.75, max(0.35, min(float(r.low), new_high - 0.04)))
@@ -2252,9 +2259,21 @@ class ChessKibitzerRuntime:
         else:
             clean_rules = VIRGIN_FOUNDATIONAL_RULES
         self.rules = _ensure_foundational_rules(clean_rules)
+        self.learned_leaves = tuple(
+            lf
+            for lf in self.learned_leaves
+            if not lf.leaf_name.startswith(("hazard_", "coached_", "immunized_"))
+        )
         self.bitboard_sleeve = BitboardIntuitionSleeve()
         self.will_edges = RIGHT_BRAIN_WILL_EDGES
-        self.archives = ThreeBranchArchives()
+        seed_arch_dir = self.training_root / "outputs" / "branch_archives"
+        if (seed_arch_dir / "philosophical_lexicon.json").exists():
+            try:
+                self.archives = ThreeBranchArchives.load_all(seed_arch_dir)
+            except Exception:
+                self.archives = ThreeBranchArchives()
+        else:
+            self.archives = ThreeBranchArchives()
         self.ledger = ContemplationLedger()
         self.diary = SettledDiary()
         self.chord_memory = ChordMemoryBank()
@@ -3222,15 +3241,13 @@ class ChessKibitzerRuntime:
                         )
                         lines.append(f"  • {r.concept_name} ({r.rule_id}): [{leaves_str}]")
                 if before_evals and after_evals:
-                    lines.append("\nQueued Scene Replay Check:")
-                    for bef, aft in zip(before_evals, after_evals):
-                        bef_status = "SETTLED (GEAR 1)" if bef["settled"] else "STILL_COLLIDING (GEAR 3)"
-                        aft_status = "SETTLED (GEAR 1)" if aft["settled"] else "STILL_COLLIDING (GEAR 3)"
-                        lines.append(
-                            f"  • Scene #{bef['scene_index']}: "
-                            f"BEFORE = {bef_status} (Clarity {bef['clarity']:.2f}, matched={bef['matched_concept']}) "
-                            f"-> AFTER = {aft_status} (Clarity {aft['clarity']:.2f}, Confidence {aft['confidence']:.2f}, matched={aft['matched_concept']})"
-                        )
+                    settled_before = sum(1 for b in before_evals if b["settled"])
+                    settled_after = sum(1 for a in after_evals if a["settled"])
+                    total_replayed = len(after_evals)
+                    lines.append(
+                        f"\nQueued Scene Replay Check: {settled_after}/{total_replayed} settled in Gear 1 "
+                        f"(before sleep: {settled_before}/{total_replayed})."
+                    )
 
                 summary = "\n".join(lines)
                 self.last_rem_sleep_receipt = summary

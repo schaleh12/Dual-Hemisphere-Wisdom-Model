@@ -144,12 +144,17 @@ def _cluster_key_for_unresolved(scene: UnresolvedSleepScene) -> str | None:
         if k in FOUNDATIONAL_LEAVES and k.startswith("philosophical/")
     }
 
+    explicit_hazard_scene = (
+        bool(scene.is_hazard)
+        or float(cult.get("cultural/efficiency/wastelessness", 0.50)) <= 0.35
+    )
     low_cult = sorted(
         (
             (k, v)
             for k, v in cult.items()
             if k in FOUNDATIONAL_LEAVES
             and v <= 0.35
+            and not (explicit_hazard_scene and k == "cultural/freedom/needlessness")
             and (
                 scene.is_hazard
                 or float(cult.get("cultural/efficiency/wastelessness", 0.50)) < 0.65
@@ -158,10 +163,23 @@ def _cluster_key_for_unresolved(scene: UnresolvedSleepScene) -> str | None:
         ),
         key=lambda kv: (kv[1], kv[0]),
     )
-    explicit_hazard_scene = (
-        bool(scene.is_hazard)
-        or float(cult.get("cultural/efficiency/wastelessness", 0.50)) <= 0.35
-    )
+    if not low_cult and explicit_hazard_scene and scene.contrastive_reference_coordinates:
+        low_cult = sorted(
+            (
+                (k, v)
+                for k, v in cult.items()
+                if k
+                in (
+                    "cultural/efficiency/wastelessness",
+                    "cultural/freedom/self-sufficiency",
+                    "cultural/justice/honor",
+                    "cultural/justice/fairness",
+                )
+                and v <= 0.48
+                and v <= float(scene.contrastive_reference_coordinates.get(k, v)) - 0.03
+            ),
+            key=lambda kv: (kv[1], kv[0]),
+        )
     high_cult = sorted(
         (
             (k, v)
@@ -338,6 +356,34 @@ def parse_cluster_defining_leaves(
     )
 
 
+def has_genuine_hazard_pathology_leaf(target_leaves: Mapping[str, float]) -> bool:
+    """Return True if `target_leaves` contains at least one genuine low-virtue deficit or elevated shadow/chaos/hazard leaf."""
+    virtue_leaves = {
+        "philosophical/being/existence",
+        "philosophical/structure/order",
+        "philosophical/persistence/continuity",
+        "cultural/efficiency/wastelessness",
+        "cultural/freedom/self-sufficiency",
+        "cultural/justice/honor",
+        "cultural/justice/fairness",
+    }
+    shadow_ids = {leaf.leaf_id for leaf in PHILOSOPHICAL_SHADOW_LEAVES}
+    for k, v in target_leaves.items():
+        fv = float(v)
+        short_k = k.split("/")[-1]
+        if k in virtue_leaves and fv <= 0.48:
+            return True
+        if k == "philosophical/structure/chaos" and fv >= 0.55:
+            return True
+        if k == "cultural/freedom/needlessness" and fv >= 0.35:
+            return True
+        if k in shadow_ids and fv >= 0.50:
+            return True
+        if short_k.startswith(("hazard_", "blunder_", "avoid_")) and fv >= 0.50:
+            return True
+    return False
+
+
 def normalize_contrastive_target_leaves_and_thresholds(
     cluster_key: str,
     avg_coords: Mapping[str, float],
@@ -383,11 +429,15 @@ def normalize_contrastive_target_leaves_and_thresholds(
         "cultural/justice/honor",
         "cultural/justice/fairness",
     }
+    prefix, def_dir_tag, def_cult_leaf, def_phil_leaf = parse_cluster_defining_leaves(cluster_key)
     has_wastelessness = "cultural/efficiency/wastelessness" in avg_coords
     wastelessness_val = float(avg_coords.get("cultural/efficiency/wastelessness", 0.50))
-    explicit_hazard = has_wastelessness and wastelessness_val <= 0.35
-    explicit_coached = has_wastelessness and wastelessness_val >= 0.65
-    _, def_dir_tag, def_cult_leaf, def_phil_leaf = parse_cluster_defining_leaves(cluster_key)
+    explicit_hazard = prefix == "hazard" or (
+        prefix != "coached" and has_wastelessness and wastelessness_val <= 0.35
+    )
+    explicit_coached = prefix == "coached" or (
+        prefix != "hazard" and not explicit_hazard and has_wastelessness and wastelessness_val >= 0.65
+    )
     is_named_cluster = bool(def_cult_leaf and def_phil_leaf)
 
     divergent: list[tuple[float, str, float, float]] = []
@@ -427,13 +477,15 @@ def normalize_contrastive_target_leaves_and_thresholds(
                 continue
             if leaf_short.startswith("hazard_") and (v_act < 0.50 or v_act <= v_ref):
                 continue
-            if k in virtue_leaf_set and (v_act >= 0.58 or v_act >= v_ref) and k not in (def_cult_leaf, def_phil_leaf):
+            if k in virtue_leaf_set and (v_act > 0.48 or v_act >= v_ref):
                 continue
             if k in shadow_leaf_set and (v_act < 0.50 or v_act <= v_ref):
                 continue
-            if k == "philosophical/structure/chaos" and (v_act < 0.50 or v_act <= v_ref) and k != def_phil_leaf:
+            if k == "philosophical/structure/chaos" and (v_act < 0.45 or v_act <= v_ref):
                 continue
-            if k == "cultural/freedom/needlessness" and (v_act <= 0.30 or v_act < v_ref):
+            if k == "cultural/freedom/needlessness" and (v_act < 0.35 or v_act <= v_ref):
+                continue
+            if k == "philosophical/persistence/discreteness" and (v_act < 0.50 or v_act <= v_ref):
                 continue
         abs_diff = abs(v_act - v_ref)
         if abs_diff >= 0.03:
@@ -449,8 +501,8 @@ def normalize_contrastive_target_leaves_and_thresholds(
             t_val = 0.64
         elif v_act > v_ref and t_val <= 0.30:
             t_val = 0.31
-        if explicit_hazard and k in ("philosophical/structure/order", "philosophical/being/existence") and t_val >= 0.58:
-            t_val = 0.64
+        if explicit_hazard and k in virtue_leaf_set and t_val > 0.48:
+            continue
         target_leaves[k] = t_val
 
     if is_named_cluster and def_cult_leaf and def_phil_leaf:
@@ -462,11 +514,11 @@ def normalize_contrastive_target_leaves_and_thresholds(
                 ):
                     target_leaves[def_cult_leaf] = v_c
             elif explicit_hazard:
-                if not (def_cult_leaf in ("cultural/efficiency/wastelessness", "cultural/freedom/self-sufficiency") and def_dir_tag == "high"):
-                    if def_dir_tag == "low" and v_c > 0.35:
-                        v_c = 0.25
-                    elif def_dir_tag == "high" and v_c < 0.53:
-                        v_c = 0.64
+                if (
+                    (def_dir_tag == "low" and def_cult_leaf in virtue_leaf_set and v_c <= 0.48)
+                    or (def_dir_tag == "high" and def_cult_leaf == "cultural/freedom/needlessness" and v_c >= 0.35)
+                    or (def_dir_tag == "high" and def_cult_leaf == "cultural/efficiency/power" and v_c >= 0.55)
+                ):
                     target_leaves[def_cult_leaf] = v_c
             else:
                 target_leaves[def_cult_leaf] = v_c
@@ -476,11 +528,13 @@ def normalize_contrastive_target_leaves_and_thresholds(
                 if def_phil_leaf != "philosophical/structure/chaos" or v_p <= 0.45:
                     target_leaves[def_phil_leaf] = max(0.64, v_p) if def_phil_leaf in virtue_leaf_set else v_p
             elif explicit_hazard:
-                if def_phil_leaf in ("philosophical/structure/order", "philosophical/being/existence") and v_p >= 0.58:
-                    v_p = 0.64
-                elif 0.36 < v_p < 0.64:
-                    v_p = 0.64 if v_p >= 0.50 else 0.35
-                target_leaves[def_phil_leaf] = v_p
+                if (
+                    (def_phil_leaf == "philosophical/structure/chaos" and v_p >= 0.45)
+                    or (def_phil_leaf == "philosophical/persistence/discreteness" and v_p >= 0.50)
+                    or (def_phil_leaf in virtue_leaf_set and v_p <= 0.48)
+                    or (def_phil_leaf == "philosophical/being/agency" and v_p >= 0.55)
+                ):
+                    target_leaves[def_phil_leaf] = v_p
             else:
                 target_leaves[def_phil_leaf] = v_p
         if len(target_leaves) > 3:
@@ -519,6 +573,10 @@ def normalize_contrastive_target_leaves_and_thresholds(
             if explicit_hazard and (
                 leaf_short.startswith("coached_")
                 or (leaf_short.startswith("hazard_") and float(t_val) < 0.50)
+                or (k in virtue_leaf_set and float(t_val) > 0.48)
+                or (k == "cultural/freedom/needlessness" and float(t_val) < 0.35)
+                or (k == "philosophical/structure/chaos" and float(t_val) < 0.45)
+                or (k in shadow_leaf_set and float(t_val) < 0.50)
             ):
                 continue
             target_leaves[k] = t_val
@@ -722,9 +780,9 @@ def _anchor_target_leaves_from_cluster(
         if def_cult_leaf not in target_leaves and def_cult_leaf in cult:
             v_c = cult[def_cult_leaf]
             if def_dir_tag == "low":
-                target_leaves[def_cult_leaf] = round(min(0.25, max(0.14, v_c + 0.04)), 2)
+                target_leaves[def_cult_leaf] = round(min(0.30, max(0.05, v_c)), 2)
             else:
-                target_leaves[def_cult_leaf] = round(min(0.78, max(0.53, v_c)), 2)
+                target_leaves[def_cult_leaf] = round(min(0.78, max(0.50, v_c)), 2)
         if def_phil_leaf not in target_leaves and def_phil_leaf in phil:
             target_leaves[def_phil_leaf] = round(min(0.75, max(0.20, phil[def_phil_leaf])), 2)
 
@@ -905,8 +963,13 @@ def run_sleep_consolidation(
             _validate_teacher_sleep_json,
         )
 
+        prefixed_ckey = (
+            f"hazard_{ckey}"
+            if is_hazard_group and not ckey.startswith(("hazard_", "coached_"))
+            else ckey
+        )
         target_leaves, rule_low, rule_high = normalize_contrastive_target_leaves_and_thresholds(
-            ckey,
+            prefixed_ckey,
             avg_coords,
             avg_ref_coords,
         )
@@ -1096,6 +1159,8 @@ def entrain_existing_cluster_rule(
     if len(merged_leaves) > cap:
         _, _, def_cult_leaf, def_phil_leaf = parse_cluster_defining_leaves(canonical_name)
         pinned_keys = {k for k in (def_cult_leaf, def_phil_leaf) if k}
+        if "cultural/efficiency/wastelessness" in merged_leaves:
+            pinned_keys.add("cultural/efficiency/wastelessness")
         ranked_keys = sorted(
             merged_leaves.keys(),
             key=lambda k: (
@@ -1232,8 +1297,10 @@ def consolidate_sleep_clusters_locally(
     for (ckey, is_group_hazard), group in clusters.items():
         avg_coords = _average_cluster_coordinates(group)
         avg_ref_coords = _average_contrastive_reference_coordinates(group)
+        prefix = "hazard" if is_group_hazard else "coached"
+        base_name = f"{prefix}_{ckey}"
         target_leaves, rule_low, rule_high = normalize_contrastive_target_leaves_and_thresholds(
-            ckey,
+            base_name,
             avg_coords,
             avg_ref_coords,
         )
@@ -1254,11 +1321,18 @@ def consolidate_sleep_clusters_locally(
             }
             rule_low = 0.65
             rule_high = 0.82
+        if is_group_hazard and (
+            len(target_leaves) < 2 or not has_genuine_hazard_pathology_leaf(target_leaves)
+        ):
+            for s in group:
+                resolved_scene_indices.append(s.scene_index)
+            continue
+        if not target_leaves:
+            for s in group:
+                resolved_scene_indices.append(s.scene_index)
+            continue
         rep = max(group, key=lambda s: float(s.salience))
         rep_scene = rep.scene_index
-
-        prefix = "hazard" if is_group_hazard else "coached"
-        base_name = f"{prefix}_{ckey}"
         concept_name = base_name
         human_theme = ckey.replace("_cluster", "").replace("_", " ").strip() or "board balance"
         raw_desc_src = " ".join((rep.game_review_annotation or rep.scenario_text or "").split())

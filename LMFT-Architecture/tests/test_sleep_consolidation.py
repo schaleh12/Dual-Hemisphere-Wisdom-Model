@@ -831,6 +831,50 @@ def test_round2_no_coordinate_stamping_and_genuine_tier2_gate() -> None:
     )
     assert len(calm_report.minted_leaves) == 0
 
+    # 3. Deeper positional mistake (`is_hazard=True`) where 1-3 ply sensors still report high virtues
+    #    (`wastelessness=0.73, power=0.91, agency=0.93, order=0.92, needlessness=0.08`) must NEVER
+    #    forge a repulsive `hazard_*` rule anchored to healthy virtue coordinates or low needlessness
+    healthy_sensor_mistake = UnresolvedSleepScene(
+        scene_index=33,
+        scenario_text="Played Rxa5 instead of best move Kh6.",
+        external_coordinates={
+            **base_coords,
+            "cultural/efficiency/power": 0.913,
+            "cultural/efficiency/wastelessness": 0.73,
+            "cultural/freedom/needlessness": 0.08,
+            "philosophical/being/agency": 0.929,
+            "philosophical/structure/order": 0.92,
+            "philosophical/persistence/continuity": 0.95,
+        },
+        felt_chord_notes={},
+        valence=0.45,
+        salience=0.75,
+        arousal=0.65,
+        left_brain_hunch="Pulled the rook out early.",
+        is_hazard=True,
+        contrastive_reference_coordinates={
+            **base_coords,
+            "cultural/efficiency/power": 0.65,
+            "cultural/efficiency/wastelessness": 0.72,
+            "cultural/freedom/needlessness": 0.08,
+            "philosophical/being/agency": 0.68,
+            "philosophical/structure/order": 0.88,
+            "philosophical/persistence/continuity": 0.88,
+        },
+        game_review_annotation="Game Review [? MISTAKE_?]: Played Rxa5 (-1.10 pawns) instead of best move Kh6.",
+    )
+    mistake_report = consolidate_sleep_clusters_locally(
+        queued_scenes=(healthy_sensor_mistake,),
+        rules=(),
+        learned_leaves=(),
+        archives=ThreeBranchArchives(),
+        ledger=ContemplationLedger(),
+    )
+    assert len(mistake_report.forged_rules) == 0
+    assert len(mistake_report.minted_leaves) == 0
+    assert 33 in mistake_report.resolved_scene_indices
+
+
 
 
 
