@@ -1787,8 +1787,10 @@ function renderState(s) {
       const gearBadge = ref.gear_used === "GEAR_3_UNRESOLVED_QUEUED_FOR_SLEEP"
         ? "GEAR 3 · QUEUED FOR SLEEP"
         : ref.gear_used;
+      const det = s.board.last_detective_funnel_receipt || s.last_detective_funnel_receipt;
+      const detSuffix = (det && det.summary) ? ` · ${det.summary}` : "";
       document.getElementById("board-reflex-strip").textContent =
-        `Last Move: ${ref.move_san} (${gearBadge}, Clarity=${ref.clarity}, Confidence=${ref.confidence}, ${ref.elapsed_ms} ms)`;
+        `Last Move: ${ref.move_san} (${gearBadge}, Clarity=${ref.clarity}, Confidence=${ref.confidence}, ${ref.elapsed_ms} ms)${detSuffix}`;
     }
     const sanList = s.board.move_history_san || [];
     const moveSig = sanList.join(" ");

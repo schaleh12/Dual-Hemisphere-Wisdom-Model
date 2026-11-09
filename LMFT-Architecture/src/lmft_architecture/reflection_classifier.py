@@ -121,7 +121,7 @@ WILL_EDGES = (
 
 
 def leaf_tier(leaf_id: str) -> int:
-    """Return 1 for founding leaves, 2 for child leaves under founding branches, 3 for Tier-3 sub-leaves."""
+    """Return 1 for founding leaves, 2 for Commander child leaves, 3 for Sub-Commander leaves, 4 for Detective leaves."""
     if not isinstance(leaf_id, str):
         return 0
     if leaf_id in FOUNDATIONAL_LEAVES or leaf_id in (
@@ -138,7 +138,7 @@ def leaf_tier(leaf_id: str) -> int:
         if leaf_id.startswith(prefix):
             rest = leaf_id[len(prefix):]
             parts = rest.split("/")
-            if 1 <= len(parts) <= 2 and all(
+            if 1 <= len(parts) <= 3 and all(
                 re.fullmatch(r"[a-z][a-z0-9_-]{2,40}", p) for p in parts
             ):
                 return len(parts) + 1
@@ -146,13 +146,13 @@ def leaf_tier(leaf_id: str) -> int:
 
 
 def is_valid_leaf_id(leaf_id: str) -> bool:
-    """Return True if leaf_id is a founding leaf or a learned Tier-2/Tier-3 child leaf."""
+    """Return True if leaf_id is a founding leaf or a learned Tier-2/Tier-3/Tier-4 child leaf."""
     return leaf_tier(leaf_id) > 0
 
 
 @dataclass(frozen=True)
 class LearnedLeaf:
-    """A non-founding Tier-2 or Tier-3 child classification leaf grown under a parent branch."""
+    """A non-founding Tier-2 (Commander), Tier-3 (Sub-Commander), or Tier-4 (Detective) child classification leaf."""
 
     parent_branch: str
     leaf_name: str
@@ -162,9 +162,9 @@ class LearnedLeaf:
     sub_sensor_midpoints: tuple[float, ...] | None = None
 
     def __post_init__(self):
-        if self.parent_branch not in ALL_GROWABLE_PARENT_BRANCHES and leaf_tier(self.parent_branch) != 2:
+        if self.parent_branch not in ALL_GROWABLE_PARENT_BRANCHES and leaf_tier(self.parent_branch) not in (2, 3):
             raise ValueError(
-                f"parent_branch must be a founding branch or Tier-2 learned leaf: {self.parent_branch!r}"
+                f"parent_branch must be a founding branch or Tier-2/Tier-3 learned leaf: {self.parent_branch!r}"
             )
         if not isinstance(self.leaf_name, str) or not re.fullmatch(r"[a-z][a-z0-9_-]{2,40}", self.leaf_name):
             raise ValueError(f"invalid leaf_name: {self.leaf_name!r}")
@@ -636,7 +636,7 @@ def _evaluate_rules_with_inhibition(
     rules: tuple[FuzzyConceptRule, ...],
     coords: Mapping[str, float],
 ) -> dict[str, float]:
-    """Evaluate rules and apply branch-scoped multi-tier Specificity Inhibition (Tier 3 > Tier 2 > Tier 1)."""
+    """Evaluate rules and apply branch-scoped multi-tier Specificity Inhibition (Tier 4 > Tier 3 > Tier 2 > Tier 1)."""
     raw_activations = {
         r.concept_name: r.evaluate(coords)
         for r in rules

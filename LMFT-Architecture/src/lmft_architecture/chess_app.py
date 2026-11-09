@@ -82,6 +82,7 @@ from .chess_kibitz_bridge import (
     format_move_history_pgn_snippet,
     inspect_chess_moves_in_reply,
     merge_board_fact_with_chat_sensors,
+    reweight_suspects_with_left_brain_theory,
     verify_or_ground_chess_moves_in_reply,
 )
 from .chess_ui import CHESS_SINGLE_PAGE_HTML
@@ -1602,10 +1603,12 @@ class ChessKibitzerRuntime:
                 "pgn_snippet": pgn_snippet,
                 "last_move_uci": last_move_uci,
                 "last_board_reflex": self.last_board_reflex,
+                "last_detective_funnel_receipt": getattr(self, "last_detective_funnel_receipt", None),
                 "legal_moves_uci": legal_uci,
                 "posture": self.board_posture.to_dict(),
                 "presets": PRESET_CHESS_POSITIONS,
             },
+            "last_detective_funnel_receipt": getattr(self, "last_detective_funnel_receipt", None),
             "chat_messages": list(self.chat_messages[-120:]),
             "gemini_api_configured": bool(os.environ.get("GEMINI_API_KEY", "").strip()),
         }
@@ -1931,6 +1934,7 @@ class ChessKibitzerRuntime:
         safe_sub_sensors: tuple[float, ...] | None = None
         gear_2_delib_text: str | None = None
         delib_trace: Any = None
+        gear_2_steered: dict[str, Any] = {"evals": None, "receipt": None}
         top_san_set = {c.san for c in top_candidates[:4]}
 
         should_wake_gear_2 = (
@@ -1985,6 +1989,29 @@ class ChessKibitzerRuntime:
                             comma_prefix,
                             learned_leaves=self.learned_leaves,
                         )
+                        c1_mentioned = inspect_chess_moves_in_reply(
+                            comma_prefix,
+                            self.board,
+                            move_history_san=self.move_history_san,
+                        )["legal_moves_mentioned"]
+                        steered_evals, steering_receipt = reweight_suspects_with_left_brain_theory(
+                            all_evals,
+                            c_coords,
+                            will_edges=self.will_edges,
+                            left_brain_mentioned_san=str(c1_mentioned[0]) if c1_mentioned else None,
+                        )
+                        gear_2_steered["evals"] = steered_evals
+                        gear_2_steered["receipt"] = steering_receipt
+                        steered_theory_coords = dict(c_coords)
+                        if steered_evals and steered_evals[0].coords_snapshot:
+                            top_snap = steered_evals[0].coords_snapshot
+                            for fk in FOUNDATIONAL_LEAVES:
+                                if fk in top_snap:
+                                    steered_theory_coords[fk] = round(
+                                        0.50 * float(steered_theory_coords.get(fk, 0.50))
+                                        + 0.50 * float(top_snap[fk]),
+                                        4,
+                                    )
                         raw_c_vibe, _ = compile_right_brain_vibe(
                             self.birth_state,
                             fact_coords,
@@ -1994,7 +2021,7 @@ class ChessKibitzerRuntime:
                             event_id=f"pre_move_{self.scene_counter + 1}_comma",
                             prior_memory=self.memory,
                             learned_leaves=self.learned_leaves,
-                            internal_theory_coords=c_coords,
+                            internal_theory_coords=steered_theory_coords,
                             internal_theory_experiential=c_exp,
                             queried_child_leaves=queried_1,
                             skipped_child_leaves=skipped_1,
@@ -2037,6 +2064,24 @@ class ChessKibitzerRuntime:
                     self.board,
                     move_history_san=self.move_history_san,
                 )["legal_moves_mentioned"]
+                if gear_2_steered["evals"] is None and gear_2_delib_text:
+                    c_coords_full, _, _, _ = pre_sensors.score_text(
+                        gear_2_delib_text,
+                        learned_leaves=self.learned_leaves,
+                    )
+                    steered_evals, steering_receipt = reweight_suspects_with_left_brain_theory(
+                        all_evals,
+                        c_coords_full,
+                        will_edges=self.will_edges,
+                        left_brain_mentioned_san=str(mentioned[0]) if mentioned else None,
+                    )
+                    gear_2_steered["evals"] = steered_evals
+                    gear_2_steered["receipt"] = steering_receipt
+                if gear_2_steered["evals"] is not None:
+                    all_evals = list(gear_2_steered["evals"])
+                    top_candidates = all_evals[:8]
+                    eval_by_san = {e.san: e for e in all_evals}
+                    top_san_set = {c.san for c in top_candidates[:4]}
                 if mentioned:
                     left_brain_proposed_san = str(mentioned[0])
                     cand_eval = eval_by_san.get(left_brain_proposed_san)
@@ -2127,10 +2172,51 @@ class ChessKibitzerRuntime:
                             else:
                                 chosen_san = left_brain_proposed_san
                                 selection_mode = "gear_2_left_brain_deliberation"
+                elif (
+                    gear_2_steered["evals"]
+                    and isinstance(gear_2_steered["receipt"], dict)
+                    and gear_2_steered["receipt"].get("steered")
+                ):
+                    steered_top = gear_2_steered["evals"][0]
+                    has_new_shadow = bool(
+                        steered_top.shadow_warnings and not right_brain_choice.shadow_warnings
+                    )
+                    if (
+                        not steered_top.is_blunder
+                        and not steered_top.is_repetition
+                        and not has_new_shadow
+                        and (right_brain_choice.composite_score - steered_top.composite_score) <= 0.40
+                    ):
+                        chosen_san = steered_top.san
+                        left_brain_proposed_san = steered_top.san
+                        selection_mode = "gear_2_left_brain_deliberation"
             except Exception:
                 pass
 
         chosen_eval = eval_by_san.get(chosen_san, right_brain_choice)
+        detective_suspects = [
+            ev.detective_trace for ev in all_evals[:5] if ev.detective_trace is not None
+        ]
+        if detective_suspects or gear_2_steered["receipt"] is not None:
+            s_parts = [
+                f"{ev.san}({ev.detective_trace.get('detective_verdict', 'stabilized')} Δ{float(ev.detective_trace.get('ply5_delta', 0.0)):+.2f})"
+                for ev in all_evals[:3]
+                if ev.detective_trace is not None
+            ]
+            summary = (
+                f"Ply-5 Detective: {', '.join(s_parts)} → Exec={chosen_san}"
+                if s_parts
+                else f"Gear-2 Steer: Exec={chosen_san}"
+            )
+            self.last_detective_funnel_receipt = {
+                "chosen_san": chosen_san,
+                "selection_mode": selection_mode,
+                "suspects": detective_suspects,
+                "gear_2_steering": gear_2_steered["receipt"],
+                "summary": summary,
+            }
+        else:
+            self.last_detective_funnel_receipt = None
         self._in_sparring_ai_move = bool(in_sparring_mode)
         try:
             snap = self.handle_chess_move(

@@ -586,11 +586,11 @@ SUB_SENSOR_FEATURE_NAMES: tuple[str, ...] = (
     "move_net_safety",
     "move_positional_gain",
     "min_friendly_minor_escape_squares_norm",
-    "ply3_material_delta_norm",
+    "pinned_friendly_pieces_norm",
     "ply3_safety_drop",
     "ply3_mobility_drop",
     "ply3_king_shield_drop",
-    "ply3_hanging_pieces_jump",
+    "enemy_fork_and_king_trap_norm",
     "unanswered_enemy_threat_norm",
     "passed_pawn_push_norm",
 )
@@ -639,15 +639,15 @@ def compute_move_sub_sensors(
     """Compute the 16-float Sub-Sensor Bank (`z`) for a candidate move.
 
     - Slots 0..7: 8 Ply-1 `extract_bitboard_features` values.
-    - Slots 8..15: 8 Ply-1-to-Ply-3 Rollout & Tactical Sub-Probes:
+    - Slots 8..15: 8 Rollout & Tactical Sub-Probes:
       (8) `min_friendly_minor_escape_squares_norm` (detects trapped bishops/knights like `b3` after `a5-a4`),
-      (9) `ply3_material_delta_norm`,
-      (10) `ply3_safety_drop`,
-      (11) `ply3_mobility_drop`,
-      (12) `ply3_king_shield_drop`,
-      (13) `ply3_hanging_pieces_jump`,
-      (14) `unanswered_enemy_threat_norm`,
-      (15) `passed_pawn_push_norm`.
+      (9) `pinned_friendly_pieces_norm` (detects friendly pieces pinned to our King or Queen),
+      (10) `ply3_safety_drop` (rollout material safety drop),
+      (11) `ply3_mobility_drop` (army mobility cramp),
+      (12) `ply3_king_shield_drop` (weakening of our King's pawn shelter),
+      (13) `enemy_fork_and_king_trap_norm` (enemy double-attack forks and back-rank / 0-escape-square King traps),
+      (14) `unanswered_enemy_threat_norm` (existing enemy threats left unanswered),
+      (15) `passed_pawn_push_norm` (advancing passed/central pawns).
     """
     us = board.turn if perspective is None else perspective
     them = not us
@@ -761,18 +761,37 @@ def compute_move_sub_sensors(
     # If a minor piece is trapped at Ply 2 (`min_escape == 0`), reflect the pending minor-piece loss in ply3 deltas
     trapped_minor_loss = 2.5 if min_escape == 0 else (1.0 if min_escape == 1 and max_unanswered_threat < 1.0 else 0.0)
     worst_loss = max(float(blunder_penalty), max_unanswered_threat, trapped_minor_loss)
-    mat_before = sum(
-        val * (chess.popcount(board.pieces_mask(pt, us)) - chess.popcount(board.pieces_mask(pt, them)))
-        for pt, val in _PIECE_VALUES.items()
-        if val > 0.0
-    )
-    mat_nb = sum(
-        val * (chess.popcount(nb.pieces_mask(pt, us)) - chess.popcount(nb.pieces_mask(pt, them)))
-        for pt, val in _PIECE_VALUES.items()
-        if val > 0.0
-    )
-    ply3_mat_delta_norm = round(max(-1.0, min(1.0, ((mat_nb - worst_loss) - mat_before) / 6.0)), 4)
     ply3_safety_drop = round(_clamp01(worst_loss / 3.5), 4)
+
+    # Slot 9: `pinned_friendly_pieces_norm` (pieces pinned to our King or shielding our Queen from a sliding attacker)
+    pinned_count = 0
+    our_queens = list(nb.pieces(chess.QUEEN, us))
+    enemy_sliders = (
+        list(nb.pieces(chess.BISHOP, them))
+        + list(nb.pieces(chess.ROOK, them))
+        + list(nb.pieces(chess.QUEEN, them))
+    )
+    occ_all = nb.occupied
+    for sq in our_non_king_nb:
+        if nb.is_pinned(us, sq):
+            pinned_count += 1
+            continue
+        if our_queens and sq not in our_queens and nb.is_attacked_by(them, sq):
+            is_queen_shield = False
+            for q_sq in our_queens:
+                for sl_sq in enemy_sliders:
+                    ray_mask = chess.BB_RAYS[sl_sq][q_sq]
+                    if not (ray_mask & chess.BB_SQUARES[sq]):
+                        continue
+                    between_mask = chess.between(sl_sq, q_sq)
+                    if chess.popcount(between_mask & occ_all) == 1 and (between_mask & chess.BB_SQUARES[sq]):
+                        is_queen_shield = True
+                        break
+                if is_queen_shield:
+                    break
+            if is_queen_shield:
+                pinned_count += 1
+    pinned_friendly_pieces_norm = round(_clamp01(pinned_count / 2.0), 4)
 
     our_att_before = chess.popcount(_union_attacks_bb(board, us))
     our_att_nb = chess.popcount(_union_attacks_bb(nb, us))
@@ -789,8 +808,48 @@ def compute_move_sub_sensors(
         ks_before = 0.50
     ply3_king_shield_drop = round(_clamp01(max(0.0, ks_before - float(p1["king_shield_safety"]))), 4)
 
-    hanging_jump = max(0, hanging_nb - hanging_before) + (1 if min_escape == 0 else 0)
-    ply3_hanging_pieces_jump = round(_clamp01(hanging_jump / 2.0), 4)
+    # Slot 13: `enemy_fork_and_king_trap_norm` (double-attack forks + 0-escape-square back-rank/mating nets)
+    fork_and_trap_pressure = 0.0
+    valuable_targets = [
+        sq
+        for pt in (chess.KNIGHT, chess.BISHOP, chess.ROOK, chess.QUEEN, chess.KING)
+        for sq in nb.pieces(pt, us)
+    ]
+    for e_sq, e_pc in nb.piece_map().items():
+        if e_pc.color != them:
+            continue
+        e_val = 99.0 if e_pc.piece_type == chess.KING else _PIECE_VALUES.get(e_pc.piece_type, 1.0)
+        forked = [
+            t_sq
+            for t_sq in valuable_targets
+            if nb.attacks_mask(e_sq) & chess.BB_SQUARES[t_sq]
+            and (
+                nb.piece_type_at(t_sq) == chess.KING
+                or not nb.is_attacked_by(us, t_sq)
+                or _PIECE_VALUES.get(nb.piece_type_at(t_sq) or chess.PAWN, 1.0) > e_val
+            )
+        ]
+        if len(forked) >= 2:
+            fork_and_trap_pressure = max(fork_and_trap_pressure, 0.85)
+            break
+    king_sq_nb = nb.king(us)
+    enemy_heavy = bool(nb.pieces(chess.ROOK, them) or nb.pieces(chess.QUEEN, them))
+    if king_sq_nb is not None and enemy_heavy:
+        safe_king_steps = [
+            k_to
+            for k_to in nb.attacks(king_sq_nb)
+            if nb.color_at(k_to) != us and not nb.is_attacked_by(them, k_to)
+        ]
+        if not safe_king_steps:
+            fork_and_trap_pressure = max(fork_and_trap_pressure, 0.75 if not nb.is_check() else 1.0)
+        elif chess.square_rank(king_sq_nb) == home_rank and not any(
+            chess.square_rank(k_to) != home_rank for k_to in safe_king_steps
+        ):
+            fork_and_trap_pressure = max(fork_and_trap_pressure, 0.65)
+        elif len(safe_king_steps) == 1 and nb.is_check():
+            fork_and_trap_pressure = max(fork_and_trap_pressure, 0.55)
+    enemy_fork_and_king_trap_norm = round(_clamp01(fork_and_trap_pressure), 4)
+
     unanswered_enemy_threat_norm = round(_clamp01(max(max_unanswered_threat, trapped_minor_loss) / 3.5), 4)
 
     # Slot 15: `passed_pawn_push_norm`
@@ -814,11 +873,11 @@ def compute_move_sub_sensors(
         slots_0_7
         + [
             min_minor_escape_norm,
-            ply3_mat_delta_norm,
+            pinned_friendly_pieces_norm,
             ply3_safety_drop,
             ply3_mobility_drop,
             ply3_king_shield_drop,
-            ply3_hanging_pieces_jump,
+            enemy_fork_and_king_trap_norm,
             unanswered_enemy_threat_norm,
             round(float(passed_push), 4),
         ]
@@ -1088,9 +1147,11 @@ class CandidateMoveEvaluation:
     vow_alignment_delta: float = 0.0
     guided_by_vow: bool = False
     sub_sensors: tuple[float, ...] = ()
+    detective_trace: Mapping[str, Any] | None = None
+    coords_snapshot: Mapping[str, float] | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        out: dict[str, Any] = {
             "san": self.san,
             "uci": self.uci,
             "composite_score": round(float(self.composite_score), 4),
@@ -1110,6 +1171,67 @@ class CandidateMoveEvaluation:
             "vow_alignment_delta": round(float(self.vow_alignment_delta), 4),
             "guided_by_vow": bool(self.guided_by_vow),
         }
+        if self.detective_trace is not None:
+            out["detective_trace"] = dict(self.detective_trace)
+        return out
+
+
+def compute_will_circuit_activations(
+    coords: dict[str, float],
+    *,
+    will_edges: Sequence[Any] = RIGHT_BRAIN_WILL_EDGES,
+    intention_shift: float = 0.0,
+    theory_override: float | None = None,
+    confidence_override: float | None = None,
+) -> tuple[float, float, float]:
+    """Compute `psychological/will/intention` and `execution` strictly through `will_edges` (`rb-will-0..8`)."""
+    w_map = {e.id: float(e.weight) for e in RIGHT_BRAIN_WILL_EDGES}
+    for edge in will_edges:
+        w_map[edge.id] = float(edge.weight)
+    pos_int_denom = max(
+        0.5,
+        max(0.0, w_map["rb-will-0"])
+        + max(0.0, w_map["rb-will-1"])
+        + max(0.0, w_map["rb-will-2"]),
+    )
+    needlessness_val = float(coords.get("cultural/freedom/needlessness", 0.10))
+    base_intention = (
+        w_map["rb-will-0"] * float(coords.get("experiential/reflection/salience", 0.50))
+        + w_map["rb-will-1"] * float(coords.get("experiential/phase/arousal", 0.50))
+        + w_map["rb-will-2"] * float(coords.get("cultural/efficiency/power", 0.50))
+        + w_map["rb-will-3"] * needlessness_val
+    ) / pos_int_denom
+    intention_val = _clamp01(base_intention + float(intention_shift))
+    coords["psychological/will/intention"] = float(intention_val)
+
+    fact_val = float(coords.get("psychological/truth/fact", 0.50))
+    theory_val = (
+        _clamp01(float(theory_override))
+        if theory_override is not None
+        else float(coords.get("psychological/truth/theory", 0.50))
+    )
+    conf_val = (
+        _clamp01(float(confidence_override))
+        if confidence_override is not None
+        else float(coords.get("psychological/contemplation/confidence", 0.60))
+    )
+    pos_exec_denom = max(
+        0.5,
+        max(0.0, w_map["rb-will-4"])
+        + max(0.0, w_map["rb-will-5"])
+        + max(0.0, w_map["rb-will-6"])
+        + max(0.0, w_map["rb-will-7"]),
+    )
+    will_execution_drive = (
+        w_map["rb-will-4"] * intention_val
+        + w_map["rb-will-5"] * fact_val
+        + w_map["rb-will-6"] * theory_val
+        + w_map["rb-will-7"] * conf_val
+        + w_map["rb-will-8"] * needlessness_val
+    )
+    execution_coord = _clamp01(will_execution_drive / pos_exec_denom)
+    coords["psychological/will/execution"] = float(execution_coord)
+    return intention_val, execution_coord, will_execution_drive
 
 
 def compute_candidate_move_fuzzy_coordinates(
@@ -1326,42 +1448,7 @@ def compute_candidate_move_fuzzy_coordinates(
         coords["experiential/phase/valence"] = _clamp01(float(ambient_valence))
 
     # 4. `psychological/will/intention` and `execution` via `will_edges` (`rb-will-0..8`)
-    w_map = {e.id: float(e.weight) for e in RIGHT_BRAIN_WILL_EDGES}
-    for edge in will_edges:
-        w_map[edge.id] = float(edge.weight)
-    pos_int_denom = max(
-        0.5,
-        max(0.0, w_map["rb-will-0"])
-        + max(0.0, w_map["rb-will-1"])
-        + max(0.0, w_map["rb-will-2"]),
-    )
-    intention_coord = _clamp01(
-        (
-            w_map["rb-will-0"] * coords["experiential/reflection/salience"]
-            + w_map["rb-will-1"] * coords["experiential/phase/arousal"]
-            + w_map["rb-will-2"] * coords["cultural/efficiency/power"]
-            + w_map["rb-will-3"] * coords["cultural/freedom/needlessness"]
-        )
-        / pos_int_denom
-    )
-    coords["psychological/will/intention"] = intention_coord
-    pos_exec_denom = max(
-        0.5,
-        max(0.0, w_map["rb-will-4"])
-        + max(0.0, w_map["rb-will-5"])
-        + max(0.0, w_map["rb-will-6"])
-        + max(0.0, w_map["rb-will-7"]),
-    )
-    coords["psychological/will/execution"] = _clamp01(
-        (
-            w_map["rb-will-4"] * intention_coord
-            + w_map["rb-will-5"] * fact_coord
-            + w_map["rb-will-6"] * theory_coord
-            + w_map["rb-will-7"] * sleeve_conf
-            + w_map["rb-will-8"] * coords["cultural/freedom/needlessness"]
-        )
-        / pos_exec_denom
-    )
+    compute_will_circuit_activations(coords, will_edges=will_edges)
     active_shadow_ids = {w.shadow_leaf_id for w in all_warnings if w.shadow_leaf_id}
     move_sub_sensors: tuple[float, ...] | None = None
     if any(leaf.sub_sensor_weights is not None for leaf in learned_leaves):
@@ -1391,7 +1478,7 @@ def _evaluate_learned_leaves_into_coords(
     move_sub_sensors: Sequence[float] | None = None,
     active_shadow_ids: set[str] | None = None,
 ) -> None:
-    """Populate Tier-2 and Tier-3 `LearnedLeaf` activations in `coords` from `move_sub_sensors` and updated `coords`."""
+    """Populate Tier-2, Tier-3, and Tier-4 `LearnedLeaf` activations in `coords` from `move_sub_sensors` and updated `coords`."""
     shadow_set = active_shadow_ids or set()
     for leaf in sorted(learned_leaves, key=lambda lf: lf.tier):
         if leaf.leaf_id in shadow_set:
@@ -1399,7 +1486,11 @@ def _evaluate_learned_leaves_into_coords(
         if leaf.sub_sensor_weights is not None and move_sub_sensors is not None:
             sub_val = leaf.evaluate_sub_sensors(move_sub_sensors)
             if leaf.tier >= 3 and leaf.parent_branch in coords:
-                sub_val = round(sub_val * float(coords.get(leaf.parent_branch, 1.0)), 6)
+                parent_val = float(coords.get(leaf.parent_branch, 0.0))
+                if parent_val >= 0.50:
+                    sub_val = round(sub_val * parent_val, 6)
+                else:
+                    sub_val = 0.0
             coords[leaf.leaf_id] = sub_val
             continue
         if not leaf.leaf_name.startswith(("hazard_", "coached_")):
@@ -1597,6 +1688,7 @@ def _rollout_intention_into_theory_and_confidence(
     sleeve: BitboardIntuitionSleeve,
     base_coords: dict[str, float],
     out_rollout_phil: dict[str, float] | None = None,
+    out_best_board_3: list[chess.Board] | None = None,
 ) -> tuple[float, float, float, float]:
     """Project a candidate `intention` through the opponent's best replies (`Ply 2`) and our best response (`Ply 3`) to ground `theory`, `confidence`, and `clarity`."""
     us = perspective
@@ -1672,6 +1764,7 @@ def _rollout_intention_into_theory_and_confidence(
         best_board_3 = board_2
         best_sleeve_3: dict[str, Any] = {"value_prior": 0.50, "policy_prior": 0.50, "sleeve_confidence": 0.55}
         best_eff_mat_3 = _material_balance_for_side(board_2, us)
+        scored_m3_boards: list[tuple[float, chess.Board]] = []
 
         for m3 in our_responses:
             m3_score, board_3, sleeve_3, pending_loss_3, allows_mate_4 = _score_rollout_ply_impulse(
@@ -1687,6 +1780,7 @@ def _rollout_intention_into_theory_and_confidence(
                 mat_3 = _material_balance_for_side(board_3, us)
                 eff_mat_3 = mat_3 - (9.0 if allows_mate_4 else 0.85 * pending_loss_3)
                 m3_util = eff_mat_3 + 0.80 * m3_score
+            scored_m3_boards.append((m3_util, board_3))
             if m3_util > best_m3_utility:
                 second_m3_utility = best_m3_utility
                 best_m3_utility = m3_util
@@ -1775,6 +1869,11 @@ def _rollout_intention_into_theory_and_confidence(
                 out_rollout_phil.clear()
                 for k, v in phil_3.items():
                     out_rollout_phil[k] = float(v)
+            if out_best_board_3 is not None:
+                out_best_board_3.clear()
+                scored_m3_boards.sort(key=lambda item: -item[0])
+                for _u3, b3_cand in scored_m3_boards[:3]:
+                    out_best_board_3.append(b3_cand)
 
     return rollout_theory, rollout_conf, rollout_clarity, rollout_loss
 
@@ -1892,6 +1991,202 @@ def _enrich_move_coords_with_theory_rollout(
     return coords, is_blunder, blunder_penalty
 
 
+def _run_detective_ply5_walk_on_suspects(
+    board_before: chess.Board,
+    suspects: Sequence[dict[str, Any]],
+    *,
+    fault_line_leaves: Sequence[str],
+    perspective: chess.Color,
+    rule_tuple: tuple[FuzzyConceptRule, ...] = (),
+    learned_tuple: tuple[LearnedLeaf, ...] = (),
+    sleeve: BitboardIntuitionSleeve = _DEFAULT_BITBOARD_SLEEVE,
+    will_edges: Sequence[Any] = RIGHT_BRAIN_WILL_EDGES,
+) -> None:
+    """Walk `Ply 3 -> Ply 4 opponent reply -> Ply 5 best response` on the top 3 suspects to refine `Intention`, `Theory`, and `Execution`."""
+    us = perspective
+    them = not us
+    mat_before = _material_balance_for_side(board_before, us)
+    fault_keys = tuple(fault_line_leaves) or (
+        "philosophical/structure/order",
+        "philosophical/being/existence",
+        "cultural/efficiency/wastelessness",
+    )
+
+    pool_v3_mean: dict[str, float] = {
+        fk: sum(float(s["coords"].get(fk, 0.50)) for s in suspects[:3]) / max(1, len(suspects[:3]))
+        for fk in fault_keys
+    }
+
+    for rank_idx, cand in enumerate(suspects[:3]):
+        c_dict = cand["coords"]
+        b3_candidates: list[chess.Board] = list(cand.get("ply3_boards") or ())
+        if not b3_candidates and cand.get("ply3_board") is not None:
+            b3_candidates = [cand["ply3_board"]]
+        b3_candidates = [b for b in b3_candidates if b is not None and not b.is_game_over()]
+        if not b3_candidates:
+            continue
+
+        best_b3_ply5_loss = 999.0
+        best_b3_util = -999.0
+        board_5: chess.Board | None = None
+
+        for board_3 in b3_candidates:
+            reply4_candidates = _select_rollout_branch_moves(board_3, max_quiet=6)
+            if not reply4_candidates:
+                continue
+            scored_r4: list[tuple[float, chess.Board]] = []
+            for r4 in reply4_candidates:
+                r4_score, board_4, _, _, r4_allows_mate = _score_rollout_ply_impulse(
+                    board_3,
+                    r4,
+                    perspective=them,
+                    sleeve=sleeve,
+                )
+                if not r4_allows_mate or len(reply4_candidates) == 1:
+                    scored_r4.append((r4_score, board_4))
+            if not scored_r4:
+                continue
+            scored_r4.sort(key=lambda item: -item[0])
+            _, board_4 = scored_r4[0]
+
+            cand_ply5_loss = float(cand.get("ply3_loss", 0.0))
+            cand_board_5 = board_4
+            cand_b3_util = -999.0
+            if board_4.is_checkmate():
+                cand_ply5_loss = 9.5
+                cand_b3_util = -95.0
+            else:
+                our5_responses = _select_rollout_branch_moves(board_4, max_quiet=6)
+                if our5_responses:
+                    best_m5_util = -999.0
+                    best_eff_mat_5 = _material_balance_for_side(board_4, us)
+                    for m5 in our5_responses:
+                        m5_score, b5, _, pending_loss_5, allows_mate_6 = _score_rollout_ply_impulse(
+                            board_4,
+                            m5,
+                            perspective=us,
+                            sleeve=sleeve,
+                        )
+                        if b5.is_checkmate():
+                            eff_mat_5 = mat_before + 9.0
+                            m5_util = 100.0
+                        else:
+                            mat_5 = _material_balance_for_side(b5, us)
+                            eff_mat_5 = mat_5 - (9.0 if allows_mate_6 else 0.85 * pending_loss_5)
+                            m5_util = eff_mat_5 + 0.80 * m5_score
+                        if m5_util > best_m5_util:
+                            best_m5_util = m5_util
+                            cand_board_5 = b5
+                            best_eff_mat_5 = eff_mat_5
+                    net_mat_delta_5 = best_eff_mat_5 - mat_before
+                    cand_ply5_loss = max(0.0, -net_mat_delta_5) if net_mat_delta_5 <= -0.8 else 0.0
+                    cand_b3_util = best_m5_util - 1.5 * cand_ply5_loss
+                else:
+                    mat_4 = _material_balance_for_side(board_4, us)
+                    cand_ply5_loss = max(0.0, mat_before - mat_4)
+                    cand_b3_util = -cand_ply5_loss
+
+            if cand_b3_util > best_b3_util:
+                best_b3_util = cand_b3_util
+                best_b3_ply5_loss = cand_ply5_loss
+                board_5 = cand_board_5
+            if cand_ply5_loss == 0.0:
+                break
+
+        if board_5 is None:
+            continue
+        ply5_loss = best_b3_ply5_loss
+
+        posture_5 = evaluate_chess_board_posture(board_5, perspective=us)
+        phil_5 = posture_5.philosophical_coordinates
+        ply3_snapshot = dict(c_dict)
+
+        was_1ply_blunder = bool(cand.get("was_1ply_blunder", False))
+        if ply5_loss >= 0.8:
+            cand["is_blunder"] = True
+            cand["blunder_penalty"] = max(float(cand["blunder_penalty"]), ply5_loss)
+
+        leaf_deltas: list[float] = []
+        for fk in fault_keys:
+            v3 = float(ply3_snapshot.get(fk, 0.50))
+            v_pool = float(pool_v3_mean.get(fk, v3))
+            if fk in phil_5:
+                v5 = float(phil_5[fk])
+            elif fk == "cultural/efficiency/wastelessness":
+                v5 = (
+                    round(max(0.08, 0.42 - 0.08 * min(4.0, float(cand["blunder_penalty"]))), 4)
+                    if cand["is_blunder"]
+                    else v3
+                )
+            elif fk == "cultural/freedom/needlessness":
+                v5 = 0.53 if cand["is_blunder"] else v3
+            else:
+                v5 = v3
+            sign = -1.0 if fk in ("philosophical/structure/chaos", "cultural/freedom/needlessness") else 1.0
+            leaf_deltas.append(sign * (0.65 * (v5 - v_pool) + 0.35 * (v5 - v3)))
+
+        loss_jump = max(0.0, ply5_loss - float(cand.get("ply3_loss", 0.0)))
+        ply5_delta = (sum(leaf_deltas) / max(1, len(leaf_deltas))) - 0.18 * min(3.0, loss_jump)
+        ply3_clarity = float(ply3_snapshot.get("psychological/contemplation/clarity", 0.60))
+        significant_ply5_signal = (
+            loss_jump > 0.0
+            or bool(cand["is_blunder"])
+            or ply3_clarity < 0.55
+            or any(float(c_dict.get(lf.leaf_id, 0.0)) >= 0.50 for lf in learned_tuple if lf.tier >= 2)
+        )
+        if significant_ply5_signal:
+            c_dict["psychological/truth/theory"] = _clamp01(
+                float(c_dict.get("psychological/truth/theory", 0.50)) + 0.35 * ply5_delta
+            )
+            c_dict["psychological/contemplation/clarity"] = _clamp01(
+                float(c_dict.get("psychological/contemplation/clarity", 0.50))
+                + (0.08 if ply5_delta >= 0.0 and not cand["is_blunder"] else -0.15 * min(2.0, loss_jump))
+            )
+
+        cand["sub_sensors"] = _sync_coords_and_learned_leaves_after_rollout(
+            board_before,
+            cand["move"],
+            cand["next_board"],
+            c_dict,
+            was_1ply_blunder=was_1ply_blunder,
+            is_blunder=bool(cand["is_blunder"]),
+            blunder_penalty=float(cand["blunder_penalty"]),
+            r_loss=max(float(cand.get("ply3_loss", 0.0)), ply5_loss),
+            forced_mate_rollout=bool(cand.get("forced_mate_rollout", False)),
+            rollout_phil_3={},
+            perspective=us,
+            learned_leaves=learned_tuple,
+        )
+        intention_shift = (
+            round(max(-0.25, min(0.25, 0.50 * ply5_delta)), 4)
+            if significant_ply5_signal
+            else 0.0
+        )
+        cand["detective_intention_shift"] = intention_shift
+        compute_will_circuit_activations(
+            c_dict,
+            will_edges=will_edges,
+            intention_shift=intention_shift,
+        )
+        for r in rule_tuple:
+            for req_leaf in r.target_leaves:
+                c_dict.setdefault(req_leaf, 0.0)
+
+        verdict = (
+            "unraveled_blunder"
+            if cand["is_blunder"]
+            else ("stabilized" if ply5_delta >= -0.01 else "strained")
+        )
+        cand["detective_trace"] = {
+            "suspect_rank": rank_idx + 1,
+            "fault_line_leaves": list(fault_keys),
+            "ply5_delta": round(float(ply5_delta), 4),
+            "ply5_loss": round(float(ply5_loss), 4),
+            "intention_shift": float(intention_shift),
+            "detective_verdict": verdict,
+        }
+
+
 def evaluate_candidate_moves_with_right_brain(
     board: chess.Board,
     rules: Sequence[FuzzyConceptRule] = (),
@@ -1903,7 +2198,7 @@ def evaluate_candidate_moves_with_right_brain(
     active_vow_leaves: Sequence[str] = (),
     branch_archives: Any = None,
 ) -> list[CandidateMoveEvaluation]:
-    """Rank legal moves via `Intention (Ply 1) -> Theory (Ply 2-3 Rollout) -> Confidence -> Execution` (`will_edges`)."""
+    """Rank legal moves via `Intention (Ply 1) -> Theory (Ply 2-3 Rollout) -> Detective Walk (Ply 5) -> Execution` (`will_edges`)."""
     _ = (active_vow_leaves, branch_archives)
     legal = list(board.legal_moves)
     if not legal:
@@ -1913,9 +2208,6 @@ def evaluate_candidate_moves_with_right_brain(
     rule_tuple = tuple(rules)
     learned_tuple = tuple(learned_leaves)
     will_tuple = tuple(will_edges)
-    w_map = {e.id: float(e.weight) for e in RIGHT_BRAIN_WILL_EDGES}
-    for edge in will_tuple:
-        w_map[edge.id] = float(edge.weight)
     sleeve = bitboard_sleeve if bitboard_sleeve is not None else _DEFAULT_BITBOARD_SLEEVE
     evaluations: list[CandidateMoveEvaluation] = []
     pending_candidates: list[dict[str, Any]] = []
@@ -1987,13 +2279,19 @@ def evaluate_candidate_moves_with_right_brain(
                 "next_board": next_board,
                 "is_rep": is_rep,
                 "coords": coords,
+                "ply1_coords": dict(coords),
                 "sub_sensors": sub_sensors,
                 "is_blunder": is_blunder,
+                "was_1ply_blunder": is_blunder,
                 "blunder_penalty": blunder_penalty,
                 "post_posture": post_posture,
                 "shadow_names": shadow_names,
                 "intention_rank": intention_rank,
                 "rolled_out": False,
+                "ply3_board": None,
+                "ply3_loss": 0.0,
+                "detective_intention_shift": 0.0,
+                "detective_trace": None,
             }
         )
 
@@ -2005,6 +2303,7 @@ def evaluate_candidate_moves_with_right_brain(
         cand["rolled_out"] = True
         was_1ply_blunder = bool(cand["is_blunder"])
         rollout_phil_3: dict[str, float] = {}
+        best_b3_holder: list[chess.Board] = []
         r_theory, r_conf, r_clarity, r_loss = _rollout_intention_into_theory_and_confidence(
             board,
             cand["next_board"],
@@ -2013,7 +2312,11 @@ def evaluate_candidate_moves_with_right_brain(
             sleeve=sleeve,
             base_coords=cand["coords"],
             out_rollout_phil=rollout_phil_3,
+            out_best_board_3=best_b3_holder,
         )
+        cand["ply3_board"] = best_b3_holder[0] if best_b3_holder else cand["next_board"]
+        cand["ply3_boards"] = tuple(best_b3_holder) if best_b3_holder else (cand["next_board"],)
+        cand["ply3_loss"] = float(r_loss)
         c_dict = cand["coords"]
         forced_mate_rollout = bool(r_theory >= 0.97 and r_conf >= 0.97 and r_loss == 0.0)
         if forced_mate_rollout:
@@ -2063,6 +2366,69 @@ def evaluate_candidate_moves_with_right_brain(
     if pending_candidates and all(bool(c["is_blunder"]) for c in pending_candidates[:rollout_k]):
         for cand in pending_candidates[rollout_k:]:
             _apply_rollout_to_candidate(cand)
+
+    # Identify Position Fault Line & run Ply-5 Detective Walk on top 3 suspects when unsettled
+    rolled_pool = [c for c in pending_candidates if c.get("rolled_out")]
+    safe_pool = [c for c in rolled_pool if not c["is_blunder"] and not c["is_rep"]] or rolled_pool
+    if safe_pool:
+        def _prelim_suspect_score(c_item: dict[str, Any]) -> float:
+            c_d = c_item["coords"]
+            _, _, w_drive = compute_will_circuit_activations(
+                c_d,
+                will_edges=will_tuple,
+            )
+            posture_sc = (
+                0.55 * float(c_d.get("cultural/efficiency/wastelessness", 0.50))
+                + 0.55 * float(c_d.get("philosophical/being/existence", 0.50))
+                + 0.45 * float(c_d.get("philosophical/structure/order", 0.50))
+                + 0.40 * float(c_d.get("philosophical/persistence/continuity", 0.50))
+                + 0.35 * float(c_d.get("philosophical/persistence/discreteness", 0.50))
+                + 0.25 * float(c_d.get("philosophical/being/agency", 0.50))
+                - 0.25 * float(c_d.get("philosophical/structure/chaos", 0.50))
+            )
+            return w_drive + posture_sc - 1.35 * float(c_item["blunder_penalty"]) - (1.80 if c_item["is_rep"] else 0.0)
+
+        suspects = sorted(safe_pool, key=lambda item: (-_prelim_suspect_score(item), str(item["san"])))[:3]
+        top_suspect = suspects[0]
+        top_clarity = float(top_suspect["coords"].get("psychological/contemplation/clarity", 0.60))
+        score_margin = (
+            (_prelim_suspect_score(suspects[0]) - _prelim_suspect_score(suspects[1]))
+            if len(suspects) >= 2
+            else 1.0
+        )
+        has_active_deep_leaf = any(
+            float(top_suspect["coords"].get(lf.leaf_id, 0.0)) >= 0.50
+            for lf in learned_tuple
+            if lf.tier >= 2
+        )
+        if not top_suspect.get("forced_mate_rollout") and (
+            top_clarity < 0.55 or score_margin < 0.12 or has_active_deep_leaf
+        ):
+            def _leaf_tension(leaf_k: str) -> float:
+                p1_to_p3 = max(
+                    (
+                        abs(float(s["coords"].get(leaf_k, 0.50)) - float(s["ply1_coords"].get(leaf_k, 0.50)))
+                        for s in suspects
+                    ),
+                    default=0.0,
+                )
+                vals = [float(s["coords"].get(leaf_k, 0.50)) for s in suspects]
+                spread = (max(vals) - min(vals)) if len(vals) >= 2 else 0.0
+                return p1_to_p3 + spread
+
+            fault_line_leaves = tuple(
+                sorted(FOUNDATIONAL_LEAVES, key=lambda k: (_leaf_tension(k), k), reverse=True)[:3]
+            )
+            _run_detective_ply5_walk_on_suspects(
+                board,
+                suspects,
+                fault_line_leaves=fault_line_leaves,
+                perspective=us,
+                rule_tuple=rule_tuple,
+                learned_tuple=learned_tuple,
+                sleeve=sleeve,
+                will_edges=will_tuple,
+            )
 
     for cand in pending_candidates:
         san = cand["san"]
@@ -2143,31 +2509,13 @@ def evaluate_candidate_moves_with_right_brain(
             + 0.18 * coached_peak
             - 0.22 * hazard_peak
         )
-        needlessness_val = float(coords.get("cultural/freedom/needlessness", 0.10))
-        pos_int_denom = max(
-            0.5,
-            max(0.0, w_map["rb-will-0"])
-            + max(0.0, w_map["rb-will-1"])
-            + max(0.0, w_map["rb-will-2"]),
-        )
-        intention_val = _clamp01(
-            (
-                w_map["rb-will-0"] * float(coords.get("experiential/reflection/salience", 0.50))
-                + w_map["rb-will-1"] * float(coords.get("experiential/phase/arousal", 0.50))
-                + w_map["rb-will-2"] * float(coords.get("cultural/efficiency/power", 0.50))
-                + w_map["rb-will-3"] * needlessness_val
-            )
-            / pos_int_denom
-        )
-        coords["psychological/will/intention"] = float(intention_val)
-
-        # Action Bid on `psychological/will/execution` (`will_edges`: rb-will-4..8)
-        will_execution_drive = (
-            w_map["rb-will-4"] * intention_val
-            + w_map["rb-will-5"] * fact_val
-            + w_map["rb-will-6"] * theory_val
-            + w_map["rb-will-7"] * float(confidence)
-            + w_map["rb-will-8"] * needlessness_val
+        coords["psychological/truth/theory"] = float(theory_val)
+        intention_val, _, will_execution_drive = compute_will_circuit_activations(
+            coords,
+            will_edges=will_tuple,
+            intention_shift=float(cand.get("detective_intention_shift", 0.0)),
+            theory_override=theory_val,
+            confidence_override=float(confidence),
         )
         if is_hazard_match:
             contemplation_drive = (
@@ -2226,11 +2574,135 @@ def evaluate_candidate_moves_with_right_brain(
                 vow_alignment_delta=vow_delta,
                 guided_by_vow=guided_by_vow,
                 sub_sensors=tuple(cand.get("sub_sensors", ())),
+                detective_trace=cand.get("detective_trace"),
+                coords_snapshot=dict(coords),
             )
         )
 
     evaluations.sort(key=lambda item: (-item.composite_score, item.san))
     return evaluations[: max(1, int(limit))]
+
+
+def reweight_suspects_with_left_brain_theory(
+    evaluations: Sequence[CandidateMoveEvaluation],
+    left_brain_theory_coords: Mapping[str, float],
+    *,
+    will_edges: Sequence[Any] = RIGHT_BRAIN_WILL_EDGES,
+    left_brain_mentioned_san: str | None = None,
+) -> tuple[list[CandidateMoveEvaluation], dict[str, Any]]:
+    """Re-score `Intention` and `Theory` across safe Detective suspects from Left-Brain Clause-1 `Theory` via `compute_will_circuit_activations`."""
+    eval_list = list(evaluations)
+    if not eval_list:
+        return [], {}
+
+    priority_leaves = sorted(
+        FOUNDATIONAL_LEAVES,
+        key=lambda k: (abs(float(left_brain_theory_coords.get(k, 0.50)) - 0.50), k),
+        reverse=True,
+    )[:3]
+    prior_winner_san = eval_list[0].san
+    updated_list: list[CandidateMoveEvaluation] = []
+    suspect_deltas: dict[str, dict[str, float]] = {}
+
+    safe_top_sans = {
+        ev.san
+        for ev in eval_list[:3]
+        if not ev.is_blunder
+        and not ev.is_repetition
+        and not str(ev.matched_concept or "").startswith(("hazard_", "blunder_", "avoid_"))
+    }
+
+    for ev in eval_list:
+        if ev.san not in safe_top_sans:
+            updated_list.append(ev)
+            continue
+
+        c_snap = dict(ev.coords_snapshot) if ev.coords_snapshot is not None else {k: 0.50 for k in FOUNDATIONAL_LEAVES}
+        c_snap["psychological/truth/fact"] = float(ev.fact)
+        c_snap["psychological/truth/theory"] = float(ev.theory)
+        c_snap["psychological/contemplation/confidence"] = float(ev.confidence)
+        c_snap["psychological/will/intention"] = float(ev.intention)
+
+        prior_det_shift = (
+            float(ev.detective_trace.get("intention_shift", 0.0))
+            if isinstance(ev.detective_trace, Mapping)
+            else 0.0
+        )
+        _, _, old_will_drive = compute_will_circuit_activations(
+            dict(c_snap),
+            will_edges=will_edges,
+            intention_shift=prior_det_shift,
+            theory_override=float(ev.theory),
+            confidence_override=float(ev.confidence),
+        )
+
+        # Compute alignment between this safe suspect's coordinates and the Left Brain's Clause-1 priority leaves
+        sims = [
+            1.0 - abs(float(c_snap.get(pk, 0.50)) - float(left_brain_theory_coords.get(pk, 0.50)))
+            for pk in priority_leaves
+        ]
+        mean_sim = sum(sims) / max(1, len(sims))
+        mention_bonus = 0.16 if (left_brain_mentioned_san and ev.san == left_brain_mentioned_san) else 0.0
+        theory_alignment_delta = (mean_sim - 0.65) * 0.35 + mention_bonus
+
+        new_theory = _clamp01(float(ev.theory) + theory_alignment_delta)
+        new_int_shift = max(-0.30, min(0.30, prior_det_shift + theory_alignment_delta))
+        c_snap["psychological/truth/theory"] = new_theory
+        new_intention, new_exec_coord, new_will_drive = compute_will_circuit_activations(
+            c_snap,
+            will_edges=will_edges,
+            intention_shift=new_int_shift,
+            theory_override=new_theory,
+            confidence_override=float(ev.confidence),
+        )
+        drive_delta = new_will_drive - old_will_drive
+        new_composite = float(ev.composite_score) + drive_delta
+        new_trace = dict(ev.detective_trace) if isinstance(ev.detective_trace, Mapping) else {}
+        new_trace["left_brain_theory_alignment"] = round(float(mean_sim), 4)
+        new_trace["left_brain_intention_shift"] = round(float(new_int_shift), 4)
+        new_trace["left_brain_execution_delta"] = round(float(drive_delta), 4)
+
+        suspect_deltas[ev.san] = {
+            "intention": round(float(new_intention), 4),
+            "theory": round(float(new_theory), 4),
+            "execution_coord": round(float(new_exec_coord), 4),
+            "execution_delta": round(float(drive_delta), 4),
+        }
+        updated_list.append(
+            CandidateMoveEvaluation(
+                san=ev.san,
+                uci=ev.uci,
+                composite_score=new_composite,
+                settled=ev.settled,
+                clarity=ev.clarity,
+                confidence=ev.confidence,
+                matched_concept=ev.matched_concept,
+                dominant_piece=ev.dominant_piece,
+                dominant_color=ev.dominant_color,
+                is_blunder=ev.is_blunder,
+                is_repetition=ev.is_repetition,
+                shadow_warnings=ev.shadow_warnings,
+                execution_bid=new_composite,
+                fact=ev.fact,
+                theory=new_theory,
+                intention=new_intention,
+                vow_alignment_delta=ev.vow_alignment_delta,
+                guided_by_vow=ev.guided_by_vow,
+                sub_sensors=ev.sub_sensors,
+                detective_trace=new_trace,
+                coords_snapshot=c_snap,
+            )
+        )
+
+    updated_list.sort(key=lambda item: (-item.composite_score, item.san))
+    steered_winner_san = updated_list[0].san
+    receipt = {
+        "priority_leaves": list(priority_leaves),
+        "prior_winner_san": prior_winner_san,
+        "steered_winner_san": steered_winner_san,
+        "suspect_deltas": suspect_deltas,
+    }
+    return updated_list, receipt
 
 
 def format_move_history_pgn_snippet(move_history_san: Sequence[str], *, max_plies: int = 8) -> str:

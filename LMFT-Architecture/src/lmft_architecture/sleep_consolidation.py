@@ -1392,13 +1392,6 @@ def consolidate_sleep_clusters_locally(
 
             from .chess_kibitz_bridge import SUB_SENSOR_FEATURE_NAMES
 
-            top3_idx = sorted(range(16), key=lambda i: (abs(sub_sensor_deltas[i]), -i), reverse=True)[:3]
-            active_top_idx = [i for i in top3_idx if abs(sub_sensor_deltas[i]) >= 0.05] or [top3_idx[0]]
-            raw_w = [sub_sensor_deltas[i] if i in active_top_idx else 0.0 for i in range(16)]
-            peak_abs_w = max(abs(x) for x in raw_w) or 1.0
-            sub_w = tuple(round(x / peak_abs_w, 6) for x in raw_w)
-            sub_m = tuple(round(0.5 * (float(avg_played_z[i]) + float(avg_ref_z[i])), 6) for i in range(16))
-
             _, _, def_cult_t1, def_phil_t1 = parse_cluster_defining_leaves(base_name)
             ctx_t1_leaves = [k for k in (def_phil_t1, def_cult_t1) if k is not None]
             if not ctx_t1_leaves:
@@ -1409,8 +1402,9 @@ def consolidate_sleep_clusters_locally(
                     )
                 ]
             base_parent_branch = ctx_t1_leaves[0].rsplit("/", 1)[0]
-            # Check if an existing Tier-2 leaf under `base_parent_branch` is already active (`>= 0.50`)
+            # Check if an existing Tier-2 Commander leaf under `base_parent_branch` is already active (`>= 0.50`)
             active_t2_parent: LearnedLeaf | None = None
+            t2_parent_val = 1.0
             for lf in active_learned_leaves:
                 if lf.tier == 2 and lf.parent_branch == base_parent_branch:
                     lf_val = (
@@ -1420,17 +1414,95 @@ def consolidate_sleep_clusters_locally(
                     )
                     if lf_val >= 0.50:
                         active_t2_parent = lf
+                        t2_parent_val = lf_val
                         break
-            leaf_parent_branch = active_t2_parent.leaf_id if active_t2_parent is not None else base_parent_branch
+
+            # If a Tier-2 Commander leaf is active, check if a Tier-3 Sub-Commander leaf under it is also active (`>= 0.50`)
+            active_t3_parent: LearnedLeaf | None = None
+            t3_parent_val = 1.0
+            if active_t2_parent is not None:
+                for lf in active_learned_leaves:
+                    if lf.tier == 3 and lf.parent_branch == active_t2_parent.leaf_id:
+                        lf_raw = (
+                            lf.evaluate_sub_sensors(avg_played_z)
+                            if lf.sub_sensor_weights is not None
+                            else float(avg_coords.get(lf.leaf_id, 0.0))
+                        )
+                        lf_gated = round(lf_raw * t2_parent_val, 6) if t2_parent_val >= 0.50 else 0.0
+                        if lf_raw >= 0.50 and lf_gated >= 0.45:
+                            active_t3_parent = lf
+                            t3_parent_val = max(0.50, lf_gated)
+                            break
+
+            deepest_parent = active_t3_parent if active_t3_parent is not None else active_t2_parent
+            used_dom_indices: set[int] = set()
+            for anc in (active_t2_parent, active_t3_parent):
+                if anc is not None and anc.sub_sensor_weights is not None:
+                    dom_i = max(range(16), key=lambda i: abs(float(anc.sub_sensor_weights[i])))
+                    used_dom_indices.add(dom_i)
+
+            if active_t3_parent is not None:
+                # Tier-4 Detective leaf requires a secondary separating sub-sensor feature (`>= 0.15` delta)
+                secondary_sep = [
+                    i for i in range(16)
+                    if i not in used_dom_indices and abs(sub_sensor_deltas[i]) >= 0.15
+                ]
+                if not secondary_sep:
+                    continue
+                ranked_idx = sorted(
+                    range(16),
+                    key=lambda i: (
+                        1 if i in secondary_sep else 0,
+                        abs(sub_sensor_deltas[i]),
+                        -i,
+                    ),
+                    reverse=True,
+                )
+            elif active_t2_parent is not None:
+                secondary_sep = [
+                    i for i in range(16)
+                    if i not in used_dom_indices and abs(sub_sensor_deltas[i]) >= 0.15
+                ]
+                ranked_idx = sorted(
+                    range(16),
+                    key=lambda i: (
+                        1 if i in secondary_sep else 0,
+                        abs(sub_sensor_deltas[i]),
+                        -i,
+                    ),
+                    reverse=True,
+                )
+            else:
+                ranked_idx = sorted(range(16), key=lambda i: (abs(sub_sensor_deltas[i]), -i), reverse=True)
+
+            top3_idx = ranked_idx[:3]
+            active_top_idx = [i for i in top3_idx if abs(sub_sensor_deltas[i]) >= 0.05] or [top3_idx[0]]
+            raw_w = [sub_sensor_deltas[i] if i in active_top_idx else 0.0 for i in range(16)]
+            peak_abs_w = max(abs(x) for x in raw_w) or 1.0
+            sub_w = tuple(round(x / peak_abs_w, 6) for x in raw_w)
+            sub_m = tuple(round(0.5 * (float(avg_played_z[i]) + float(avg_ref_z[i])), 6) for i in range(16))
+
+            if active_t3_parent is not None:
+                leaf_parent_branch = active_t3_parent.leaf_id
+            elif active_t2_parent is not None:
+                leaf_parent_branch = active_t2_parent.leaf_id
+            else:
+                leaf_parent_branch = base_parent_branch
+
             probe_tag = SUB_SENSOR_FEATURE_NAMES[active_top_idx[0]].replace("_norm", "")
             leaf_slug = re.sub(r"[^a-z0-9_]+", "_", f"{prefix}_{probe_tag}".lower())[:36].strip("_")
             if not re.fullmatch(r"[a-z][a-z0-9_-]{2,40}", leaf_slug):
                 leaf_slug = f"{prefix}_sub_probe"
             if f"{leaf_parent_branch}/{leaf_slug}" in existing_leaf_ids:
                 leaf_slug = f"{leaf_slug[:28]}_s{rep_scene}"[:36].strip("_")
+            tier_role_label = (
+                "Tier-4 Detective"
+                if active_t3_parent is not None
+                else ("Tier-3 Sub-Commander" if active_t2_parent is not None else "Tier-2 Commander")
+            )
             leaf_desc = (
-                f"Sub-sensor tactical/positional detector on {probe_tag.replace('_', ' ')} "
-                f"separating {human_theme} when Tier-1 coordinates tie."
+                f"{tier_role_label} sub-sensor detector on {probe_tag.replace('_', ' ')} "
+                f"separating {human_theme} when shallower coordinates tie."
             )
             scored_leaf = score_leaf_anchor_weights_at_birth(
                 LearnedLeaf(
@@ -1445,13 +1517,28 @@ def consolidate_sleep_clusters_locally(
             minted_leaves.append(scored_leaf)
             existing_leaf_ids.add(scored_leaf.leaf_id)
             candidate_leaf_id = scored_leaf.leaf_id
-            played_leaf_val = scored_leaf.evaluate_sub_sensors(avg_played_z)
-            ref_leaf_val = scored_leaf.evaluate_sub_sensors(avg_ref_z)
+            raw_played_leaf_val = scored_leaf.evaluate_sub_sensors(avg_played_z)
+            raw_ref_leaf_val = scored_leaf.evaluate_sub_sensors(avg_ref_z)
+            if scored_leaf.tier == 4:
+                played_leaf_val = round(raw_played_leaf_val * t3_parent_val, 6) if t3_parent_val >= 0.50 else 0.0
+                ref_leaf_val = round(raw_ref_leaf_val * float(avg_ref_coords.get(active_t3_parent.leaf_id, 0.25)), 6)
+            elif scored_leaf.tier == 3:
+                played_leaf_val = round(raw_played_leaf_val * t2_parent_val, 6) if t2_parent_val >= 0.50 else 0.0
+                ref_leaf_val = round(raw_ref_leaf_val * float(avg_ref_coords.get(active_t2_parent.leaf_id, 0.25)), 6)
+            else:
+                played_leaf_val = raw_played_leaf_val
+                ref_leaf_val = raw_ref_leaf_val
             avg_coords[scored_leaf.leaf_id] = played_leaf_val
             avg_ref_coords[scored_leaf.leaf_id] = ref_leaf_val
             for s in group:
                 if s.played_sub_sensors is not None and len(s.played_sub_sensors) >= 16:
-                    s.external_coordinates[scored_leaf.leaf_id] = scored_leaf.evaluate_sub_sensors(s.played_sub_sensors)
+                    s_raw = scored_leaf.evaluate_sub_sensors(s.played_sub_sensors)
+                    if scored_leaf.tier == 4:
+                        s.external_coordinates[scored_leaf.leaf_id] = round(s_raw * t3_parent_val, 6)
+                    elif scored_leaf.tier == 3:
+                        s.external_coordinates[scored_leaf.leaf_id] = round(s_raw * t2_parent_val, 6)
+                    else:
+                        s.external_coordinates[scored_leaf.leaf_id] = s_raw
                 else:
                     s.external_coordinates[scored_leaf.leaf_id] = played_leaf_val
 
@@ -1459,7 +1546,11 @@ def consolidate_sleep_clusters_locally(
                 ctx_k: round(float(avg_coords.get(ctx_k, 0.50)), 2)
                 for ctx_k in ctx_t1_leaves[:2]
             }
-            target_leaves[scored_leaf.leaf_id] = 0.80
+            target_leaves[scored_leaf.leaf_id] = (
+                0.80
+                if scored_leaf.tier == 2
+                else round(min(0.80, max(0.58, played_leaf_val)), 2)
+            )
             concept_name = f"{prefix}_sub_{probe_tag}"
             if any(r.concept_name == concept_name for r in active_rules):
                 concept_name = f"{concept_name}_s{rep_scene}"

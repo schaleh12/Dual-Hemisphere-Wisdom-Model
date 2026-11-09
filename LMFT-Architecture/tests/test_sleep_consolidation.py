@@ -1013,6 +1013,71 @@ def test_tier1_blindness_gate_and_trapped_bishop_sub_sensor_genesis() -> None:
     assert len(report_t3.forged_rules) == 1
     assert report_t3.forged_rules[0].tier == 3
 
+    # Verify a third Tier-1-blind scene under that active Tier-2 + Tier-3 hierarchy mints a Tier-4 Detective leaf & rule
+    sub_t4_played = list(sub_t3_played)
+    sub_t4_ref = list(sub_t3_ref)
+    sub_t4_played[12] = 0.78  # ply3_king_shield_drop secondary fault
+    sub_t4_ref[12] = 0.04
+    t4_scene = UnresolvedSleepScene(
+        scene_index=44,
+        scenario_text="[Middlegame - Move 19] Played Bf4 allowing both safety drop and king shield breach.",
+        external_coordinates=tied_t1_played,
+        felt_chord_notes={},
+        valence=0.28,
+        salience=0.88,
+        arousal=0.76,
+        left_brain_hunch="Develop bishop into tactical storm.",
+        is_hazard=True,
+        contrastive_reference_coordinates=tied_t1_ref,
+        game_review_annotation="Game Review [?? BLUNDER_??]: Played Bf4 (-3.20 pawns) instead of best move a4.",
+        played_sub_sensors=tuple(sub_t4_played),
+        reference_sub_sensors=tuple(sub_t4_ref),
+    )
+    report_t4 = consolidate_sleep_clusters_locally(
+        queued_scenes=(t4_scene,),
+        rules=report_t3.updated_rules,
+        learned_leaves=report_t3.updated_learned_leaves,
+        archives=ThreeBranchArchives(),
+        ledger=ContemplationLedger(),
+    )
+    assert len(report_t4.minted_leaves) == 1
+    minted_t4_leaf = report_t4.minted_leaves[0]
+    assert minted_t4_leaf.tier == 4
+    assert minted_t4_leaf.parent_branch == minted_t3_leaf.leaf_id
+    assert len(report_t4.forged_rules) == 1
+    forged_t4_rule = report_t4.forged_rules[0]
+    assert forged_t4_rule.tier == 4
+    assert minted_t4_leaf.leaf_id in forged_t4_rule.target_leaves
+
+    # Verify wake-time parent gating on Tier-4 leaf and 4-tier specificity inhibition (Tier 4 > Tier 3 > Tier 2 > Tier 1)
+    from lmft_architecture.chess_kibitz_bridge import _evaluate_learned_leaves_into_coords
+    from lmft_architecture.reflection_classifier import _evaluate_rules_with_inhibition
+
+    wake_coords = dict(tied_t1_played)
+    _evaluate_learned_leaves_into_coords(
+        wake_coords,
+        report_t4.updated_learned_leaves,
+        is_blunder=True,
+        move_sub_sensors=tuple(sub_t4_played),
+    )
+    assert wake_coords[minted_t2_leaf.leaf_id] >= 0.50
+    assert wake_coords[minted_t3_leaf.leaf_id] >= 0.50
+    assert wake_coords[minted_t4_leaf.leaf_id] >= 0.50
+    t4_acts = _evaluate_rules_with_inhibition(report_t4.updated_rules, wake_coords)
+    assert t4_acts[forged_t4_rule.concept_name] > 0.50
+    assert t4_acts[report_t3.forged_rules[0].concept_name] < t4_acts[forged_t4_rule.concept_name]
+    assert t4_acts[forged_t2_rule.concept_name] < t4_acts[forged_t4_rule.concept_name]
+
+    # Verify that when the Tier-3 parent is inactive (< 0.50), the Tier-4 Detective leaf is gated to 0.0
+    quiet_wake_coords = dict(tied_t1_ref)
+    _evaluate_learned_leaves_into_coords(
+        quiet_wake_coords,
+        report_t4.updated_learned_leaves,
+        is_blunder=False,
+        move_sub_sensors=tuple(sub_t4_ref),
+    )
+    assert quiet_wake_coords[minted_t4_leaf.leaf_id] == 0.0
+
     # Verify that when BOTH Tier-1 (< 0.12) and sub-sensors (< 0.15) are blind, zero fake rules are minted
     blind_scene = UnresolvedSleepScene(
         scene_index=43,
@@ -1040,7 +1105,8 @@ def test_tier1_blindness_gate_and_trapped_bishop_sub_sensor_genesis() -> None:
     assert len(blind_report.minted_leaves) == 0
     assert 43 not in blind_report.resolved_scene_indices
 
-    # Verify Right-Brain candidate evaluation fires the Tier-2 hazard rule on Bf4 and ranks a4 above Bf4
+    # Verify Right-Brain candidate evaluation fires the Tier-2 hazard rule on Bf4, ranks a4 above Bf4,
+    # and runs the Ply-5 Detective Walk on the top 3 suspects when Tier-2/3 leaves are active
     evals = evaluate_candidate_moves_with_right_brain(
         board,
         rules=report.forged_rules,
@@ -1050,6 +1116,14 @@ def test_tier1_blindness_gate_and_trapped_bishop_sub_sensor_genesis() -> None:
     by_uci = {ev.uci: ev for ev in evals}
     assert by_uci["a2a4"].composite_score > by_uci["c1f4"].composite_score
     assert str(by_uci["c1f4"].matched_concept or "").startswith("hazard_")
+    detective_traced = [ev for ev in evals if ev.detective_trace is not None]
+    assert len(detective_traced) == 3
+    for dt_ev in detective_traced:
+        assert dt_ev.detective_trace is not None
+        assert "fault_line_leaves" in dt_ev.detective_trace
+        assert "ply5_delta" in dt_ev.detective_trace
+        assert "intention_shift" in dt_ev.detective_trace
+        assert dt_ev.detective_trace["detective_verdict"] in ("unraveled_blunder", "stabilized", "strained")
 
     # Verify bounded Top-3 child pooling in pool_departmental_child_chord stays strictly in [0.0, 1.0]
     many_leaves = tuple(

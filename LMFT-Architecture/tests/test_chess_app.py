@@ -2288,6 +2288,29 @@ def test_three_ply_rollout_updates_leaves_and_gear_2_move_arbitration(tmp_path: 
     g2_trace = snap_g2["chat_messages"][-1]["telemetry"]["spliced_trace"]
     assert g2_trace["clause_1_prefix"] == "Under competing strategic plans,"
     assert g2_trace["comma_scored_live"] is True
+    assert snap_g2["last_detective_funnel_receipt"] is not None
+    assert snap_g2["last_detective_funnel_receipt"]["gear_2_steering"] is not None
+    assert "last_detective_funnel_receipt" in CHESS_SINGLE_PAGE_HTML
+
+    # 3. Verify two-way `reweight_suspects_with_left_brain_theory` routes Theory -> Intention -> Execution
+    #    through `compute_will_circuit_activations` and lifts the aligned safe suspect without boosting blunders
+    from lmft_architecture.chess_kibitz_bridge import reweight_suspects_with_left_brain_theory
+
+    raw_suspects = evaluate_candidate_moves_with_right_brain(
+        chess.Board("r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 3 3"),
+        rules=(colliding_rule_a, colliding_rule_b),
+        limit=12,
+    )
+    safe_target = next(c for c in raw_suspects[1:4] if not c.is_blunder and not c.is_repetition)
+    steered_list, steer_rec = reweight_suspects_with_left_brain_theory(
+        raw_suspects,
+        dict(safe_target.coords_snapshot or {}),
+        left_brain_mentioned_san=safe_target.san,
+    )
+    steered_by_san = {c.san: c for c in steered_list}
+    assert steered_by_san[safe_target.san].intention > safe_target.intention
+    assert steered_by_san[safe_target.san].execution_bid > safe_target.execution_bid
+    assert steer_rec["steered_winner_san"] in {c.san for c in steered_list[:2]}
 
     stub_blunder = _StubGear2LeftBrain("We lash out immediately with Bxf7+ torip open the King.")
     rt_veto = ChessKibitzerRuntime(
