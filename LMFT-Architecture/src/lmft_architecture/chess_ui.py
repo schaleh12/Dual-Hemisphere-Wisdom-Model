@@ -590,7 +590,7 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
     <button class="btn btn-tutorial" id="new-user-tutorial-btn" onclick="openTutorialModal()">? Quick Start</button>
     <button class="btn" id="auto-update-sync-btn" onclick="syncAndAutoUpdate()" title="Sync latest code &amp; wisdom rules from GitHub and auto-relaunch if updated">🔄 Auto-Update</button>
     <span class="pill" id="rules-count-pill">Rules: 24</span>
-    <span class="pill" id="model-status-pill">Qwen3-8B</span>
+    <span class="pill" id="model-status-pill">Qwen3-4B</span>
     <span class="pill" id="sleep-queue-pill">Sleep Queue: 0</span>
     <select id="lineage-select" onchange="switchLineage(this.value)">
       <option value="schooled" selected>Schooled (Cycle 2 · Chess Wisdom)</option>
@@ -608,7 +608,7 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
         <div class="avatar-box" id="top-player-avatar" style="overflow:hidden;padding:0;"><img src="/assets/celestriad_spirit_particle.jpg" alt="Celestriad 1.0" style="width:100%;height:100%;object-fit:cover;" /></div>
         <div class="player-name-stack">
           <span class="player-name-main" id="top-player-name">Celestriad 1.0</span>
-          <span class="player-name-sub" id="top-player-meta">⚫ Playing Black · 40-Node Tree + Qwen3-8B</span>
+          <span class="player-name-sub" id="top-player-meta">⚫ Playing Black · 40-Node Tree + Qwen3-4B</span>
           <span id="posture-summary-span" style="display:none;">White to move</span>
         </div>
       </div>
@@ -812,7 +812,7 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
       <button class="btn" onclick="closeTutorialModal()">✕</button>
     </div>
     <p style="font-size:13px;color:var(--text-1);margin:8px 0 4px 0;">
-      <strong>Celestriad 1.0</strong> plays moves silently and fast on 1-step intuition using a <strong>40-Node Right-Brain Fuzzy Tree</strong>, and speaks with <strong>Qwen3-8B</strong> (spliced at <code>&lt;|subliminal_gap|&gt;</code>) when <strong>reflecting during REM Sleep</strong> or when <strong>you ask it a question</strong>.
+      <strong>Celestriad 1.0</strong> plays moves silently and fast on 1-step intuition using a <strong>40-Node Right-Brain Fuzzy Tree</strong>, and speaks with <strong>Qwen3-4B</strong> (spliced at <code>&lt;|subliminal_gap|&gt;</code>) when <strong>deliberating in Gear 2</strong> or when <strong>you ask it a question</strong>.
     </p>
     <div class="tutorial-step">
       <strong>Button #1: 🎮 1. Play &amp; Chat (Default Mode)</strong><br/>
@@ -877,7 +877,7 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
           Inside this app, you are watching two distinct hemispheres work together across a synthetic <strong>Corpus Callosum</strong>:
           <ul style="margin:6px 0 0 18px;padding:0;">
             <li><strong>The Right Hemisphere (The 40-Node Fuzzy Tree + Bitboard Sleeve)</strong>: Feels the geometry, tension, and harmony of the board in <strong>~15 milliseconds</strong> without generating a single word of English.</li>
-            <li><strong>The Left Hemisphere (Qwen3-8B)</strong>: The conscious poet and strategist, woken up only when the Right Brain detects a conflict, a question from you, or a nighttime <strong>REM Sleep</strong> dream.</li>
+            <li><strong>The Left Hemisphere (Qwen3-4B)</strong>: The conscious poet and strategist, woken up only when the Right Brain detects a conflict, a question from you, or a nighttime <strong>REM Sleep</strong> dream.</li>
           </ul>
         </div>
       </div>
@@ -969,7 +969,7 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
             <li><strong>1. 24-Leaf Contrastive Rule &amp; Tier-2 Leaf Forging</strong>: REM Sleep compares the played move's 24 Founding Leaves against the best alternative (<code>played_coordinates</code> vs. <code>contrastive_reference_coordinates</code>), clusters recurring mistakes or masterstrokes, and mints 3-wire <code>hazard_</code> and <code>coached_</code> rules plus discriminative <strong>Tier-2 <code>LearnedLeaf</code> nodes</strong> anchored to the exact department where the gap occurred.</li>
             <li><strong>2. Same-Family Centroid Winner-Take-All &amp; Cross-Family Dissonance</strong>: Co-firing sub-facets of the same cluster family resolve cleanly to the closest archetype centroid, while genuine collisions between a <code>hazard_</code> rule and a <code>coached_</code> rule trigger conscious deliberation.</li>
             <li><strong>3. Bitboard Sleeve &amp; Callosum Homeostasis</strong>: Post-mortem coordinate deltas sculpt the 8-circuit Bitboard Intuition Sleeve weights and gently regularize the Left-Brain LoRA adapters toward their birth anchor so repeated dreams never distort prose grammar.</li>
-            <li><strong>4. Dream Chronicle &amp; Active Waking Vow</strong>: Qwen3-8B reflects on the game in clean 3-stanza prose and distills a single-sentence <strong>Waking Vow</strong> that actively tugs candidate move scores (<code>vow_alignment_delta</code>) in the very next game!</li>
+            <li><strong>4. Dream Chronicle &amp; Active Waking Vow</strong>: Qwen3-4B reflects on the game in clean 3-stanza prose and distills a single-sentence <strong>Waking Vow</strong> that actively tugs candidate move scores (<code>vow_alignment_delta</code>) in the very next game!</li>
           </ul>
         </div>
       </div>
@@ -1720,12 +1720,12 @@ function renderState(s) {
 
       if (botAvatar) botAvatar.innerHTML = CELESTRIAD_SPIRIT_AVATAR_HTML;
       if (botName) botName.textContent = `Celestriad 1.0 (${botBadge})`;
-      if (botSubtitle) botSubtitle.textContent = "40-Node Fuzzy Tree + Qwen3-8B";
+      if (botSubtitle) botSubtitle.textContent = "40-Node Fuzzy Tree + Qwen3-4B";
       if (pEloEl) pEloEl.textContent = hpEloText;
     } else {
       if (topAvatar) topAvatar.innerHTML = CELESTRIAD_SPIRIT_AVATAR_HTML;
       if (topName) topName.textContent = `Celestriad 1.0 (${topBadge})`;
-      if (topMeta) topMeta.textContent = "40-Node Fuzzy Tree + Qwen3-8B";
+      if (topMeta) topMeta.textContent = "40-Node Fuzzy Tree + Qwen3-4B";
       if (eloEl) eloEl.textContent = hpEloText;
 
       if (botAvatar) botAvatar.textContent = "🐟";
@@ -1738,7 +1738,7 @@ function renderState(s) {
     if (humanOnBottom) {
       if (topAvatar) topAvatar.innerHTML = CELESTRIAD_SPIRIT_AVATAR_HTML;
       if (topName) topName.textContent = "Celestriad 1.0";
-      if (topMeta) topMeta.textContent = "⚫ Playing Black · 40-Node Tree + Qwen3-8B";
+      if (topMeta) topMeta.textContent = "⚫ Playing Black · 40-Node Tree + Qwen3-4B";
       if (eloEl) eloEl.textContent = hpEloText;
 
       if (botAvatar) botAvatar.textContent = "👤";
@@ -1753,7 +1753,7 @@ function renderState(s) {
 
       if (botAvatar) botAvatar.innerHTML = CELESTRIAD_SPIRIT_AVATAR_HTML;
       if (botName) botName.textContent = "Celestriad 1.0";
-      if (botSubtitle) botSubtitle.textContent = "⚫ Playing Black · 40-Node Tree + Qwen3-8B";
+      if (botSubtitle) botSubtitle.textContent = "⚫ Playing Black · 40-Node Tree + Qwen3-4B";
       if (pEloEl) pEloEl.textContent = hpEloText;
     }
   }
