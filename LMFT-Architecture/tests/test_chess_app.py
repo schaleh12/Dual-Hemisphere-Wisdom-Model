@@ -2204,6 +2204,29 @@ def test_clean_machine_installer_crlf_sync_and_signed_contrastive_bitboard_sleev
     assert all(float(v) < 2.25 for v in saved_weights["policy_weights"].values())
     assert all(abs(float(v)) < 2.25 for v in saved_weights["leaf_weights"].values())
 
+    # 7. Forced Mate-in-2 (`best_board_3.is_checkmate()`) ranks #1 and blowout captures never flag `-75.34 pawn` blunders
+    import chess
+    from lmft_architecture.chess_kibitz_bridge import (
+        ObjectiveCalibratedSparringEngine,
+        evaluate_candidate_moves_with_right_brain,
+    )
+
+    mate_in_2_board = chess.Board("1k2r3/8/8/8/2P5/4q3/5PPP/R6K b - - 0 1")
+    cands = evaluate_candidate_moves_with_right_brain(mate_in_2_board, limit=16)
+    assert cands[0].san == "Qe1+"
+    assert cands[0].composite_score > 40.0
+    assert cands[0].theory == pytest.approx(0.98)
+
+    blowout_board = chess.Board("1k2r3/3q4/8/8/3P4/3q4/5PPP/R6K b - - 0 1")
+    partner = ObjectiveCalibratedSparringEngine(use_stockfish_uci=False)
+    review = partner.audit_played_move_for_game_review(
+        blowout_board,
+        chess.Move.from_uci("d3e4"),
+    )
+    assert review["classification"] == "SOLID"
+    assert not review["is_hazard"]
+    assert not review["should_queue_for_sleep"]
+
 
 
 

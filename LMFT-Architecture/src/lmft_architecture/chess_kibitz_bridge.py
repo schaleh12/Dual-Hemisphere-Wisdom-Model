@@ -1615,55 +1615,61 @@ def _rollout_intention_into_theory_and_confidence(
         net_mat_delta = best_eff_mat_3 - mat_before
         branch_loss = max(0.0, -net_mat_delta) if net_mat_delta <= -0.8 else 0.0
 
-        posture_3 = evaluate_chess_board_posture(best_board_3, perspective=us)
-        phil_3 = posture_3.philosophical_coordinates
-        order_3 = float(phil_3.get("philosophical/structure/order", 0.50))
-        cont_3 = float(phil_3.get("philosophical/persistence/continuity", 0.50))
-        agency_3 = float(phil_3.get("philosophical/being/agency", 0.50))
-        exist_3 = float(phil_3.get("philosophical/being/existence", 0.50))
-        chaos_3 = float(phil_3.get("philosophical/structure/chaos", 0.50))
+        if best_board_3.is_checkmate():
+            branch_theory = 0.98
+            branch_conf = 0.98
+            branch_clarity = 0.98
+            branch_loss = 0.0
+        else:
+            posture_3 = evaluate_chess_board_posture(best_board_3, perspective=us)
+            phil_3 = posture_3.philosophical_coordinates
+            order_3 = float(phil_3.get("philosophical/structure/order", 0.50))
+            cont_3 = float(phil_3.get("philosophical/persistence/continuity", 0.50))
+            agency_3 = float(phil_3.get("philosophical/being/agency", 0.50))
+            exist_3 = float(phil_3.get("philosophical/being/existence", 0.50))
+            chaos_3 = float(phil_3.get("philosophical/structure/chaos", 0.50))
 
-        branch_theory = _clamp01(
-            0.35 * float(best_sleeve_3["policy_prior"])
-            + 0.25 * float(best_sleeve_3["value_prior"])
-            + 0.20 * order_3
-            + 0.12 * cont_3
-            + 0.08 * agency_3
-            + 0.06 * min(4.0, max(0.0, net_mat_delta))
-            - 0.18 * min(4.0, branch_loss)
-        )
-        structural_clarity_3 = _clamp01(
-            0.55 * (1.0 - abs(fact_1ply - branch_theory))
-            + 0.45 * (order_3 * (1.0 - 0.4 * chaos_3))
-            - 0.20 * min(3.0, branch_loss)
-        )
-        sleeve_conf_3 = float(best_sleeve_3["sleeve_confidence"])
-        if rule_tuple:
-            coords_3 = dict(base_coords)
-            for k, v in phil_3.items():
-                coords_3[k] = float(v)
-            coords_3["psychological/truth/fact"] = _clamp01(
-                0.55 * float(best_sleeve_3["value_prior"])
-                + 0.45 * exist_3
+            branch_theory = _clamp01(
+                0.35 * float(best_sleeve_3["policy_prior"])
+                + 0.25 * float(best_sleeve_3["value_prior"])
+                + 0.20 * order_3
+                + 0.12 * cont_3
+                + 0.08 * agency_3
+                + 0.06 * min(4.0, max(0.0, net_mat_delta))
+                - 0.18 * min(4.0, branch_loss)
+            )
+            structural_clarity_3 = _clamp01(
+                0.55 * (1.0 - abs(fact_1ply - branch_theory))
+                + 0.45 * (order_3 * (1.0 - 0.4 * chaos_3))
                 - 0.20 * min(3.0, branch_loss)
             )
-            coords_3["psychological/truth/theory"] = branch_theory
-            coords_3["psychological/contemplation/clarity"] = structural_clarity_3
-            coords_3["psychological/contemplation/confidence"] = sleeve_conf_3
-            acts_3 = _evaluate_rules_with_inhibition(rule_tuple, coords_3)
-            rule_cl_3, rule_conf_3, matched_3, _conf_3, _rsn_3 = compute_contemplation(acts_3)
-            branch_clarity = _clamp01(0.50 * float(rule_cl_3) + 0.50 * structural_clarity_3)
-            if matched_3 and matched_3.startswith(("hazard_", "blunder_", "avoid_")):
-                branch_conf = _clamp01(0.35 * sleeve_conf_3 - 0.25 * float(rule_conf_3) - 0.15 * min(4.0, branch_loss))
-            else:
-                branch_conf = _clamp01(
-                    0.50 * float(rule_conf_3)
-                    + 0.50 * sleeve_conf_3
-                    - 0.15 * min(4.0, branch_loss)
+            sleeve_conf_3 = float(best_sleeve_3["sleeve_confidence"])
+            if rule_tuple:
+                coords_3 = dict(base_coords)
+                for k, v in phil_3.items():
+                    coords_3[k] = float(v)
+                coords_3["psychological/truth/fact"] = _clamp01(
+                    0.55 * float(best_sleeve_3["value_prior"])
+                    + 0.45 * exist_3
+                    - 0.20 * min(3.0, branch_loss)
                 )
-        else:
-            branch_clarity = structural_clarity_3
-            branch_conf = _clamp01(sleeve_conf_3 - 0.15 * min(4.0, branch_loss))
+                coords_3["psychological/truth/theory"] = branch_theory
+                coords_3["psychological/contemplation/clarity"] = structural_clarity_3
+                coords_3["psychological/contemplation/confidence"] = sleeve_conf_3
+                acts_3 = _evaluate_rules_with_inhibition(rule_tuple, coords_3)
+                rule_cl_3, rule_conf_3, matched_3, _conf_3, _rsn_3 = compute_contemplation(acts_3)
+                branch_clarity = _clamp01(0.50 * float(rule_cl_3) + 0.50 * structural_clarity_3)
+                if matched_3 and matched_3.startswith(("hazard_", "blunder_", "avoid_")):
+                    branch_conf = _clamp01(0.35 * sleeve_conf_3 - 0.25 * float(rule_conf_3) - 0.15 * min(4.0, branch_loss))
+                else:
+                    branch_conf = _clamp01(
+                        0.50 * float(rule_conf_3)
+                        + 0.50 * sleeve_conf_3
+                        - 0.15 * min(4.0, branch_loss)
+                    )
+            else:
+                branch_clarity = structural_clarity_3
+                branch_conf = _clamp01(sleeve_conf_3 - 0.15 * min(4.0, branch_loss))
 
         branch_util = branch_theory + 0.50 * branch_conf + 0.20 * branch_clarity - 0.30 * branch_loss
         if branch_util < worst_branch_utility:
@@ -1700,15 +1706,20 @@ def _enrich_move_coords_with_theory_rollout(
         sleeve=sleeve,
         base_coords=coords,
     )
-    coords["psychological/truth/theory"] = _clamp01(
-        0.35 * float(coords.get("psychological/truth/theory", 0.50)) + 0.65 * r_theory
-    )
-    coords["psychological/contemplation/confidence"] = _clamp01(
-        0.40 * float(coords.get("psychological/contemplation/confidence", 0.60)) + 0.60 * r_conf
-    )
-    coords["psychological/contemplation/clarity"] = _clamp01(
-        0.40 * float(coords.get("psychological/contemplation/clarity", 0.60)) + 0.60 * r_clarity
-    )
+    if r_theory >= 0.97 and r_conf >= 0.97 and r_loss == 0.0:
+        coords["psychological/truth/theory"] = 0.98
+        coords["psychological/contemplation/confidence"] = 0.98
+        coords["psychological/contemplation/clarity"] = 0.98
+    else:
+        coords["psychological/truth/theory"] = _clamp01(
+            0.35 * float(coords.get("psychological/truth/theory", 0.50)) + 0.65 * r_theory
+        )
+        coords["psychological/contemplation/confidence"] = _clamp01(
+            0.40 * float(coords.get("psychological/contemplation/confidence", 0.60)) + 0.60 * r_conf
+        )
+        coords["psychological/contemplation/clarity"] = _clamp01(
+            0.40 * float(coords.get("psychological/contemplation/clarity", 0.60)) + 0.60 * r_clarity
+        )
     if r_loss >= 0.8:
         is_blunder = True
         blunder_penalty = max(float(blunder_penalty), r_loss)
@@ -1828,15 +1839,21 @@ def evaluate_candidate_moves_with_right_brain(
             base_coords=cand["coords"],
         )
         c_dict = cand["coords"]
-        c_dict["psychological/truth/theory"] = _clamp01(
-            0.35 * float(c_dict.get("psychological/truth/theory", 0.50)) + 0.65 * r_theory
-        )
-        c_dict["psychological/contemplation/confidence"] = _clamp01(
-            0.40 * float(c_dict.get("psychological/contemplation/confidence", 0.60)) + 0.60 * r_conf
-        )
-        c_dict["psychological/contemplation/clarity"] = _clamp01(
-            0.40 * float(c_dict.get("psychological/contemplation/clarity", 0.60)) + 0.60 * r_clarity
-        )
+        if r_theory >= 0.97 and r_conf >= 0.97 and r_loss == 0.0:
+            cand["forced_mate_rollout"] = True
+            c_dict["psychological/truth/theory"] = 0.98
+            c_dict["psychological/contemplation/confidence"] = 0.98
+            c_dict["psychological/contemplation/clarity"] = 0.98
+        else:
+            c_dict["psychological/truth/theory"] = _clamp01(
+                0.35 * float(c_dict.get("psychological/truth/theory", 0.50)) + 0.65 * r_theory
+            )
+            c_dict["psychological/contemplation/confidence"] = _clamp01(
+                0.40 * float(c_dict.get("psychological/contemplation/confidence", 0.60)) + 0.60 * r_conf
+            )
+            c_dict["psychological/contemplation/clarity"] = _clamp01(
+                0.40 * float(c_dict.get("psychological/contemplation/clarity", 0.60)) + 0.60 * r_clarity
+            )
         if r_loss >= 0.8:
             cand["is_blunder"] = True
             cand["blunder_penalty"] = max(float(cand["blunder_penalty"]), r_loss)
@@ -1990,6 +2007,7 @@ def evaluate_candidate_moves_with_right_brain(
             will_execution_drive
             + contemplation_drive
             + leaf_posture_score
+            + (50.0 if cand.get("forced_mate_rollout") else 0.0)
             - 1.35 * blunder_penalty
             - (1.80 if is_rep else 0.0)
         )
@@ -2855,18 +2873,24 @@ class ObjectiveCalibratedSparringEngine:
             sleeve=sleeve,
         )
 
+        if not board_after_played.is_checkmate() and cp_after > -9000.0:
+            cp_before = max(-1500.0, min(1500.0, float(cp_before)))
+            best_cp = max(-1500.0, min(1500.0, float(best_cp)))
+            cp_after = max(-1500.0, min(1500.0, float(cp_after)))
+
         cp_drop = 0.0 if played_move == best_move else round(max(0.0, best_cp - cp_after), 1)
         cp_gain = round(cp_after - cp_before, 1)
         cp_edge_over_alt = round(static_played_cp - second_best_cp, 1)
         chaos_val = float(played_coords.get("philosophical/structure/chaos", 0.0))
+        still_winning_blowout = cp_after >= 700.0 and not played_is_blunder
 
-        if played_move != best_move and (cp_drop >= 150.0 or (played_is_blunder and not best_is_blunder)):
+        if not still_winning_blowout and played_move != best_move and (cp_drop >= 150.0 or (played_is_blunder and not best_is_blunder)):
             classification = "BLUNDER_??"
             glyph = "??"
             is_hazard = True
             should_queue = True
             ref_coords = best_coords
-        elif played_move != best_move and cp_drop >= 90.0:
+        elif not still_winning_blowout and played_move != best_move and cp_drop >= 90.0:
             classification = "MISTAKE_?"
             glyph = "?"
             is_hazard = True
