@@ -861,7 +861,8 @@ class SubliminalGapLeftBrain:
             suppressed_ids = self._suppressed_token_ids()
             generated_ids: list[int] = []
 
-            for step_idx in range(self.max_clause_1_tokens):
+            max_base_steps = int(self.max_clause_1_tokens)
+            for step_idx in range(max_base_steps + 12):
                 next_logits = self._step_stream_state(state)
                 if step_idx == 0:
                     c1_start_cached_len = int(state.cur_embeds.size(1))
@@ -897,7 +898,34 @@ class SubliminalGapLeftBrain:
             if state is not None and generated_ids:
                 state.generated_turn_token_ids.extend(generated_ids)
             raw_clause_1 = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
-            norm_clause_1 = normalize_clause_1_prefix(raw_clause_1)
+            if (
+                "," not in raw_clause_1
+                and ";" not in raw_clause_1
+                and re.search(r"(?<!\b\d)[.!?](?=\s|$)", raw_clause_1) is not None
+            ):
+                cleaned_c1 = _strip_chat_turn_bleed(raw_clause_1)
+                cleaned_c1 = re.sub(r"<think>.*?</think>", "", cleaned_c1, flags=re.DOTALL)
+                cleaned_c1 = cleaned_c1.replace("<think>", "").replace("</think>", "")
+                cleaned_c1 = cleaned_c1.replace(SUBLIMINAL_GAP_TOKEN, "")
+                cleaned_c1 = " ".join(cleaned_c1.replace("\n", " ").split()).strip().lstrip(",;:.!?—–- ").strip()
+                sent_m = re.search(r"(?<!\b\d)[.!?](?=\s|$)", cleaned_c1)
+                if sent_m is not None:
+                    first_sent = cleaned_c1[: sent_m.end()].strip()
+                    first_words = first_sent.rstrip(".!?").split()
+                    if len(first_words) >= 4 and not first_words[0].lower().endswith("ing"):
+                        norm_clause_1 = first_sent
+                    else:
+                        norm_clause_1 = normalize_clause_1_prefix(raw_clause_1)
+                else:
+                    norm_clause_1 = normalize_clause_1_prefix(raw_clause_1)
+            else:
+                if (
+                    "," not in raw_clause_1
+                    and ";" not in raw_clause_1
+                    and re.search(r"(?<!\b\d)[.!?](?=\s|$)", raw_clause_1) is None
+                ):
+                    raw_clause_1 = re.sub(r"\s+[A-Za-z]{1,2}$", "", raw_clause_1.rstrip())
+                norm_clause_1 = normalize_clause_1_prefix(raw_clause_1)
             if not owns_stream:
                 raw_compact = " ".join(raw_clause_1.replace("\n", " ").split()).strip()
                 if raw_compact != norm_clause_1:
@@ -1063,7 +1091,7 @@ class SubliminalGapLeftBrain:
             if not prefix and cleaned_post_gap:
                 cleaned_post_gap = cleaned_post_gap.lstrip(",;:-–— ").strip()
             post_gap_text = cleaned_post_gap
-            if not prefix and post_gap_text and post_gap_text[0].islower():
+            if (not prefix or prefix.rstrip().endswith((".", "!", "?"))) and post_gap_text and post_gap_text[0].islower():
                 post_gap_text = post_gap_text[0].upper() + post_gap_text[1:]
             elif (
                 prefix

@@ -357,7 +357,7 @@ def parse_cluster_defining_leaves(
 
 
 def has_genuine_hazard_pathology_leaf(target_leaves: Mapping[str, float]) -> bool:
-    """Return True if `target_leaves` contains at least one genuine low-virtue deficit or elevated shadow/chaos/hazard leaf."""
+    """Return True if `target_leaves` contains at least one genuine low-virtue deficit or elevated shadow/hazard leaf."""
     virtue_leaves = {
         "philosophical/being/existence",
         "philosophical/structure/order",
@@ -372,8 +372,6 @@ def has_genuine_hazard_pathology_leaf(target_leaves: Mapping[str, float]) -> boo
         fv = float(v)
         short_k = k.split("/")[-1]
         if k in virtue_leaves and fv <= 0.48:
-            return True
-        if k == "philosophical/structure/chaos" and fv >= 0.55:
             return True
         if k == "cultural/freedom/needlessness" and fv >= 0.35:
             return True

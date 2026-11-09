@@ -1246,6 +1246,50 @@ def test_repetition_and_ngram_penalty_and_stanza_start_duplicate_check() -> None
     assert len(observed_stanza_overrides[0]) == 3
     assert all(s is not None and s.endswith(",") for s in observed_stanza_overrides[0])
 
+    # 8. Verify `generate_clause_1_prefix` continues past `max_clause_1_tokens` (+12 extra tokens)
+    #    until punctuation is reached instead of chopping mid-word (`"onto un,"`), and preserves `.`
+    #    on a complete sentence without a comma.
+    class _FixedSeqLeftBrain(SubliminalGapLeftBrain):
+        def __init__(self, seq_tokens: list[str], **kwargs):
+            self._seq_toks = seq_tokens
+            self._tok = _WordLevelTestTokenizer()
+            g_id = ensure_subliminal_gap_token(self._tok)
+            self._seq_ids = [self._tok.encode(t)[0] for t in seq_tokens]
+            super().__init__(
+                _MiniCausalLM(vocab_size=64, hidden_size=32, num_layers=2),
+                self._tok,
+                SubliminalGapProjector(hidden_size=32),
+                gap_token_id=g_id,
+                device="cpu",
+                **kwargs,
+            )
+            self._cursor = 0
+
+        def _step_stream_state(self, state):
+            logits = torch.full((64,), -100.0)
+            chosen_id = self._seq_ids[min(self._cursor, len(self._seq_ids) - 1)]
+            self._cursor += 1
+            logits[chosen_id] = 100.0
+            return logits
+
+    lb_midword = _FixedSeqLeftBrain(
+        ["with", "violent", "forks", "onto", "un", "guarded", "squares,"],
+        max_clause_1_tokens=5,
+        max_post_gap_tokens=6,
+    )
+    c1_midword = lb_midword.generate_clause_1_prefix("Test midword.")
+    assert "onto un," not in c1_midword
+    assert c1_midword.endswith("squares,")
+
+    lb_full_sent = _FixedSeqLeftBrain(
+        ["The", "enemy", "King", "rests", "behind", "pawns."],
+        max_clause_1_tokens=5,
+        max_post_gap_tokens=6,
+    )
+    c1_full_sent = lb_full_sent.generate_clause_1_prefix("Test complete sentence.")
+    assert c1_full_sent == "The enemy King rests behind pawns."
+
+
 
 
 

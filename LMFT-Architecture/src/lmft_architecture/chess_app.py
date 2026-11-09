@@ -3105,7 +3105,7 @@ class ChessKibitzerRuntime:
                 sleep_prompt,
                 sleep_chord,
                 max_stanzas=stanza_limit,
-                sentences_per_stanza=3,
+                sentences_per_stanza=1,
                 num_sentences=target_sents,
                 conversation_history=(),
                 chord_builder_at_comma=_build_sleep_comma_chord,

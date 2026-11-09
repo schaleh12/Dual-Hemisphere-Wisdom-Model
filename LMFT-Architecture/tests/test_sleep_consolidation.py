@@ -832,8 +832,24 @@ def test_round2_no_coordinate_stamping_and_genuine_tier2_gate() -> None:
     assert len(calm_report.minted_leaves) == 0
 
     # 3. Deeper positional mistake (`is_hazard=True`) where 1-3 ply sensors still report high virtues
-    #    (`wastelessness=0.73, power=0.91, agency=0.93, order=0.92, needlessness=0.08`) must NEVER
-    #    forge a repulsive `hazard_*` rule anchored to healthy virtue coordinates or low needlessness
+    #    (`wastelessness=0.73, power=0.91, agency=0.93, order=0.92, needlessness=0.08, chaos=0.55`) must NEVER
+    #    forge a repulsive `hazard_*` rule anchored to healthy virtue coordinates or `chaos` alone without a deficit leaf
+    from lmft_architecture.sleep_consolidation import has_genuine_hazard_pathology_leaf
+
+    assert not has_genuine_hazard_pathology_leaf(
+        {
+            "cultural/efficiency/power": 0.74,
+            "philosophical/being/agency": 0.90,
+            "philosophical/structure/chaos": 0.55,
+        }
+    )
+    assert has_genuine_hazard_pathology_leaf(
+        {
+            "cultural/efficiency/power": 0.50,
+            "cultural/justice/fairness": 0.29,
+            "philosophical/structure/chaos": 0.51,
+        }
+    )
     healthy_sensor_mistake = UnresolvedSleepScene(
         scene_index=33,
         scenario_text="Played Rxa5 instead of best move Kh6.",
@@ -844,6 +860,7 @@ def test_round2_no_coordinate_stamping_and_genuine_tier2_gate() -> None:
             "cultural/freedom/needlessness": 0.08,
             "philosophical/being/agency": 0.929,
             "philosophical/structure/order": 0.92,
+            "philosophical/structure/chaos": 0.55,
             "philosophical/persistence/continuity": 0.95,
         },
         felt_chord_notes={},
@@ -859,6 +876,7 @@ def test_round2_no_coordinate_stamping_and_genuine_tier2_gate() -> None:
             "cultural/freedom/needlessness": 0.08,
             "philosophical/being/agency": 0.68,
             "philosophical/structure/order": 0.88,
+            "philosophical/structure/chaos": 0.35,
             "philosophical/persistence/continuity": 0.88,
         },
         game_review_annotation="Game Review [? MISTAKE_?]: Played Rxa5 (-1.10 pawns) instead of best move Kh6.",
