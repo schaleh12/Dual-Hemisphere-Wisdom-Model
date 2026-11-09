@@ -182,8 +182,17 @@ def normalize_clause_1_prefix(raw_prefix: str) -> str:
     cleaned = cleaned.replace("<think>", "").replace("</think>", "")
     cleaned = cleaned.replace(SUBLIMINAL_GAP_TOKEN, "")
     cleaned = " ".join(cleaned.replace("\n", " ").split()).strip()
+    cleaned = cleaned.lstrip(",;:.!?—–- ").strip()
     if not cleaned:
         return "Weighing the situation before us,"
+
+    # If a sentence-ending period/exclamation/question mark appears before a valid comma clause,
+    # keep only the first sentence segment so multi-sentence scratchpad text never leaks into Clause 1.
+    sent_match = re.search(r"(?<!\b\d)[.!?](?=\s|$)", cleaned)
+    if sent_match is not None:
+        first_sent = cleaned[: sent_match.start()].strip()
+        if len(first_sent.split()) >= 2:
+            cleaned = first_sent
 
     # If a comma already appears after at least 2 words, truncate right at the first comma
     if "," in cleaned:
@@ -193,7 +202,7 @@ def normalize_clause_1_prefix(raw_prefix: str) -> str:
             return f"{before_comma},"
 
     # Replace any premature sentence-ending punctuation with a comma
-    cleaned = cleaned.rstrip(".!?;:—- ").strip()
+    cleaned = cleaned.rstrip(".!?;:—–- ").strip()
     if not cleaned or len(cleaned.split()) < 2:
         return "Weighing the situation before us,"
     return f"{cleaned},"
@@ -205,6 +214,7 @@ def clean_post_gap_continuation(raw_text: str) -> str:
     text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
     text = text.replace("<think>", "").replace("</think>", "")
     text = " ".join(text.replace("\n", " ").split()).strip()
+    text = text.lstrip(",;:.!?—–- ").strip()
     if text.count("(") > text.count(")"):
         last_open = text.rfind("(")
         if last_open > 0:
@@ -765,6 +775,12 @@ class SubliminalGapLeftBrain:
     ) -> _PersistentTurnStreamState | None:
         """Initialize a persistent KV-cache stream state by encoding `base_prompt` once at turn start."""
         prior_clean = prior_assistant_text.strip()
+        if (
+            _tokenizer_has_single_think_token(self.tokenizer)
+            and "</think>" not in base_prompt
+            and base_prompt.rstrip().endswith("Assistant:")
+        ):
+            base_prompt = f"{base_prompt.rstrip()}\n<think>\n\n</think>"
         full_prompt = f"{base_prompt} {prior_clean}" if prior_clean else base_prompt
         prompt_ids = self.tokenizer.encode(full_prompt, add_special_tokens=True)
         if not prompt_ids:
@@ -877,8 +893,12 @@ class SubliminalGapLeftBrain:
                 decoded_so_far = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
                 if any(m in decoded_so_far for m in _CHAT_TURN_BOUNDARY_MARKERS):
                     break
-                # Stop as soon as a comma or semicolon appears after at least 3 generated tokens
-                if step_idx >= 2 and ("," in decoded_so_far or ";" in decoded_so_far):
+                # Stop as soon as a comma, semicolon, or sentence-ending punctuation appears after at least 3 generated tokens
+                if step_idx >= 2 and (
+                    "," in decoded_so_far
+                    or ";" in decoded_so_far
+                    or re.search(r"(?<!\b\d)[.!?](?=\s|$)", decoded_so_far) is not None
+                ):
                     break
 
             if state is not None and generated_ids:
@@ -1383,7 +1403,7 @@ class SubliminalGapLeftBrain:
         | None = None,
         clause_1_override: str | None = None,
         stanza_clause_1_overrides: Sequence[str | None] | None = None,
-        lead_with_gap: bool = True,
+        lead_with_gap: bool = False,
         lora_scale_factor: float | None = None,
         qk_lora_scale: float | None = 0.35,
         vo_lora_scale: float | None = 0.08,
@@ -1401,13 +1421,13 @@ class SubliminalGapLeftBrain:
                 if int(max_stanzas) == 2:
                     resolved_stanza_overrides = (
                         clean_c1,
-                        "Carrying this vow into our next game,",
+                        "Weighing these board moments together,",
                     )
                 else:
                     resolved_stanza_overrides = (
                         clean_c1,
                         "Weighing how the board's structure shifted across the game,",
-                        "Carrying this vow into our next game,",
+                        "Weighing these board moments together,",
                     )
         if lora_scale_factor is not None:
             ctx = attenuate_lora_scaling(self.model, factor=float(lora_scale_factor))
@@ -1466,7 +1486,7 @@ def generate_rem_dream_self_reflection(
     | None = None,
     clause_1_override: str | None = None,
     stanza_clause_1_overrides: Sequence[str | None] | None = None,
-    lead_with_gap: bool = True,
+    lead_with_gap: bool = False,
     lora_scale_factor: float | None = None,
     qk_lora_scale: float | None = 0.35,
     vo_lora_scale: float | None = 0.08,
@@ -1501,13 +1521,13 @@ def generate_rem_dream_self_reflection(
             if int(max_stanzas) == 2:
                 resolved_stanza_overrides = (
                     clean_c1,
-                    "Carrying this vow into our next game,",
+                    "Weighing these board moments together,",
                 )
             else:
                 resolved_stanza_overrides = (
                     clean_c1,
                     "Weighing how the board's structure shifted across the game,",
-                    "Carrying this vow into our next game,",
+                    "Weighing these board moments together,",
                 )
     model_obj = getattr(left_brain, "model", None)
     if lora_scale_factor is not None:

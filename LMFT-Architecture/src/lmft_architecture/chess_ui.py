@@ -23,6 +23,7 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="referrer" content="strict-origin-when-cross-origin" />
 <link rel="icon" type="image/x-icon" href="/assets/celestriad_spirit_particle.ico" />
 <link rel="shortcut icon" type="image/x-icon" href="/assets/celestriad_spirit_particle.ico" />
 <link rel="apple-touch-icon" href="/assets/celestriad_spirit_particle.jpg" />
@@ -1095,7 +1096,7 @@ function openSpaceCenterModal() {
     id: "wyQmOXlCBTM",
     fallbackIds: ["TBczHWyQ_Ig", "fimtgnKXQk8", "ojGJg3Wa5XY", "8SzFaEqbLRM"],
     title: "1. Somewhere Out There — Our Lady Peace",
-    url: "https://music.youtube.com/watch?v=0R68_ZzqUu0&si=8E0J7O53bafxLEtj"
+    url: "https://www.youtube.com/watch?v=wyQmOXlCBTM"
   };
   const btn0 = document.getElementById("jb-track-0");
   if (btn0) {
@@ -1183,7 +1184,7 @@ window.onYouTubeIframeAPIReady = function() {
     height: "56",
     width: "100%",
     videoId: activeTrack.id,
-    playerVars: { autoplay: jukeboxPlaying ? 1 : 0, controls: 1, rel: 0, modestbranding: 1 },
+    playerVars: { autoplay: jukeboxPlaying ? 1 : 0, controls: 1, rel: 0, modestbranding: 1, origin: window.location.origin },
     events: {
       onReady: function(ev) {
         if (jukeboxMuted && ev.target && ev.target.mute) ev.target.mute();
@@ -1685,7 +1686,7 @@ function renderColorBars(posture) {
 function renderState(s) {
   if (!s) return;
   document.getElementById("model-status-pill").textContent = s.left_brain_status || "Qwen3-4B";
-  const isSelfTrain = !!autoSelfPlayTimer;
+  const isSelfTrain = !!autoSelfPlayTimer || (s.elo && s.elo.game_mode === "sparring");
   const lmftColor = (s.elo && s.elo.lmft_color) || "White";
   const stockfishColor = lmftColor === "White" ? "Black" : "White";
   const bottomBoardColor = boardFlipped ? "Black" : "White";
@@ -1791,9 +1792,8 @@ function renderState(s) {
       const gearBadge = ref.gear_used === "GEAR_3_UNRESOLVED_QUEUED_FOR_SLEEP"
         ? "GEAR 3 · QUEUED FOR SLEEP"
         : ref.gear_used;
-      const vowTag = ref.guided_by_vow ? " · ✨ Guided by Active Dream Vow" : "";
       document.getElementById("board-reflex-strip").textContent =
-        `Last Move: ${ref.move_san} (${gearBadge}, Clarity=${ref.clarity}, Confidence=${ref.confidence}, ${ref.elapsed_ms} ms${vowTag})`;
+        `Last Move: ${ref.move_san} (${gearBadge}, Clarity=${ref.clarity}, Confidence=${ref.confidence}, ${ref.elapsed_ms} ms)`;
     }
     const sanList = s.board.move_history_san || [];
     const moveSig = sanList.join(" ");

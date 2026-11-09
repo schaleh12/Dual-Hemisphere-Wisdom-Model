@@ -55,7 +55,7 @@ from .reflection_classifier import (
     _evaluate_rules_with_inhibition,
     compute_contemplation,
 )
-from .right_brain_equilibrium import ThreeBridgeSensors
+from .right_brain_equilibrium import RIGHT_BRAIN_WILL_EDGES, ThreeBridgeSensors
 from .subliminal_gap_splice import (
     SubliminalChordVector,
     pool_departmental_child_chord,
@@ -691,7 +691,8 @@ class BitboardIntuitionSleeve:
         that were higher on the best reference move UP) with gentle L2 anchor regularization.
         """
         lr = max(0.005, min(0.25, float(learning_rate)))
-        decay = 0.015 * lr
+        decay = 0.25 * lr
+        step_lr = 0.30 * lr
         for vk, def_v in DEFAULT_SLEEVE_VALUE_WEIGHTS.items():
             cur_v = float(self.value_weights.get(vk, def_v))
             self.value_weights[vk] = round(
@@ -720,12 +721,12 @@ class BitboardIntuitionSleeve:
                 p_val = float(played_coordinates[lk])
                 r_val = float(ref_map[lk])
                 delta = (r_val - p_val) if is_hazard else (p_val - r_val)
-                if abs(delta) >= 0.01:
+                if abs(delta) >= 0.15:
                     if lk == "philosophical/structure/chaos":
                         # Higher chaos on a blunder (`r_val < p_val` -> `delta < 0`) makes chaos penalty more negative
-                        new_w = max(-2.5, min(-0.10, float(self.leaf_weights[lk]) + lr * delta))
+                        new_w = max(-2.5, min(-0.10, float(self.leaf_weights[lk]) + step_lr * delta))
                     else:
-                        new_w = max(0.10, min(2.5, float(self.leaf_weights[lk]) + lr * delta))
+                        new_w = max(0.10, min(2.5, float(self.leaf_weights[lk]) + step_lr * delta))
                     self.leaf_weights[lk] = round(new_w, 4)
                     updated_keys.append(lk)
 
@@ -735,13 +736,13 @@ class BitboardIntuitionSleeve:
                     p_feat = float(played_bitboard_features[fk])
                     r_feat = float(reference_bitboard_features[fk])
                     feat_delta = (r_feat - p_feat) if is_hazard else (p_feat - r_feat)
-                    if abs(feat_delta) >= 0.01:
+                    if abs(feat_delta) >= 0.15:
                         self.value_weights[fk] = round(
-                            max(0.10, min(3.0, float(self.value_weights.get(fk, DEFAULT_SLEEVE_VALUE_WEIGHTS[fk])) + lr * feat_delta)),
+                            max(0.10, min(3.0, float(self.value_weights.get(fk, DEFAULT_SLEEVE_VALUE_WEIGHTS[fk])) + step_lr * feat_delta)),
                             4,
                         )
                         self.policy_weights[fk] = round(
-                            max(0.10, min(3.0, float(self.policy_weights.get(fk, DEFAULT_SLEEVE_POLICY_WEIGHTS[fk])) + lr * feat_delta)),
+                            max(0.10, min(3.0, float(self.policy_weights.get(fk, DEFAULT_SLEEVE_POLICY_WEIGHTS[fk])) + step_lr * feat_delta)),
                             4,
                         )
                         updated_circuit_keys.append(fk)
@@ -998,6 +999,7 @@ def compute_candidate_move_fuzzy_coordinates(
     perspective: chess.Color | None = None,
     learned_leaves: Sequence[LearnedLeaf] = (),
     bitboard_sleeve: BitboardIntuitionSleeve | None = None,
+    will_edges: Sequence[Any] = RIGHT_BRAIN_WILL_EDGES,
 ) -> tuple[dict[str, float], bool, float, ChessBoardPosture, tuple[str, ...]]:
     """Compute the 40-node Fuzzy Tree coordinate dictionary (`Fact`, `Theory`, `Confidence`, `Intention`) for `move`."""
     us = board.turn if perspective is None else perspective
@@ -1276,26 +1278,42 @@ def compute_candidate_move_fuzzy_coordinates(
         - (0.30 if is_rep_move else 0.0)
     )
 
-    # 4. `psychological/will/intention` via `RIGHT_BRAIN_WILL_EDGES` (`rb-will-0..3`)
+    # 4. `psychological/will/intention` and `execution` via `will_edges` (`rb-will-0..8`)
+    w_map = {e.id: float(e.weight) for e in RIGHT_BRAIN_WILL_EDGES}
+    for edge in will_edges:
+        w_map[edge.id] = float(edge.weight)
+    pos_int_denom = max(
+        0.5,
+        max(0.0, w_map["rb-will-0"])
+        + max(0.0, w_map["rb-will-1"])
+        + max(0.0, w_map["rb-will-2"]),
+    )
     intention_coord = _clamp01(
         (
-            1.0 * coords["experiential/reflection/salience"]
-            + 1.0 * coords["experiential/phase/arousal"]
-            + 0.8 * coords["cultural/efficiency/power"]
-            - 0.8 * coords["cultural/freedom/needlessness"]
+            w_map["rb-will-0"] * coords["experiential/reflection/salience"]
+            + w_map["rb-will-1"] * coords["experiential/phase/arousal"]
+            + w_map["rb-will-2"] * coords["cultural/efficiency/power"]
+            + w_map["rb-will-3"] * coords["cultural/freedom/needlessness"]
         )
-        / 2.8
+        / pos_int_denom
     )
     coords["psychological/will/intention"] = intention_coord
+    pos_exec_denom = max(
+        0.5,
+        max(0.0, w_map["rb-will-4"])
+        + max(0.0, w_map["rb-will-5"])
+        + max(0.0, w_map["rb-will-6"])
+        + max(0.0, w_map["rb-will-7"]),
+    )
     coords["psychological/will/execution"] = _clamp01(
         (
-            1.0 * intention_coord
-            + 1.0 * fact_coord
-            + 0.7 * theory_coord
-            + 0.5 * sleeve_conf
-            - 0.8 * coords["cultural/freedom/needlessness"]
+            w_map["rb-will-4"] * intention_coord
+            + w_map["rb-will-5"] * fact_coord
+            + w_map["rb-will-6"] * theory_coord
+            + w_map["rb-will-7"] * sleeve_conf
+            + w_map["rb-will-8"] * coords["cultural/freedom/needlessness"]
         )
-        / 3.2
+        / pos_exec_denom
     )
     active_shadow_ids = {w.shadow_leaf_id for w in all_warnings if w.shadow_leaf_id}
     for leaf in learned_leaves:
@@ -1723,10 +1741,12 @@ def evaluate_candidate_moves_with_right_brain(
     learned_leaves: Sequence[LearnedLeaf] = (),
     limit: int = 6,
     bitboard_sleeve: BitboardIntuitionSleeve | None = None,
+    will_edges: Sequence[Any] = RIGHT_BRAIN_WILL_EDGES,
     active_vow_leaves: Sequence[str] = (),
     branch_archives: Any = None,
 ) -> list[CandidateMoveEvaluation]:
-    """Rank legal moves via `Intention (Ply 1) -> Theory (Ply 2-3 Rollout) -> Confidence -> Execution` (`RIGHT_BRAIN_WILL_EDGES`)."""
+    """Rank legal moves via `Intention (Ply 1) -> Theory (Ply 2-3 Rollout) -> Confidence -> Execution` (`will_edges`)."""
+    _ = (active_vow_leaves, branch_archives)
     legal = list(board.legal_moves)
     if not legal:
         return []
@@ -1734,7 +1754,10 @@ def evaluate_candidate_moves_with_right_brain(
     us = board.turn
     rule_tuple = tuple(rules)
     learned_tuple = tuple(learned_leaves)
-    vow_leaf_tuple = tuple(k for k in active_vow_leaves if k in FOUNDATIONAL_LEAVES)
+    will_tuple = tuple(will_edges)
+    w_map = {e.id: float(e.weight) for e in RIGHT_BRAIN_WILL_EDGES}
+    for edge in will_tuple:
+        w_map[edge.id] = float(edge.weight)
     sleeve = bitboard_sleeve if bitboard_sleeve is not None else _DEFAULT_BITBOARD_SLEEVE
     evaluations: list[CandidateMoveEvaluation] = []
     pending_candidates: list[dict[str, Any]] = []
@@ -1777,6 +1800,7 @@ def evaluate_candidate_moves_with_right_brain(
                 perspective=us,
                 learned_leaves=learned_tuple,
                 bitboard_sleeve=sleeve,
+                will_edges=will_tuple,
             )
         )
         for r in rule_tuple:
@@ -1948,16 +1972,31 @@ def evaluate_candidate_moves_with_right_brain(
             + 0.18 * coached_peak
             - 0.22 * hazard_peak
         )
-        intention_val = float(coords.get("psychological/will/intention", 0.50))
         needlessness_val = float(coords.get("cultural/freedom/needlessness", 0.10))
+        pos_int_denom = max(
+            0.5,
+            max(0.0, w_map["rb-will-0"])
+            + max(0.0, w_map["rb-will-1"])
+            + max(0.0, w_map["rb-will-2"]),
+        )
+        intention_val = _clamp01(
+            (
+                w_map["rb-will-0"] * float(coords.get("experiential/reflection/salience", 0.50))
+                + w_map["rb-will-1"] * float(coords.get("experiential/phase/arousal", 0.50))
+                + w_map["rb-will-2"] * float(coords.get("cultural/efficiency/power", 0.50))
+                + w_map["rb-will-3"] * needlessness_val
+            )
+            / pos_int_denom
+        )
+        coords["psychological/will/intention"] = float(intention_val)
 
-        # Action Bid on `psychological/will/execution` (`RIGHT_BRAIN_WILL_EDGES`: rb-will-4..8)
+        # Action Bid on `psychological/will/execution` (`will_edges`: rb-will-4..8)
         will_execution_drive = (
-            1.0 * intention_val
-            + 1.0 * fact_val
-            + 0.7 * theory_val
-            + 0.5 * float(confidence)
-            - 0.8 * needlessness_val
+            w_map["rb-will-4"] * intention_val
+            + w_map["rb-will-5"] * fact_val
+            + w_map["rb-will-6"] * theory_val
+            + w_map["rb-will-7"] * float(confidence)
+            + w_map["rb-will-8"] * needlessness_val
         )
         if is_hazard_match:
             contemplation_drive = (
@@ -1985,31 +2024,12 @@ def evaluate_candidate_moves_with_right_brain(
             - 0.25 * float(coords.get("philosophical/structure/chaos", 0.50))
         )
         vow_delta = 0.0
-        if vow_leaf_tuple:
-            for vk in vow_leaf_tuple:
-                c_val = float(coords.get(vk, 0.50))
-                if vk in ("philosophical/structure/chaos", "cultural/freedom/needlessness"):
-                    if c_val > 0.50:
-                        vow_delta -= 0.35 * (c_val - 0.45)
-                    elif c_val <= 0.35 and not is_blunder:
-                        vow_delta += 0.16 * (0.45 - c_val)
-                else:
-                    if c_val >= 0.55 and not is_blunder:
-                        vow_delta += 0.25 * (c_val - 0.45)
-                    elif c_val < 0.42:
-                        vow_delta -= 0.40 * (0.48 - c_val)
-        if branch_archives is not None and hasattr(branch_archives, "recall_resonant_clauses"):
-            res = branch_archives.recall_resonant_clauses(coords, min_similarity=0.70)
-            exec_match = res.get("executive_match")
-            if exec_match is not None and not is_blunder:
-                vow_delta += 0.18 * (float(exec_match["similarity"]) - 0.65)
-        guided_by_vow = bool(vow_delta >= 0.05 and not is_blunder)
+        guided_by_vow = False
 
         execution_bid = (
             will_execution_drive
             + contemplation_drive
             + leaf_posture_score
-            + vow_delta
             - 1.35 * blunder_penalty
             - (1.80 if is_rep else 0.0)
         )
@@ -2593,6 +2613,19 @@ class ObjectiveCalibratedSparringEngine:
         clamped_elo = min(2800.0, max(600.0, float(target_elo)))
         self.opponent_moves_played += 1
 
+        def _allows_mate_in_one_or_queen_hang(b: chess.Board, mv_cand: chess.Move) -> bool:
+            nb_c = b.copy()
+            nb_c.push(mv_cand)
+            if nb_c.is_game_over():
+                return False
+            for opp_m in nb_c.legal_moves:
+                nb_c.push(opp_m)
+                is_m = nb_c.is_checkmate()
+                nb_c.pop()
+                if is_m:
+                    return True
+            return False
+
         if self.use_stockfish_uci and self.stockfish_path.exists():
             try:
                 with self._popen_stockfish() as eng:
@@ -2607,23 +2640,42 @@ class ObjectiveCalibratedSparringEngine:
                         res = eng.play(board, self._chess_engine_mod.Limit(depth=depth_lim, time=0.06))
                         chosen_move = res.move
                     else:
-                        # Stockfish UCI_Elo minimum is 1320; calibrate <1320 Elo via shallow MultiPV candidate pool
+                        # Stockfish UCI_Elo minimum is 1320; calibrate <1320 Elo via MultiPV pool filtered to <= 250 cp drop
                         multipv_k = 2 if clamped_elo >= 1150.0 else (4 if clamped_elo >= 950.0 else 6)
                         infos = eng.analyse(
                             board,
-                            self._chess_engine_mod.Limit(depth=1, time=0.02),
+                            self._chess_engine_mod.Limit(depth=2, time=0.03),
                             multipv=min(multipv_k, len(legal)),
                         )
                         if isinstance(infos, dict):
                             infos = [infos]
-                        pv_moves = [
-                            inf["pv"][0]
-                            for inf in infos
-                            if inf.get("pv") and inf["pv"][0] in board.legal_moves
-                        ]
-                        if pv_moves:
-                            pick_idx = (len(board.move_stack) // 2 + board.fullmove_number) % len(pv_moves)
-                            chosen_move = pv_moves[pick_idx]
+                        pv_scored: list[tuple[chess.Move, float]] = []
+                        for inf in infos:
+                            if not inf.get("pv") or inf["pv"][0] not in board.legal_moves:
+                                continue
+                            mv_cand = inf["pv"][0]
+                            cand_cp = 0.0
+                            score_obj = inf.get("score")
+                            if score_obj is not None:
+                                pov = score_obj.pov(board.turn) if hasattr(score_obj, "pov") else score_obj
+                                raw_cp = pov.score(mate_score=9999) if hasattr(pov, "score") else None
+                                if raw_cp is not None:
+                                    cand_cp = float(raw_cp)
+                            pv_scored.append((mv_cand, cand_cp))
+                        if pv_scored:
+                            best_pv_cp = pv_scored[0][1]
+                            safe_pv_moves = [
+                                mv_cand
+                                for idx_c, (mv_cand, cand_cp) in enumerate(pv_scored)
+                                if idx_c == 0
+                                or (
+                                    (best_pv_cp - cand_cp) <= 250.0
+                                    and cand_cp > -8000.0
+                                    and not _allows_mate_in_one_or_queen_hang(board, mv_cand)
+                                )
+                            ]
+                            pick_idx = (len(board.move_stack) // 2 + board.fullmove_number) % len(safe_pv_moves)
+                            chosen_move = safe_pv_moves[pick_idx]
                         else:
                             chosen_move = None
                     if chosen_move is not None and chosen_move in board.legal_moves:
@@ -2644,16 +2696,42 @@ class ObjectiveCalibratedSparringEngine:
             san = board.san(mv)
             nb = board.copy()
             nb.push(mv)
-            cp = _static_centipawns_for_color(nb, us)
+            if nb.is_checkmate():
+                cp = 9999.0
+            else:
+                cp = _static_centipawns_for_color(nb, us)
+                # Account for 1-ply opponent tactical reply (hanging piece / mate-in-1)
+                if nb.legal_moves:
+                    worst_reply_cp = min(
+                        (
+                            -9999.0
+                            if (nb_r := nb.copy(), nb_r.push(opp_m), nb_r.is_checkmate())[2]
+                            else _static_centipawns_for_color(nb_r, us)
+                        )
+                        for opp_m in nb.legal_moves
+                        if nb.is_capture(opp_m) or nb.gives_check(opp_m)
+                    ) if any(nb.is_capture(m) or nb.gives_check(m) for m in nb.legal_moves) else cp
+                    cp = min(cp, worst_reply_cp)
             if nb.is_repetition(2):
                 cp -= 120.0
             scored_moves.append((cp, mv, san))
         scored_moves.sort(key=lambda item: (-item[0], item[2]))
 
-        # Lower target_elo widens candidate pool slightly so play strength scales smoothly
+        # Lower target_elo widens candidate pool slightly while filtering out blunders (> 250 cp drop or mate-in-1)
         pool_width = 1 if clamped_elo >= 1400.0 else (2 if clamped_elo >= 1000.0 else min(4, len(scored_moves)))
-        pick_idx = (len(board.move_stack) // 2) % pool_width
-        chosen_cp, chosen_mv, chosen_san = scored_moves[pick_idx]
+        best_cp = scored_moves[0][0]
+        safe_pool = [
+            item
+            for idx_c, item in enumerate(scored_moves[:pool_width])
+            if idx_c == 0
+            or (
+                (best_cp - item[0]) <= 250.0
+                and item[0] > -8000.0
+                and not _allows_mate_in_one_or_queen_hang(board, item[1])
+            )
+        ]
+        pick_idx = (len(board.move_stack) // 2) % len(safe_pool)
+        chosen_cp, chosen_mv, chosen_san = safe_pool[pick_idx]
         return {
             "move_san": chosen_san,
             "move_uci": chosen_mv.uci(),

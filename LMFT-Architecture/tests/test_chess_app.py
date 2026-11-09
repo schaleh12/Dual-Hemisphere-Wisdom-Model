@@ -1190,7 +1190,7 @@ def test_speaker_attribution_and_clean_slate_reset(tmp_path: Path) -> None:
 
 
 def test_longitudinal_rem_dream_chronicles_and_coordinate_vow_keeping(tmp_path: Path) -> None:
-    """Verify multi-stanza REM dream chronicles and pure coordinate vow-tracking (`NEW_VOW` -> `BROKEN` -> `HONORED`)."""
+    """Verify vow-free multi-stanza REM sleep reflection, projector protection (`harvested_gap_pairs_count == 0`), real `will_edges` move scoring, and non-saturating `BitboardIntuitionSleeve` distillation."""
     state_dir = tmp_path / "dream_chronicles_state"
     left_brain = _make_mini_left_brain()
     runtime = ChessKibitzerRuntime(
@@ -1200,7 +1200,7 @@ def test_longitudinal_rem_dream_chronicles_and_coordinate_vow_keeping(tmp_path: 
     )
     runtime.set_auto_rem_sleep(False)
 
-    # Cycle 1: Queue two distinct tactical scenes so Deep REM Sleep generates a 2-stanza Match Chronicle (`NEW_VOW`)
+    # Cycle 1: Queue two distinct tactical scenes so Deep REM Sleep generates a 2-stanza reflection without vow theater
     runtime.handle_set_fen("r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 3 3")
     blunder_rev = runtime.sparring_engine.audit_played_move_for_game_review(
         runtime.board,
@@ -1233,35 +1233,13 @@ def test_longitudinal_rem_dream_chronicles_and_coordinate_vow_keeping(tmp_path: 
     )
 
     snap_c1 = runtime.handle_run_rem_sleep()
-    chronicles_1 = snap_c1["rem_dream_chronicles"]
-    assert len(chronicles_1) == 1
-    assert chronicles_1[0]["vow_outcome"] == "NEW_VOW"
-    assert len(chronicles_1[0]["stanzas"]) == 2
+    assert snap_c1["rem_dream_chronicles"] == []
     assert "\n\n" in (snap_c1["last_rem_sleep_self_talk"] or "")
-    assert len(chronicles_1[0]["vowed_leaves"]) >= 1
-    assert chronicles_1[0]["vow_sentence"]
+    assert "Longitudinal Dream Vow Status:" not in snap_c1["last_rem_sleep_receipt"]
+    assert snap_c1["harvested_gap_pairs_count"] == 0
+    assert not (state_dir / "live_projector_weights.pt").exists()
 
-    # Cycle 2: Repeat the same blunder on the vowed coordinate leaves -> `vow_outcome == "BROKEN"`
-    runtime.handle_set_fen("r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 3 3")
-    runtime.handle_chess_move("Bxf7+")
-    id_3 = int(runtime.chat_messages[-1]["id"])
-    runtime.flag_turn_for_coaching(
-        id_3,
-        user_note=blunder_rev["annotation_summary"],
-        check_auto_sleep=False,
-        is_hazard=True,
-        override_coordinates=blunder_rev["played_coordinates"],
-        contrastive_reference_coordinates=blunder_rev["contrastive_reference_coordinates"],
-        game_review_annotation=blunder_rev["annotation_summary"],
-    )
-    snap_c2 = runtime.handle_run_rem_sleep()
-    chronicles_2 = snap_c2["rem_dream_chronicles"]
-    assert len(chronicles_2) == 2
-    assert chronicles_2[-1]["vow_outcome"] == "BROKEN"
-    assert len(chronicles_2[-1]["vow_overlap_leaves"]) >= 1
-    assert "Longitudinal Dream Vow Status: BROKEN" in snap_c2["last_rem_sleep_receipt"]
-
-    # Cycle 3: Play a sound castling move (`O-O`) with `is_hazard=False` -> `vow_outcome == "HONORED"`
+    # Cycle 2: Play a sound castling move (`O-O`) with `is_hazard=False` and run REM sleep
     runtime.handle_set_fen("r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 3 3")
     sound_rev = runtime.sparring_engine.audit_played_move_for_game_review(
         runtime.board,
@@ -1275,7 +1253,7 @@ def test_longitudinal_rem_dream_chronicles_and_coordinate_vow_keeping(tmp_path: 
     id_4 = int(runtime.chat_messages[-1]["id"])
     runtime.flag_turn_for_coaching(
         id_4,
-        user_note="Castled safely to honor King shelter.",
+        user_note="Castled safely to shelter the King.",
         check_auto_sleep=False,
         is_hazard=False,
         override_coordinates=sound_rev["played_coordinates"],
@@ -1283,10 +1261,10 @@ def test_longitudinal_rem_dream_chronicles_and_coordinate_vow_keeping(tmp_path: 
         game_review_annotation="[! GREAT_MOVE]: Castled safely.",
     )
     snap_c3 = runtime.handle_run_rem_sleep()
-    chronicles_3 = snap_c3["rem_dream_chronicles"]
-    assert len(chronicles_3) == 3
-    assert chronicles_3[-1]["vow_outcome"] == "HONORED"
-    assert "Longitudinal Dream Vow Status: HONORED" in snap_c3["last_rem_sleep_receipt"]
+    assert snap_c3["rem_dream_chronicles"] == []
+    assert "Longitudinal Dream Vow Status:" not in snap_c3["last_rem_sleep_receipt"]
+    assert snap_c3["harvested_gap_pairs_count"] == 0
+    assert not (state_dir / "live_projector_weights.pt").exists()
 
     # Verify persistence across restart in `club_meta.json`
     reloaded = ChessKibitzerRuntime(
@@ -1294,22 +1272,80 @@ def test_longitudinal_rem_dream_chronicles_and_coordinate_vow_keeping(tmp_path: 
         left_brain=left_brain,
         lazy_load_gpu=False,
     )
-    assert len(reloaded.rem_dream_chronicles) == 3
-    assert reloaded.rem_dream_chronicles[-1]["vow_outcome"] == "HONORED"
-    assert len(reloaded._get_active_vow_leaves()) >= 1
+    assert reloaded.rem_dream_chronicles == []
 
-    # Verify live 3-branch archive recall and vow-guided move selection
+    # Verify live 3-branch archive recall and real `will_edges` move evaluation
     res_check = reloaded.archives.recall_resonant_clauses(
         sound_rev["played_coordinates"],
         min_similarity=0.40,
     )
     assert res_check["top_resonance_score"] >= 0.40
     reloaded.handle_set_fen("r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 3 3")
-    ai_vow_snap = reloaded.handle_chess_ai_move()
-    arb = ai_vow_snap["last_hybrid_move_arbitration"]
-    assert "vow_alignment_delta" in arb
-    assert "guided_by_vow" in arb
-    assert len(arb["active_vow_leaves"]) >= 1
+    ai_snap = reloaded.handle_chess_ai_move()
+    arb = ai_snap["last_hybrid_move_arbitration"]
+    assert arb["vow_alignment_delta"] == 0.0
+    assert arb["guided_by_vow"] is False
+    assert arb["active_vow_leaves"] == []
+
+    # Verify `evaluate_candidate_moves_with_right_brain` uses `will_edges` (`rb-will-0..8`)
+    from lmft_architecture.right_brain_equilibrium import Association, RIGHT_BRAIN_WILL_EDGES
+
+    eval_default = {
+        e.san: e
+        for e in evaluate_candidate_moves_with_right_brain(
+            chess.Board("r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 3 3"),
+            will_edges=RIGHT_BRAIN_WILL_EDGES,
+            limit=30,
+        )
+    }
+    custom_will = tuple(
+        Association(
+            e.id,
+            e.source_id,
+            e.target_id,
+            0.25 if e.id in ("rb-will-2", "rb-will-5") else (-1.0 if e.id == "rb-will-8" else e.weight),
+            e.confidence,
+            e.plasticity,
+            e.created_event_id,
+            e.last_updated_event_id,
+        )
+        for e in RIGHT_BRAIN_WILL_EDGES
+    )
+    eval_custom = {
+        e.san: e
+        for e in evaluate_candidate_moves_with_right_brain(
+            chess.Board("r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 3 3"),
+            will_edges=custom_will,
+            limit=30,
+        )
+    }
+    assert eval_custom["O-O"].intention != eval_default["O-O"].intention
+    assert eval_custom["O-O"].execution_bid != eval_default["O-O"].execution_bid
+
+    # Verify `BitboardIntuitionSleeve.distill_post_mortem_scene` ignores tiny noise (`|r_val - p_val| < 0.15`)
+    # and does not saturate `wastelessness` or `material_balance_norm` to `2.5` / `3.0` after 160 steps
+    from lmft_architecture.chess_kibitz_bridge import BitboardIntuitionSleeve
+
+    test_sleeve = BitboardIntuitionSleeve()
+    for _ in range(160):
+        test_sleeve.distill_post_mortem_scene(
+            blunder_rev["played_coordinates"],
+            blunder_rev["contrastive_reference_coordinates"],
+            is_hazard=True,
+            played_bitboard_features=blunder_rev["played_bitboard_features"],
+            reference_bitboard_features=blunder_rev["reference_bitboard_features"],
+        )
+    assert test_sleeve.leaf_weights["cultural/efficiency/wastelessness"] < 2.2
+    assert test_sleeve.value_weights["material_balance_norm"] < 2.5
+    assert test_sleeve.policy_weights["move_net_safety"] < 2.5
+
+    # Verify `<1150 Elo` Stockfish sparring filters out Queen-hanging blunders (`> 250 cp` drop)
+    queen_hang_board = chess.Board("r1bqk1nr/pppp1ppp/2n5/2b1p3/2B1P3/3P1Q2/PPP2PPP/RNB1K1NR b KQkq - 2 4")
+    sp_res = runtime.sparring_engine.select_sparring_opponent_move(
+        queen_hang_board,
+        target_elo=990.0,
+    )
+    assert sp_res["move_san"] not in ("Qg5", "Qh4", "Qf6")
 
     # Verify multi-stanza chat exports `stanza_chord_trajectory` and `archive_resonance` in telemetry
     chat_stanza_snap = reloaded.handle_chat_message(
@@ -1321,17 +1357,7 @@ def test_longitudinal_rem_dream_chronicles_and_coordinate_vow_keeping(tmp_path: 
     assert len(last_chat_tel["stanza_chord_trajectory"]) >= 1
     assert "archive_resonance" in last_chat_tel
 
-    # Verify Fix #4a & Fix #5 in `LMFT-Chess.exe`:
-    # REM Sleep harvests `ContrastiveGapPair` trajectories (`L2 >= 0.35`) to `celestriad_gap_trajectories.jsonl`
-    # and mints discriminative Tier-2 `LearnedLeaf` nodes exposed in `get_state_snapshot()`
-    traj_path = state_dir / "celestriad_gap_trajectories.jsonl"
-    assert traj_path.exists()
-    traj_lines = [ln for ln in traj_path.read_text(encoding="utf-8").splitlines() if ln.strip()]
-    assert len(traj_lines) >= 1
-    first_pair = json.loads(traj_lines[0])
-    assert first_pair["domain"] == "chess_intuition"
-    assert first_pair["chord_l2_distance"] >= 0.35
-    assert snap_c3["harvested_gap_pairs_count"] >= 1
+    # Verify discriminative Tier-2 `LearnedLeaf` nodes are still minted and exposed in `get_state_snapshot()`
     assert snap_c3["learned_leaves_count"] >= 1
     assert len(snap_c3["learned_leaves"][0]["anchor_weights"]) == 8
 
@@ -1743,7 +1769,7 @@ def test_zero_wire_clone_rule_ties_and_rem_vow_prompt_no_chat_bleed(tmp_path: Pa
     assert sleep_deduped[0].high < 0.88
     assert "cultural/efficiency/power" not in sleep_deduped[0].target_leaves
 
-    # 3. Verify `prev_chronicle` vow is folded into `sleep_prompt` with `conversation_history=()`
+    # 3. Verify `sleep_prompt` strips raw PGN move numbers/results, omits vow theater, uses `conversation_history=()`,
     #    and `Newly Forged Right-Brain Rules` formats `<= 0.30` leaf targets with `<=`.
     left_brain = _make_mini_left_brain()
     runtime = ChessKibitzerRuntime(
@@ -1765,7 +1791,7 @@ def test_zero_wire_clone_rule_ties_and_rem_vow_prompt_no_chat_bleed(tmp_path: Pa
     rev = runtime.sparring_engine.audit_played_move_for_game_review(board, "Bxf7+", perspective=chess.WHITE)
     sc = UnresolvedSleepScene(
         scene_index=99,
-        scenario_text="Move 3. White played Bxf7+.",
+        scenario_text="Move 3. White played 3. Bxf7+ (7. Be2 Qd7 9: 0-1.).",
         external_coordinates=rev["played_coordinates"],
         felt_chord_notes={},
         valence=0.22,
@@ -1776,27 +1802,16 @@ def test_zero_wire_clone_rule_ties_and_rem_vow_prompt_no_chat_bleed(tmp_path: Pa
         contrastive_reference_coordinates=rev["contrastive_reference_coordinates"],
         game_review_annotation=rev["annotation_summary"],
     )
-    runtime.rem_dream_chronicles.append(
-        {
-            "cycle_index": 1,
-            "game_number": 1,
-            "stanzas": ["Keep the king sheltered behind the castled pawns."],
-            "vow_sentence": "Keep the king sheltered behind the castled pawns.",
-            "vowed_leaves": ["cultural/efficiency/wastelessness"],
-            "vow_outcome": "NEW_VOW",
-            "vow_overlap_leaves": [],
-            "harvested_gap_pairs": 1,
-            "minted_leaves": [],
-        }
-    )
     runtime.sleep_queue.append(sc)
     snap = runtime.handle_run_rem_sleep()
     assert captured_hist and all(h == () for h in captured_hist)
-    assert any('My previous vow was "Keep the king sheltered behind the castled pawns."' in p for p in captured_prompts)
+    assert all("vow" not in p.lower() for p in captured_prompts)
+    assert all("0-1" not in p and "Move 3" not in p for p in captured_prompts)
     assert "Previous REM Sleep Vow" not in snap["last_rem_sleep_receipt"]
+    assert "Longitudinal Dream Vow Status:" not in snap["last_rem_sleep_receipt"]
     assert "wastelessness<=0.25" in snap["last_rem_sleep_receipt"]
 
-    # 4. Verify all 29 queued scenes from Game #135 (`Scene #15545..#15651`) settle with `Clarity >= 0.50`,
+    # 4. Verify all 29 queued scenes from Game #135 (`Scene #15545..#15651`) settle with `Clarity >= 0.50` when sleep rules are loaded,
     #    preserved `rule_grounded_coordination` refinements survive `_ensure_foundational_rules`, and
     #    cross-family (`hazard_` vs `coached_`) ties still collide (`Clarity == 0.00, is_confused == True`).
     threads_path = repo_root / "LMFT-Training" / "outputs" / "chess_kibitzer_state" / "threads.json"
@@ -1816,7 +1831,7 @@ def test_zero_wire_clone_rule_ties_and_rem_vow_prompt_no_chat_bleed(tmp_path: Pa
             and 15545 <= int(m["id"]) <= 15651
             and ((m.get("telemetry") or {}).get("game_review") or {}).get("should_queue_for_sleep")
         ]
-        if scenes_135:
+        if scenes_135 and sleep_rules:
             assert len(scenes_135) == 29
             for sid, p_coords, is_haz in scenes_135:
                 sc_coords = {k: 0.50 for k in FOUNDATIONAL_LEAVES}
