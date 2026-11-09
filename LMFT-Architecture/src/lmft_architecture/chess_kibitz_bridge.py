@@ -2894,14 +2894,6 @@ class ObjectiveCalibratedSparringEngine:
             should_queue = False
             ref_coords = best_coords
 
-        if is_hazard:
-            played_coords["cultural/efficiency/wastelessness"] = 0.25
-            best_coords["cultural/efficiency/wastelessness"] = max(
-                0.72,
-                float(best_coords.get("cultural/efficiency/wastelessness", 0.72)),
-            )
-            ref_coords = best_coords
-
         played_bitboard_features = extract_bitboard_features(
             board_before,
             played_move,

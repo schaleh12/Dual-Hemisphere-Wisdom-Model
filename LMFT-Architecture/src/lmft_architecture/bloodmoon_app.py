@@ -2509,8 +2509,6 @@ class BloodmoonClockRuntime:
                 chord_builder_at_comma=_build_sleep_comma_chord,
                 stanza_boundary_callback=_sleep_stanza_boundary if stanza_limit > 1 else None,
                 clause_1_override=sleep_clause_1,
-                qk_lora_scale=0.35,
-                vo_lora_scale=0.08,
             )
             return dream_text.strip() or None
         except Exception:

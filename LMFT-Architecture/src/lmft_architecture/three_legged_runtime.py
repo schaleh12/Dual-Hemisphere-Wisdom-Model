@@ -674,7 +674,6 @@ class SubliminalGapLeftBrain:
             model=model,
             device=resolved_device,
         )
-        sculpt_lora_rank_channels(model, projector)
         model.eval()
         projector.eval()
         return cls(
@@ -775,12 +774,6 @@ class SubliminalGapLeftBrain:
     ) -> _PersistentTurnStreamState | None:
         """Initialize a persistent KV-cache stream state by encoding `base_prompt` once at turn start."""
         prior_clean = prior_assistant_text.strip()
-        if (
-            _tokenizer_has_single_think_token(self.tokenizer)
-            and "</think>" not in base_prompt
-            and base_prompt.rstrip().endswith("Assistant:")
-        ):
-            base_prompt = f"{base_prompt.rstrip()}\n<think>\n\n</think>"
         full_prompt = f"{base_prompt} {prior_clean}" if prior_clean else base_prompt
         prompt_ids = self.tokenizer.encode(full_prompt, add_special_tokens=True)
         if not prompt_ids:
@@ -1405,8 +1398,8 @@ class SubliminalGapLeftBrain:
         stanza_clause_1_overrides: Sequence[str | None] | None = None,
         lead_with_gap: bool = False,
         lora_scale_factor: float | None = None,
-        qk_lora_scale: float | None = 0.35,
-        vo_lora_scale: float | None = 0.08,
+        qk_lora_scale: float | None = None,
+        vo_lora_scale: float | None = None,
     ) -> str:
         """Generate REM sleep self-reflection with split-projection LoRA scaling (`qk_lora_scale` vs `vo_lora_scale`) and optional 1st-person `clause_1_override`."""
         clean_c1 = str(clause_1_override).strip() if clause_1_override else None
@@ -1434,7 +1427,7 @@ class SubliminalGapLeftBrain:
         else:
             ctx = attenuate_lora_scaling(
                 self.model,
-                factor=0.0,
+                factor=1.0,
                 qk_factor=qk_lora_scale,
                 vo_factor=vo_lora_scale,
             )
@@ -1488,8 +1481,8 @@ def generate_rem_dream_self_reflection(
     stanza_clause_1_overrides: Sequence[str | None] | None = None,
     lead_with_gap: bool = False,
     lora_scale_factor: float | None = None,
-    qk_lora_scale: float | None = 0.35,
-    vo_lora_scale: float | None = 0.08,
+    qk_lora_scale: float | None = None,
+    vo_lora_scale: float | None = None,
 ) -> str:
     """Generate REM sleep self-reflection on `left_brain` with split-projection LoRA scaling and optional 1st-person `clause_1_override`."""
     if hasattr(left_brain, "generate_rem_dream_self_reflection"):
@@ -1535,7 +1528,7 @@ def generate_rem_dream_self_reflection(
     else:
         ctx = attenuate_lora_scaling(
             model_obj,
-            factor=0.0,
+            factor=1.0,
             qk_factor=qk_lora_scale,
             vo_factor=vo_lora_scale,
         )

@@ -2139,15 +2139,6 @@ class ChessKibitzerRuntime:
         scene_coords = dict(override_coordinates) if override_coordinates is not None else dict(vibe.coordinates)
         if is_hazard:
             self._hazard_scene_indices.add(int(scene_index))
-            if override_coordinates is None:
-                scene_coords["cultural/efficiency/wastelessness"] = min(
-                    float(scene_coords.get("cultural/efficiency/wastelessness", 0.20)),
-                    0.20,
-                )
-                scene_coords["experiential/phase/valence"] = min(
-                    float(scene_coords.get("experiential/phase/valence", vibe.valence)),
-                    0.28,
-                )
         else:
             self._hazard_scene_indices.discard(int(scene_index))
         sleep_scene = UnresolvedSleepScene(
@@ -3102,8 +3093,6 @@ class ChessKibitzerRuntime:
                 stanza_boundary_callback=_stanza_cb,
                 clause_1_override=sleep_clause_1,
                 stanza_clause_1_overrides=sleep_stanza_overrides,
-                qk_lora_scale=0.35,
-                vo_lora_scale=0.08,
             )
             return dream_text.strip() or None
         except Exception:
