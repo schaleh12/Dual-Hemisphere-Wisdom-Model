@@ -693,26 +693,6 @@ class BitboardIntuitionSleeve:
         lr = max(0.005, min(0.25, float(learning_rate)))
         decay = 0.25 * lr
         step_lr = 0.30 * lr
-        for vk, def_v in DEFAULT_SLEEVE_VALUE_WEIGHTS.items():
-            cur_v = float(self.value_weights.get(vk, def_v))
-            self.value_weights[vk] = round(
-                max(0.10, min(3.0, cur_v + decay * (float(def_v) - cur_v))),
-                4,
-            )
-        for pk, def_p in DEFAULT_SLEEVE_POLICY_WEIGHTS.items():
-            cur_p = float(self.policy_weights.get(pk, def_p))
-            self.policy_weights[pk] = round(
-                max(0.10, min(3.0, cur_p + decay * (float(def_p) - cur_p))),
-                4,
-            )
-        for lk, def_l in DEFAULT_SLEEVE_LEAF_WEIGHTS.items():
-            cur_l = float(self.leaf_weights.get(lk, def_l))
-            blended_l = cur_l + decay * (float(def_l) - cur_l)
-            if lk == "philosophical/structure/chaos":
-                self.leaf_weights[lk] = round(max(-2.5, min(-0.10, blended_l)), 4)
-            else:
-                self.leaf_weights[lk] = round(max(0.10, min(2.5, blended_l)), 4)
-
         updated_keys: list[str] = []
         updated_circuit_keys: list[str] = []
         ref_map = reference_coordinates or {}
@@ -721,6 +701,15 @@ class BitboardIntuitionSleeve:
                 p_val = float(played_coordinates[lk])
                 r_val = float(ref_map[lk])
                 delta = (r_val - p_val) if is_hazard else (p_val - r_val)
+                if abs(delta) < 0.05:
+                    continue
+                def_l = float(DEFAULT_SLEEVE_LEAF_WEIGHTS.get(lk, 0.50))
+                cur_l = float(self.leaf_weights.get(lk, def_l))
+                blended_l = cur_l + decay * (def_l - cur_l)
+                if lk == "philosophical/structure/chaos":
+                    self.leaf_weights[lk] = round(max(-2.5, min(-0.10, blended_l)), 4)
+                else:
+                    self.leaf_weights[lk] = round(max(0.10, min(2.5, blended_l)), 4)
                 if abs(delta) >= 0.15:
                     if lk == "philosophical/structure/chaos":
                         # Higher chaos on a blunder (`r_val < p_val` -> `delta < 0`) makes chaos penalty more negative
@@ -736,13 +725,27 @@ class BitboardIntuitionSleeve:
                     p_feat = float(played_bitboard_features[fk])
                     r_feat = float(reference_bitboard_features[fk])
                     feat_delta = (r_feat - p_feat) if is_hazard else (p_feat - r_feat)
+                    if abs(feat_delta) < 0.05:
+                        continue
+                    def_v = float(DEFAULT_SLEEVE_VALUE_WEIGHTS[fk])
+                    cur_v = float(self.value_weights.get(fk, def_v))
+                    self.value_weights[fk] = round(
+                        max(0.10, min(3.0, cur_v + decay * (def_v - cur_v))),
+                        4,
+                    )
+                    def_p = float(DEFAULT_SLEEVE_POLICY_WEIGHTS[fk])
+                    cur_p = float(self.policy_weights.get(fk, def_p))
+                    self.policy_weights[fk] = round(
+                        max(0.10, min(3.0, cur_p + decay * (def_p - cur_p))),
+                        4,
+                    )
                     if abs(feat_delta) >= 0.15:
                         self.value_weights[fk] = round(
-                            max(0.10, min(3.0, float(self.value_weights.get(fk, DEFAULT_SLEEVE_VALUE_WEIGHTS[fk])) + step_lr * feat_delta)),
+                            max(0.10, min(3.0, float(self.value_weights[fk]) + step_lr * feat_delta)),
                             4,
                         )
                         self.policy_weights[fk] = round(
-                            max(0.10, min(3.0, float(self.policy_weights.get(fk, DEFAULT_SLEEVE_POLICY_WEIGHTS[fk])) + step_lr * feat_delta)),
+                            max(0.10, min(3.0, float(self.policy_weights[fk]) + step_lr * feat_delta)),
                             4,
                         )
                         updated_circuit_keys.append(fk)
@@ -1922,7 +1925,7 @@ def evaluate_candidate_moves_with_right_brain(
             )
             is_hazard_match = bool(
                 (matched and matched.startswith(("hazard_", "blunder_", "avoid_")))
-                or (hazard_peak >= 0.50 and hazard_peak >= coached_peak)
+                or (hazard_peak >= 0.50 and hazard_peak > coached_peak + 0.05 and (is_blunder or bool(shadow_names)))
             )
             learned_bonus = 0.65 * coached_peak - 0.85 * hazard_peak
             if matched and matched.startswith(("hazard_", "blunder_", "avoid_")):

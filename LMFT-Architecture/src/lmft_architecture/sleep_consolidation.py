@@ -357,27 +357,17 @@ def parse_cluster_defining_leaves(
 
 
 def has_genuine_hazard_pathology_leaf(target_leaves: Mapping[str, float]) -> bool:
-    """Return True if `target_leaves` contains at least one genuine low-virtue deficit or elevated shadow/hazard leaf."""
-    virtue_leaves = {
-        "philosophical/being/existence",
-        "philosophical/structure/order",
-        "philosophical/persistence/continuity",
-        "cultural/efficiency/wastelessness",
-        "cultural/freedom/self-sufficiency",
-        "cultural/justice/honor",
-        "cultural/justice/fairness",
-    }
+    """Return True if `target_leaves` contains at least one genuine move-level blunder/pathology leaf."""
     shadow_ids = {leaf.leaf_id for leaf in PHILOSOPHICAL_SHADOW_LEAVES}
     for k, v in target_leaves.items():
         fv = float(v)
-        short_k = k.split("/")[-1]
-        if k in virtue_leaves and fv <= 0.48:
+        if k == "cultural/efficiency/wastelessness" and fv <= 0.38:
             return True
-        if k == "cultural/freedom/needlessness" and fv >= 0.35:
+        if k == "cultural/freedom/needlessness" and fv >= 0.38:
             return True
         if k in shadow_ids and fv >= 0.50:
             return True
-        if short_k.startswith(("hazard_", "blunder_", "avoid_")) and fv >= 0.50:
+        if k.count("/") >= 2 and k.rsplit("/", 1)[-1].startswith(("hazard_", "blunder_", "avoid_")) and fv >= 0.50:
             return True
     return False
 
@@ -503,6 +493,18 @@ def normalize_contrastive_target_leaves_and_thresholds(
             continue
         target_leaves[k] = t_val
 
+    if explicit_hazard:
+        if "cultural/efficiency/wastelessness" in avg_coords and float(avg_coords["cultural/efficiency/wastelessness"]) <= 0.38:
+            target_leaves["cultural/efficiency/wastelessness"] = round(
+                min(0.38, max(0.05, float(avg_coords["cultural/efficiency/wastelessness"]))),
+                2,
+            )
+        if "cultural/freedom/needlessness" in avg_coords and float(avg_coords["cultural/freedom/needlessness"]) >= 0.38:
+            target_leaves["cultural/freedom/needlessness"] = round(
+                min(0.95, max(0.38, float(avg_coords["cultural/freedom/needlessness"]))),
+                2,
+            )
+
     if is_named_cluster and def_cult_leaf and def_phil_leaf:
         if def_cult_leaf not in target_leaves and def_cult_leaf in avg_coords:
             v_c = round(min(0.95, max(0.05, float(avg_coords[def_cult_leaf]))), 2)
@@ -535,19 +537,35 @@ def normalize_contrastive_target_leaves_and_thresholds(
                     target_leaves[def_phil_leaf] = v_p
             else:
                 target_leaves[def_phil_leaf] = v_p
-        if len(target_leaves) > 3:
-            pinned = {def_cult_leaf, def_phil_leaf}
-            if "cultural/efficiency/wastelessness" in target_leaves:
-                pinned.add("cultural/efficiency/wastelessness")
-            if (
-                "philosophical/persistence/continuity" in target_leaves
-                and float(target_leaves["philosophical/persistence/continuity"]) <= 0.20
-                and "philosophical/persistence/discreteness" in target_leaves
-            ):
-                pinned.add("philosophical/persistence/continuity")
-            for k in list(target_leaves.keys()):
-                if k not in pinned and len(target_leaves) > 3:
-                    target_leaves.pop(k, None)
+
+    if len(target_leaves) > 3:
+        pinned: set[str | None] = set()
+        if (
+            "cultural/efficiency/wastelessness" in target_leaves
+            and (not explicit_hazard or float(target_leaves["cultural/efficiency/wastelessness"]) <= 0.38)
+        ):
+            pinned.add("cultural/efficiency/wastelessness")
+        if (
+            explicit_hazard
+            and "cultural/freedom/needlessness" in target_leaves
+            and float(target_leaves["cultural/freedom/needlessness"]) >= 0.38
+        ):
+            pinned.add("cultural/freedom/needlessness")
+        if is_named_cluster and def_cult_leaf and def_phil_leaf:
+            if len(pinned) < 3 and def_phil_leaf in target_leaves:
+                pinned.add(def_phil_leaf)
+            if len(pinned) < 3 and def_cult_leaf in target_leaves:
+                pinned.add(def_cult_leaf)
+        if (
+            len(pinned) < 3
+            and "philosophical/persistence/continuity" in target_leaves
+            and float(target_leaves["philosophical/persistence/continuity"]) <= 0.20
+            and "philosophical/persistence/discreteness" in target_leaves
+        ):
+            pinned.add("philosophical/persistence/continuity")
+        for k in list(target_leaves.keys()):
+            if k not in pinned and len(target_leaves) > 3:
+                target_leaves.pop(k, None)
 
     if len(target_leaves) < 2:
         for k, t_val in base_targets.items():

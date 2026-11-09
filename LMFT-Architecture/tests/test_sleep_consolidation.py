@@ -843,9 +843,16 @@ def test_round2_no_coordinate_stamping_and_genuine_tier2_gate() -> None:
             "philosophical/structure/chaos": 0.55,
         }
     )
-    assert has_genuine_hazard_pathology_leaf(
+    assert not has_genuine_hazard_pathology_leaf(
         {
             "cultural/efficiency/power": 0.50,
+            "cultural/justice/fairness": 0.29,
+            "philosophical/structure/chaos": 0.51,
+        }
+    )
+    assert has_genuine_hazard_pathology_leaf(
+        {
+            "cultural/efficiency/wastelessness": 0.25,
             "cultural/justice/fairness": 0.29,
             "philosophical/structure/chaos": 0.51,
         }

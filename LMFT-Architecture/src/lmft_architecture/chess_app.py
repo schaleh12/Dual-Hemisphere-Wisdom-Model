@@ -300,9 +300,20 @@ def _ensure_foundational_rules(rules: tuple[FuzzyConceptRule, ...]) -> tuple[Fuz
                     continue
                 cleaned_haz_leaves[k] = fv
             if len(cleaned_haz_leaves) > 3:
-                pinned_haz = {x for x in (def_cult, def_phil) if x is not None}
-                if "cultural/efficiency/wastelessness" in cleaned_haz_leaves:
+                pinned_haz: set[str] = set()
+                if (
+                    "cultural/efficiency/wastelessness" in cleaned_haz_leaves
+                    and float(cleaned_haz_leaves["cultural/efficiency/wastelessness"]) <= 0.38
+                ):
                     pinned_haz.add("cultural/efficiency/wastelessness")
+                if (
+                    "cultural/freedom/needlessness" in cleaned_haz_leaves
+                    and float(cleaned_haz_leaves["cultural/freedom/needlessness"]) >= 0.38
+                ):
+                    pinned_haz.add("cultural/freedom/needlessness")
+                for x in (def_phil, def_cult):
+                    if x is not None and x in cleaned_haz_leaves and len(pinned_haz) < 3:
+                        pinned_haz.add(x)
                 sorted_haz_keys = sorted(
                     cleaned_haz_leaves.keys(),
                     key=lambda key: (key in pinned_haz, abs(cleaned_haz_leaves[key] - 0.50)),
