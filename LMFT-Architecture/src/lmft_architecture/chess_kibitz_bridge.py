@@ -1252,6 +1252,7 @@ def compute_candidate_move_fuzzy_coordinates(
     learned_leaves: Sequence[LearnedLeaf] = (),
     bitboard_sleeve: BitboardIntuitionSleeve | None = None,
     will_edges: Sequence[Any] = RIGHT_BRAIN_WILL_EDGES,
+    ambient_valence: float | None = None,
 ) -> tuple[dict[str, float], bool, float, ChessBoardPosture, tuple[str, ...]]:
     """Compute the 40-node Fuzzy Tree coordinate dictionary (`Fact`, `Theory`, `Confidence`, `Intention`) for `move`."""
     us = board.turn if perspective is None else perspective
@@ -1468,16 +1469,15 @@ def compute_candidate_move_fuzzy_coordinates(
         0.45 + 0.08 * net_capture_gain + 0.25 * float(sleeve_out["policy_prior"])
     )
     coords["experiential/phase/arousal"] = _clamp01(0.35 + 0.40 * agency + 0.25 * chaos)
-    raw_valence = (
-        0.55 * float(post_posture.board_valence)
-        + 0.45 * float(sleeve_out["value_prior"])
-        + 0.06 * min(8.5, max(-3.5, float(net_capture_gain)))
-        - 0.18 * min(3.5, float(blunder_penalty))
+    sleeve_coherence = 1.0 - min(
+        1.0, abs(float(sleeve_out["value_prior"]) - float(sleeve_out["policy_prior"]))
     )
-    valence_coord = _clamp01(min(0.95, max(0.05, raw_valence)))
-    if is_blunder:
-        valence_coord = min(0.28, valence_coord)
-    coords["experiential/phase/valence"] = valence_coord
+    if ambient_valence is not None:
+        coords["experiential/phase/valence"] = _clamp01(float(ambient_valence))
+    else:
+        coords["experiential/phase/valence"] = _clamp01(
+            0.50 * float(sleeve_out["value_prior"]) + 0.50 * sleeve_coherence
+        )
 
     coords["cultural/justice/honor"] = _clamp01(
         0.24
@@ -1496,7 +1496,7 @@ def compute_candidate_move_fuzzy_coordinates(
         + 0.04 * order
         - 0.22 * min(3.5, float(blunder_penalty))
     )
-    fairness_coord = _clamp01(0.55 * trade_parity + 0.45 * float(post_posture.board_valence))
+    fairness_coord = _clamp01(0.55 * trade_parity + 0.45 * float(sleeve_out["value_prior"]))
     coords["cultural/justice/fairness"] = min(0.30, fairness_coord) if is_blunder else fairness_coord
 
     is_transforming = bool(
@@ -1511,9 +1511,6 @@ def compute_candidate_move_fuzzy_coordinates(
             + 0.22 * chaos
             + 0.19 * float(sleeve_out["policy_prior"])
         )
-    )
-    sleeve_coherence = 1.0 - min(
-        1.0, abs(float(sleeve_out["value_prior"]) - float(sleeve_out["policy_prior"]))
     )
     coords["experiential/synchronization/resonance"] = _clamp01(
         0.32 * order
@@ -2017,9 +2014,6 @@ def _sync_coords_and_learned_leaves_after_rollout(
         coords["cultural/justice/fairness"] = min(
             0.30, float(coords.get("cultural/justice/fairness", 0.50))
         )
-        coords["experiential/phase/valence"] = min(
-            0.28, float(coords.get("experiential/phase/valence", 0.50))
-        )
         if r_loss >= 0.8 and not was_1ply_blunder:
             coords["psychological/truth/fact"] = _clamp01(
                 float(coords.get("psychological/truth/fact", 0.50))
@@ -2189,7 +2183,6 @@ def evaluate_candidate_moves_with_right_brain(
             1.0 * float(coords.get("psychological/will/intention", 0.50))
             + 1.0 * float(coords.get("psychological/truth/fact", 0.50))
             + 0.5 * float(coords.get("psychological/truth/theory", 0.50))
-            + 0.35 * float(coords.get("experiential/phase/valence", 0.50))
             - 1.2 * blunder_penalty
             - (1.5 if is_rep else 0.0)
         )
@@ -2709,30 +2702,28 @@ class BoardAnchoredBridgeSensors:
             branch_gate_threshold=branch_gate_threshold,
         )
         # First call in run_three_legged_turn is Pass 1 (External Fact):
-        # Anchor the 6 Philosophical coordinates to the real python-chess board!
+        # Anchor the 6 Philosophical coordinates to the real python-chess board,
+        # while keeping Experiential coordinates (`valence`, `arousal`, `salience`,
+        # `novelty`, `resonance`, `entrainment`) governed by the AI's Feeler bridge
+        # and Equilibrium Controller rather than wired to centipawn board formulas!
         if self.call_count == 1:
             anchored = dict(coords)
-            exp_out = dict(exp_raw)
             for leaf_id, board_val in self.board_posture.philosophical_coordinates.items():
                 anchored[leaf_id] = float(board_val)
-            # When scoring an automatic board state prompt (no user story text), ground
-            # the 6 Cultural coordinates and 6 Experiential coordinates in the board's
-            # structural and +/- evaluation state instead of MiniLM's dry reading of the
-            # "Chess table — Move N..." header.
-            if self.ground_cultural_on_board or clean_for_minilm.startswith("Chess table —"):
+            if self.ground_cultural_on_board:
                 phil = self.board_posture.philosophical_coordinates
                 order_f = float(phil.get("philosophical/structure/order", 0.50))
                 cont_f = float(phil.get("philosophical/persistence/continuity", 0.50))
                 exist_f = float(phil.get("philosophical/being/existence", 0.50))
-                chaos_f = float(phil.get("philosophical/structure/chaos", 0.30))
                 agency_f = float(phil.get("philosophical/being/agency", 0.50))
-                board_val_f = _clamp01(float(self.board_posture.board_valence))
 
                 anchored["cultural/efficiency/power"] = _clamp01(
                     0.55 * agency_f
                     + 0.45 * float(phil.get("philosophical/persistence/discreteness", 0.50))
                 )
-                anchored["cultural/efficiency/wastelessness"] = 0.68
+                anchored["cultural/efficiency/wastelessness"] = _clamp01(
+                    0.45 * exist_f + 0.35 * order_f + 0.20 * cont_f
+                )
                 anchored["cultural/justice/honor"] = _clamp01(
                     0.18
                     + 0.28 * order_f
@@ -2742,53 +2733,17 @@ class BoardAnchoredBridgeSensors:
                 )
                 anchored["cultural/justice/fairness"] = _clamp01(
                     0.15
-                    + 0.55 * board_val_f
+                    + 0.55 * exist_f
                     + 0.15 * order_f
                     - (0.12 if self.board_posture.in_check else 0.0)
                 )
                 anchored["cultural/freedom/self-sufficiency"] = _clamp01(
                     0.50 * exist_f + 0.30 * order_f + 0.20 * cont_f
                 )
-                anchored["cultural/freedom/needlessness"] = 0.08
-
-                board_arousal = _clamp01(0.35 + 0.40 * agency_f + 0.25 * chaos_f)
-                board_salience = _clamp01(
-                    max(
-                        float(exp_raw.get("experiential/reflection/salience", 0.45)),
-                        0.48
-                        + 0.30 * abs(board_val_f - 0.50)
-                        + (0.18 if self.board_posture.board_shadow_warnings else 0.0),
-                    )
+                anchored["cultural/freedom/needlessness"] = _clamp01(
+                    0.20 if self.board_posture.board_shadow_warnings else 0.08
                 )
-                board_novelty = _clamp01(
-                    0.35
-                    + 0.35 * chaos_f
-                    + 0.20 * agency_f
-                    + (0.10 if self.board_posture.in_check else 0.0)
-                )
-                board_resonance = _clamp01(
-                    0.45 * order_f
-                    + 0.35 * cont_f
-                    + 0.20 * exist_f
-                    - (0.15 if self.board_posture.board_shadow_warnings else 0.0)
-                )
-                board_entrainment = _clamp01(
-                    0.50 * cont_f
-                    + 0.35 * order_f
-                    + 0.15 * exist_f
-                    - (0.15 if self.board_posture.in_check else 0.0)
-                )
-                for exp_k, exp_v in (
-                    ("experiential/phase/valence", board_val_f),
-                    ("experiential/phase/arousal", board_arousal),
-                    ("experiential/reflection/salience", board_salience),
-                    ("experiential/reflection/novelty", board_novelty),
-                    ("experiential/synchronization/resonance", board_resonance),
-                    ("experiential/synchronization/entrainment", board_entrainment),
-                ):
-                    exp_out[exp_k] = exp_v
-                    anchored[exp_k] = exp_v
-            return anchored, exp_out, queried, skipped
+            return anchored, dict(exp_raw), queried, skipped
 
         # Subsequent calls (Clause 1 at comma and full-sentence Pass 2+ Theory) score
         # the proposed plan/chat text directly so any mismatch with the board triggers dissonance!

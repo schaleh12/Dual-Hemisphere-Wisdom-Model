@@ -1877,11 +1877,14 @@ def test_zero_wire_clone_rule_ties_and_rem_vow_prompt_no_chat_bleed(tmp_path: Pa
 
 
 def test_board_valence_evaluation_and_candidate_move_valence() -> None:
-    """Verify `experiential/phase/valence` reflects the `+/-` chess board evaluation and candidate move quality."""
+    """Verify `experiential/phase/valence` stays governed by the AI's Feeler mood rather than static centipawns."""
     from lmft_architecture.chess_kibitz_bridge import (
         compute_board_valence,
         compute_candidate_move_fuzzy_coordinates,
     )
+
+    assert "Autonomous Internal Mood — Un-Wired from Centipawns" in CHESS_SINGLE_PAGE_HTML
+    assert "4 Departments" in CHESS_SINGLE_PAGE_HTML and "12 Parent Branches" in CHESS_SINGLE_PAGE_HTML
 
     start_board = chess.Board()
     assert compute_board_valence(start_board, chess.WHITE) == pytest.approx(0.50, abs=0.05)
@@ -1897,7 +1900,8 @@ def test_board_valence_evaluation_and_candidate_move_valence() -> None:
     assert val_white > 0.68
     assert val_black < 0.32
 
-    # BoardAnchoredBridgeSensors grounds `experiential/phase/valence` on the board evaluation
+    # BoardAnchoredBridgeSensors anchors the 6 Philosophical Fact leaves to the board
+    # while preserving the AI's own Feeler mood (`experiential/phase/valence = 0.11`)!
     sensors = ThreeBridgeSensors(
         will_cultural=lambda _t, _c=(): {k: 0.04 for k in FOUNDATIONAL_LEAVES[:6]},
         truth_philosophical=lambda _t, _c=(): {k: 0.25 for k in FOUNDATIONAL_LEAVES[6:12]},
@@ -1911,22 +1915,13 @@ def test_board_valence_evaluation_and_candidate_move_valence() -> None:
     coords, exp_out, _q, _s = anchored_sensors.score_text(
         build_natural_chess_scenario_prompt(start_board)
     )
-    assert exp_out["experiential/phase/valence"] == pytest.approx(0.50, abs=0.05)
-    assert coords["experiential/phase/valence"] == pytest.approx(0.50, abs=0.05)
-    for exp_key in (
-        "experiential/phase/valence",
-        "experiential/phase/arousal",
-        "experiential/reflection/salience",
-        "experiential/reflection/novelty",
-        "experiential/synchronization/resonance",
-        "experiential/synchronization/entrainment",
-    ):
-        assert exp_key in exp_out and 0.0 <= exp_out[exp_key] <= 1.0
-        assert exp_key in coords and coords[exp_key] == pytest.approx(exp_out[exp_key])
-    assert coords["cultural/justice/honor"] != 0.52
-    assert coords["cultural/justice/fairness"] != 0.52
+    assert exp_out["experiential/phase/valence"] == pytest.approx(0.11)
+    assert coords["experiential/phase/valence"] == pytest.approx(0.11)
+    assert coords["philosophical/being/existence"] == pytest.approx(
+        start_posture.philosophical_coordinates["philosophical/being/existence"]
+    )
 
-    # Candidate move fuzzy coordinates populate all 24 Founding Leaves
+    # Candidate move fuzzy coordinates populate all 24 Founding Leaves and respect autonomous mood (`ambient_valence`)
     all_24_founding_leaves = (
         "cultural/efficiency/power",
         "cultural/efficiency/wastelessness",
@@ -1957,18 +1952,21 @@ def test_board_valence_evaluation_and_candidate_move_valence() -> None:
     coords_bxf7, is_blunder_bxf7, _, _, _ = compute_candidate_move_fuzzy_coordinates(
         italian_board,
         italian_board.parse_san("Bxf7+"),
+        ambient_valence=0.64,
     )
     coords_oo, is_blunder_oo, _, _, _ = compute_candidate_move_fuzzy_coordinates(
         italian_board,
         italian_board.parse_san("O-O"),
+        ambient_valence=0.64,
     )
     for k24 in all_24_founding_leaves:
         assert k24 in coords_oo, f"Missing Founding Leaf {k24} in candidate move coordinates"
         assert 0.0 <= coords_oo[k24] <= 1.0
     assert is_blunder_bxf7 is True
     assert is_blunder_oo is False
-    assert coords_bxf7["experiential/phase/valence"] <= 0.28
-    assert coords_oo["experiential/phase/valence"] > coords_bxf7["experiential/phase/valence"] + 0.20
+    assert coords_bxf7["experiential/phase/valence"] == pytest.approx(0.64)
+    assert coords_oo["experiential/phase/valence"] == pytest.approx(0.64)
+    assert coords_bxf7["cultural/efficiency/wastelessness"] <= 0.38
     assert coords_bxf7["cultural/justice/fairness"] <= 0.30
     assert coords_oo["cultural/justice/fairness"] > coords_bxf7["cultural/justice/fairness"]
     assert coords_oo["cultural/justice/honor"] > coords_bxf7["cultural/justice/honor"]
@@ -1991,7 +1989,7 @@ def test_board_valence_evaluation_and_candidate_move_valence() -> None:
     assert coords_dev_nc6["experiential/reflection/novelty"] > coords_rep_ng8["experiential/reflection/novelty"] + 0.25
     assert coords_dev_nc6["cultural/justice/honor"] > coords_rep_ng8["cultural/justice/honor"] + 0.20
 
-    # Winning free-queen capture has high positive valence (>= 0.68) and high tactical self-sufficiency (>= 0.72)
+    # Winning free-queen capture has high fairness (>= 0.65) and high tactical self-sufficiency (>= 0.72)
     # even in the opening while other minor pieces sit on the back rank (knowing when all pieces are NOT required)
     free_queen_board = chess.Board("rnb1kbnr/pppp1ppp/8/4p3/3qP3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 0 3")
     coords_nxd4, is_blunder_nxd4, _, _, _ = compute_candidate_move_fuzzy_coordinates(
@@ -1999,7 +1997,6 @@ def test_board_valence_evaluation_and_candidate_move_valence() -> None:
         free_queen_board.parse_san("Nxd4"),
     )
     assert is_blunder_nxd4 is False
-    assert coords_nxd4["experiential/phase/valence"] >= 0.68
     assert coords_nxd4["cultural/justice/fairness"] >= 0.65
     assert coords_nxd4["cultural/freedom/self-sufficiency"] >= 0.72
     assert coords_nxd4["cultural/freedom/needlessness"] <= 0.08
