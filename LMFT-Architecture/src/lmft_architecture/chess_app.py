@@ -474,7 +474,7 @@ class ChessKibitzerRuntime:
         self.left_brain_loading = False
         self.left_brain_status = "LAZY_STANDBY"
         self.active_lineage = "schooled"
-        self.active_checkpoint_label = "Cycle 2 (models/left_brain_lora_cycle2)"
+        self.active_checkpoint_label = "Cycle 2 (models/left_brain_chess)"
         self.sleep_cycle_index = 2
         self._resolve_checkpoint_dir()
 
@@ -1173,7 +1173,7 @@ class ChessKibitzerRuntime:
             t.start()
         else:
             self.left_brain_status = "GEAR_1_ONLY (No LoRA checkpoint found)"
-        self.active_checkpoint_label = f"Cycle {self.sleep_cycle_index} (models/left_brain_lora_cycle2)"
+        self.active_checkpoint_label = f"Cycle {self.sleep_cycle_index} (models/left_brain_chess)"
         self._resolve_checkpoint_dir()
         self.rules = self._load_default_rules()
         self.learned_leaves = self._load_default_learned_leaves()
@@ -1187,6 +1187,16 @@ class ChessKibitzerRuntime:
         return self.get_state_snapshot()
 
     def _resolve_checkpoint_dir(self) -> Path | None:
+        c_chess = self.training_root / "models" / "left_brain_chess"
+        if (c_chess / "corpus_callosum_meta.json").exists():
+            self.active_checkpoint_label = "Cycle 2 (models/left_brain_chess)"
+            self.sleep_cycle_index = 2
+            return c_chess
+        c_base = self.training_root / "models" / "left_brain_baseline"
+        if (c_base / "corpus_callosum_meta.json").exists():
+            self.active_checkpoint_label = "Cycle 1 (models/left_brain_baseline)"
+            self.sleep_cycle_index = 1
+            return c_base
         c2 = self.training_root / "models" / "left_brain_lora_cycle2"
         if (c2 / "corpus_callosum_meta.json").exists():
             self.active_checkpoint_label = "Cycle 2 (models/left_brain_lora_cycle2)"
@@ -1197,11 +1207,6 @@ class ChessKibitzerRuntime:
             self.active_checkpoint_label = "Cycle 1 (models/left_brain_lora)"
             self.sleep_cycle_index = 1
             return c1
-        c_8b = self.training_root / "models" / "left_brain_qwen3_8b"
-        if (c_8b / "corpus_callosum_meta.json").exists():
-            self.active_checkpoint_label = "Cycle 2 (Qwen3-8B · models/left_brain_qwen3_8b)"
-            self.sleep_cycle_index = 2
-            return c_8b
         return None
 
     def _load_qwen_locked(self) -> None:
@@ -1217,13 +1222,23 @@ class ChessKibitzerRuntime:
             return
         is_8b_ckpt = "8b" in str(ckpt_dir).lower()
         self.left_brain_loading = True
-        self.left_brain_status = "LOADING_QWEN_8B..." if is_8b_ckpt else "LOADING_QWEN_4B..."
+        self.left_brain_status = "LOADING_QWEN_8B..." if is_8b_ckpt else "LOADING_IMPISH_LLAMA_4B..."
         try:
             loaded = SubliminalGapLeftBrain.from_checkpoint(
                 ckpt_dir,
                 max_clause_1_tokens=20,
                 max_post_gap_tokens=64,
             )
+            loaded.projector.capture_resting_anchor()
+            live_proj_file = self.state_dir / "live_projector_weights.pt"
+            if live_proj_file.is_file():
+                try:
+                    import torch
+
+                    live_sd = torch.load(live_proj_file, map_location=loaded.device, weights_only=True)
+                    loaded.projector.load_state_dict(live_sd, strict=True)
+                except Exception:
+                    pass
             self._qwen_left_brain = loaded
             self.left_brain = loaded
             if loaded.callosum_metadata is not None:
@@ -2692,6 +2707,24 @@ class ChessKibitzerRuntime:
         )
         self.bitboard_sleeve = BitboardIntuitionSleeve()
         self.will_edges = RIGHT_BRAIN_WILL_EDGES
+        live_proj_file = self.state_dir / "live_projector_weights.pt"
+        if live_proj_file.exists():
+            try:
+                live_proj_file.unlink()
+            except Exception:
+                pass
+        if self.left_brain is not None and hasattr(self.left_brain, "projector"):
+            try:
+                import torch
+
+                with torch.no_grad():
+                    for p, p0 in zip(
+                        self.left_brain.projector.parameters(),
+                        self.left_brain.projector.get_resting_anchor_params(),
+                    ):
+                        p.copy_(p0)
+            except Exception:
+                pass
         seed_arch_dir = self.training_root / "outputs" / "branch_archives"
         if (seed_arch_dir / "philosophical_lexicon.json").exists():
             try:

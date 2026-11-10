@@ -4,7 +4,7 @@ Creates `dist/lmft-sanctuary-club-v0.1.0-win64.zip` containing:
 - `LMFT-Chess.exe` & `LMFT-Bloodmoon.exe` (standalone Windows launchers)
 - `src/lmft_architecture/*.py` (all core runtime, right-brain, comma-splice, chess & bloodmoon modules)
 - `outputs/rem_sleep_consolidated_ruleset.json` & `outputs/continuous_tiered_ruleset.json`
-- `models/right_brain_bridges/` & `models/left_brain_lora_cycle2/` (when present on disk)
+- `models/right_brain_bridges/`, `models/left_brain_baseline/`, `models/left_brain_chess/`, & `models/left_brain_bloodmoon/` (when present on disk)
 """
 
 from __future__ import annotations
@@ -109,8 +109,9 @@ def build_release_zip(
     if include_model_weights:
         for model_rel in (
             "models/right_brain_bridges",
-            "models/left_brain_qwen3_8b",
-            "models/left_brain_lora_cycle2",
+            "models/left_brain_baseline",
+            "models/left_brain_chess",
+            "models/left_brain_bloodmoon",
         ):
             m_dir = train_root / model_rel
             if m_dir.exists():

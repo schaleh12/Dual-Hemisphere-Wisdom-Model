@@ -184,18 +184,18 @@ def build_custom_antigravity_prompt(hw: dict[str, object]) -> str:
 
     if vram_gb >= 12.0:
         profile_mode = (
-            "Keep 4-bit NF4 Qwen/Qwen3-8B enabled as the primary Left Brain and keep sequential "
-            "VRAM unloading active during REM Sleep."
+            "Keep native 16-bit bfloat16 SicariusSicariiStuff/Impish_LLAMA_4B enabled as the primary Left Brain "
+            "and keep sequential VRAM unloading active during REM Sleep."
         )
     elif vram_gb >= 7.5:
         profile_mode = (
-            "Configure LMFT-Chess to prefer 4-bit NF4 Qwen/Qwen3-4B or Qwen3-8B with max_context_chars=12000 "
-            "and strict torch.cuda.empty_cache() before REM Sleep so VRAM stays under 8 GB."
+            "Configure LMFT-Chess to run SicariusSicariiStuff/Impish_LLAMA_4B with max_context_chars=12000 "
+            "and strict torch.cuda.empty_cache() before REM Sleep."
         )
     else:
         profile_mode = (
             "Configure LMFT-Chess for Low-VRAM / CPU-Assisted mode: keep the 40-Node Right Brain and "
-            "3 MiniLM bridges on CPU/fp16, and use a lightweight 4-bit Qwen3-4B Left Brain with short "
+            "3 MiniLM bridges on CPU/fp16, and use a lightweight 4-bit Impish_LLAMA_4B Left Brain with short "
             "max_post_gap_tokens=28."
         )
 

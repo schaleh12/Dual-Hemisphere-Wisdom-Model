@@ -71,7 +71,7 @@ from .virgin_baseline import (
 DEFAULT_IMPISH_BLOODMOON_HF_ID = "SicariusSicariiStuff/Impish_LLAMA_4B"
 DEFAULT_IMPISH_BLOODMOON_HIDDEN_SIZE = 3072
 IMPISH_BLOODMOON_STATE_REL_DIR = Path("outputs") / "impish_bloodmoon_state"
-IMPISH_BLOODMOON_CHECKPOINT_REL_DIR = Path("models") / "left_brain_impish_bloodmoon"
+IMPISH_BLOODMOON_CHECKPOINT_REL_DIR = Path("models") / "left_brain_bloodmoon"
 
 UNSTEERED_BOOTSTRAP_STATUS = "UNSTEERED_BOOTSTRAP_CYCLE_0"
 TRAINED_STEERED_STATUS = "TRAINED_STEERED_CALLOSUM"

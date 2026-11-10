@@ -144,9 +144,9 @@ def main() -> None:
         max_new_tokens=32,
     )
 
-    ckpt_dir_1 = train_root / "models" / "left_brain_lora"
-    ckpt_dir_2 = train_root / "models" / "left_brain_lora_cycle2"
-    ckpt_dir_bm = train_root / "models" / "left_brain_impish_bloodmoon"
+    ckpt_dir_1 = train_root / "models" / "left_brain_baseline"
+    ckpt_dir_2 = train_root / "models" / "left_brain_chess"
+    ckpt_dir_bm = train_root / "models" / "left_brain_bloodmoon"
     meta_1 = save_lora_and_callosum_checkpoint(
         ckpt_dir_1,
         model=model,
@@ -246,7 +246,7 @@ def main() -> None:
 
     p1_mb = (ckpt_dir_1 / "projector_weights.pt").stat().st_size / (1024 * 1024)
     p2_mb = (ckpt_dir_2 / "projector_weights.pt").stat().st_size / (1024 * 1024)
-    print(f"\nProjector checkpoint sizes: left_brain_lora={p1_mb:.2f} MB, left_brain_lora_cycle2={p2_mb:.2f} MB")
+    print(f"\nProjector checkpoint sizes: left_brain_baseline={p1_mb:.2f} MB, left_brain_chess={p2_mb:.2f} MB")
 
     print("\n=== HONEST UN-RIGGED HOLDOUT EVALUATION SUMMARY ===")
     print(f"Raw Uncalibrated Both-Branches Flipped: {post_eval.both_branches_flipped_count}/{post_eval.total_holdout_pairs}")

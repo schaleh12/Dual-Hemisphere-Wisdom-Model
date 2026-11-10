@@ -399,7 +399,7 @@ class BloodmoonClockRuntime:
         self.impish_checkpoint_dir = (
             Path(impish_checkpoint_dir).resolve()
             if impish_checkpoint_dir is not None
-            else (self.training_root / "models" / "left_brain_impish_bloodmoon")
+            else (self.training_root / "models" / "left_brain_bloodmoon")
         )
         self.teacher = teacher
         self._lazy_load_gpu = bool(lazy_load_gpu)
@@ -1187,6 +1187,16 @@ class BloodmoonClockRuntime:
                 max_clause_1_tokens=20,
                 max_post_gap_tokens=64,
             )
+            loaded.projector.capture_resting_anchor()
+            live_proj_file = self.impish_state_dir / "live_projector_weights.pt"
+            if live_proj_file.is_file():
+                try:
+                    import torch
+
+                    live_sd = torch.load(live_proj_file, map_location=loaded.device, weights_only=True)
+                    loaded.projector.load_state_dict(live_sd, strict=True)
+                except Exception:
+                    pass
             self._impish_left_brain = loaded
             self.left_brain = loaded
             self.left_brain_status = f"READY (Impish_LLAMA_4B · {callosum_status})"

@@ -2,8 +2,8 @@
   "schema_version": 1,
   "version": "0.2.0",
   "github_repo": "schaleh12/Dual-Hemisphere-Wisdom-Model",
-  "build_sha256": "88ed5a5cb0c0e894382dc249316913e7d1e9e33c71afd32a5bf34bf922ced84c",
-  "build_short_hash": "88ed5a5cb0c0",
+  "build_sha256": "49f658d54604f89f0269d501fab69f41db42cdeeb7452c0ff8ece47b40ae914d",
+  "build_short_hash": "49f658d54604",
   "files": {
     "src/lmft_architecture/__init__.py": {
       "sha256": "a89f56c2195e87129adbffa5065d8769ea096e13ba98783d217c4d120ee92623",
@@ -66,8 +66,8 @@
       "size_bytes": 5515
     },
     "src/lmft_architecture/bloodmoon_app.py": {
-      "sha256": "ce79ba176015513f593c2c1be0731d0013d25b6c02a0cbcbaffbef7a88e2fac1",
-      "size_bytes": 137172
+      "sha256": "7f0e17a66b2a2c2d3d3ce7e36b67dcfc53b2e606c4be1cd8ff178156cfb51e8e",
+      "size_bytes": 137634
     },
     "src/lmft_architecture/bloodmoon_ui.py": {
       "sha256": "a09722c7044ab838914108dd0ed78d5099c2c344935ce048af840e04b6c8f91c",
@@ -90,8 +90,8 @@
       "size_bytes": 3267
     },
     "src/lmft_architecture/chess_app.py": {
-      "sha256": "f6839f8940b8612f439ba9fc2c5cd8fa5e616094f818f8475b79958ba7cf18c1",
-      "size_bytes": 173556
+      "sha256": "feccc2861833264f2dc60c0b2fadf20616be375562524c5b7391932caa5a0ef0",
+      "size_bytes": 174955
     },
     "src/lmft_architecture/chess_kibitz_bridge.py": {
       "sha256": "122ac83b65779bb6c6d9c3a2ad0f11e282b6329763041ab82e1b6170fe4a674d",
@@ -154,16 +154,16 @@
       "size_bytes": 24970
     },
     "src/lmft_architecture/github_auto_sync.py": {
-      "sha256": "f75f61e35d968f9b7832eb51227e2729517061eda1a5ae2acbdfc6b3c087a5db",
-      "size_bytes": 14529
+      "sha256": "ad074410fdeb394426e01c781cfd680c9d243a07b56270538d625db76fa62a0f",
+      "size_bytes": 14727
     },
     "src/lmft_architecture/impish_bloodmoon_adapter.py": {
-      "sha256": "9b10d195e8ccbcb49109418a5dd4eedaafff1f83fe294b00bee1a783271a179c",
-      "size_bytes": 25830
+      "sha256": "433391bedea452669a7fb98c826d86135d3f58cac5e397b336584d28f77d9e9a",
+      "size_bytes": 25823
     },
     "src/lmft_architecture/installer_wizard.py": {
-      "sha256": "2d31f59cc81d139fb4d0b32c38cac39899e1abfc7edf91d5e86aefa34187b37c",
-      "size_bytes": 45869
+      "sha256": "5619e594bb40da43b16d4d7a2b2e6d3774285e4feab200e4e8fdee16c5b8a1c9",
+      "size_bytes": 45885
     },
     "src/lmft_architecture/insufficiency.py": {
       "sha256": "705295fa433251559d70171903c3f1f99f8c5e3aa8bad0ec37e6248fd89a74eb",

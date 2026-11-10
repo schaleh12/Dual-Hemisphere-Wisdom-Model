@@ -313,13 +313,16 @@ def test_saved_stage3_gpu_report_and_checkpoint_artifacts_exist() -> None:
 
     repo_root = resolve_training_root()
     report_path = repo_root / "outputs" / "left_brain_lora_eval_report.json"
-    ckpt_dir = repo_root / "models" / "left_brain_lora"
+    ckpt_dir = repo_root / "models" / "left_brain_baseline"
+    chess_ckpt_dir = repo_root / "models" / "left_brain_chess"
+    bm_ckpt_dir = repo_root / "models" / "left_brain_bloodmoon"
 
     assert report_path.exists(), f"Missing {report_path}"
-    assert (ckpt_dir / "corpus_callosum_meta.json").exists()
-    assert (ckpt_dir / "projector_weights.pt").exists()
-    assert (ckpt_dir / "lora_config.json").exists()
-    assert (ckpt_dir / "lora_adapters.pt").exists()
+    for d in (ckpt_dir, chess_ckpt_dir, bm_ckpt_dir):
+        assert (d / "corpus_callosum_meta.json").exists()
+        assert (d / "projector_weights.pt").exists()
+        assert (d / "lora_config.json").exists()
+        assert (d / "lora_adapters.pt").exists()
 
     report = json.loads(report_path.read_text(encoding="utf-8"))
     assert report["schema_version"] == 1

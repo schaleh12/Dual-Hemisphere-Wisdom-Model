@@ -409,7 +409,7 @@ def test_saved_stage5_rem_sleep_report_and_cycle2_checkpoint_exist() -> None:
     repo_root = resolve_training_root()
     report_path = repo_root / "outputs" / "rem_sleep_cycle_report.json"
     dreams_path = repo_root / "outputs" / "gap_trajectories_rem_dreams.jsonl"
-    ckpt2_dir = repo_root / "models" / "left_brain_lora_cycle2"
+    ckpt2_dir = repo_root / "models" / "left_brain_chess"
 
     assert report_path.exists(), f"Missing {report_path}"
     assert dreams_path.exists(), f"Missing {dreams_path}"
