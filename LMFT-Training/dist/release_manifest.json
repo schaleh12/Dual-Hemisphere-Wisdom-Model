@@ -2,8 +2,8 @@
   "schema_version": 1,
   "version": "0.2.0",
   "github_repo": "schaleh12/Dual-Hemisphere-Wisdom-Model",
-  "build_sha256": "49f658d54604f89f0269d501fab69f41db42cdeeb7452c0ff8ece47b40ae914d",
-  "build_short_hash": "49f658d54604",
+  "build_sha256": "c1e7f43c13596257feb97c668b5da62db2ed04cffbd192e8aa28a58e702fc8ed",
+  "build_short_hash": "c1e7f43c1359",
   "files": {
     "src/lmft_architecture/__init__.py": {
       "sha256": "a89f56c2195e87129adbffa5065d8769ea096e13ba98783d217c4d120ee92623",
@@ -230,8 +230,8 @@
       "size_bytes": 6988
     },
     "src/lmft_architecture/reflection_classifier.py": {
-      "sha256": "ebdfd0d64fba3a487467d441ab360d5c72101d5551dfa0ba14d0777eed6e07b9",
-      "size_bytes": 69550
+      "sha256": "a8696b6420f3276dae4e2e3c777a46fa69d7fa453d73063b264c38a0664bf68f",
+      "size_bytes": 69978
     },
     "src/lmft_architecture/reliability.py": {
       "sha256": "6a73d534e6c70fb96c91d1fbd37310ad82c78609c9e4ca7a857422ea81f5b95f",
@@ -302,8 +302,8 @@
       "size_bytes": 11619
     },
     "src/lmft_architecture/workspace_paths.py": {
-      "sha256": "89796c8e37dec1db15f42bb4f2e2577ac254ee47dcaa0b9ca3e62fef0213e26a",
-      "size_bytes": 3352
+      "sha256": "d20dd074232762a49ec29a6c43cfdf862fea191e4f36ec9fb57d6d8deebaae81",
+      "size_bytes": 3553
     },
     "docs/assets/celestial_seal_poem.jpg": {
       "sha256": "a2d98ba6b0adffd354c56e7f4d7ca574332c6d3683e407c7351463f7b69de113",

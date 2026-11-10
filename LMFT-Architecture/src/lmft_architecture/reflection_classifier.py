@@ -674,7 +674,16 @@ def _evaluate_rules_with_inhibition(
                     (d_r.polarity == "repulsive" or d_r.concept_name.startswith(("hazard_", "blunder_", "avoid_")))
                     for d_r in deeper_inhibitors
                 ) and not is_r_hazard
-                if has_deeper_hazard_override or len(r.target_leaves) < 3:
+                is_foundational_posture = (
+                    r.rule_id in ("rule_1", "rule_2", "rule_grounded_coordination", "rule_sanctuary_equilibrium")
+                    or r.concept_name in (
+                        "grounded_coordination",
+                        "sanctuary_equilibrium",
+                        "balanced_cooperation",
+                        "mutual_respect",
+                    )
+                )
+                if has_deeper_hazard_override or is_foundational_posture:
                     val = 0.0
                 else:
                     val = round(val * (1.0 - 0.5 * max_deeper), 6)

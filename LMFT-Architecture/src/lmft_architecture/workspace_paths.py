@@ -75,8 +75,14 @@ def resolve_split_path(rel_path: str | Path, repo_root: str | Path | None = None
     first = norm.split("/", 1)[0]
     if first in ("experiments", "outputs", "models", "dist", "scripts"):
         return resolve_training_root(repo_root) / norm
-    if first in ("AGENTS.md", "DECISIONS.md", "PROJECT_STATE.md", "README.md", ".gitignore"):
+    if first in ("AGENTS.md", "DECISIONS.md", "PROJECT_STATE.md", "README.md", "RELEASE_NOTES.md", ".gitignore"):
         ws = resolve_workspace_root(repo_root) / norm
         if ws.exists():
             return ws
-    return resolve_arch_root(repo_root) / norm
+    arch_cand = resolve_arch_root(repo_root) / norm
+    if arch_cand.exists():
+        return arch_cand
+    ws_cand = resolve_workspace_root(repo_root) / norm
+    if ws_cand.exists():
+        return ws_cand
+    return arch_cand
