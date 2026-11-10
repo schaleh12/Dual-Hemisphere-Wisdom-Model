@@ -2144,14 +2144,17 @@ def run_three_legged_turn(
                 )
                 last_hail = hail
 
+                active_sentence_base_vibe: RightBrainVibe = current_vibe
+                prev_sent_theory_coords: dict[str, float] = {}
+                completed_sentence_count: int = 0
+
                 def _build_chord_at_comma(
                     comma_prefix: str,
                     *,
                     _pass_idx: int = p,
-                    _base_vibe: RightBrainVibe = current_vibe,
                 ) -> tuple[SubliminalChordVector, str | None, tuple[str, ...]]:
                     if not comma_prefix.strip():
-                        mid_comma_vibe = _base_vibe
+                        mid_comma_vibe = active_sentence_base_vibe
                     else:
                         if comma_prefix in cached_comma_scores:
                             comma_coords, comma_exp = cached_comma_scores[comma_prefix]
@@ -2182,8 +2185,21 @@ def run_three_legged_turn(
                         if comma_prefix.rstrip().endswith((".", "!", "?")):
                             mid_comma_vibe = raw_comma_vibe
                         else:
-                            mid_comma_vibe = _compile_mid_sentence_comma_vibe(_base_vibe, raw_comma_vibe)
-                    if _pass_idx >= 3 and prev_theory_coords:
+                            mid_comma_vibe = _compile_mid_sentence_comma_vibe(
+                                active_sentence_base_vibe, raw_comma_vibe
+                            )
+                    if completed_sentence_count >= 1 and prev_sent_theory_coords:
+                        chord_at_comma = compute_stanza_residual_chord(
+                            birth_state,
+                            external_coords,
+                            prev_sent_theory_coords,
+                            mid_comma_vibe,
+                            stanza_index=completed_sentence_count,
+                            deliberation=deliberation,
+                            social_drift=social_drift,
+                            learned_leaves=learned_tuple,
+                        )
+                    elif _pass_idx >= 3 and prev_theory_coords:
                         chord_at_comma = compute_stanza_residual_chord(
                             birth_state,
                             external_coords,
@@ -2328,7 +2344,6 @@ def run_three_legged_turn(
                     reply_text = validate_plain_english_left_brain_reply(multi_text)
                 elif int(num_sentences) > 1 or equilibrium_stop:
                     target_max_sents = max(2, int(num_sentences)) if equilibrium_stop and int(num_sentences) <= 1 else int(num_sentences)
-                    prev_sent_theory_coords: dict[str, float] = {}
                     sent_stop_fn: Callable[[int, SplicedThoughtTrace, str], bool] | None = None
                     if equilibrium_stop:
 
@@ -2339,8 +2354,8 @@ def run_three_legged_turn(
                             *,
                             _pass_idx: int = p,
                         ) -> bool:
-                            nonlocal prev_sent_theory_coords
-                            eval_text = cumulative_text.strip() or trace.full_thought.strip()
+                            nonlocal active_sentence_base_vibe, prev_sent_theory_coords, completed_sentence_count
+                            eval_text = trace.full_thought.strip() or cumulative_text.strip()
                             if not eval_text:
                                 return False
                             s_coords, s_exp, _, _ = sensors.score_text(
@@ -2348,6 +2363,7 @@ def run_three_legged_turn(
                                 learned_leaves=learned_tuple,
                                 branch_gating=branch_gating,
                             )
+                            stanza_scored_records.append((dict(s_coords), dict(s_exp)))
                             s_vibe, _ = compile_right_brain_vibe(
                                 birth_state,
                                 external_coords,
@@ -2381,7 +2397,9 @@ def run_three_legged_turn(
                                 )
                                 if sent_delta < 0.04:
                                     return True
+                            active_sentence_base_vibe = s_vibe
                             prev_sent_theory_coords = dict(s_coords)
+                            completed_sentence_count = sent_count
                             return False
 
                         sent_stop_fn = _sentence_equilibrium_stop

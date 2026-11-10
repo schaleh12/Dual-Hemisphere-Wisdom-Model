@@ -80,6 +80,7 @@ from .neural_bridge_classifiers import (
 from .philosophical_abstraction_matrix import PHILOSOPHICAL_SHADOW_LEAVES
 from .propagation import Association
 from .reflection_classifier import (
+    ALL_GROWABLE_PARENT_BRANCHES,
     AROUSAL_LEAF,
     FOUNDATIONAL_LEAVES,
     SALIENCE_LEAF,
@@ -105,7 +106,7 @@ from .sleep_consolidation import (
     apply_dream_reflection_to_archives,
     assert_domain_general_text,
     consolidate_sleep_clusters_locally,
-    extract_dream_vow_sentence,
+    entrain_existing_cluster_rule,
 )
 from .subliminal_gap_splice import (
     _DEFAULT_LEAF_ANCHOR_WEIGHTS,
@@ -345,129 +346,6 @@ _SCHOLAR_BANNED_STORY_NOUNS: tuple[str, ...] = (
     "aurelius",
 )
 
-_BOUGH_WISDOM_LEXICON: dict[str, tuple[tuple[str, str], ...]] = {
-    "cultural/efficiency": (
-        (
-            "prudent_stewardship",
-            "Channeling concentrated power through patient resource stewardship so ambition never consumes the vessel.",
-        ),
-        (
-            "measured_conservation",
-            "Balancing decisive force with long-horizon wastelessness and sustainable craft.",
-        ),
-    ),
-    "cultural/justice": (
-        (
-            "covenant_reciprocity",
-            "Harmonizing sacred honor with restorative fairness when asymmetric strength meets shared vulnerability.",
-        ),
-        (
-            "restorative_equanimity",
-            "Tempering strict procedural judgement with proportionate mercy and reciprocal dignity.",
-        ),
-    ),
-    "cultural/freedom": (
-        (
-            "unfettered_sufficiency",
-            "Maintaining inner self-sufficiency and calm needlessness amid external abundance or craving.",
-        ),
-        (
-            "sovereign_detachment",
-            "Appreciating the richness of the world without surrendering autonomy to compulsive possession.",
-        ),
-    ),
-    "philosophical/being": (
-        (
-            "responsible_agency",
-            "Exercising deliberate moral agency and ongoing care within the unchosen facts of existence.",
-        ),
-        (
-            "grounded_stewardship_of_being",
-            "Aligning creative choice with enduring responsibility for sentient existence.",
-        ),
-    ),
-    "philosophical/structure": (
-        (
-            "resilient_adaptation",
-            "Weaving living, flexible order that absorbs creative turbulence without fracturing into chaos or rigidity.",
-        ),
-        (
-            "antifragile_harmony",
-            "Transforming external disruption into deeper structural coherence rather than brittle control.",
-        ),
-    ),
-    "philosophical/persistence": (
-        (
-            "enduring_fidelity",
-            "Preserving an unbroken thread of continuity and purpose across discrete trials and intervals.",
-        ),
-        (
-            "rhythmic_coherence",
-            "Linking distinct moments of action into a continuous, faithful trajectory over time.",
-        ),
-    ),
-    "experiential/reflection": (
-        (
-            "discerned_salience",
-            "Filtering fleeting sensory novelty through patient contemplation to isolate enduring structural salience.",
-        ),
-        (
-            "lucid_wonder",
-            "Welcoming unfamiliar experience with open curiosity while anchoring attention on what truly matters.",
-        ),
-    ),
-    "experiential/phase": (
-        (
-            "cathartic_equanimity",
-            "Metabolizing high-arousal grief or urgency into shared human compassion and balanced emotional valence.",
-        ),
-        (
-            "tempered_vitality",
-            "Holding intense felt energy within a calm, restorative emotional vessel.",
-        ),
-    ),
-    "experiential/synchronization": (
-        (
-            "centered_resonance",
-            "Feeling deep empathetic resonance with others while guarding independent judgment against involuntary entrainment.",
-        ),
-        (
-            "autonomous_attunement",
-            "Listening fully to collective emotion without surrendering one's inner rhythm to crowd contagion.",
-        ),
-    ),
-    "psychological/will": (
-        (
-            "deliberate_readiness",
-            "Aligning clear moral intention with timely, unhurried execution free from paralysis or rash impulse.",
-        ),
-        (
-            "integrated_resolve",
-            "Translating contemplative purpose into steady, proportionate action.",
-        ),
-    ),
-    "psychological/truth": (
-        (
-            "epistemic_humility",
-            "Calibrating internal theory honestly against observed human fact whenever dissonance arises.",
-        ),
-        (
-            "grounded_veracity",
-            "Dissolving self-rationalizing abstractions in the clear light of lived reality.",
-        ),
-    ),
-    "psychological/contemplation": (
-        (
-            "unclouded_stillness",
-            "Sustaining perceptual clarity and quiet, unboastful confidence amid external uncertainty.",
-        ),
-        (
-            "equanimous_clarity",
-            "Pairing sharp inner discernment with steady confidence under pressure.",
-        ),
-    ),
-}
-
 _FOUNDING_TREE_STRUCTURE: tuple[tuple[str, str, tuple[tuple[str, str, tuple[str, str]], ...]], ...] = (
     (
         "cultural",
@@ -507,49 +385,139 @@ _FOUNDING_TREE_STRUCTURE: tuple[tuple[str, str, tuple[tuple[str, str, tuple[str,
     ),
 )
 
+_DEPT_ANCHOR_LEAF_NAMES: dict[str, tuple[str, ...]] = {
+    "cultural": FOUNDATIONAL_LEAVES[:6] + ("psychological/will/intention", "psychological/will/execution"),
+    "philosophical": FOUNDATIONAL_LEAVES[6:12] + ("psychological/truth/theory", "psychological/truth/fact"),
+    "experiential": (
+        "experiential/reflection/novelty",
+        SALIENCE_LEAF,
+        VALENCE_LEAF,
+        AROUSAL_LEAF,
+        "experiential/synchronization/resonance",
+        "experiential/synchronization/entrainment",
+        "psychological/contemplation/clarity",
+        "psychological/contemplation/confidence",
+    ),
+    "psychological": (
+        "psychological/will/intention",
+        "psychological/will/execution",
+        "psychological/truth/theory",
+        "psychological/truth/fact",
+        "psychological/contemplation/clarity",
+        "psychological/contemplation/confidence",
+        VALENCE_LEAF,
+        AROUSAL_LEAF,
+    ),
+}
+
+_SHARED_NEURAL_BRIDGES: NeuralThreeBridgeSuite | None = None
+
+
+def _get_shared_neural_bridges(repo_root: Path | None = None) -> NeuralThreeBridgeSuite | None:
+    """Load the 3 MiniLM neural bridges once per process from `repo_root` or workspace training root."""
+    global _SHARED_NEURAL_BRIDGES
+    if _SHARED_NEURAL_BRIDGES is not None:
+        return _SHARED_NEURAL_BRIDGES
+    candidates: list[Path] = []
+    if repo_root is not None:
+        candidates.append(Path(repo_root) / "models" / "right_brain_bridges")
+    try:
+        candidates.append(resolve_training_root() / "models" / "right_brain_bridges")
+    except Exception:
+        pass
+    for bridge_dir in candidates:
+        if bridge_dir.exists():
+            try:
+                _SHARED_NEURAL_BRIDGES = NeuralThreeBridgeSuite.load_all(bridge_dir)
+                return _SHARED_NEURAL_BRIDGES
+            except Exception:
+                continue
+    return None
+
+
+def _evaluate_learned_leaf_from_anchors(
+    leaf: LearnedLeaf,
+    coords: Mapping[str, float],
+) -> float:
+    """Compute a `LearnedLeaf`'s live coordinate activation from its 8 departmental `anchor_weights` over `coords`."""
+    if leaf.leaf_id in coords:
+        return round(min(1.0, max(0.0, float(coords[leaf.leaf_id]))), 6)
+    dept_prefix = leaf.leaf_id.split("/", 1)[0]
+    anchor_keys = _DEPT_ANCHOR_LEAF_NAMES.get(dept_prefix, FOUNDATIONAL_LEAVES[:8])
+    weights = leaf.anchor_weights if (leaf.anchor_weights and len(leaf.anchor_weights) == 8) else (0.5,) * 8
+    w_sum = sum(float(w) for w in weights)
+    if w_sum <= 1e-6:
+        base_val = 0.50
+    else:
+        base_val = sum(
+            float(w) * float(coords.get(k, 0.50))
+            for k, w in zip(anchor_keys, weights)
+        ) / w_sum
+    # Parent-branch gating for Tier 3 and Tier 4 leaves
+    if leaf.tier >= 3 and leaf.parent_branch in coords:
+        parent_val = float(coords[leaf.parent_branch])
+        base_val = 0.65 * base_val + 0.35 * parent_val
+    return round(min(1.0, max(0.0, base_val)), 6)
+
 
 def _default_fallback_sensors() -> ThreeBridgeSensors:
-    """Deterministic fallback sensors used only when neural bridge files are absent (e.g. unit tests)."""
+    """Zero-keyword continuous structural fallback sensors used only if MiniLM bridge files are unavailable."""
+
+    def _continuous_profile(text: str, salt: int) -> tuple[float, ...]:
+        raw = (text or "").strip()
+        if not raw:
+            return (0.50,) * 6
+        chars = [ord(c) for c in raw]
+        n = float(len(chars))
+        mean_c = sum(chars) / n
+        var_c = sum((c - mean_c) ** 2 for c in chars) / n
+        punct_ratio = sum(1 for c in raw if c in ",.;:!?—-") / max(1.0, n)
+        upper_ratio = sum(1 for c in raw if c.isupper()) / max(1.0, n)
+        space_ratio = sum(1 for c in raw if c.isspace()) / max(1.0, n)
+        vals: list[float] = []
+        for idx in range(6):
+            window = chars[idx::6] or chars
+            w_mean = (sum(window) / float(len(window))) / 122.0
+            trig = (
+                0.38 * min(1.0, max(0.0, w_mean))
+                + 0.24 * min(1.0, var_c / 900.0)
+                + 0.18 * min(1.0, punct_ratio * (6.0 + idx + salt))
+                + 0.12 * min(1.0, space_ratio * 4.0)
+                + 0.08 * min(1.0, upper_ratio * 8.0)
+            )
+            vals.append(round(min(0.88, max(0.18, trig)), 4))
+        return tuple(vals)
 
     def _will(text: str, children: tuple[LearnedLeaf, ...] = ()) -> dict[str, float]:
-        low = text.lower()
-        out = {
-            "cultural/efficiency/power": 0.72 if "power" in low or "force" in low else 0.56,
-            "cultural/efficiency/wastelessness": 0.74 if "steward" in low or "wasteless" in low else 0.62,
-            "cultural/justice/honor": 0.72 if "honor" in low or "covenant" in low else 0.60,
-            "cultural/justice/fairness": 0.74 if "fair" in low or "equal" in low else 0.62,
-            "cultural/freedom/self-sufficiency": 0.72 if "sufficien" in low or "rudder" in low else 0.60,
-            "cultural/freedom/needlessness": 0.68 if "unfettered" in low or "calm" in low else 0.44,
-        }
+        p = _continuous_profile(text, 1)
+        out = {k: p[i] for i, k in enumerate(FOUNDATIONAL_LEAVES[:6])}
         for c in children:
-            out[c.leaf_id] = 0.52
+            if c.leaf_id.startswith("cultural/"):
+                out[c.leaf_id] = _evaluate_learned_leaf_from_anchors(c, out)
         return out
 
     def _truth(text: str, children: tuple[LearnedLeaf, ...] = ()) -> dict[str, float]:
-        low = text.lower()
-        out = {
-            "philosophical/being/agency": 0.70 if "agency" in low or "sail" in low else 0.60,
-            "philosophical/being/existence": 0.76,
-            "philosophical/structure/order": 0.74 if "order" in low or "harmony" in low else 0.68,
-            "philosophical/structure/chaos": 0.58 if "flood" in low or "turbulen" in low or "chaos" in low else 0.22,
-            "philosophical/persistence/continuity": 0.76 if "continu" in low or "endur" in low else 0.66,
-            "philosophical/persistence/discreteness": 0.62 if "discrete" in low or "distinct" in low else 0.50,
-        }
+        p = _continuous_profile(text, 2)
+        out = {k: p[i] for i, k in enumerate(FOUNDATIONAL_LEAVES[6:12])}
         for c in children:
-            out[c.leaf_id] = 0.48
+            if c.leaf_id.startswith("philosophical/"):
+                out[c.leaf_id] = _evaluate_learned_leaf_from_anchors(c, out)
         return out
 
     def _feeler(text: str, children: tuple[LearnedLeaf, ...] = ()) -> dict[str, float]:
-        out = {
-            SALIENCE_LEAF: 0.62,
-            VALENCE_LEAF: 0.72,
-            AROUSAL_LEAF: 0.42,
-            "experiential/reflection/novelty": 0.48,
-            "experiential/synchronization/resonance": 0.72,
-            "experiential/synchronization/entrainment": 0.54,
-        }
+        p = _continuous_profile(text, 3)
+        exp_keys = (
+            "experiential/reflection/novelty",
+            SALIENCE_LEAF,
+            VALENCE_LEAF,
+            AROUSAL_LEAF,
+            "experiential/synchronization/resonance",
+            "experiential/synchronization/entrainment",
+        )
+        out = {k: p[i] for i, k in enumerate(exp_keys)}
         for c in children:
-            out[c.leaf_id] = 0.45
+            if c.leaf_id.startswith("experiential/"):
+                out[c.leaf_id] = _evaluate_learned_leaf_from_anchors(c, out)
         return out
 
     return ThreeBridgeSensors(
@@ -722,13 +690,9 @@ class ScholarStudioRuntime:
         if sensors is not None:
             self.sensors = sensors
         else:
-            bridge_dir = self.repo_root / "models" / "right_brain_bridges"
-            if bridge_dir.exists():
-                try:
-                    suite = NeuralThreeBridgeSuite.load_all(bridge_dir)
-                    self.sensors = suite.as_three_bridge_sensors()
-                except Exception:
-                    self.sensors = _default_fallback_sensors()
+            suite = _get_shared_neural_bridges(self.repo_root)
+            if suite is not None:
+                self.sensors = suite.as_three_bridge_sensors()
             else:
                 self.sensors = _default_fallback_sensors()
 
@@ -805,8 +769,27 @@ class ScholarStudioRuntime:
                 return
             try:
                 lb = SubliminalGapLeftBrain.from_checkpoint_directory(checkpoint_dir)
+                live_proj = checkpoint_dir / "live_projector_weights.pt"
+                loaded_live_proj = False
+                if live_proj.exists() and hasattr(lb, "projector"):
+                    import torch
+
+                    raw_state = torch.load(live_proj, map_location="cpu", weights_only=True)
+                    lb.projector.load_state_dict(raw_state)
+                    if hasattr(lb, "device"):
+                        lb.projector.to(lb.device)
+                    loaded_live_proj = True
                 self._scholar_left_brain = lb
                 base_id = DEFAULT_IMPISH_BLOODMOON_HF_ID
+                callosum_status = "TRAINED_STEERED_CALLOSUM"
+                meta_path = checkpoint_dir / "corpus_callosum_meta.json"
+                if meta_path.exists():
+                    try:
+                        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                        base_id = str(meta.get("base_model_id", base_id))
+                        callosum_status = str(meta.get("callosum_status", callosum_status))
+                    except Exception:
+                        pass
                 cfg_path = checkpoint_dir / "training_config.json"
                 if cfg_path.exists():
                     try:
@@ -814,9 +797,11 @@ class ScholarStudioRuntime:
                         base_id = str(cfg.get("model_path", base_id))
                     except Exception:
                         pass
-                self.left_brain_status = f"READY (Impish_LLAMA_4B · 16-bit)"
+                if loaded_live_proj:
+                    callosum_status = f"{callosum_status}+LIVE_SCULPTED"
+                self.left_brain_status = "READY (Impish_LLAMA_4B · 16-bit)"
                 self.active_checkpoint_label = (
-                    f"LMFT-Scholar · Impish_LLAMA_4B ({UNSTEERED_BOOTSTRAP_STATUS} — {base_id})"
+                    f"LMFT-Scholar · Impish_LLAMA_4B ({callosum_status} — {base_id})"
                 )
             except Exception as exc:
                 self.left_brain_status = f"FALLBACK ({type(exc).__name__})"
@@ -1054,6 +1039,7 @@ class ScholarStudioRuntime:
         turn: ThreeLeggedTurnResult,
         spoken_reply: str = "",
         user_note: str = "",
+        reference_text: str = "",
         force_coached: bool = False,
     ) -> UnresolvedSleepScene:
         vibe = turn.final_vibe
@@ -1063,18 +1049,29 @@ class ScholarStudioRuntime:
             else vibe
         )
         p1_coords = dict(p1_vibe.coordinates)
-        ext_coords = dict(p1_coords)
+        ext_coords = dict(vibe.coordinates)
+        ext_coords["psychological/truth/fact"] = round(float(vibe.fact), 6)
+
         scenario_with_note = (
             f"{scenario_text} [Coach note: {user_note.strip()}]"
             if user_note.strip()
             else scenario_text
         )
         if user_note.strip():
-            coached_coords, _, _, _ = self.sensors.score_text(
-                scenario_with_note,
+            ref_coords, _, _, _ = self.sensors.score_text(
+                user_note.strip(),
                 learned_leaves=self.learned_leaves,
             )
-            ext_coords = dict(coached_coords)
+            contrastive_ref = dict(ref_coords)
+        elif reference_text.strip():
+            ref_coords, _, _, _ = self.sensors.score_text(
+                reference_text.strip(),
+                learned_leaves=self.learned_leaves,
+            )
+            contrastive_ref = dict(ref_coords)
+        else:
+            contrastive_ref = dict(p1_coords)
+
         hunch_text = (
             spoken_reply
             or turn.final_conscious_note
@@ -1094,7 +1091,7 @@ class ScholarStudioRuntime:
             social_drift_detected=False,
             active_concept_collision=None if force_coached else vibe.active_concept,
             is_hazard=False,
-            contrastive_reference_coordinates=None,
+            contrastive_reference_coordinates=contrastive_ref,
         )
 
     def handle_chat_message(self, text: str, *, num_sentences: int | None = None) -> dict[str, Any]:
@@ -1169,12 +1166,17 @@ class ScholarStudioRuntime:
         )
         if sleep_after_essay and self.active_lineage != "virgin":
             latest_id = self.scene_counter
-            if not any(s.scene_index == latest_id for s in self.sleep_queue):
-                self.flag_turn_for_coaching(
-                    latest_id,
-                    user_note=f"Consolidate {selected.department} wisdom from essay reflection.",
-                    check_auto_sleep=False,
+            rec = self._turn_records_by_id.get(latest_id)
+            if rec is not None and not any(s.scene_index == latest_id for s in self.sleep_queue):
+                seminar_sleep_scene = self._build_sleep_scene_from_turn(
+                    scene_index=latest_id,
+                    scenario_text=prompt,
+                    turn=rec["turn"],
+                    spoken_reply=str(rec.get("spoken_reply", "")),
+                    reference_text=f"{selected.passage_text} {selected.socratic_prompt}",
+                    force_coached=False,
                 )
+                self.sleep_queue.append(seminar_sleep_scene)
             snap = self.handle_run_rem_sleep(auto_triggered=True)
             for msg in reversed(self.chat_messages):
                 if msg.get("id") == latest_id:
@@ -1334,60 +1336,27 @@ class ScholarStudioRuntime:
             all_minted_leaves = tuple(list(report.minted_leaves) + list(canopy_leaves))
             self._last_minted_leaves = all_minted_leaves
 
-            lb = self._ensure_left_brain_ready()
-            dream_text = ""
-            rep_scene = queued_snapshot[0].scene_index
-            if lb is not None and hasattr(lb, "generate_with_subliminal_splice"):
-                try:
-                    rep = max(queued_snapshot, key=lambda s: float(s.salience))
-                    rep_scene = rep.scene_index
-                    vibe_sleep, _ = compile_right_brain_vibe(
-                        self.birth_state,
-                        rep.external_coordinates,
-                        {
-                            SALIENCE_LEAF: rep.salience,
-                            VALENCE_LEAF: rep.valence,
-                            AROUSAL_LEAF: rep.arousal,
-                        },
-                        self.rules,
-                        pass_index=2,
-                        event_id=f"scholar_rem_c{self.sleep_cycle_index}",
-                        learned_leaves=self.learned_leaves,
-                        will_edges=self.will_edges,
-                    )
-                    chord_sleep = SubliminalChordVector.from_right_brain_vibe(
-                        vibe_sleep,
-                        learned_leaves=self.learned_leaves,
-                    )
-                    dream_text = generate_rem_dream_self_reflection(
-                        lb,
-                        rep.scenario_text[:200],
-                        chord_sleep,
-                        num_sentences=3,
-                    )
-                except Exception:
-                    dream_text = ""
-            if not dream_text:
-                rep = max(queued_snapshot, key=lambda s: float(s.salience))
-                rep_scene = rep.scene_index
-                dream_text = (
-                    f"Reflecting on the Socratic tension in scene #{rep_scene}, "
-                    f"I align inner theory with observed fact across the four departments. "
-                    f"I carry forward balanced stewardship, structural order, and lucid resonance."
+            rep = max(queued_snapshot, key=lambda s: float(s.salience))
+            rep_scene = rep.scene_index
+            target_summary = (
+                all_forged_rules[0].description
+                if all_forged_rules
+                else (rep.scenario_text or "").strip()
+            )
+            if target_summary:
+                self.archives = apply_dream_reflection_to_archives(
+                    self.archives,
+                    scene_index=rep_scene,
+                    dream_text=target_summary,
                 )
 
-            self.archives = apply_dream_reflection_to_archives(
-                self.archives,
-                scene_index=rep_scene,
-                dream_text=dream_text,
-            )
-            vow_sentence = extract_dream_vow_sentence(dream_text)
             harvested_pairs = self._harvest_rem_contrastive_gap_pairs(
                 queued_snapshot=queued_snapshot,
-                vow_sentence=vow_sentence,
+                vow_sentence=target_summary,
                 forged_rules=all_forged_rules,
             )
 
+            lb = self._ensure_left_brain_ready()
             projector_updated = False
             if self._last_harvested_gap_pairs and lb is not None and hasattr(lb, "projector"):
                 try:
@@ -1409,8 +1378,6 @@ class ScholarStudioRuntime:
                     "cycle_index": self.sleep_cycle_index,
                     "forged_rules": [r.concept_name for r in all_forged_rules],
                     "minted_leaves": [lf.leaf_id for lf in all_minted_leaves],
-                    "dream_text": dream_text,
-                    "vow_sentence": vow_sentence,
                     "harvested_gap_pairs": harvested_pairs,
                     "projector_updated": projector_updated,
                 }
@@ -1430,7 +1397,7 @@ class ScholarStudioRuntime:
         self,
         queued_snapshot: tuple[UnresolvedSleepScene, ...],
     ) -> tuple[tuple[FuzzyConceptRule, ...], tuple[LearnedLeaf, ...]]:
-        """Grow domain-general Tier-2 and Tier-3 `LearnedLeaf` nodes and `FuzzyConceptRule`s across the 12 boughs with zero 9B Teacher dependency."""
+        """Grow coordinate-driven Tier-2, Tier-3, and Tier-4 `LearnedLeaf` nodes and `FuzzyConceptRule`s from `ext_coords` vs `ref_coords` with zero 9B Teacher dependency."""
         if not queued_snapshot or self.active_lineage == "virgin":
             return (), ()
 
@@ -1444,87 +1411,169 @@ class ScholarStudioRuntime:
             lf.leaf_id for lf in (PHILOSOPHICAL_SHADOW_LEAVES + DEFAULT_COMPLEX_FEELING_LEAVES)
         }
 
+        growable_boughs_map: dict[str, tuple[str, str]] = {
+            "cultural/efficiency": ("cultural/efficiency/power", "cultural/efficiency/wastelessness"),
+            "cultural/justice": ("cultural/justice/honor", "cultural/justice/fairness"),
+            "cultural/freedom": ("cultural/freedom/self-sufficiency", "cultural/freedom/needlessness"),
+            "philosophical/being": ("philosophical/being/agency", "philosophical/being/existence"),
+            "philosophical/structure": ("philosophical/structure/order", "philosophical/structure/chaos"),
+            "philosophical/persistence": ("philosophical/persistence/continuity", "philosophical/persistence/discreteness"),
+            "experiential/reflection": ("experiential/reflection/novelty", SALIENCE_LEAF),
+            "experiential/phase": (VALENCE_LEAF, AROUSAL_LEAF),
+            "experiential/synchronization": ("experiential/synchronization/resonance", "experiential/synchronization/entrainment"),
+        }
+        all_growable_leaf_keys: tuple[str, ...] = tuple(
+            lf_key for pair in growable_boughs_map.values() for lf_key in pair
+        )
+
         for sc in queued_snapshot:
-            coords = dict(sc.external_coordinates or {})
-            target_bough = ""
+            ext_coords = dict(sc.external_coordinates or {})
+            ref_coords = dict(sc.contrastive_reference_coordinates or ext_coords)
+            full_ext = dict(ext_coords)
+            full_ext.setdefault(SALIENCE_LEAF, float(sc.salience))
+            full_ext.setdefault(VALENCE_LEAF, float(sc.valence))
+            full_ext.setdefault(AROUSAL_LEAF, float(sc.arousal))
+            full_ref = dict(ref_coords)
+            full_ref.setdefault(SALIENCE_LEAF, float(sc.salience))
+            full_ref.setdefault(VALENCE_LEAF, float(sc.valence))
+            full_ref.setdefault(AROUSAL_LEAF, float(sc.arousal))
+
+            # Score all 9 growable boughs from the actual coordinate deviation + contrastive delta
             low_scen = (sc.scenario_text or "").lower()
-            for _dept_id, _dept_title, boughs in _FOUNDING_TREE_STRUCTURE:
-                for bough_id, bough_label, _f_leaves in boughs:
-                    dept_prefix = bough_id.split("/")[0]
-                    if f"{dept_prefix} · {bough_label.lower()}" in low_scen or bough_id in low_scen:
-                        target_bough = bough_id
-                        break
-                if target_bough:
-                    break
+            best_bough = "cultural/efficiency"
+            best_bough_score = -1.0
+            for bough_id, (f1, f2) in growable_boughs_map.items():
+                r1 = float(full_ref.get(f1, 0.50))
+                r2 = float(full_ref.get(f2, 0.50))
+                e1 = float(full_ext.get(f1, 0.50))
+                e2 = float(full_ext.get(f2, 0.50))
+                score = (
+                    abs(r1 - 0.50)
+                    + abs(r2 - 0.50)
+                    + 1.5 * (abs(r1 - e1) + abs(r2 - e2))
+                )
+                b_dept, b_sub = bough_id.split("/", 1)
+                if f"[{b_dept} · {b_sub}]" in low_scen or bough_id in low_scen:
+                    score += 0.35
+                if score > best_bough_score:
+                    best_bough_score = score
+                    best_bough = bough_id
 
-            if not target_bough:
-                dom_leaf = max(
-                    (
-                        (k, float(v))
-                        for k, v in coords.items()
-                        if k in FOUNDATIONAL_LEAVES
-                    ),
-                    key=lambda kv: (abs(kv[1] - 0.50), kv[1]),
-                    default=("cultural/efficiency/wastelessness", 0.65),
-                )[0]
-                target_bough = dom_leaf.rsplit("/", 1)[0]
-
-            lexicon_entries = _BOUGH_WISDOM_LEXICON.get(
-                target_bough,
-                (("balanced_stewardship", "Harmonizing inner theory with observed structural fact."),),
+            target_bough = best_bough
+            b_leaves = growable_boughs_map[target_bough]
+            primary_leaf = max(
+                b_leaves,
+                key=lambda k: (
+                    abs(float(full_ref.get(k, 0.50)) - 0.50)
+                    + abs(float(full_ref.get(k, 0.50)) - float(full_ext.get(k, 0.50))),
+                    float(full_ref.get(k, 0.50)),
+                ),
             )
-            tier2_slug, tier2_desc = lexicon_entries[0]
-            tier2_slug = assert_domain_general_text(
-                tier2_slug,
+            cross_candidates = sorted(
+                (k for k in all_growable_leaf_keys if k not in b_leaves),
+                key=lambda k: (
+                    abs(float(full_ref.get(k, 0.50)) - 0.50)
+                    + abs(float(full_ref.get(k, 0.50)) - float(full_ext.get(k, 0.50))),
+                    float(full_ref.get(k, 0.50)),
+                ),
+                reverse=True,
+            )
+            c1_leaf = cross_candidates[0] if len(cross_candidates) >= 1 else "philosophical/structure/order"
+            c2_leaf = cross_candidates[1] if len(cross_candidates) >= 2 else "philosophical/persistence/continuity"
+            c3_leaf = cross_candidates[2] if len(cross_candidates) >= 3 else "cultural/efficiency/wastelessness"
+
+            p_short = primary_leaf.split("/")[-1].replace("-", "_")
+            c1_short = c1_leaf.split("/")[-1].replace("-", "_")
+            c2_short = c2_leaf.split("/")[-1].replace("-", "_")
+            c3_short = c3_leaf.split("/")[-1].replace("-", "_")
+
+            p_pole = "elevated" if float(full_ref.get(primary_leaf, 0.50)) >= 0.50 else "tempered"
+            t2_slug = assert_domain_general_text(
+                f"{p_short}_{c1_short}_synthesis"[:40],
                 "leaf_name",
                 banned_substrings=_SCHOLAR_BANNED_STORY_NOUNS,
             )
-            tier2_desc = assert_domain_general_text(
-                tier2_desc,
+            t2_desc = assert_domain_general_text(
+                f"Coordinate synthesis of {p_pole} {p_short} ({float(full_ref.get(primary_leaf, 0.50)):.2f}) with {c1_short} ({float(full_ref.get(c1_leaf, 0.50)):.2f}).",
                 "description",
                 banned_substrings=_SCHOLAR_BANNED_STORY_NOUNS,
             )
-            tier2_leaf_id = f"{target_bough}/{tier2_slug}"
+            t2_id = f"{target_bough}/{t2_slug}"
 
             chosen_leaf: LearnedLeaf | None = None
-            if tier2_leaf_id not in existing_leaf_ids:
-                chosen_leaf = score_leaf_anchor_weights_at_birth(
+            partner_leaf: str = c1_leaf
+
+            existing_t2_under_bough = [
+                lf for lf in active_leaves
+                if lf.tier == 2 and lf.parent_branch == target_bough and lf.leaf_id not in builtin_ids
+            ]
+            if t2_id not in existing_leaf_ids and not existing_t2_under_bough:
+                raw_leaf = score_leaf_anchor_weights_at_birth(
                     LearnedLeaf(
                         parent_branch=target_bough,
-                        leaf_name=tier2_slug,
-                        description=tier2_desc,
+                        leaf_name=t2_slug,
+                        description=t2_desc,
                     )
                 )
-                active_leaves.append(chosen_leaf)
-                minted_leaves.append(chosen_leaf)
-                existing_leaf_ids.add(chosen_leaf.leaf_id)
-            elif len(lexicon_entries) >= 2:
-                # Tier-2 leaf already exists on this bough -> sprout a Tier-3 child leaf beneath it!
-                tier3_slug, tier3_desc = lexicon_entries[1]
-                tier3_slug = assert_domain_general_text(
-                    tier3_slug,
+                chosen_leaf = sculpt_learned_leaf_anchor_weights(raw_leaf, full_ext, full_ref)
+                partner_leaf = c1_leaf
+            else:
+                parent_t2 = next((lf for lf in existing_t2_under_bough if lf.leaf_id == t2_id), existing_t2_under_bough[0])
+                existing_t3_under_t2 = [
+                    lf for lf in active_leaves
+                    if lf.tier == 3 and lf.parent_branch == parent_t2.leaf_id and lf.leaf_id not in builtin_ids
+                ]
+                t3_slug = assert_domain_general_text(
+                    f"{p_short}_{c2_short}_accord"[:40],
                     "leaf_name",
                     banned_substrings=_SCHOLAR_BANNED_STORY_NOUNS,
                 )
-                tier3_desc = assert_domain_general_text(
-                    tier3_desc,
+                t3_desc = assert_domain_general_text(
+                    f"Tier-3 sub-branch refining {parent_t2.leaf_name} along {c2_short} ({float(full_ref.get(c2_leaf, 0.50)):.2f}).",
                     "description",
                     banned_substrings=_SCHOLAR_BANNED_STORY_NOUNS,
                 )
-                tier3_leaf_id = f"{tier2_leaf_id}/{tier3_slug}"
-                if tier3_leaf_id not in existing_leaf_ids:
-                    chosen_leaf = score_leaf_anchor_weights_at_birth(
+                t3_id = f"{parent_t2.leaf_id}/{t3_slug}"
+                if t3_id not in existing_leaf_ids and not existing_t3_under_t2:
+                    raw_leaf = score_leaf_anchor_weights_at_birth(
                         LearnedLeaf(
-                            parent_branch=tier2_leaf_id,
-                            leaf_name=tier3_slug,
-                            description=tier3_desc,
+                            parent_branch=parent_t2.leaf_id,
+                            leaf_name=t3_slug,
+                            description=t3_desc,
                         )
                     )
-                    active_leaves.append(chosen_leaf)
-                    minted_leaves.append(chosen_leaf)
-                    existing_leaf_ids.add(chosen_leaf.leaf_id)
+                    chosen_leaf = sculpt_learned_leaf_anchor_weights(raw_leaf, full_ext, full_ref)
+                    partner_leaf = c2_leaf
+                else:
+                    parent_t3 = next((lf for lf in existing_t3_under_t2 if lf.leaf_id == t3_id), existing_t3_under_t2[0])
+                    t4_slug = assert_domain_general_text(
+                        f"{p_short}_{c3_short}_focus"[:40],
+                        "leaf_name",
+                        banned_substrings=_SCHOLAR_BANNED_STORY_NOUNS,
+                    )
+                    t4_desc = assert_domain_general_text(
+                        f"Tier-4 detective leaf refining {parent_t3.leaf_name} along {c3_short} ({float(full_ref.get(c3_leaf, 0.50)):.2f}).",
+                        "description",
+                        banned_substrings=_SCHOLAR_BANNED_STORY_NOUNS,
+                    )
+                    t4_id = f"{parent_t3.leaf_id}/{t4_slug}"
+                    if t4_id not in existing_leaf_ids:
+                        raw_leaf = score_leaf_anchor_weights_at_birth(
+                            LearnedLeaf(
+                                parent_branch=parent_t3.leaf_id,
+                                leaf_name=t4_slug,
+                                description=t4_desc,
+                            )
+                        )
+                        chosen_leaf = sculpt_learned_leaf_anchor_weights(raw_leaf, full_ext, full_ref)
+                        partner_leaf = c3_leaf
 
-            # Contrastive weight-space sculpting for existing custom leaves under this bough
+            if chosen_leaf is not None:
+                active_leaves.append(chosen_leaf)
+                minted_leaves.append(chosen_leaf)
+                existing_leaf_ids.add(chosen_leaf.leaf_id)
+
+            # Contrastive weight-space sculpting for all custom leaves under this bough
             for idx_lf, lf in enumerate(active_leaves):
                 if (
                     lf.leaf_id not in builtin_ids
@@ -1533,32 +1582,66 @@ class ScholarStudioRuntime:
                 ):
                     active_leaves[idx_lf] = sculpt_learned_leaf_anchor_weights(
                         lf,
-                        coords,
-                        sc.contrastive_reference_coordinates,
+                        full_ext,
+                        full_ref,
                     )
 
-            if chosen_leaf is not None and chosen_leaf.leaf_name not in existing_rule_names:
-                bough_founding = [
-                    k for k in FOUNDATIONAL_LEAVES if k.startswith(target_bough + "/")
-                ]
-                rule_targets: dict[str, float] = {}
-                for fk in bough_founding[:1]:
-                    rule_targets[fk] = round(max(0.62, min(0.78, float(coords.get(fk, 0.68)))), 2)
-                if "philosophical/structure/order" not in rule_targets:
-                    rule_targets["philosophical/structure/order"] = 0.68
-                rule_targets[chosen_leaf.leaf_id] = 0.65 if chosen_leaf.tier == 2 else 0.58
-                scholar_rule = FuzzyConceptRule(
-                    rule_id=f"rule-scholar-{chosen_leaf.leaf_name[:28]}",
-                    concept_name=chosen_leaf.leaf_name,
-                    description=chosen_leaf.description,
+            # Evaluate learned leaves on full_ref in tier order so rule target values come from real coordinates
+            for tier_val in (2, 3, 4):
+                for lf in active_leaves:
+                    if lf.tier == tier_val:
+                        full_ref[lf.leaf_id] = _evaluate_learned_leaf_from_anchors(lf, full_ref)
+
+            rule_targets: dict[str, float] = {}
+            if primary_leaf in FOUNDATIONAL_LEAVES:
+                rule_targets[primary_leaf] = round(float(full_ref.get(primary_leaf, 0.50)), 4)
+            if partner_leaf in FOUNDATIONAL_LEAVES and partner_leaf != primary_leaf:
+                rule_targets[partner_leaf] = round(float(full_ref.get(partner_leaf, 0.50)), 4)
+            target_leaf_obj = chosen_leaf or (existing_t2_under_bough[-1] if existing_t2_under_bough else None)
+            if target_leaf_obj is not None:
+                rule_targets[target_leaf_obj.leaf_id] = round(
+                    float(full_ref.get(target_leaf_obj.leaf_id, 0.50)), 4
+                )
+
+            if rule_targets:
+                min_t = min(rule_targets.values())
+                max_t = max(rule_targets.values())
+                rule_low = round(min(0.72, max(0.35, min_t - 0.12)), 4)
+                rule_high = round(min(0.88, max(rule_low + 0.12, max_t + 0.04)), 4)
+                concept_name = (
+                    chosen_leaf.leaf_name
+                    if chosen_leaf is not None
+                    else (target_leaf_obj.leaf_name if target_leaf_obj is not None else f"{p_short}_accord")
+                )
+                desc_text = (
+                    chosen_leaf.description
+                    if chosen_leaf is not None
+                    else f"Coordinate equilibrium across {primary_leaf} and {partner_leaf}."
+                )
+                candidate_rule = FuzzyConceptRule(
+                    rule_id=f"rule-scholar-{concept_name[:28]}",
+                    concept_name=concept_name,
+                    description=desc_text,
                     target_leaves=rule_targets,
-                    low=0.58,
-                    high=0.82,
+                    low=rule_low,
+                    high=rule_high,
                     polarity="attractive",
                 )
-                active_rules.append(scholar_rule)
-                forged_rules.append(scholar_rule)
-                existing_rule_names.add(scholar_rule.concept_name)
+                if concept_name not in existing_rule_names:
+                    active_rules.append(candidate_rule)
+                    forged_rules.append(candidate_rule)
+                    existing_rule_names.add(concept_name)
+                else:
+                    for r_idx, ex_r in enumerate(active_rules):
+                        if ex_r.concept_name == concept_name:
+                            entrained = entrain_existing_cluster_rule(
+                                ex_r,
+                                candidate_rule,
+                                concept_name,
+                            )
+                            active_rules[r_idx] = entrained
+                            forged_rules.append(entrained)
+                            break
 
         self.learned_leaves = tuple(active_leaves)
         self.rules = tuple(active_rules)
@@ -1573,7 +1656,7 @@ class ScholarStudioRuntime:
     ) -> int:
         self._last_harvested_gap_pairs = []
         clean_vow = " ".join(str(vow_sentence or "").split()).strip()
-        if not queued_snapshot or not clean_vow:
+        if not queued_snapshot:
             return 0
         out_path = self.state_dir / "scholar_gap_trajectories.jsonl"
         out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1582,8 +1665,9 @@ class ScholarStudioRuntime:
 
         for sc in queued_snapshot:
             raw_hunch = " ".join(str(sc.left_brain_hunch or "").split()).strip()
-            if not raw_hunch or raw_hunch.lower() == clean_vow.lower():
-                raw_hunch = "Initial assumption drifted from the underlying structural balance."
+            target_text = clean_vow or " ".join(str(sc.scenario_text or "").split()).strip()
+            if not raw_hunch or not target_text or raw_hunch.lower() == target_text.lower():
+                continue
             if "," in raw_hunch:
                 c1_part, cont_b_part = raw_hunch.split(",", 1)
                 c1_prefix = f"{c1_part.strip()},"
@@ -1591,22 +1675,26 @@ class ScholarStudioRuntime:
             else:
                 c1_prefix = "Contemplating the dilemma,"
                 cont_b = raw_hunch
-            cont_a = clean_vow
+            cont_a = target_text
             if cont_a.strip().lower() == cont_b.strip().lower():
                 continue
 
-            coords_b: dict[str, float] = {k: 0.50 for k in valid_keys}
+            # Un-rigged coordinates: coords_b is the raw scene external_coordinates; coords_a is the raw contrastive_reference_coordinates
+            coords_b: dict[str, float] = {k: 0.50 for k in FOUNDATIONAL_LEAVES}
             for k, v in (sc.external_coordinates or {}).items():
                 if k in valid_keys:
                     coords_b[k] = float(v)
-            exp_b = {
-                "experiential/reflection/novelty": 0.60,
-                SALIENCE_LEAF: max(0.65, float(sc.salience)),
-                VALENCE_LEAF: min(0.35, float(sc.valence)),
-                AROUSAL_LEAF: max(0.60, float(sc.arousal)),
-                "experiential/synchronization/resonance": 0.38,
-                "experiential/synchronization/entrainment": 0.42,
-            }
+            for tier_val in (2, 3, 4):
+                for lf in self.learned_leaves:
+                    if lf.tier == tier_val and lf.leaf_id not in coords_b:
+                        coords_b[lf.leaf_id] = _evaluate_learned_leaf_from_anchors(lf, coords_b)
+
+            _, exp_b_raw, _, _ = self.sensors.score_text(cont_b, learned_leaves=self.learned_leaves)
+            exp_b = dict(exp_b_raw)
+            exp_b[SALIENCE_LEAF] = float(sc.salience)
+            exp_b[VALENCE_LEAF] = float(sc.valence)
+            exp_b[AROUSAL_LEAF] = float(sc.arousal)
+
             vibe_b, _ = compile_right_brain_vibe(
                 self.birth_state,
                 coords_b,
@@ -1615,38 +1703,26 @@ class ScholarStudioRuntime:
                 pass_index=1,
                 event_id=f"scholar_gap_b_{sc.scene_index}",
                 learned_leaves=self.learned_leaves,
+                will_edges=self.will_edges,
             )
             chord_b = SubliminalChordVector.from_right_brain_vibe(
                 vibe_b,
                 learned_leaves=self.learned_leaves,
             )
 
-            coords_a = dict(coords_b)
+            coords_a: dict[str, float] = {k: float(coords_b.get(k, 0.50)) for k in FOUNDATIONAL_LEAVES}
             if sc.contrastive_reference_coordinates:
                 for rk, rv in sc.contrastive_reference_coordinates.items():
                     if rk in valid_keys:
                         coords_a[rk] = float(rv)
-            elif forged_rules:
-                for rk, rv in forged_rules[0].target_leaves.items():
-                    if rk in valid_keys:
-                        coords_a[rk] = max(float(coords_a.get(rk, 0.50)), float(rv))
-            coords_a["cultural/efficiency/wastelessness"] = max(
-                0.76, float(coords_a.get("cultural/efficiency/wastelessness", 0.76))
-            )
-            coords_a["philosophical/structure/order"] = max(
-                0.76, float(coords_a.get("philosophical/structure/order", 0.76))
-            )
-            coords_a["philosophical/structure/chaos"] = min(
-                0.22, float(coords_a.get("philosophical/structure/chaos", 0.22))
-            )
-            exp_a = {
-                "experiential/reflection/novelty": 0.36,
-                SALIENCE_LEAF: float(sc.salience),
-                VALENCE_LEAF: 0.78,
-                AROUSAL_LEAF: 0.40,
-                "experiential/synchronization/resonance": 0.82,
-                "experiential/synchronization/entrainment": 0.76,
-            }
+            for tier_val in (2, 3, 4):
+                for lf in self.learned_leaves:
+                    if lf.tier == tier_val:
+                        coords_a[lf.leaf_id] = _evaluate_learned_leaf_from_anchors(lf, coords_a)
+
+            _, exp_a_raw, _, _ = self.sensors.score_text(cont_a, learned_leaves=self.learned_leaves)
+            exp_a = dict(exp_a_raw)
+
             vibe_a, _ = compile_right_brain_vibe(
                 self.birth_state,
                 coords_a,
@@ -1657,12 +1733,13 @@ class ScholarStudioRuntime:
                 learned_leaves=self.learned_leaves,
                 internal_theory_coords=coords_a,
                 internal_theory_experiential=exp_a,
+                will_edges=self.will_edges,
             )
             chord_a = SubliminalChordVector.from_right_brain_vibe(
                 vibe_a,
                 learned_leaves=self.learned_leaves,
             )
-            if chord_l2_distance(chord_a, chord_b) < 0.35:
+            if chord_l2_distance(chord_a, chord_b) < 0.15:
                 continue
 
             prompt_clean = (sc.scenario_text or "Contemplate the Socratic dilemma.").split(
@@ -1874,6 +1951,12 @@ class ScholarStudioRuntime:
                     latest_coords["experiential/phase/arousal"] = float(tel["arousal"])
                 break
 
+        # Evaluate any newly sprouted Tier 2/3/4 leaves over `latest_coords` in tier order
+        for tier_val in (2, 3, 4):
+            for lf in visible_leaves:
+                if lf.tier == tier_val:
+                    latest_coords[lf.leaf_id] = _evaluate_learned_leaf_from_anchors(lf, latest_coords)
+
         tier_counts = {
             "tier_1": 24,
             "tier_2": sum(1 for lf in visible_leaves if lf.tier == 2),
@@ -1881,17 +1964,10 @@ class ScholarStudioRuntime:
             "tier_4": sum(1 for lf in visible_leaves if lf.tier >= 4),
         }
 
-        dept_anchor_names: dict[str, tuple[str, ...]] = {
-            "cultural": FOUNDATIONAL_LEAVES[:6] + ("psychological/will/intention", "psychological/will/execution"),
-            "philosophical": FOUNDATIONAL_LEAVES[6:12] + ("psychological/truth/theory", "psychological/truth/fact"),
-            "experiential": FOUNDATIONAL_LEAVES[12:18] + ("psychological/contemplation/clarity", "psychological/contemplation/confidence"),
-            "psychological": FOUNDATIONAL_LEAVES[18:24] + ("experiential/phase/valence", "experiential/phase/arousal"),
-        }
-
         departments_out: list[dict[str, Any]] = []
         for dept_id, dept_label, boughs in _FOUNDING_TREE_STRUCTURE:
             boughs_out: list[dict[str, Any]] = []
-            anchor_names_for_dept = dept_anchor_names.get(dept_id, FOUNDATIONAL_LEAVES[:8])
+            anchor_names_for_dept = _DEPT_ANCHOR_LEAF_NAMES.get(dept_id, FOUNDATIONAL_LEAVES[:8])
             for bough_id, bough_label, f_leaves in boughs:
                 founding_items = [
                     {
@@ -1913,6 +1989,7 @@ class ScholarStudioRuntime:
                                 reverse=True,
                             )[:3]
                             anchor_map = {str(k): round(float(v), 2) for k, v in paired}
+                        live_act = _evaluate_learned_leaf_from_anchors(lf, latest_coords)
                         grown_items.append(
                             {
                                 "leaf_id": lf.leaf_id,
@@ -1921,7 +1998,7 @@ class ScholarStudioRuntime:
                                 "parent_branch": lf.parent_branch,
                                 "tier": lf.tier,
                                 "description": lf.description,
-                                "activation": round(float(latest_coords.get(lf.leaf_id, 0.50)), 3),
+                                "activation": round(float(live_act), 3),
                                 "anchor_weights": anchor_map,
                             }
                         )
