@@ -281,13 +281,7 @@ SCHOLAR_SINGLE_PAGE_HTML = """<!DOCTYPE html>
     <span class="pill" id="lesson-step-pill">Steps: 0</span>
   </div>
   <div class="curriculum-controls">
-    <select id="curriculum-sentences-select" title="Sentences per Scholar reflection">
-      <option value="1">1 Sentence</option>
-      <option value="2">2 Sentences</option>
-      <option value="3" selected>3 Sentences (1 Stanza)</option>
-      <option value="4">4 Sentences</option>
-      <option value="6">2 Stanzas (6 Sentences)</option>
-    </select>
+    <span class="pill" title="Left Brain stops naturally when Right-Brain equilibrium settles">Natural Equilibrium Flow</span>
     <button class="btn btn-primary" id="step-curriculum-btn" onclick="stepCurriculumLesson()">Step Curriculum Lesson</button>
     <button class="btn" id="loop-curriculum-btn" onclick="toggleCurriculumLoop()">Run Curriculum Loop</button>
   </div>
@@ -334,13 +328,6 @@ SCHOLAR_SINGLE_PAGE_HTML = """<!DOCTYPE html>
     <div id="chat-messages"></div>
     <div class="chat-bar">
       <input type="text" id="chat-input" placeholder="Ask a Socratic question, pose a dilemma, or test a concept..." onkeydown="if(event.key==='Enter')sendChatMessage()" />
-      <select id="chat-sentences-select" title="How many sentences the Scholar generates">
-        <option value="1">Reply: 1 Sentence</option>
-        <option value="2">Reply: 2 Sentences</option>
-        <option value="3" selected>Reply: 3 Sentences (1 Stanza)</option>
-        <option value="4">Reply: 4 Sentences</option>
-        <option value="6">Reply: 2 Stanzas (6 Sentences)</option>
-      </select>
       <button class="btn btn-primary" onclick="sendChatMessage()">Send</button>
     </div>
   </section>
@@ -441,9 +428,12 @@ function renderState(s) {
       .map(([k, v]) => `${k.split("/").slice(-1)[0]}=${Number(v).toFixed(2)}`)
       .join(", ");
     document.getElementById("telemetry-summary-text").innerHTML =
+      `<div><strong>Modality:</strong> ${escapeHtml(tel.speech_mode || "Public Speech")}</div>` +
       `<div><strong>Gear:</strong> ${escapeHtml(tel.gear_used || "")}</div>` +
       `<div><strong>Outcome:</strong> ${escapeHtml(tel.outcome || "")} (${tel.settled ? "Settled" : "Queued for Sleep"})</div>` +
       `<div><strong>Active Concept:</strong> ${escapeHtml(tel.active_concept || "none")}</div>` +
+      `<div><strong>Truth (Fact / Theory):</strong> ${Number(tel.fact || 0).toFixed(2)} / ${Number(tel.theory || 0).toFixed(2)}</div>` +
+      `<div><strong>Will (Intention / Exec):</strong> ${Number(tel.intention || 0).toFixed(2)} / ${Number(tel.execution || 0).toFixed(2)}</div>` +
       `<div><strong>Clarity / Conf:</strong> ${Number(tel.clarity || 0).toFixed(2)} / ${Number(tel.confidence || 0).toFixed(2)}</div>` +
       `<div><strong>Valence / Arousal:</strong> ${Number(tel.valence || 0).toFixed(2)} / ${Number(tel.arousal || 0).toFixed(2)}</div>` +
       `<div><strong>Top Fact Leaves:</strong> ${escapeHtml(topLeaves)}</div>`;
@@ -455,8 +445,15 @@ function renderState(s) {
     const box = document.getElementById("chat-messages");
     box.innerHTML = msgs.map(m => {
       const isComp = m.sender === "companion" && typeof m.id === "number";
+      const modeTag = (m.telemetry && m.telemetry.speech_mode) ? ` · ${escapeHtml(m.telemetry.speech_mode)}` : "";
       const badge = (m.telemetry && m.telemetry.active_concept)
-        ? `<span class="pill">${escapeHtml(m.telemetry.active_concept)} · ${escapeHtml(m.telemetry.gear_used || "")}</span>`
+        ? `<span class="pill">${escapeHtml(m.telemetry.active_concept)}${modeTag}</span>`
+        : "";
+      const splicedClauses = (m.spliced_clauses && m.spliced_clauses.length)
+        ? m.spliced_clauses
+        : ((m.telemetry && m.telemetry.spliced_clauses) || []);
+      const traceBlock = (isComp && splicedClauses.length)
+        ? `<details style="margin-top:6px;font-size:11px;color:var(--text-2);"><summary style="cursor:pointer;">Inspect Internal Monologue &amp; &lt;|subliminal_gap|&gt; Splice (${splicedClauses.length} sentence${splicedClauses.length === 1 ? '' : 's'})</summary><div style="margin-top:4px;padding:6px 8px;background:var(--bg-2);border-radius:6px;white-space:pre-wrap;">${splicedClauses.map(c => escapeHtml(c)).join("\n")}</div></details>`
         : "";
       const actions = isComp ? `
         <div class="msg-actions">
@@ -471,6 +468,7 @@ function renderState(s) {
             ${badge}
           </div>
           <div class="msg-text">${escapeHtml(m.text)}</div>
+          ${traceBlock}
           ${actions}
           ${m.auto_rem_sleep_receipt ? `<div style="margin-top:8px;padding:6px 8px;border-radius:6px;background:rgba(168,85,247,0.12);border:1px solid rgba(168,85,247,0.3);font-size:11px;">${escapeHtml(m.auto_rem_sleep_receipt)}</div>` : ""}
         </div>
@@ -487,8 +485,7 @@ async function sendChatMessage() {
   scholarBusy = true;
   try {
     inp.value = "";
-    const sents = Number(document.getElementById("chat-sentences-select").value || 3);
-    await apiPost("/api/chat", { text: txt, num_sentences: sents });
+    await apiPost("/api/chat", { text: txt });
   } finally {
     scholarBusy = false;
   }
@@ -504,8 +501,7 @@ async function studyCanvasPassage() {
   scholarBusy = true;
   try {
     canvasDirty = false;
-    const sents = Number(document.getElementById("curriculum-sentences-select").value || 3);
-    await apiPost("/api/canvas/study", { passage_text: txt, num_sentences: sents });
+    await apiPost("/api/canvas/study", { passage_text: txt });
   } finally {
     scholarBusy = false;
   }
@@ -522,8 +518,7 @@ async function stepCurriculumLesson() {
   scholarBusy = true;
   try {
     const lessonId = document.getElementById("lesson-select").value;
-    const sents = Number(document.getElementById("curriculum-sentences-select").value || 3);
-    await apiPost("/api/curriculum/step", { lesson_id: lessonId, num_sentences: sents });
+    await apiPost("/api/curriculum/step", { lesson_id: lessonId });
   } finally {
     scholarBusy = false;
   }

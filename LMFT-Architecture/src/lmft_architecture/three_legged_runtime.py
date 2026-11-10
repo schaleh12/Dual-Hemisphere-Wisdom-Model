@@ -1942,6 +1942,7 @@ def run_three_legged_turn(
     num_sentences: int = 1,
     max_stanzas: int = 1,
     sentences_per_stanza: int = 3,
+    equilibrium_stop: bool = False,
     comma_chord_transform: Callable[[SubliminalChordVector], SubliminalChordVector] | None = None,
     conversation_history: Sequence[tuple[str, str]] = (),
     max_context_chars: int = DEFAULT_MAX_CONTEXT_CHARS,
@@ -2325,15 +2326,75 @@ def run_three_legged_turn(
                         cached_clause_1_prefix = multi_traces[0].clause_1_prefix
                     spliced_traces.extend(multi_traces)
                     reply_text = validate_plain_english_left_brain_reply(multi_text)
-                elif int(num_sentences) > 1:
+                elif int(num_sentences) > 1 or equilibrium_stop:
+                    target_max_sents = max(2, int(num_sentences)) if equilibrium_stop and int(num_sentences) <= 1 else int(num_sentences)
+                    prev_sent_theory_coords: dict[str, float] = {}
+                    sent_stop_fn: Callable[[int, SplicedThoughtTrace, str], bool] | None = None
+                    if equilibrium_stop:
+
+                        def _sentence_equilibrium_stop(
+                            sent_count: int,
+                            trace: SplicedThoughtTrace,
+                            cumulative_text: str,
+                            *,
+                            _pass_idx: int = p,
+                        ) -> bool:
+                            nonlocal prev_sent_theory_coords
+                            eval_text = cumulative_text.strip() or trace.full_thought.strip()
+                            if not eval_text:
+                                return False
+                            s_coords, s_exp, _, _ = sensors.score_text(
+                                eval_text,
+                                learned_leaves=learned_tuple,
+                                branch_gating=branch_gating,
+                            )
+                            s_vibe, _ = compile_right_brain_vibe(
+                                birth_state,
+                                external_coords,
+                                external_exp,
+                                rules,
+                                pass_index=_pass_idx,
+                                event_id=f"scene-{scene_index}-pass-{_pass_idx}-sent-{sent_count}",
+                                prior_memory=prior_memory,
+                                learned_leaves=learned_tuple,
+                                internal_theory_coords=s_coords,
+                                internal_theory_experiential=s_exp,
+                                queried_child_leaves=queried_1,
+                                skipped_child_leaves=skipped_1,
+                                social_drift=social_drift,
+                                ratified_chords=pass_ratified_chords,
+                                will_edges=active_will_edges,
+                            )
+                            if (
+                                s_vibe.posture in ("SETTLED_EASE", "AT_EASE", "WORDLESS_REFLEX", "THEORY_SYNTHESIS")
+                                and float(s_vibe.clarity) >= 0.68
+                                and not s_vibe.self_registry.dissonance_notes
+                            ):
+                                return True
+                            if sent_count >= 2 and prev_sent_theory_coords:
+                                sent_delta = max(
+                                    (
+                                        abs(float(s_coords.get(k, 0.0)) - float(prev_sent_theory_coords.get(k, 0.0)))
+                                        for k in set(s_coords) | set(prev_sent_theory_coords)
+                                    ),
+                                    default=0.0,
+                                )
+                                if sent_delta < 0.04:
+                                    return True
+                            prev_sent_theory_coords = dict(s_coords)
+                            return False
+
+                        sent_stop_fn = _sentence_equilibrium_stop
+
                     multi_text, multi_traces = subliminal_left_brain.generate_multi_sentence_script(
                         scenario_text,
-                        num_sentences=int(num_sentences),
+                        num_sentences=min(6, max(1, target_max_sents)),
                         pass_index=p,
                         clause_1_prefix=cached_clause_1_prefix,
                         conversation_history=conversation_history,
                         max_context_chars=max_context_chars,
                         chord_builder_at_comma=_build_chord_at_comma,
+                        stop_condition=sent_stop_fn,
                         lead_with_gap=lead_with_gap,
                     )
                     if clause_1_prefix is None and multi_traces and not lead_with_gap:

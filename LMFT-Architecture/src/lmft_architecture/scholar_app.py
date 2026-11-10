@@ -647,12 +647,13 @@ class ScholarStudioRuntime:
         user_role_label: str,
         companion_role_label: str,
         fact_anchor_text: str | None = None,
-        num_sentences: int = 3,
+        num_sentences: int | None = None,
     ) -> dict[str, Any]:
         with self._lock:
             self.scene_counter += 1
             scene_id = self.scene_counter
-            target_sentences = max(1, min(6, int(num_sentences)))
+            use_equilibrium_stop = num_sentences is None
+            target_sentences = 6 if num_sentences is None else max(1, min(6, int(num_sentences)))
             lb = self._ensure_left_brain_ready()
 
             effective_sensors = self.sensors
@@ -695,6 +696,7 @@ class ScholarStudioRuntime:
                 branch_archives=active_archives,
                 force_spoken_reply=True,
                 num_sentences=target_sentences,
+                equilibrium_stop=use_equilibrium_stop,
                 will_edges=self.will_edges,
             )
 
@@ -714,6 +716,23 @@ class ScholarStudioRuntime:
             spoken_reply = (
                 turn_result.final_conscious_note
                 or f"Contemplating {vibe.active_concept or 'the Socratic tension'}, inner theory aligns with observed fact."
+            )
+            spliced_clauses = [
+                f"{tr.clause_1_prefix} <|subliminal_gap|> {tr.post_gap_continuation}".strip()
+                for tr in turn_result.spliced_traces
+            ]
+            if not spliced_clauses:
+                if "," in spoken_reply:
+                    c1_fb, c2_fb = spoken_reply.split(",", 1)
+                    spliced_clauses = [f"{c1_fb.strip()}, <|subliminal_gap|> {c2_fb.strip()}"]
+                else:
+                    spliced_clauses = [f"<|subliminal_gap|> {spoken_reply}"]
+
+            spoken_publicly = bool(float(vibe.execution) >= 0.25)
+            speech_mode = (
+                "Public Speech (Will Execution)"
+                if spoken_publicly
+                else "Internal Monologue (Inspectable)"
             )
             self._turn_records_by_id[scene_id] = {
                 "scene_index": scene_id,
@@ -747,6 +766,9 @@ class ScholarStudioRuntime:
                 "sender": "companion",
                 "role_label": companion_role_label,
                 "text": spoken_reply,
+                "internal_monologue": spoken_reply,
+                "spliced_clauses": spliced_clauses,
+                "spoken_publicly": spoken_publicly,
                 "coached": queued_now,
                 "savored": False,
                 "telemetry": {
@@ -754,8 +776,16 @@ class ScholarStudioRuntime:
                     "outcome": turn_result.outcome,
                     "settled": turn_result.settled,
                     "active_concept": vibe.active_concept or "none",
+                    "speech_mode": speech_mode,
+                    "spoken_publicly": spoken_publicly,
+                    "sentence_count": len(spliced_clauses),
+                    "spliced_clauses": spliced_clauses,
                     "clarity": round(float(vibe.clarity), 4),
                     "confidence": round(float(vibe.confidence), 4),
+                    "fact": round(float(vibe.fact), 4),
+                    "theory": round(float(vibe.theory), 4),
+                    "intention": round(float(vibe.intention), 4),
+                    "execution": round(float(vibe.execution), 4),
                     "valence": round(float(vibe.valence), 4),
                     "arousal": round(float(vibe.arousal), 4),
                     "fact_coordinates": {
@@ -828,7 +858,7 @@ class ScholarStudioRuntime:
             contrastive_reference_coordinates=None,
         )
 
-    def handle_chat_message(self, text: str, *, num_sentences: int = 3) -> dict[str, Any]:
+    def handle_chat_message(self, text: str, *, num_sentences: int | None = None) -> dict[str, Any]:
         clean = str(text or "").strip()
         if not clean:
             raise ValueError("Chat message text must be non-empty.")
@@ -849,7 +879,7 @@ class ScholarStudioRuntime:
         self,
         passage_text: str | None = None,
         *,
-        num_sentences: int = 3,
+        num_sentences: int | None = None,
     ) -> dict[str, Any]:
         if passage_text is not None:
             self.study_canvas_text = str(passage_text).strip()
@@ -872,7 +902,7 @@ class ScholarStudioRuntime:
         self,
         *,
         lesson_id: str = "",
-        num_sentences: int = 3,
+        num_sentences: int | None = None,
     ) -> dict[str, Any]:
         clean_id = str(lesson_id or "").strip()
         selected: ScholarCurriculumLesson | None = None
@@ -1496,16 +1526,18 @@ def create_scholar_http_server(
             try:
                 body = self._read_json_body()
                 if path == "/api/chat":
+                    raw_n = body.get("num_sentences")
                     snap = runtime.handle_chat_message(
                         str(body.get("text", "")),
-                        num_sentences=int(body.get("num_sentences", 3)),
+                        num_sentences=int(raw_n) if raw_n is not None else None,
                     )
                     self._send_json(snap)
                     return
                 if path == "/api/canvas/study":
+                    raw_n = body.get("num_sentences")
                     snap = runtime.handle_study_passage(
                         body.get("passage_text"),
-                        num_sentences=int(body.get("num_sentences", 3)),
+                        num_sentences=int(raw_n) if raw_n is not None else None,
                     )
                     self._send_json(snap)
                     return
@@ -1514,9 +1546,10 @@ def create_scholar_http_server(
                     self._send_json(snap)
                     return
                 if path == "/api/curriculum/step":
+                    raw_n = body.get("num_sentences")
                     snap = runtime.handle_step_curriculum_lesson(
                         lesson_id=str(body.get("lesson_id", "")),
-                        num_sentences=int(body.get("num_sentences", 3)),
+                        num_sentences=int(raw_n) if raw_n is not None else None,
                     )
                     self._send_json(snap)
                     return

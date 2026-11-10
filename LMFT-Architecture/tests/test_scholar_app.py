@@ -42,15 +42,20 @@ def test_scholar_runtime_chat_passage_curriculum_savor_and_rem_sleep(tmp_path: P
     assert snap0["rules_count"] == 2
     assert len(snap0["curriculum_lessons"]) == len(SCHOLAR_CURRICULUM_LESSONS)
 
-    # 1. Socratic chat turn
+    # 1. Socratic chat turn (natural equilibrium flow without sentence-count restriction)
     snap1 = runtime.handle_chat_message(
         "How does patient stewardship balance power with wastelessness?",
-        num_sentences=2,
     )
     companion_msgs = [m for m in snap1["chat_messages"] if m.get("sender") == "companion" and "id" in m]
     assert len(companion_msgs) == 1
     first_turn_id = int(companion_msgs[0]["id"])
-    assert companion_msgs[0]["telemetry"]["clarity"] >= 0.0
+    tel1 = companion_msgs[0]["telemetry"]
+    assert tel1["clarity"] >= 0.0
+    assert "fact" in tel1 and "theory" in tel1
+    assert "intention" in tel1 and "execution" in tel1
+    assert tel1["speech_mode"] in ("Public Speech (Will Execution)", "Internal Monologue (Inspectable)")
+    assert companion_msgs[0]["internal_monologue"]
+    assert any("<|subliminal_gap|>" in c for c in companion_msgs[0]["spliced_clauses"])
 
     # 2. Savor turn into 3-Branch Archives
     snap_savored = runtime.savor_turn_vibe(first_turn_id)
@@ -60,14 +65,12 @@ def test_scholar_runtime_chat_passage_curriculum_savor_and_rem_sleep(tmp_path: P
     # 3. Study passage contemplation
     snap2 = runtime.handle_study_passage(
         "When a river floods in spring, terraced floodplains absorb the chaos and preserve order.",
-        num_sentences=2,
     )
     assert "terraced floodplains" in snap2["study_canvas_text"]
 
     # 4. Step curriculum lesson
     snap3 = runtime.handle_step_curriculum_lesson(
         lesson_id="cultural_justice_reciprocity",
-        num_sentences=2,
     )
     assert snap3["curriculum_step_counter"] == 1
 
@@ -161,10 +164,13 @@ def test_scholar_http_server_endpoints(tmp_path: Path) -> None:
             html = resp.read().decode("utf-8")
             assert "LMFT-Scholar" in html
             assert "Foundational 4-Department Curriculum" in html
+            assert "Natural Equilibrium Flow" in html
+            assert "chat-sentences-select" not in html
+            assert "curriculum-sentences-select" not in html
 
         req = urllib.request.Request(
             f"http://127.0.0.1:{port}/api/curriculum/step",
-            data=json.dumps({"lesson_id": "philosophical_being_agency", "num_sentences": 2}).encode("utf-8"),
+            data=json.dumps({"lesson_id": "philosophical_being_agency"}).encode("utf-8"),
             headers={"Content-Type": "application/json"},
             method="POST",
         )
