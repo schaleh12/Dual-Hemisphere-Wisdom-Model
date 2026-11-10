@@ -590,7 +590,7 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
     <button class="btn btn-tutorial" id="new-user-tutorial-btn" onclick="openTutorialModal()">? Quick Start</button>
     <button class="btn" id="auto-update-sync-btn" onclick="syncAndAutoUpdate()" title="Sync latest code &amp; wisdom rules from GitHub and auto-relaunch if updated">🔄 Auto-Update</button>
     <span class="pill" id="rules-count-pill">Rules: 24</span>
-    <span class="pill" id="model-status-pill">Qwen3-4B</span>
+    <span class="pill" id="model-status-pill">Impish_LLAMA_4B</span>
     <span class="pill" id="sleep-queue-pill">Sleep Queue: 0</span>
     <select id="lineage-select" onchange="switchLineage(this.value)">
       <option value="schooled" selected>Schooled (Cycle 2 · Chess Wisdom)</option>
@@ -608,7 +608,7 @@ CHESS_SINGLE_PAGE_HTML = r"""<!DOCTYPE html>
         <div class="avatar-box" id="top-player-avatar" style="overflow:hidden;padding:0;"><img src="/assets/celestriad_spirit_particle.jpg" alt="Celestriad 1.0" style="width:100%;height:100%;object-fit:cover;" /></div>
         <div class="player-name-stack">
           <span class="player-name-main" id="top-player-name">Celestriad 1.0</span>
-          <span class="player-name-sub" id="top-player-meta">⚫ Playing Black · 40-Node Tree + Qwen3-4B</span>
+          <span class="player-name-sub" id="top-player-meta">⚫ Playing Black · 40-Node Tree + Impish_LLAMA_4B</span>
           <span id="posture-summary-span" style="display:none;">White to move</span>
         </div>
       </div>
@@ -1720,12 +1720,12 @@ function renderState(s) {
 
       if (botAvatar) botAvatar.innerHTML = CELESTRIAD_SPIRIT_AVATAR_HTML;
       if (botName) botName.textContent = `Celestriad 1.0 (${botBadge})`;
-      if (botSubtitle) botSubtitle.textContent = "40-Node Fuzzy Tree + Qwen3-4B";
+      if (botSubtitle) botSubtitle.textContent = "40-Node Fuzzy Tree + Impish_LLAMA_4B";
       if (pEloEl) pEloEl.textContent = hpEloText;
     } else {
       if (topAvatar) topAvatar.innerHTML = CELESTRIAD_SPIRIT_AVATAR_HTML;
       if (topName) topName.textContent = `Celestriad 1.0 (${topBadge})`;
-      if (topMeta) topMeta.textContent = "40-Node Fuzzy Tree + Qwen3-4B";
+      if (topMeta) topMeta.textContent = "40-Node Fuzzy Tree + Impish_LLAMA_4B";
       if (eloEl) eloEl.textContent = hpEloText;
 
       if (botAvatar) botAvatar.textContent = "🐟";
@@ -1738,7 +1738,7 @@ function renderState(s) {
     if (humanOnBottom) {
       if (topAvatar) topAvatar.innerHTML = CELESTRIAD_SPIRIT_AVATAR_HTML;
       if (topName) topName.textContent = "Celestriad 1.0";
-      if (topMeta) topMeta.textContent = "⚫ Playing Black · 40-Node Tree + Qwen3-4B";
+      if (topMeta) topMeta.textContent = "⚫ Playing Black · 40-Node Tree + Impish_LLAMA_4B";
       if (eloEl) eloEl.textContent = hpEloText;
 
       if (botAvatar) botAvatar.textContent = "👤";
@@ -1753,7 +1753,7 @@ function renderState(s) {
 
       if (botAvatar) botAvatar.innerHTML = CELESTRIAD_SPIRIT_AVATAR_HTML;
       if (botName) botName.textContent = "Celestriad 1.0";
-      if (botSubtitle) botSubtitle.textContent = "⚫ Playing Black · 40-Node Tree + Qwen3-4B";
+      if (botSubtitle) botSubtitle.textContent = "⚫ Playing Black · 40-Node Tree + Impish_LLAMA_4B";
       if (pEloEl) pEloEl.textContent = hpEloText;
     }
   }

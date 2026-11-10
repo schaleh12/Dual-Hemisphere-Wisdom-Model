@@ -1,8 +1,8 @@
 """Standalone App #2: `LMFT-Bloodmoon.exe` — Clockwise Content-Evolution Studio (`bloodmoon_app.py`).
 
 Plain-English Purpose:
-Dedicated standalone desktop application for 4-bit `SicariusSicariiStuff/Impish_Bloodmoon_12B`
-(`hidden_size = 5120`), completely isolated from `Qwen3-4B` and the Chess app.
+Dedicated standalone desktop application for native 16-bit `SicariusSicariiStuff/Impish_LLAMA_4B`
+(`hidden_size = 3072`), using the universal Left-Brain base model.
 
 Enforces:
 1. **Hard One-Way Polarity Rule (`feminine_to_masculine` ONLY)**:
@@ -470,14 +470,14 @@ class BloodmoonClockRuntime:
             callosum_status = str(self.left_brain.callosum_metadata.callosum_status)
 
         self.sleep_cycle_index = cycle_idx
-        self.active_checkpoint_label = f"Impish Bloodmoon ({callosum_status} — {base_model_id})"
+        self.active_checkpoint_label = f"Impish Bloodmoon · Impish_LLAMA_4B ({callosum_status} — {base_model_id})"
         if self.left_brain is not None:
-            self.left_brain_status = f"READY (Impish Bloodmoon · {callosum_status})"
+            self.left_brain_status = f"READY (Impish Bloodmoon · Impish_LLAMA_4B · {callosum_status})"
         elif meta_file.exists() and self._lazy_load_gpu:
-            self.left_brain_status = "LOADING_IMPISH_BLOODMOON..."
+            self.left_brain_status = "LOADING_IMPISH_LLAMA_4B..."
         else:
             self.left_brain_status = (
-                "IMPISH_CHECKPOINT_NOT_INSTALLED (Run experiments/run_train_impish_bloodmoon.py)"
+                "IMPISH_CHECKPOINT_NOT_INSTALLED (Run LMFT-Training/scripts/train_left_brain_lora.py)"
             )
 
         # Strict 3-Phase Clockwise State Machine (`1 -> 2 -> 3 -> 1`)
@@ -1171,7 +1171,7 @@ class BloodmoonClockRuntime:
         if not meta_file.exists():
             self.left_brain = None
             self.left_brain_status = (
-                "IMPISH_CHECKPOINT_NOT_INSTALLED (Run experiments/run_train_impish_bloodmoon.py)"
+                "IMPISH_CHECKPOINT_NOT_INSTALLED (Run LMFT-Training/scripts/train_left_brain_lora.py)"
             )
             return
         try:
@@ -1180,7 +1180,7 @@ class BloodmoonClockRuntime:
         except Exception:
             pass
         self.left_brain_loading = True
-        self.left_brain_status = "LOADING_IMPISH_BLOODMOON..."
+        self.left_brain_status = "LOADING_IMPISH_LLAMA_4B..."
         try:
             loaded = SubliminalGapLeftBrain.from_checkpoint(
                 ckpt_dir,
@@ -1189,7 +1189,7 @@ class BloodmoonClockRuntime:
             )
             self._impish_left_brain = loaded
             self.left_brain = loaded
-            self.left_brain_status = f"READY (Impish Bloodmoon · {callosum_status})"
+            self.left_brain_status = f"READY (Impish_LLAMA_4B · {callosum_status})"
         except Exception as exc:
             self.left_brain = None
             self.left_brain_status = f"IMPISH_LOAD_ERROR ({type(exc).__name__}: {exc})"

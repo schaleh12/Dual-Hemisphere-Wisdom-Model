@@ -1072,7 +1072,7 @@ class CorpusCallosumMetadata:
     sleep_cycle_index: int
     trained_trajectories_count: int
     notes: str = ""
-    base_model_id: str = "Qwen/Qwen3-4B"
+    base_model_id: str = "SicariusSicariiStuff/Impish_LLAMA_4B"
     callosum_status: str = "TRAINED_STEERED_CALLOSUM"
 
     def to_dict(self) -> dict[str, object]:
@@ -1102,7 +1102,7 @@ def save_corpus_callosum_checkpoint(
     sleep_cycle_index: int = 0,
     trained_trajectories_count: int = 0,
     notes: str = "",
-    base_model_id: str = "Qwen/Qwen3-4B",
+    base_model_id: str = "SicariusSicariiStuff/Impish_LLAMA_4B",
     callosum_status: str | None = None,
 ) -> CorpusCallosumMetadata:
     """Persist `SubliminalGapProjector` weights and Sleep-Cycle maturation metadata to disk."""
@@ -1163,7 +1163,7 @@ def load_corpus_callosum_checkpoint(
         sleep_cycle_index=int(raw_meta["sleep_cycle_index"]),
         trained_trajectories_count=trained_cnt,
         notes=str(raw_meta.get("notes", "")),
-        base_model_id=str(raw_meta.get("base_model_id", "Qwen/Qwen3-4B")),
+        base_model_id=str(raw_meta.get("base_model_id", "SicariusSicariiStuff/Impish_LLAMA_4B")),
         callosum_status=str(raw_meta.get("callosum_status", default_status)),
     )
     projector = SubliminalGapProjector(

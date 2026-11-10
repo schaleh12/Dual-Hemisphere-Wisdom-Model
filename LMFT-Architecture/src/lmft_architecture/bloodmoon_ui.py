@@ -1,7 +1,7 @@
 """Standalone UI for `LMFT-Bloodmoon.exe` — Clockwise Content-Evolution Studio (`bloodmoon_ui.py`).
 
 Plain-English Purpose:
-Provides a dedicated dark-minimalist single-page interface for the `Impish Bloodmoon 12B`
+Provides a dedicated dark-minimalist single-page interface for the `Impish_LLAMA_4B`
 standalone application centered on the 3-Phase Clockwise Evolution Loop:
   1. Phase 1 — Female Script-Writer (The Producer · She/Her)
   2. Phase 2 — Male Content-Lover (The Audience & Self-Immunizer · He/Him)
@@ -258,7 +258,7 @@ BLOODMOON_SINGLE_PAGE_HTML = """<!DOCTYPE html>
     <span>LMFT-Bloodmoon · Clockwise Content-Evolution Studio</span>
   </div>
   <div class="status-strip">
-    <span class="pill" id="model-status-pill">Impish Bloodmoon 12B</span>
+    <span class="pill" id="model-status-pill">Impish_LLAMA_4B</span>
     <span class="pill" id="cycle-count-pill">Cycles: 0</span>
     <span class="pill" id="rules-count-pill">Rules: 2</span>
     <span class="pill" id="sleep-queue-pill">Sleep Queue: 0</span>
@@ -396,7 +396,7 @@ async function apiPost(path, payload) {
 
 function renderState(s) {
   if (!s) return;
-  document.getElementById("model-status-pill").textContent = s.left_brain_status || "Impish Bloodmoon 12B";
+  document.getElementById("model-status-pill").textContent = s.left_brain_status || "Impish_LLAMA_4B";
   document.getElementById("cycle-count-pill").textContent = "Cycles: " + (s.clockwise_cycle_count || 0);
   document.getElementById("rules-count-pill").textContent = "Rules: " + (s.rules_count || 0);
   document.getElementById("sleep-queue-pill").textContent = "Sleep Queue: " + (s.sleep_queue_count || 0);

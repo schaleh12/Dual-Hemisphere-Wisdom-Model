@@ -1228,7 +1228,15 @@ class ChessKibitzerRuntime:
             self.left_brain = loaded
             if loaded.callosum_metadata is not None:
                 self.sleep_cycle_index = int(loaded.callosum_metadata.sleep_cycle_index)
-            model_tag = "Qwen3-8B · " if is_8b_ckpt else "Qwen3-4B · "
+                base_id = str(loaded.callosum_metadata.base_model_id or "")
+            else:
+                base_id = ""
+            if "impish_llama_4b" in base_id.lower():
+                model_tag = "Impish_LLAMA_4B · "
+            elif is_8b_ckpt:
+                model_tag = "Qwen3-8B · "
+            else:
+                model_tag = "Qwen3-4B · "
             self.left_brain_status = f"READY ({model_tag}Cycle {self.sleep_cycle_index})"
         except Exception as exc:
             self.left_brain_status = f"GEAR_1_FALLBACK ({type(exc).__name__}: {exc})"

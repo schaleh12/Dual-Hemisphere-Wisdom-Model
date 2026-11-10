@@ -53,7 +53,7 @@ def main() -> None:
     sensors = load_trained_neural_bridge_sensors(bridges_dir, device="cpu")
     birth = create_birth_state("ind-sprint2-eval", birth_event_id="birth-sprint2-eval", random_seed=42)
 
-    hf_model_id = "Qwen/Qwen3-4B"
+    hf_model_id = "SicariusSicariiStuff/Impish_LLAMA_4B"
     device = "cuda" if torch.cuda.is_available() else "cpu"
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
@@ -76,11 +76,11 @@ def main() -> None:
         rank=16,
         lora_alpha=32.0,
         lora_dropout=0.05,
-        num_top_layers=18,
+        num_top_layers=16,
         base_model_id=hf_model_id,
     )
     inject_lora_adapters(model, lora_cfg)
-    # Uses default intermediate_size = 256 (~10.6 MB projector_weights.pt)
+    # Uses default intermediate_size = 256 (~12.7 MB projector_weights.pt for hidden_size=3072)
     projector = SubliminalGapProjector(hidden_size=hidden_size).to(device=device, dtype=torch.float32)
     anchored = projector.anchor_to_llm_embeddings(model, tokenizer)
     print(f"Projector intermediate_size={projector.intermediate_size}, semantically_anchored_at_birth={anchored}")
@@ -105,7 +105,7 @@ def main() -> None:
         f"greedy_changed={pre_eval.greedy_text_changed_count}/{pre_eval.total_holdout_pairs}"
     )
 
-    print(f"Training Qwen3-4B LoRA + SubliminalGapProjector on {len(train_pairs)} pairs...")
+    print(f"Training {hf_model_id} LoRA + SubliminalGapProjector on {len(train_pairs)} pairs...")
     epoch_history = train_left_brain_lora_and_callosum(
         model,
         tokenizer,
@@ -113,9 +113,9 @@ def main() -> None:
         train_pairs=train_pairs,
         gap_token_id=gap_token_id,
         device=device,
-        epochs=5,
-        lr_projector=6e-4,
-        lr_lora=1.5e-4,
+        epochs=6,
+        lr_projector=8e-4,
+        lr_lora=3e-4,
         weight_decay=0.01,
         mle_weight=0.25,
         contrastive_weight=2.0,
@@ -146,6 +146,7 @@ def main() -> None:
 
     ckpt_dir_1 = train_root / "models" / "left_brain_lora"
     ckpt_dir_2 = train_root / "models" / "left_brain_lora_cycle2"
+    ckpt_dir_bm = train_root / "models" / "left_brain_impish_bloodmoon"
     meta_1 = save_lora_and_callosum_checkpoint(
         ckpt_dir_1,
         model=model,
@@ -153,7 +154,7 @@ def main() -> None:
         lora_config=lora_cfg,
         sleep_cycle_index=1,
         trained_trajectories_count=len(train_pairs),
-        notes=f"Sprint 2.1: Qwen3-4B LoRA + Semantically Anchored 256-dim SubliminalGapProjector trained on {len(train_pairs)} contrastive gap pairs.",
+        notes=f"Sprint 2.1: {hf_model_id} LoRA + Semantically Anchored 256-dim SubliminalGapProjector trained on {len(train_pairs)} contrastive gap pairs.",
         base_model_id=hf_model_id,
         callosum_status="TRAINED_STEERED_CALLOSUM",
     )
@@ -164,10 +165,24 @@ def main() -> None:
         lora_config=lora_cfg,
         sleep_cycle_index=2,
         trained_trajectories_count=len(train_pairs),
-        notes=f"Sprint 2.1 Cycle 2: Qwen3-4B LoRA + Semantically Anchored 256-dim SubliminalGapProjector trained on {len(train_pairs)} contrastive gap pairs.",
+        notes=f"Sprint 2.1 Cycle 2: {hf_model_id} LoRA + Semantically Anchored 256-dim SubliminalGapProjector trained on {len(train_pairs)} contrastive gap pairs.",
         base_model_id=hf_model_id,
         callosum_status="TRAINED_STEERED_CALLOSUM",
     )
+    save_lora_and_callosum_checkpoint(
+        ckpt_dir_bm,
+        model=model,
+        projector=projector,
+        lora_config=lora_cfg,
+        sleep_cycle_index=2,
+        trained_trajectories_count=len(train_pairs),
+        notes=f"Trained Corpus Callosum + LoRA for {hf_model_id} ({len(train_pairs)} contrastive pairs, 6 epochs).",
+        base_model_id=hf_model_id,
+        callosum_status="TRAINED_STEERED_CALLOSUM",
+    )
+    bm_holdout_dict = post_eval.to_dict()
+    bm_holdout_dict["pre_training_holdout_baseline"] = pre_eval.to_dict()
+    atomic_json(ckpt_dir_bm / "impish_bloodmoon_holdout_report.json", bm_holdout_dict)
 
     peak_vram_gb = (
         round(torch.cuda.max_memory_allocated() / (1024 ** 3), 3)

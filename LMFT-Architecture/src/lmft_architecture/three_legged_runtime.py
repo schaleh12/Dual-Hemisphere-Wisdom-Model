@@ -100,7 +100,8 @@ from .train_left_brain_lora import (
     sculpt_lora_rank_channels,
 )
 
-DEFAULT_QWEN_4B_HF_ID = "Qwen/Qwen3-4B"
+DEFAULT_IMPISH_LLAMA_4B_HF_ID = "SicariusSicariiStuff/Impish_LLAMA_4B"
+DEFAULT_QWEN_4B_HF_ID = DEFAULT_IMPISH_LLAMA_4B_HF_ID
 DEFAULT_QWEN_8B_HF_ID = "Qwen/Qwen3-8B"
 DEFAULT_MAX_CONTEXT_CHARS = 24_000
 

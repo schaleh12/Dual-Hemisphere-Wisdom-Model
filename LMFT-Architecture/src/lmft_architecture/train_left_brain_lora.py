@@ -119,7 +119,7 @@ class LoRAConfig:
     lora_dropout: float = 0.05
     target_modules: tuple[str, ...] = DEFAULT_LORA_TARGET_MODULES
     num_top_layers: int | None = 16
-    base_model_id: str = "Qwen/Qwen3-4B"
+    base_model_id: str = "SicariusSicariiStuff/Impish_LLAMA_4B"
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -223,7 +223,7 @@ def save_lora_and_callosum_checkpoint(
     """Save both `SubliminalGapProjector` and `LoRALinear` adapter weights to `checkpoint_dir`."""
     out_dir = Path(checkpoint_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    resolved_base_model = str(base_model_id or lora_config.base_model_id or "Qwen/Qwen3-4B")
+    resolved_base_model = str(base_model_id or lora_config.base_model_id or "SicariusSicariiStuff/Impish_LLAMA_4B")
     meta = save_corpus_callosum_checkpoint(
         out_dir,
         projector,

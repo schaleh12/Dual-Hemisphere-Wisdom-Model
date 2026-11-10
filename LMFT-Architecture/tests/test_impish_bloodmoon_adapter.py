@@ -54,8 +54,8 @@ def test_guardrail_1_gguf_rejection_think_token_detection_and_hidden_size_check(
     with pytest.raises(ValueError, match="contains only .gguf files"):
         validate_pytorch_hf_model_source(gguf_dir)
 
-    assert DEFAULT_IMPISH_BLOODMOON_HF_ID == "SicariusSicariiStuff/Impish_Bloodmoon_12B"
-    assert DEFAULT_IMPISH_BLOODMOON_HIDDEN_SIZE == 5120
+    assert DEFAULT_IMPISH_BLOODMOON_HF_ID == "SicariusSicariiStuff/Impish_LLAMA_4B"
+    assert DEFAULT_IMPISH_BLOODMOON_HIDDEN_SIZE == 3072
     assert validate_pytorch_hf_model_source(DEFAULT_IMPISH_BLOODMOON_HF_ID) == DEFAULT_IMPISH_BLOODMOON_HF_ID
 
     llama_tok = _WordLevelTestTokenizer()
