@@ -2,8 +2,8 @@
   "schema_version": 1,
   "version": "0.2.0",
   "github_repo": "schaleh12/Dual-Hemisphere-Wisdom-Model",
-  "build_sha256": "c1e7f43c13596257feb97c668b5da62db2ed04cffbd192e8aa28a58e702fc8ed",
-  "build_short_hash": "c1e7f43c1359",
+  "build_sha256": "b4c506794ac6af54947363dc4eb1b65a3020e204e21f4dcea63d64659cfa0458",
+  "build_short_hash": "b4c506794ac6",
   "files": {
     "src/lmft_architecture/__init__.py": {
       "sha256": "a89f56c2195e87129adbffa5065d8769ea096e13ba98783d217c4d120ee92623",
@@ -154,8 +154,8 @@
       "size_bytes": 24970
     },
     "src/lmft_architecture/github_auto_sync.py": {
-      "sha256": "ad074410fdeb394426e01c781cfd680c9d243a07b56270538d625db76fa62a0f",
-      "size_bytes": 14727
+      "sha256": "fcd597a364f8fbbdc5cfb56ee4a55f8b60a57034ddd7ace7ac0bba256e85bda6",
+      "size_bytes": 14969
     },
     "src/lmft_architecture/impish_bloodmoon_adapter.py": {
       "sha256": "433391bedea452669a7fb98c826d86135d3f58cac5e397b336584d28f77d9e9a",
@@ -252,6 +252,14 @@
     "src/lmft_architecture/runtime_store.py": {
       "sha256": "c9644a969d9c559909525dbc895f09f61fc339b13ecafcf2dc8a5f2c0e66df4f",
       "size_bytes": 5068
+    },
+    "src/lmft_architecture/scholar_app.py": {
+      "sha256": "e4db81ad07f2d04fc6951b86eecfd35aa06ed1dcea0c8521cc66a27b8ff7bf6b",
+      "size_bytes": 69674
+    },
+    "src/lmft_architecture/scholar_ui.py": {
+      "sha256": "ac86eeb218f2f7ddf141633f21760e48086f82eef92c1230ebd274d38ac56c5e",
+      "size_bytes": 20812
     },
     "src/lmft_architecture/scoped_attention.py": {
       "sha256": "b35d5c1bffc99dc5b1a529b253f690dbbf112f77e70cb4bb95db997cd46502dc",

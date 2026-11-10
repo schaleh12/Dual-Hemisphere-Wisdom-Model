@@ -70,6 +70,10 @@ PRETRAINED_MODEL_CHECKPOINT_PATHS: tuple[str, ...] = (
     "models/left_brain_bloodmoon/lora_adapters.pt",
     "models/left_brain_bloodmoon/lora_config.json",
     "models/left_brain_bloodmoon/projector_weights.pt",
+    "models/left_brain_scholar/corpus_callosum_meta.json",
+    "models/left_brain_scholar/lora_adapters.pt",
+    "models/left_brain_scholar/lora_config.json",
+    "models/left_brain_scholar/projector_weights.pt",
 )
 
 _TEXT_NORM_SUFFIXES: frozenset[str] = frozenset(
@@ -82,6 +86,7 @@ PROTECTED_USER_STATE_PREFIXES: tuple[str, ...] = (
     "outputs/club_user_state",
     "outputs/chess_kibitzer_state",
     "outputs/impish_bloodmoon_state",
+    "outputs/scholar_state",
     "outputs/impish_sparring_trajectories.jsonl",
 )
 

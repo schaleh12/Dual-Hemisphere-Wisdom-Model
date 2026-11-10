@@ -22,6 +22,7 @@ LMFT-Training/outputs/club_user_state/
 LMFT-Training/outputs/club_state/
 LMFT-Training/outputs/chess_kibitzer_state/
 LMFT-Training/outputs/impish_bloodmoon_state/
+LMFT-Training/outputs/scholar_state/
 *patreon_unlock_receipt.json
 LMFT-Training/outputs/.desktop_window_profile/
 LMFT-Training/outputs/.chess_window_profile/
@@ -41,6 +42,8 @@ LMFT-Training/models/*
 !LMFT-Training/models/left_brain_chess/**
 !LMFT-Training/models/left_brain_bloodmoon/
 !LMFT-Training/models/left_brain_bloodmoon/**
+!LMFT-Training/models/left_brain_scholar/
+!LMFT-Training/models/left_brain_scholar/**
 !LMFT-Training/models/right_brain_bridges/
 !LMFT-Training/models/right_brain_bridges/*
 !LMFT-Training/models/right_brain_bridges/**
