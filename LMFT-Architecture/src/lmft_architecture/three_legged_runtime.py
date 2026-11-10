@@ -160,7 +160,36 @@ _CHAT_TURN_BOUNDARY_MARKERS: tuple[str, ...] = (
     "Assistant:",
     "<|im_end|>",
     "<|im_start|>",
+    "<|eot_id|>",
+    "<|end_of_text|>",
 )
+
+_ABBREV_BEFORE_PERIOD_RE = re.compile(
+    r"(?:\b(?:Mr|Mrs|Ms|Dr|Prof|St|Capt|Gen|Col|Lt|Sgt|vs|etc|e\.g|i\.e)|(?:\b[A-Z])|(?:\b\d+))\.$"
+)
+
+
+def _find_sentence_end_matches(text: str) -> list[re.Match[str]]:
+    """Return genuine sentence-ending `.`, `!`, `?` matches (ignoring `Mr.`, initials `H.`, and numbers `1.`)."""
+    out: list[re.Match[str]] = []
+    for m in re.finditer(r'([.!?])["\')\]\*]*(?=\s|$)', text):
+        punct = m.group(1)
+        if punct == ".":
+            prefix = text[: m.start(1) + 1]
+            if _ABBREV_BEFORE_PERIOD_RE.search(prefix) is not None:
+                continue
+        out.append(m)
+    return out
+
+
+def _ends_complete_sentence(text: str) -> bool:
+    """Return True when `text` ends with a genuine sentence-ending `.`, `!`, or `?`."""
+    stripped = text.rstrip().rstrip('"\')]*')
+    if not stripped or not stripped.endswith((".", "!", "?")):
+        return False
+    if stripped.endswith(".") and _ABBREV_BEFORE_PERIOD_RE.search(stripped) is not None:
+        return False
+    return True
 
 
 def _strip_chat_turn_bleed(text: str) -> str:
@@ -251,6 +280,7 @@ class SplicedThoughtTrace:
     comma_vibe_posture: str | None = None
     comma_dissonance_notes: tuple[str, ...] = ()
     comma_scored_live: bool = False
+    hit_eos: bool = False
 
     def __post_init__(self) -> None:
         assert_zero_stage_directions_in_prompt(self.prompt_before_gap)
@@ -268,6 +298,7 @@ class SplicedThoughtTrace:
             "comma_vibe_posture": self.comma_vibe_posture,
             "comma_dissonance_notes": list(self.comma_dissonance_notes),
             "comma_scored_live": self.comma_scored_live,
+            "hit_eos": self.hit_eos,
         }
 
 
@@ -318,6 +349,7 @@ class _PersistentTurnStreamState:
     active_gap_spans: list[tuple[int, int]] = field(default_factory=list)
     masked_gap_spans: list[tuple[int, int]] = field(default_factory=list)
     generated_turn_token_ids: list[int] = field(default_factory=list)
+    hit_eos: bool = False
 
 
 def _apply_repetition_and_ngram_penalty(
@@ -326,6 +358,8 @@ def _apply_repetition_and_ngram_penalty(
     *,
     repetition_penalty: float = 1.22,
     no_repeat_ngram_size: int = 3,
+    block_recent_2grams: bool = True,
+    square_frequent: bool = True,
 ) -> None:
     """Apply standard HuggingFace repetition penalty and n-gram blocking to `logits` in-place (when `vocab_size > 1000`)."""
     vocab_size = int(logits.size(0))
@@ -339,7 +373,11 @@ def _apply_repetition_and_ngram_penalty(
         for tok_id in set(int(t) for t in prior_token_ids[-96:]):
             if 0 <= tok_id < vocab_size:
                 val = float(logits[tok_id].item())
-                pen = (repetition_penalty ** 2) if freq_32.get(tok_id, 0) >= 2 else repetition_penalty
+                pen = (
+                    (repetition_penalty ** 2)
+                    if (square_frequent and freq_32.get(tok_id, 0) >= 2)
+                    else repetition_penalty
+                )
                 if val > 0.0:
                     logits[tok_id] = val / pen
                 else:
@@ -353,14 +391,15 @@ def _apply_repetition_and_ngram_penalty(
                 banned_id = int(prior_token_ids[idx + prefix_len])
                 if 0 <= banned_id < vocab_size:
                     logits[banned_id] = -1e4
-    recent_2gram_window = prior_token_ids[-48:]
-    if len(recent_2gram_window) >= 2:
-        last_tok = int(recent_2gram_window[-1])
-        for idx in range(len(recent_2gram_window) - 1):
-            if int(recent_2gram_window[idx]) == last_tok:
-                banned_2gram_id = int(recent_2gram_window[idx + 1])
-                if 0 <= banned_2gram_id < vocab_size:
-                    logits[banned_2gram_id] = -1e4
+    if block_recent_2grams:
+        recent_2gram_window = prior_token_ids[-48:]
+        if len(recent_2gram_window) >= 2:
+            last_tok = int(recent_2gram_window[-1])
+            for idx in range(len(recent_2gram_window) - 1):
+                if int(recent_2gram_window[idx]) == last_tok:
+                    banned_2gram_id = int(recent_2gram_window[idx + 1])
+                    if 0 <= banned_2gram_id < vocab_size:
+                        logits[banned_2gram_id] = -1e4
 
 
 def is_repetitive_sentence(sentence: str, *, max_word_repeats: int = 3) -> bool:
@@ -552,6 +591,7 @@ class SubliminalGapLeftBrain:
         callosum_metadata: CorpusCallosumMetadata | None = None,
         lora_config: LoRAConfig | None = None,
         anchor_at_birth: bool = False,
+        prompt_format: str | None = None,
     ) -> None:
         embed_weight = model.get_input_embeddings().weight
         model_hidden_size = int(embed_weight.shape[1])
@@ -573,6 +613,12 @@ class SubliminalGapLeftBrain:
         self.max_post_gap_tokens = int(max_post_gap_tokens)
         self.callosum_metadata = callosum_metadata
         self.lora_config = lora_config
+        resolved_fmt = (
+            prompt_format
+            or (getattr(callosum_metadata, "prompt_format", None) if callosum_metadata is not None else None)
+            or "legacy_ua"
+        )
+        self.prompt_format: str = str(resolved_fmt)
         self.last_traces: list[SplicedThoughtTrace] = []
         if not getattr(self.projector, "semantically_anchored_at_birth", False):
             should_anchor = bool(anchor_at_birth) or (
@@ -689,6 +735,70 @@ class SubliminalGapLeftBrain:
             lora_config=lora_cfg,
         )
 
+    def _uses_chatml(self) -> bool:
+        return (
+            self.prompt_format == "chatml"
+            and hasattr(self.tokenizer, "apply_chat_template")
+            and bool(getattr(self.tokenizer, "chat_template", None))
+        )
+
+    def _turn_end_token_ids(self) -> set[int]:
+        """Collect all EOS / ChatML turn-end token IDs (`eos_token_id`, `<|im_end|>`, `<|eot_id|>`, `<|end_of_text|>`)."""
+        end_ids: set[int] = set()
+        raw_eos = getattr(self.tokenizer, "eos_token_id", None)
+        if isinstance(raw_eos, int) and raw_eos >= 0:
+            end_ids.add(int(raw_eos))
+        elif isinstance(raw_eos, (list, tuple, set)):
+            for item in raw_eos:
+                if isinstance(item, int) and item >= 0:
+                    end_ids.add(int(item))
+        if hasattr(self.tokenizer, "get_vocab") and hasattr(self.tokenizer, "convert_tokens_to_ids"):
+            vocab = self.tokenizer.get_vocab()
+            if isinstance(vocab, dict):
+                for special_tok in ("<|im_end|>", "<|eot_id|>", "<|end_of_text|>"):
+                    if special_tok in vocab:
+                        tid = int(self.tokenizer.convert_tokens_to_ids(special_tok))
+                        if tid >= 0:
+                            end_ids.add(tid)
+        return end_ids
+
+    def _format_base_prompt(
+        self,
+        scenario_text: str,
+        conversation_history: Sequence[tuple[str, str]] = (),
+        *,
+        max_context_chars: int = DEFAULT_MAX_CONTEXT_CHARS,
+    ) -> str:
+        """Render the conversation history + current user prompt in either native ChatML or legacy `User:/Assistant:` format."""
+        if self._uses_chatml():
+            kept_pairs: list[tuple[str, str]] = []
+            total_chars = 0
+            if conversation_history and max_context_chars > 0:
+                for u_raw, a_raw in reversed(tuple(conversation_history)):
+                    u_clean = str(u_raw).strip()
+                    a_clean = str(a_raw).strip()
+                    if not u_clean or not a_clean:
+                        continue
+                    pair_len = len(u_clean) + len(a_clean) + 32
+                    if kept_pairs and (total_chars + pair_len > max_context_chars):
+                        break
+                    kept_pairs.append((u_clean, a_clean))
+                    total_chars += pair_len
+                kept_pairs.reverse()
+            from .gap_trajectory_schema import build_chatml_user_header
+
+            return build_chatml_user_header(
+                self.tokenizer,
+                scenario_text.strip(),
+                conversation_history=kept_pairs,
+            )
+        history_prefix = format_sliding_conversation_history(
+            conversation_history,
+            max_context_chars=max_context_chars,
+        )
+        history_block = f"{history_prefix}\n" if history_prefix else ""
+        return f"{history_block}User: {scenario_text.strip()}\nAssistant:"
+
     def _suppressed_token_ids(self) -> list[int]:
         """Collect token IDs for `<think>`, `</think>`, and `<|subliminal_gap|>` so generation stays clean."""
         suppressed: list[int] = [int(self.gap_token_id)]
@@ -734,15 +844,16 @@ class SubliminalGapLeftBrain:
             )
         return out.logits[0, -1, :].clone(), getattr(out, "past_key_values", None)
 
-    def _encode_continuation_embeds(self, text: str) -> Tensor:
-        """Encode continuation text (`' ' + text.strip()`) without duplicate BOS tokens and return `[1, K, H]` embeddings."""
+    def _encode_continuation_embeds(self, text: str, *, leading_space: bool = True) -> Tensor:
+        """Encode continuation text without duplicate BOS tokens and return `[1, K, H]` embeddings."""
         embed_layer = self.model.get_input_embeddings()
         embed_dtype = next(embed_layer.parameters()).dtype
         hidden_size = int(embed_layer.weight.shape[1])
         cleaned = text.strip()
         if not cleaned:
             return torch.empty((1, 0, hidden_size), dtype=embed_dtype, device=self.device)
-        tok_ids = self.tokenizer.encode(" " + cleaned, add_special_tokens=False)
+        target_str = (" " + cleaned) if leading_space else cleaned
+        tok_ids = self.tokenizer.encode(target_str, add_special_tokens=False)
         if not tok_ids:
             tok_ids = self.tokenizer.encode(cleaned, add_special_tokens=False)
         if not tok_ids:
@@ -775,8 +886,13 @@ class SubliminalGapLeftBrain:
     ) -> _PersistentTurnStreamState | None:
         """Initialize a persistent KV-cache stream state by encoding `base_prompt` once at turn start."""
         prior_clean = prior_assistant_text.strip()
-        full_prompt = f"{base_prompt} {prior_clean}" if prior_clean else base_prompt
-        prompt_ids = self.tokenizer.encode(full_prompt, add_special_tokens=True)
+        use_chatml = self._uses_chatml()
+        if prior_clean:
+            sep = "" if base_prompt.endswith(("\n", " ")) else " "
+            full_prompt = f"{base_prompt}{sep}{prior_clean}"
+        else:
+            full_prompt = base_prompt
+        prompt_ids = self.tokenizer.encode(full_prompt, add_special_tokens=not use_chatml)
         if not prompt_ids:
             return None
         embed_layer = self.model.get_input_embeddings()
@@ -824,14 +940,25 @@ class SubliminalGapLeftBrain:
         max_context_chars: int = DEFAULT_MAX_CONTEXT_CHARS,
         _stream_state: _PersistentTurnStreamState | None = None,
     ) -> str:
-        """Step 2a: Generate Clause 1 from `"User: {scenario_text}\\nAssistant:"` and stop at the first comma."""
+        """Step 2a: Generate Clause 1 and stop at the first comma (or natural sentence boundary in ChatML mode)."""
+        use_chatml = self._uses_chatml()
+        prior_clean = prior_assistant_text.strip()
         if clause_1_override is not None and clause_1_override.strip():
-            norm_override = normalize_clause_1_prefix(clause_1_override)
+            raw_ov = clause_1_override.strip()
+            if use_chatml and (raw_ov.endswith((",", ";")) or _ends_complete_sentence(raw_ov)):
+                norm_override = raw_ov
+            else:
+                norm_override = normalize_clause_1_prefix(clause_1_override)
             if _stream_state is not None:
-                _append_pending_embeds(_stream_state, self._encode_continuation_embeds(norm_override))
+                lead_sp = not (use_chatml and not prior_clean)
+                _append_pending_embeds(
+                    _stream_state,
+                    self._encode_continuation_embeds(norm_override, leading_space=lead_sp),
+                )
                 if hasattr(self.tokenizer, "encode"):
+                    enc_str = (" " + norm_override) if lead_sp else norm_override
                     _stream_state.generated_turn_token_ids.extend(
-                        int(t) for t in self.tokenizer.encode(" " + norm_override, add_special_tokens=False)
+                        int(t) for t in self.tokenizer.encode(enc_str, add_special_tokens=False)
                     )
             return norm_override
 
@@ -840,19 +967,18 @@ class SubliminalGapLeftBrain:
         self.model.eval()
         state = _stream_state
         try:
-            history_prefix = format_sliding_conversation_history(
+            base_prompt = self._format_base_prompt(
+                scenario_text,
                 conversation_history,
                 max_context_chars=max_context_chars,
             )
-            history_block = f"{history_prefix}\n" if history_prefix else ""
-            base_prompt = f"{history_block}User: {scenario_text.strip()}\nAssistant:"
             if state is None:
                 state = self._init_turn_stream_state(
                     base_prompt,
-                    prior_assistant_text=prior_assistant_text,
+                    prior_assistant_text=prior_clean,
                 )
             if state is None:
-                return "Weighing the situation before us,"
+                return "" if use_chatml else "Weighing the situation before us,"
 
             c1_start_cached_len = int(state.cur_embeds.size(1))
             c1_start_pending = (
@@ -863,12 +989,14 @@ class SubliminalGapLeftBrain:
 
             embed_layer = self.model.get_input_embeddings()
             embed_dtype = next(embed_layer.parameters()).dtype
-            eos_id = getattr(self.tokenizer, "eos_token_id", None)
+            turn_end_ids = self._turn_end_token_ids()
             suppressed_ids = self._suppressed_token_ids()
             generated_ids: list[int] = []
+            suppress_eos_at_zero = not (use_chatml and bool(prior_clean))
 
             max_base_steps = int(self.max_clause_1_tokens)
-            for step_idx in range(max_base_steps + 12):
+            max_total_c1_steps = (max_base_steps + 36) if use_chatml else (max_base_steps + 12)
+            for step_idx in range(max_total_c1_steps):
                 next_logits = self._step_stream_state(state)
                 if step_idx == 0:
                     c1_start_cached_len = int(state.cur_embeds.size(1))
@@ -876,15 +1004,28 @@ class SubliminalGapLeftBrain:
                 for bad_id in suppressed_ids:
                     if 0 <= bad_id < next_logits.size(0):
                         next_logits[bad_id] = -1e9
-                if step_idx == 0 and eos_id is not None and 0 <= int(eos_id) < next_logits.size(0):
-                    next_logits[int(eos_id)] = -1e9
-                _apply_repetition_and_ngram_penalty(
-                    next_logits,
-                    state.generated_turn_token_ids + generated_ids,
-                )
+                if step_idx == 0 and suppress_eos_at_zero:
+                    for eid in turn_end_ids:
+                        if 0 <= eid < next_logits.size(0):
+                            next_logits[eid] = -1e9
+                if use_chatml:
+                    _apply_repetition_and_ngram_penalty(
+                        next_logits,
+                        state.generated_turn_token_ids + generated_ids,
+                        repetition_penalty=1.05,
+                        no_repeat_ngram_size=8,
+                        block_recent_2grams=False,
+                        square_frequent=False,
+                    )
+                else:
+                    _apply_repetition_and_ngram_penalty(
+                        next_logits,
+                        state.generated_turn_token_ids + generated_ids,
+                    )
 
                 next_id = int(torch.argmax(next_logits).item())
-                if eos_id is not None and next_id == int(eos_id):
+                if next_id in turn_end_ids:
+                    state.hit_eos = True
                     break
                 generated_ids.append(next_id)
                 next_tok_tensor = torch.tensor([[next_id]], dtype=torch.long, device=self.device)
@@ -893,18 +1034,100 @@ class SubliminalGapLeftBrain:
 
                 decoded_so_far = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
                 if any(m in decoded_so_far for m in _CHAT_TURN_BOUNDARY_MARKERS):
+                    state.hit_eos = True
                     break
-                # Stop as soon as a comma, semicolon, or sentence-ending punctuation appears after at least 3 generated tokens
-                if step_idx >= 2 and (
-                    "," in decoded_so_far
-                    or ";" in decoded_so_far
-                    or re.search(r"(?<!\b\d)[.!?](?=\s|$)", decoded_so_far) is not None
-                ):
-                    break
+                if use_chatml:
+                    stripped_lead = decoded_so_far.lstrip()
+                    if stripped_lead.startswith("#"):
+                        if "\n" not in stripped_lead:
+                            continue
+                        prose_probe = stripped_lead.split("\n", 1)[1].lstrip()
+                        if not prose_probe:
+                            continue
+                    else:
+                        if step_idx >= max_base_steps + 12:
+                            break
+                        prose_probe = decoded_so_far
+                    if step_idx >= 1 and (
+                        "," in prose_probe
+                        or ";" in prose_probe
+                        or len(_find_sentence_end_matches(prose_probe)) > 0
+                    ):
+                        break
+                else:
+                    # Stop as soon as a comma, semicolon, or sentence-ending punctuation appears after at least 3 generated tokens
+                    if step_idx >= 2 and (
+                        "," in decoded_so_far
+                        or ";" in decoded_so_far
+                        or re.search(r"(?<!\b\d)[.!?](?=\s|$)", decoded_so_far) is not None
+                    ):
+                        break
 
             if state is not None and generated_ids:
                 state.generated_turn_token_ids.extend(generated_ids)
             raw_clause_1 = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
+
+            if use_chatml:
+                cleaned_raw = _strip_chat_turn_bleed(raw_clause_1)
+                cleaned_raw = re.sub(r"<think>.*?</think>", "", cleaned_raw, flags=re.DOTALL)
+                cleaned_raw = cleaned_raw.replace("<think>", "").replace("</think>", "")
+                cleaned_raw = cleaned_raw.replace(SUBLIMINAL_GAP_TOKEN, "")
+                md_header_prefix = ""
+                if cleaned_raw.lstrip().startswith("#") and "\n" in cleaned_raw.lstrip():
+                    hdr_line, rest_body = cleaned_raw.lstrip().split("\n", 1)
+                    if rest_body.strip():
+                        md_header_prefix = f"{hdr_line.strip()}\n\n"
+                        cleaned_raw = rest_body
+                cleaned_c1 = " ".join(cleaned_raw.replace("\n", " ").split()).strip()
+                if not cleaned_c1:
+                    return md_header_prefix.strip()
+
+                comma_positions = [p for p in (cleaned_c1.find(","), cleaned_c1.find(";")) if p > 0]
+                first_clause_punct = min(comma_positions) if comma_positions else None
+                sent_matches = _find_sentence_end_matches(cleaned_c1)
+                first_sent_end = sent_matches[0].end() if sent_matches else None
+
+                truncated_before_end = False
+                if first_clause_punct is not None and (
+                    first_sent_end is None or first_clause_punct < first_sent_end
+                ):
+                    candidate = cleaned_c1[: first_clause_punct + 1].strip()
+                    if candidate != cleaned_c1:
+                        truncated_before_end = True
+                    norm_clause_1 = candidate
+                elif first_sent_end is not None:
+                    candidate = cleaned_c1[:first_sent_end].strip()
+                    if candidate != cleaned_c1:
+                        truncated_before_end = True
+                    norm_clause_1 = candidate
+                else:
+                    if not state.hit_eos and len(cleaned_c1.split()) >= 4:
+                        trimmed_c1 = re.sub(r"\s+[A-Za-z]{1,2}$", "", cleaned_c1.rstrip())
+                        if trimmed_c1 and trimmed_c1 != cleaned_c1:
+                            cleaned_c1 = trimmed_c1
+                            truncated_before_end = True
+                    norm_clause_1 = cleaned_c1
+
+                norm_clause_1 = f"{md_header_prefix}{norm_clause_1}"
+                if not owns_state and state is not None:
+                    raw_norm_check = (
+                        raw_clause_1.strip()
+                        if md_header_prefix
+                        else " ".join(raw_clause_1.replace("\n", " ").split()).strip()
+                    )
+                    if raw_norm_check != norm_clause_1:
+                        if truncated_before_end:
+                            state.hit_eos = False
+                        _crop_stream_state(state, c1_start_cached_len, c1_start_pending)
+                        _append_pending_embeds(
+                            state,
+                            self._encode_continuation_embeds(
+                                norm_clause_1,
+                                leading_space=bool(prior_clean),
+                            ),
+                        )
+                return norm_clause_1
+
             if (
                 owns_state
                 and "," not in raw_clause_1
@@ -974,14 +1197,14 @@ class SubliminalGapLeftBrain:
         self.model.eval()
         self.projector.eval()
         state = _stream_state
+        use_chatml = self._uses_chatml()
         try:
-            history_prefix = format_sliding_conversation_history(
+            prior_clean = prior_assistant_text.strip()
+            base_prompt = self._format_base_prompt(
+                scenario_text,
                 conversation_history,
                 max_context_chars=max_context_chars,
             )
-            history_block = f"{history_prefix}\n" if history_prefix else ""
-            prior_clean = prior_assistant_text.strip()
-            base_prompt = f"{history_block}User: {scenario_text.strip()}\nAssistant:"
             if state is None:
                 state = self._init_turn_stream_state(
                     base_prompt,
@@ -1014,17 +1237,71 @@ class SubliminalGapLeftBrain:
                 active_chord = chord
 
             assistant_prefix = f"{prior_clean} {prefix}".strip() if prior_clean else prefix
+            header_sep = "" if base_prompt.endswith(("\n", " ")) else " "
             if assistant_prefix:
-                prompt_before_gap = (
-                    f"{history_block}User: {scenario_text.strip()}\n"
-                    f"Assistant: {assistant_prefix} {SUBLIMINAL_GAP_TOKEN}"
-                )
+                prompt_before_gap = f"{base_prompt}{header_sep}{assistant_prefix} {SUBLIMINAL_GAP_TOKEN}"
             else:
-                prompt_before_gap = (
-                    f"{history_block}User: {scenario_text.strip()}\n"
-                    f"Assistant: {SUBLIMINAL_GAP_TOKEN}"
-                )
+                prompt_before_gap = f"{base_prompt}{header_sep}{SUBLIMINAL_GAP_TOKEN}"
             assert_zero_stage_directions_in_prompt(prompt_before_gap)
+
+            if use_chatml and (
+                (state is not None and state.hit_eos)
+                or (
+                    not lead_with_gap
+                    and bool(prefix)
+                    and _ends_complete_sentence(prefix)
+                    and not prefix.rstrip().endswith((",", ";"))
+                )
+            ):
+                trace = SplicedThoughtTrace(
+                    pass_index=pass_index,
+                    clause_1_prefix=prefix,
+                    prompt_before_gap=prompt_before_gap,
+                    spliced_chord=active_chord,
+                    post_gap_continuation="",
+                    full_thought=prefix.strip(),
+                    comma_vibe_posture=comma_vibe_posture,
+                    comma_dissonance_notes=comma_dissonance_notes,
+                    comma_scored_live=comma_scored_live,
+                    hit_eos=bool(state is not None and state.hit_eos),
+                )
+                if trace.full_thought:
+                    self.last_traces.append(trace)
+                    if len(self.last_traces) > 50:
+                        del self.last_traces[:-50]
+                return trace
+
+            turn_end_ids = self._turn_end_token_ids()
+            suppressed_ids = self._suppressed_token_ids()
+
+            # In ChatML lead_with_gap mode, check before splicing Sentence 2+ whether the LLM
+            # naturally reached `<|im_end|>` right after completing the prior sentence.
+            if (
+                use_chatml
+                and not prefix
+                and bool(prior_clean)
+                and state is not None
+                and state.pending_step_embeds is not None
+                and state.pending_step_embeds.size(1) > 0
+            ):
+                peek_logits = self._step_stream_state(state)
+                for bad_id in suppressed_ids:
+                    if 0 <= bad_id < peek_logits.size(0):
+                        peek_logits[bad_id] = -1e9
+                if int(torch.argmax(peek_logits).item()) in turn_end_ids:
+                    state.hit_eos = True
+                    return SplicedThoughtTrace(
+                        pass_index=pass_index,
+                        clause_1_prefix="",
+                        prompt_before_gap=prompt_before_gap,
+                        spliced_chord=active_chord,
+                        post_gap_continuation="",
+                        full_thought="",
+                        comma_vibe_posture=comma_vibe_posture,
+                        comma_dissonance_notes=comma_dissonance_notes,
+                        comma_scored_live=comma_scored_live,
+                        hit_eos=True,
+                    )
 
             embed_layer = self.model.get_input_embeddings()
             embed_dtype = next(embed_layer.parameters()).dtype
@@ -1055,9 +1332,16 @@ class SubliminalGapLeftBrain:
 
             post_gap_start_cached_len = int(state.cur_embeds.size(1))
 
-            eos_id = getattr(self.tokenizer, "eos_token_id", None)
-            suppressed_ids = self._suppressed_token_ids()
             generated_ids: list[int] = []
+            if use_chatml:
+                if not prefix:
+                    require_post_gap_tokens = not bool(prior_clean)
+                else:
+                    require_post_gap_tokens = not _ends_complete_sentence(prefix)
+            else:
+                require_post_gap_tokens = True
+
+            bpe_vocab_len = len(self.tokenizer) if hasattr(self.tokenizer, "__len__") else 0
 
             for step_idx in range(self.max_post_gap_tokens):
                 next_logits = self._step_stream_state(state)
@@ -1066,15 +1350,41 @@ class SubliminalGapLeftBrain:
                 for bad_id in suppressed_ids:
                     if 0 <= bad_id < next_logits.size(0):
                         next_logits[bad_id] = -1e9
-                if step_idx == 0 and eos_id is not None and 0 <= int(eos_id) < next_logits.size(0):
-                    next_logits[int(eos_id)] = -1e9
-                _apply_repetition_and_ngram_penalty(
-                    next_logits,
-                    (state.generated_turn_token_ids if state is not None else []) + generated_ids,
-                )
+                if step_idx == 0 and require_post_gap_tokens:
+                    for eid in turn_end_ids:
+                        if 0 <= eid < next_logits.size(0):
+                            next_logits[eid] = -1e9
+                if use_chatml:
+                    _apply_repetition_and_ngram_penalty(
+                        next_logits,
+                        (state.generated_turn_token_ids if state is not None else []) + generated_ids,
+                        repetition_penalty=1.05,
+                        no_repeat_ngram_size=8,
+                        block_recent_2grams=False,
+                        square_frequent=False,
+                    )
+                    # After `Clause 1,` + 4 virtual gap tokens, ensure the first visible BPE token starts
+                    # a word (`" ..."`), preventing mid-word suffixes like `", ing"` from gluing onto virtual tokens.
+                    if step_idx == 0 and bool(prefix) and bpe_vocab_len > 1000:
+                        top_cands = torch.topk(next_logits, k=min(32, int(next_logits.size(0)))).indices.tolist()
+                        for cand_id in top_cands:
+                            cid = int(cand_id)
+                            if cid in turn_end_ids:
+                                break
+                            tok_piece = self.tokenizer.decode([cid], skip_special_tokens=False)
+                            if tok_piece.startswith((" ", "\n", '"', "'", "“", "(")):
+                                break
+                            next_logits[cid] = -1e9
+                else:
+                    _apply_repetition_and_ngram_penalty(
+                        next_logits,
+                        (state.generated_turn_token_ids if state is not None else []) + generated_ids,
+                    )
 
                 next_id = int(torch.argmax(next_logits).item())
-                if eos_id is not None and next_id == int(eos_id):
+                if next_id in turn_end_ids:
+                    if state is not None:
+                        state.hit_eos = True
                     break
                 generated_ids.append(next_id)
                 next_tok_tensor = torch.tensor([[next_id]], dtype=torch.long, device=self.device)
@@ -1083,23 +1393,73 @@ class SubliminalGapLeftBrain:
 
                 decoded_cont = self.tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
                 if any(m in decoded_cont for m in _CHAT_TURN_BOUNDARY_MARKERS):
+                    if state is not None:
+                        state.hit_eos = True
                     break
-                if (
-                    step_idx >= 5
-                    and decoded_cont.endswith((".", "!", "?"))
-                    and not re.search(r"\b\d+\.$", decoded_cont)
-                    and decoded_cont.count("(") <= decoded_cont.count(")")
-                ):
-                    break
+                if use_chatml:
+                    cont_probe = decoded_cont
+                    if not prefix and cont_probe.startswith("#"):
+                        if "\n" not in cont_probe:
+                            continue
+                        cont_probe = cont_probe.split("\n", 1)[1].lstrip()
+                        if not cont_probe:
+                            continue
+                    if (
+                        step_idx >= 1
+                        and _ends_complete_sentence(cont_probe)
+                        and cont_probe.count("(") <= cont_probe.count(")")
+                    ):
+                        break
+                else:
+                    if (
+                        step_idx >= 5
+                        and decoded_cont.endswith((".", "!", "?"))
+                        and not re.search(r"\b\d+\.$", decoded_cont)
+                        and decoded_cont.count("(") <= decoded_cont.count(")")
+                    ):
+                        break
 
             if state is not None and generated_ids:
                 state.generated_turn_token_ids.extend(generated_ids)
             raw_post_gap = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
-            cleaned_post_gap = clean_post_gap_continuation(raw_post_gap)
-            if not prefix and cleaned_post_gap:
-                cleaned_post_gap = cleaned_post_gap.lstrip(",;:-–— ").strip()
+
+            if use_chatml:
+                pg_clean = _strip_chat_turn_bleed(raw_post_gap)
+                pg_clean = re.sub(r"<think>.*?</think>", "", pg_clean, flags=re.DOTALL)
+                pg_clean = pg_clean.replace("<think>", "").replace("</think>", "")
+                pg_clean = pg_clean.replace(SUBLIMINAL_GAP_TOKEN, "")
+                md_pg_header = ""
+                if not prefix and pg_clean.lstrip().startswith("#") and "\n" in pg_clean.lstrip():
+                    hdr_line, rest_pg = pg_clean.lstrip().split("\n", 1)
+                    if rest_pg.strip():
+                        md_pg_header = f"{hdr_line.strip()}\n\n"
+                        pg_clean = rest_pg
+                pg_clean = " ".join(pg_clean.replace("\n", " ").split()).strip()
+                pg_clean = pg_clean.lstrip(",;:.!?—–- ").strip()
+                if pg_clean.count("(") > pg_clean.count(")"):
+                    last_open = pg_clean.rfind("(")
+                    if last_open > 0:
+                        pg_clean = pg_clean[:last_open].rstrip(",;:- ").strip()
+                if not pg_clean:
+                    cleaned_post_gap = md_pg_header.strip()
+                elif _ends_complete_sentence(pg_clean):
+                    cleaned_post_gap = f"{md_pg_header}{pg_clean}"
+                else:
+                    sent_matches_pg = _find_sentence_end_matches(pg_clean)
+                    if sent_matches_pg:
+                        cleaned_post_gap = f"{md_pg_header}{pg_clean[: sent_matches_pg[-1].end()].strip()}"
+                        if state is not None:
+                            state.hit_eos = False
+                    else:
+                        trimmed_pg = pg_clean.rstrip(",;:- ").strip()
+                        cleaned_post_gap = f"{md_pg_header}{trimmed_pg}." if trimmed_pg else md_pg_header.strip()
+            else:
+                cleaned_post_gap = clean_post_gap_continuation(raw_post_gap)
+                if not prefix and cleaned_post_gap:
+                    cleaned_post_gap = cleaned_post_gap.lstrip(",;:-–— ").strip()
+
             post_gap_text = cleaned_post_gap
-            if (not prefix or prefix.rstrip().endswith((".", "!", "?"))) and post_gap_text and post_gap_text[0].islower():
+            if (not prefix or _ends_complete_sentence(prefix)) and post_gap_text and post_gap_text[0].islower():
                 post_gap_text = post_gap_text[0].upper() + post_gap_text[1:]
             elif (
                 prefix
@@ -1107,6 +1467,7 @@ class SubliminalGapLeftBrain:
                 and len(post_gap_text) >= 2
                 and post_gap_text[0].isupper()
                 and post_gap_text[1].islower()
+                and not use_chatml
             ):
                 post_gap_text = post_gap_text[0].lower() + post_gap_text[1:]
 
@@ -1114,7 +1475,14 @@ class SubliminalGapLeftBrain:
                 raw_post_compact = " ".join(raw_post_gap.replace("\n", " ").split()).strip()
                 if raw_post_compact != cleaned_post_gap:
                     _crop_stream_state(state, post_gap_start_cached_len, None)
-                    _append_pending_embeds(state, self._encode_continuation_embeds(cleaned_post_gap))
+                    if cleaned_post_gap:
+                        _append_pending_embeds(
+                            state,
+                            self._encode_continuation_embeds(
+                                cleaned_post_gap,
+                                leading_space=not (use_chatml and not prefix and not prior_clean),
+                            ),
+                        )
 
             full_thought = f"{prefix} {post_gap_text}".strip()
             trace = SplicedThoughtTrace(
@@ -1127,10 +1495,12 @@ class SubliminalGapLeftBrain:
                 comma_vibe_posture=comma_vibe_posture,
                 comma_dissonance_notes=comma_dissonance_notes,
                 comma_scored_live=comma_scored_live,
+                hit_eos=bool(state is not None and state.hit_eos),
             )
-            self.last_traces.append(trace)
-            if len(self.last_traces) > 50:
-                del self.last_traces[:-50]
+            if full_thought or not use_chatml:
+                self.last_traces.append(trace)
+                if len(self.last_traces) > 50:
+                    del self.last_traces[:-50]
             return trace
         finally:
             if owns_stream:
@@ -1221,12 +1591,11 @@ class SubliminalGapLeftBrain:
         count = int(num_sentences)
         if not (1 <= count <= 6):
             raise ValueError(f"num_sentences must be in [1, 6], got {num_sentences!r}")
-        history_prefix = format_sliding_conversation_history(
+        base_prompt = self._format_base_prompt(
+            scenario_text,
             conversation_history,
             max_context_chars=max_context_chars,
         )
-        history_block = f"{history_prefix}\n" if history_prefix else ""
-        base_prompt = f"{history_block}User: {scenario_text.strip()}\nAssistant:"
         stream_state = self._init_turn_stream_state(base_prompt)
         completed_sentences: list[str] = []
         traces: list[SplicedThoughtTrace] = []
@@ -1250,6 +1619,10 @@ class SubliminalGapLeftBrain:
                     lead_with_gap=lead_with_gap,
                     _stream_state=stream_state,
                 )
+                if not trace.full_thought.strip():
+                    if not traces:
+                        traces.append(trace)
+                    break
                 vocab_len = len(self.tokenizer) if hasattr(self.tokenizer, "__len__") else 0
                 if vocab_len > 1000 and completed_sentences:
                     cand_words = set(re.findall(r"[a-z0-9]+", trace.full_thought.lower()))
@@ -1268,6 +1641,8 @@ class SubliminalGapLeftBrain:
                         break
                 completed_sentences.append(trace.full_thought)
                 traces.append(trace)
+                if self._uses_chatml() and trace.hit_eos:
+                    break
                 if stop_condition is not None and stop_condition(len(traces), trace, " ".join(completed_sentences).strip()):
                     break
             return " ".join(completed_sentences).strip(), tuple(traces)
@@ -1317,12 +1692,11 @@ class SubliminalGapLeftBrain:
         if not (1 <= sent_per_stanza <= 6):
             raise ValueError(f"sentences_per_stanza must be in [1, 6], got {sentences_per_stanza!r}")
 
-        history_prefix = format_sliding_conversation_history(
+        base_prompt = self._format_base_prompt(
+            scenario_text,
             conversation_history,
             max_context_chars=max_context_chars,
         )
-        history_block = f"{history_prefix}\n" if history_prefix else ""
-        base_prompt = f"{history_block}User: {scenario_text.strip()}\nAssistant:"
         stream_state = self._init_turn_stream_state(base_prompt)
         completed_stanzas: list[str] = []
         all_traces: list[SplicedThoughtTrace] = []
@@ -1361,6 +1735,8 @@ class SubliminalGapLeftBrain:
                         lead_with_gap=lead_with_gap,
                         _stream_state=stream_state,
                     )
+                    if not trace.full_thought.strip():
+                        break
                     vocab_len = len(self.tokenizer) if hasattr(self.tokenizer, "__len__") else 0
                     if vocab_len > 1000 and (stanza_sentences or completed_stanzas):
                         cand_words = set(re.findall(r"[a-z0-9]+", trace.full_thought.lower()))
@@ -1380,6 +1756,8 @@ class SubliminalGapLeftBrain:
                             break
                     stanza_sentences.append(trace.full_thought)
                     all_traces.append(trace)
+                    if self._uses_chatml() and trace.hit_eos:
+                        break
 
                 stanza_text = " ".join(stanza_sentences).strip()
                 if stanza_text:
@@ -2338,7 +2716,12 @@ def run_three_legged_turn(
                                     branch_gating=branch_gating,
                                 )
                                 stanza_scored_records.append((dict(ex_c), dict(ex_e)))
-                    if clause_1_prefix is None and multi_traces and not lead_with_gap:
+                    if (
+                        clause_1_prefix is None
+                        and multi_traces
+                        and not lead_with_gap
+                        and multi_traces[0].clause_1_prefix.rstrip().endswith((",", ";"))
+                    ):
                         cached_clause_1_prefix = multi_traces[0].clause_1_prefix
                     spliced_traces.extend(multi_traces)
                     reply_text = validate_plain_english_left_brain_reply(multi_text)
@@ -2382,7 +2765,8 @@ def run_three_legged_turn(
                                 will_edges=active_will_edges,
                             )
                             if (
-                                s_vibe.posture in ("SETTLED_EASE", "AT_EASE", "WORDLESS_REFLEX", "THEORY_SYNTHESIS")
+                                vibe_1.posture == "TUG_LEFT_BRAIN"
+                                and s_vibe.posture in ("SETTLED_EASE", "AT_EASE", "WORDLESS_REFLEX", "THEORY_SYNTHESIS")
                                 and float(s_vibe.clarity) >= 0.68
                                 and not s_vibe.self_registry.dissonance_notes
                             ):
@@ -2415,7 +2799,12 @@ def run_three_legged_turn(
                         stop_condition=sent_stop_fn,
                         lead_with_gap=lead_with_gap,
                     )
-                    if clause_1_prefix is None and multi_traces and not lead_with_gap:
+                    if (
+                        clause_1_prefix is None
+                        and multi_traces
+                        and not lead_with_gap
+                        and multi_traces[0].clause_1_prefix.rstrip().endswith((",", ";"))
+                    ):
                         cached_clause_1_prefix = multi_traces[0].clause_1_prefix
                     spliced_traces.extend(multi_traces)
                     reply_text = validate_plain_english_left_brain_reply(multi_text)
@@ -2429,7 +2818,11 @@ def run_three_legged_turn(
                         chord_builder_at_comma=_build_chord_at_comma,
                         lead_with_gap=lead_with_gap,
                     )
-                    if clause_1_prefix is None and not lead_with_gap:
+                    if (
+                        clause_1_prefix is None
+                        and not lead_with_gap
+                        and spliced_trace.clause_1_prefix.rstrip().endswith((",", ";"))
+                    ):
                         cached_clause_1_prefix = spliced_trace.clause_1_prefix
                     spliced_traces.append(spliced_trace)
                     reply_text = validate_plain_english_left_brain_reply(spliced_trace.full_thought)

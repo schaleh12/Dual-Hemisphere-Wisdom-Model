@@ -417,7 +417,11 @@ SCHOLAR_SINGLE_PAGE_HTML = """<!DOCTYPE html>
     </div>
     <div id="chat-messages"></div>
     <div class="chat-bar">
-      <input type="text" id="chat-input" placeholder="Ask a Socratic question, pose a dilemma, or test a concept..." onkeydown="if(event.key==='Enter')sendChatMessage()" />
+      <input type="text" id="chat-input" placeholder="Chat naturally, ask a Socratic question, or pose a dilemma..." onkeydown="if(event.key==='Enter')sendChatMessage()" />
+      <label style="font-size:11px;display:flex;align-items:center;gap:5px;cursor:pointer;white-space:nowrap;color:var(--text-1);" title="When checked, grounds your chat message in the Reading Canvas passage on the left">
+        <input type="checkbox" id="anchor-canvas-toggle" />
+        Use Canvas
+      </label>
       <button class="btn btn-primary" onclick="sendChatMessage()">Send</button>
     </div>
   </section>
@@ -731,10 +735,12 @@ async function sendChatMessage() {
   const inp = document.getElementById("chat-input");
   const txt = inp.value.trim();
   if (!txt || scholarBusy) return;
+  const anchorEl = document.getElementById("anchor-canvas-toggle");
+  const anchorToCanvas = anchorEl ? !!anchorEl.checked : false;
   scholarBusy = true;
   try {
     inp.value = "";
-    await apiPost("/api/chat", { text: txt });
+    await apiPost("/api/chat", { text: txt, anchor_to_canvas: anchorToCanvas });
   } finally {
     scholarBusy = false;
   }

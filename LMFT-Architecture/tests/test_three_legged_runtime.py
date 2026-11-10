@@ -1289,6 +1289,90 @@ def test_repetition_and_ngram_penalty_and_stanza_start_duplicate_check() -> None
     c1_full_sent = lb_full_sent.generate_clause_1_prefix("Test complete sentence.")
     assert c1_full_sent == "The enemy King rests behind pawns."
 
+    # 9. Verify ChatML mode does NOT splice a phantom mid-sentence gap after a comma-less complete sentence (`"Hello!"`).
+    class _ChatMLGreetingTokenizer(_WordLevelTestTokenizer):
+        chat_template = "{{ messages }}"
+
+        def apply_chat_template(self, messages, tokenize=False, add_generation_prompt=True):
+            return f"<|im_start|>user\n{messages[-1]['content']}<|im_end|>\n<|im_start|>assistant\n"
+
+    tok_chat = _ChatMLGreetingTokenizer()
+    gap_chat = ensure_subliminal_gap_token(tok_chat)
+    hello_id = tok_chat.encode("Hello!")[0]
+    world_id = tok_chat.encode("Phantom")[0]
+
+    class _ChatMLFixedLeftBrain(SubliminalGapLeftBrain):
+        def __init__(self):
+            super().__init__(
+                _MiniCausalLM(vocab_size=64, hidden_size=32, num_layers=2),
+                tok_chat,
+                SubliminalGapProjector(hidden_size=32),
+                gap_token_id=gap_chat,
+                device="cpu",
+                max_clause_1_tokens=5,
+                max_post_gap_tokens=5,
+                prompt_format="chatml",
+            )
+            self._calls = 0
+
+        def _step_stream_state(self, state):
+            logits = torch.full((64,), -100.0)
+            self._calls += 1
+            if self._calls <= 2:
+                logits[hello_id] = 100.0
+            else:
+                logits[world_id] = 100.0
+            return logits
+
+    lb_chat = _ChatMLFixedLeftBrain()
+    trace_hello = lb_chat.generate_two_clause_thought(
+        "hello",
+        chord_a,
+        lead_with_gap=False,
+    )
+    assert trace_hello.full_thought == "Hello!"
+    assert trace_hello.post_gap_continuation == ""
+    assert "Phantom" not in trace_hello.full_thought
+
+    # 10. Verify ChatML mode skips past a leading Markdown heading (`### Title\n\n`) so Clause 1 reaches
+    #     the first prose comma and preserves `### Title\n\nClause 1,` without truncating at the heading.
+    tok_hdr = _ChatMLGreetingTokenizer()
+    gap_hdr = ensure_subliminal_gap_token(tok_hdr)
+    hdr_seq_ids = [
+        tok_hdr._intern("###"),
+        tok_hdr._intern("Prudent"),
+        tok_hdr._intern("Stewardship\n\nIn"),
+        tok_hdr._intern("Moby-Dick,"),
+        tok_hdr._intern("Starbuck"),
+    ]
+
+    class _ChatMLHeadingLeftBrain(SubliminalGapLeftBrain):
+        def __init__(self):
+            super().__init__(
+                _MiniCausalLM(vocab_size=64, hidden_size=32, num_layers=2),
+                tok_hdr,
+                SubliminalGapProjector(hidden_size=32),
+                gap_token_id=gap_hdr,
+                device="cpu",
+                max_clause_1_tokens=2,
+                max_post_gap_tokens=5,
+                prompt_format="chatml",
+            )
+            self._idx = 0
+
+        def _step_stream_state(self, state):
+            logits = torch.full((64,), -100.0)
+            chosen = hdr_seq_ids[min(self._idx, len(hdr_seq_ids) - 1)]
+            self._idx += 1
+            logits[chosen] = 100.0
+            return logits
+
+    lb_hdr = _ChatMLHeadingLeftBrain()
+    c1_hdr = lb_hdr.generate_clause_1_prefix("Write an essay on Moby-Dick.")
+    assert c1_hdr == "### Prudent Stewardship\n\nIn Moby-Dick,"
+
+
+
 
 
 

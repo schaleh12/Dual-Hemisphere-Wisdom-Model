@@ -43,6 +43,7 @@ from .birth import BirthState, create_birth_state
 from .gap_trajectory_generator import score_continuation_to_chord
 from .gap_trajectory_schema import (
     ContrastiveGapPair,
+    build_chatml_user_header,
     build_full_assistant_turn_labels,
     build_post_gap_only_labels,
     chord_l2_distance,
@@ -219,6 +220,7 @@ def save_lora_and_callosum_checkpoint(
     notes: str = "",
     base_model_id: str | None = None,
     callosum_status: str | None = None,
+    prompt_format: str = "legacy_ua",
 ) -> CorpusCallosumMetadata:
     """Save both `SubliminalGapProjector` and `LoRALinear` adapter weights to `checkpoint_dir`."""
     out_dir = Path(checkpoint_dir)
@@ -232,6 +234,7 @@ def save_lora_and_callosum_checkpoint(
         notes=notes,
         base_model_id=resolved_base_model,
         callosum_status=callosum_status,
+        prompt_format=prompt_format,
     )
     atomic_json(out_dir / "lora_config.json", lora_config.to_dict())
     torch.save(extract_lora_state_dict(model), out_dir / "lora_adapters.pt")
@@ -283,6 +286,15 @@ def ensure_subliminal_gap_token(tokenizer) -> int:
     return gap_id
 
 
+def _uses_chatml_template(tokenizer, prompt_format: str) -> bool:
+    return (
+        prompt_format == "chatml"
+        and tokenizer is not None
+        and hasattr(tokenizer, "apply_chat_template")
+        and bool(getattr(tokenizer, "chat_template", None))
+    )
+
+
 def tokenize_pre_gap_and_continuation(
     tokenizer,
     pair: ContrastiveGapPair,
@@ -291,18 +303,33 @@ def tokenize_pre_gap_and_continuation(
     gap_token_id: int,
     device: str | torch.device,
     lead_with_gap: bool = False,
+    prompt_format: str = "legacy_ua",
 ) -> tuple[Tensor, Tensor, Tensor]:
     """Tokenize `[pre_gap_prompt]` and `[continuation_text]` separately so pre-gap IDs never vary by branch.
 
     Returns `(input_ids, attention_mask, post_gap_only_labels)` each of shape `[1, seq_len]`.
     """
-    pre_gap_str = pair.format_pre_gap_prompt(lead_with_gap=lead_with_gap)
-    pre_ids: list[int] = list(tokenizer.encode(pre_gap_str, add_special_tokens=True))
+    use_chatml = _uses_chatml_template(tokenizer, prompt_format)
+    effective_lead = bool(lead_with_gap or not pair.clause_1_prefix.strip())
+    pre_gap_str = pair.format_pre_gap_prompt(
+        lead_with_gap=effective_lead,
+        prompt_format=prompt_format,
+        tokenizer=tokenizer,
+    )
+    pre_ids: list[int] = list(
+        tokenizer.encode(pre_gap_str, add_special_tokens=not use_chatml)
+    )
     if not pre_ids or pre_ids[-1] != gap_token_id:
         if gap_token_id not in pre_ids:
             pre_ids.append(gap_token_id)
 
-    cont_ids: list[int] = list(tokenizer.encode(" " + continuation_text.strip(), add_special_tokens=False))
+    clean_cont = continuation_text.strip()
+    if use_chatml and effective_lead:
+        if clean_cont and clean_cont[0].islower():
+            clean_cont = clean_cont[0].upper() + clean_cont[1:]
+        cont_ids = list(tokenizer.encode(clean_cont, add_special_tokens=False))
+    else:
+        cont_ids = list(tokenizer.encode(" " + clean_cont, add_special_tokens=False))
     if not cont_ids:
         raise ValueError(f"Continuation tokenized to empty sequence: {continuation_text!r}")
     if getattr(tokenizer, "eos_token_id", None) is not None:
@@ -326,15 +353,18 @@ def _compute_spliced_branch_nlls(
     device: str | torch.device,
     lead_with_gap: bool = False,
     include_full_turn_mle: bool = False,
+    prompt_format: str = "legacy_ua",
 ) -> tuple[Tensor, Tensor]:
     """Compute `(post_gap_nll, full_assistant_turn_nll)` in a single forward pass."""
+    effective_lead = bool(lead_with_gap or not pair.clause_1_prefix.strip())
     input_ids, attn_mask, post_gap_labels = tokenize_pre_gap_and_continuation(
         tokenizer,
         pair,
         continuation_text=continuation_text,
         gap_token_id=gap_token_id,
         device=device,
-        lead_with_gap=lead_with_gap,
+        lead_with_gap=effective_lead,
+        prompt_format=prompt_format,
     )
     word_embed_fn = model.get_input_embeddings()
     chord_tensor = chord.to_tensor(device=device, dtype=torch.float32).unsqueeze(0)
@@ -365,11 +395,16 @@ def _compute_spliced_branch_nlls(
             ignore_index=IGNORE_LABEL_INDEX,
         )
 
-    if not include_full_turn_mle or lead_with_gap:
+    if not include_full_turn_mle or effective_lead:
         return post_gap_nll, post_gap_nll
 
-    user_header = f"User: {pair.user_prompt.strip()}\nAssistant:"
-    user_header_len = len(tokenizer.encode(user_header, add_special_tokens=True))
+    use_chatml = _uses_chatml_template(tokenizer, prompt_format)
+    if use_chatml:
+        user_header = build_chatml_user_header(tokenizer, pair.user_prompt)
+        user_header_len = len(tokenizer.encode(user_header, add_special_tokens=False))
+    else:
+        user_header = f"User: {pair.user_prompt.strip()}\nAssistant:"
+        user_header_len = len(tokenizer.encode(user_header, add_special_tokens=True))
     full_pre_splice_labels = build_full_assistant_turn_labels(
         input_ids,
         user_header_len=user_header_len,
@@ -399,6 +434,7 @@ def compute_post_gap_continuation_nll(
     gap_token_id: int,
     device: str | torch.device,
     lead_with_gap: bool = False,
+    prompt_format: str = "legacy_ua",
 ) -> Tensor:
     """Compute the mean per-token negative log-likelihood on `continuation_text` given `chord` at `<|subliminal_gap|>`."""
     post_gap_nll, _ = _compute_spliced_branch_nlls(
@@ -412,6 +448,7 @@ def compute_post_gap_continuation_nll(
         device=device,
         lead_with_gap=lead_with_gap,
         include_full_turn_mle=False,
+        prompt_format=prompt_format,
     )
     return post_gap_nll
 
@@ -423,11 +460,33 @@ def compute_no_gap_continuation_nll(
     *,
     continuation_text: str,
     device: str | torch.device,
+    lead_with_gap: bool = False,
+    prompt_format: str = "legacy_ua",
 ) -> Tensor:
     """Compute the pure text-only NLL on `continuation_text` right after `clause_1_prefix` with `<|subliminal_gap|>` omitted."""
-    pre_str = f"User: {pair.user_prompt.strip()}\nAssistant: {pair.clause_1_prefix.strip()}"
-    pre_ids: list[int] = list(tokenizer.encode(pre_str, add_special_tokens=True))
-    cont_ids: list[int] = list(tokenizer.encode(" " + continuation_text.strip(), add_special_tokens=False))
+    use_chatml = _uses_chatml_template(tokenizer, prompt_format)
+    effective_lead = bool(lead_with_gap or not pair.clause_1_prefix.strip())
+    if use_chatml:
+        header = build_chatml_user_header(tokenizer, pair.user_prompt)
+        sep = "" if header.endswith(("\n", " ")) else " "
+        pre_str = header if effective_lead else f"{header}{sep}{pair.clause_1_prefix.strip()}"
+        pre_ids = list(tokenizer.encode(pre_str, add_special_tokens=False))
+    else:
+        c1 = pair.clause_1_prefix.strip()
+        pre_str = (
+            f"User: {pair.user_prompt.strip()}\nAssistant:"
+            if effective_lead
+            else f"User: {pair.user_prompt.strip()}\nAssistant: {c1}"
+        )
+        pre_ids = list(tokenizer.encode(pre_str, add_special_tokens=True))
+
+    clean_cont = continuation_text.strip()
+    if use_chatml and effective_lead:
+        if clean_cont and clean_cont[0].islower():
+            clean_cont = clean_cont[0].upper() + clean_cont[1:]
+        cont_ids = list(tokenizer.encode(clean_cont, add_special_tokens=False))
+    else:
+        cont_ids = list(tokenizer.encode(" " + clean_cont, add_special_tokens=False))
     if not cont_ids:
         raise ValueError(f"Continuation tokenized to empty sequence: {continuation_text!r}")
     if getattr(tokenizer, "eos_token_id", None) is not None:
@@ -458,6 +517,176 @@ def compute_no_gap_continuation_nll(
     )
 
 
+@dataclass(frozen=True)
+class SelfDistilledPreservationAnchor:
+    """Frozen base-LLM top-k token distribution on an unpolarized prompt + its genuine Right-Brain chord."""
+
+    user_prompt: str
+    clause_1_prefix: str
+    continuation_text: str
+    chord: SubliminalChordVector
+    lead_with_gap: bool
+    teacher_top_ids: Tensor
+    teacher_top_probs: Tensor
+
+
+def _tokenize_preservation_anchor_sequences(
+    tokenizer,
+    *,
+    user_prompt: str,
+    clause_1_prefix: str,
+    continuation_text: str,
+    gap_token_id: int,
+    lead_with_gap: bool,
+    prompt_format: str = "chatml",
+) -> tuple[list[int], list[int], list[int]]:
+    """Return `(pre_ids_without_gap, pre_ids_with_gap, cont_ids)` with guaranteed 1-to-1 token alignment."""
+    use_chatml = _uses_chatml_template(tokenizer, prompt_format)
+    effective_lead = bool(lead_with_gap or not clause_1_prefix.strip())
+    c1 = clause_1_prefix.strip()
+    if use_chatml:
+        header = build_chatml_user_header(tokenizer, user_prompt)
+        sep = "" if header.endswith(("\n", " ")) else " "
+        pre_gap_str = (
+            f"{header}{sep}{SUBLIMINAL_GAP_TOKEN}"
+            if effective_lead
+            else f"{header}{sep}{c1}{SUBLIMINAL_GAP_TOKEN}"
+        )
+    else:
+        pre_gap_str = (
+            f"User: {user_prompt.strip()}\nAssistant: {SUBLIMINAL_GAP_TOKEN}"
+            if effective_lead
+            else f"User: {user_prompt.strip()}\nAssistant: {c1} {SUBLIMINAL_GAP_TOKEN}"
+        )
+    pre_ids_with_gap = list(tokenizer.encode(pre_gap_str, add_special_tokens=not use_chatml))
+    if not pre_ids_with_gap or pre_ids_with_gap[-1] != gap_token_id:
+        if gap_token_id not in pre_ids_with_gap:
+            pre_ids_with_gap.append(gap_token_id)
+    pre_ids_without_gap = [tid for tid in pre_ids_with_gap if tid != gap_token_id]
+    if not pre_ids_without_gap:
+        raise ValueError(f"Empty pre-gap sequence for preservation prompt: {user_prompt!r}")
+
+    clean_cont = continuation_text.strip()
+    if use_chatml and effective_lead:
+        if clean_cont and clean_cont[0].islower():
+            clean_cont = clean_cont[0].upper() + clean_cont[1:]
+        cont_ids = list(tokenizer.encode(clean_cont, add_special_tokens=False))
+    else:
+        cont_ids = list(tokenizer.encode(" " + clean_cont, add_special_tokens=False))
+    if not cont_ids:
+        raise ValueError(f"Empty continuation sequence for preservation prompt: {continuation_text!r}")
+    if getattr(tokenizer, "eos_token_id", None) is not None:
+        cont_ids.append(int(tokenizer.eos_token_id))
+    return pre_ids_without_gap, pre_ids_with_gap, cont_ids
+
+
+@torch.no_grad()
+def build_preservation_anchor_from_base_model(
+    model: nn.Module,
+    tokenizer,
+    *,
+    user_prompt: str,
+    clause_1_prefix: str,
+    continuation_text: str,
+    chord: SubliminalChordVector,
+    gap_token_id: int,
+    device: str | torch.device,
+    lead_with_gap: bool = False,
+    prompt_format: str = "chatml",
+    top_k: int = 64,
+) -> SelfDistilledPreservationAnchor:
+    """Record frozen base-model top-k next-token probabilities (without `<|subliminal_gap|>`) for KL distillation."""
+    was_training = model.training
+    model.eval()
+    try:
+        pre_nogap, _, cont_ids = _tokenize_preservation_anchor_sequences(
+            tokenizer,
+            user_prompt=user_prompt,
+            clause_1_prefix=clause_1_prefix,
+            continuation_text=continuation_text,
+            gap_token_id=gap_token_id,
+            lead_with_gap=lead_with_gap,
+            prompt_format=prompt_format,
+        )
+        full_ids = torch.tensor([pre_nogap + cont_ids], dtype=torch.long, device=device)
+        attn_mask = torch.ones_like(full_ids, dtype=torch.long, device=device)
+        embeds = model.get_input_embeddings()(full_ids)
+        out = model(inputs_embeds=embeds, attention_mask=attn_mask, use_cache=False)
+        k_len = len(cont_ids)
+        start_pos = len(pre_nogap) - 1
+        teacher_logits = out.logits[0, start_pos : start_pos + k_len, :].to(dtype=torch.float32)
+        if 0 <= gap_token_id < teacher_logits.shape[-1]:
+            teacher_logits[:, gap_token_id] = -1e9
+        eff_k = min(max(1, int(top_k)), int(teacher_logits.shape[-1]))
+        top_vals, top_ids = torch.topk(teacher_logits, k=eff_k, dim=-1)
+        top_probs = F.softmax(top_vals, dim=-1)
+        return SelfDistilledPreservationAnchor(
+            user_prompt=user_prompt,
+            clause_1_prefix=clause_1_prefix,
+            continuation_text=continuation_text,
+            chord=chord,
+            lead_with_gap=bool(lead_with_gap or not clause_1_prefix.strip()),
+            teacher_top_ids=top_ids.detach().to(device="cpu", dtype=torch.long),
+            teacher_top_probs=top_probs.detach().to(device="cpu", dtype=torch.float32),
+        )
+    finally:
+        if was_training:
+            model.train()
+
+
+def compute_preservation_anchor_kl_loss(
+    model: nn.Module,
+    tokenizer,
+    projector: SubliminalGapProjector,
+    anchor: SelfDistilledPreservationAnchor,
+    *,
+    gap_token_id: int,
+    device: str | torch.device,
+    prompt_format: str = "chatml",
+) -> Tensor:
+    """Compute `KL(P_base_nogap || P_spliced(anchor.chord))` so unpolarized chords preserve native base voice."""
+    _, pre_with_gap, cont_ids = _tokenize_preservation_anchor_sequences(
+        tokenizer,
+        user_prompt=anchor.user_prompt,
+        clause_1_prefix=anchor.clause_1_prefix,
+        continuation_text=anchor.continuation_text,
+        gap_token_id=gap_token_id,
+        lead_with_gap=anchor.lead_with_gap,
+        prompt_format=prompt_format,
+    )
+    full_ids = torch.tensor([pre_with_gap + cont_ids], dtype=torch.long, device=device)
+    attn_mask = torch.ones_like(full_ids, dtype=torch.long, device=device)
+    post_gap_labels = build_post_gap_only_labels(full_ids, gap_token_id=gap_token_id)
+    chord_tensor = anchor.chord.to_tensor(device=device, dtype=torch.float32).unsqueeze(0)
+    spliced = splice_subliminal_gaps_into_embeds(
+        full_ids,
+        model.get_input_embeddings(),
+        projector,
+        chord_tensor,
+        gap_token_id=gap_token_id,
+        attention_mask=attn_mask,
+        labels=post_gap_labels,
+    )
+    out = model(
+        inputs_embeds=spliced.inputs_embeds,
+        attention_mask=spliced.attention_mask,
+        use_cache=False,
+    )
+    assert spliced.labels is not None
+    active_mask = spliced.labels[0, 1:] != IGNORE_LABEL_INDEX
+    student_logits = out.logits[0, :-1, :][active_mask].to(dtype=torch.float32)
+    top_ids = anchor.teacher_top_ids.to(device=device, dtype=torch.long)
+    top_probs = anchor.teacher_top_probs.to(device=device, dtype=torch.float32)
+    if student_logits.shape[0] != top_ids.shape[0]:
+        raise ValueError(
+            f"Preservation KL token length mismatch: student={student_logits.shape[0]} vs teacher={top_ids.shape[0]}"
+        )
+    student_log_probs = F.log_softmax(student_logits, dim=-1)
+    gathered_log_probs = torch.gather(student_log_probs, dim=-1, index=top_ids)
+    kl_per_token = (top_probs * (torch.log(top_probs.clamp_min(1e-12)) - gathered_log_probs)).sum(dim=-1)
+    return kl_per_token.mean()
+
+
 def compute_contrastive_pair_loss(
     model: nn.Module,
     tokenizer,
@@ -470,6 +699,9 @@ def compute_contrastive_pair_loss(
     contrastive_weight: float = 2.0,
     margin_target: float = 0.35,
     swap_margin_target: float = 1.20,
+    lead_with_gap: bool = False,
+    include_full_turn_mle: bool = True,
+    prompt_format: str = "legacy_ua",
 ) -> tuple[Tensor, dict[str, float]]:
     """Compute matched post-gap MLE loss + chord-contrastive routing margin loss on one `ContrastiveGapPair`.
 
@@ -490,7 +722,9 @@ def compute_contrastive_pair_loss(
         continuation_text=pair.continuation_a,
         gap_token_id=gap_token_id,
         device=device,
-        include_full_turn_mle=True,
+        lead_with_gap=lead_with_gap,
+        include_full_turn_mle=include_full_turn_mle,
+        prompt_format=prompt_format,
     )
     nll_bb, full_nll_bb = _compute_spliced_branch_nlls(
         model,
@@ -501,7 +735,9 @@ def compute_contrastive_pair_loss(
         continuation_text=pair.continuation_b,
         gap_token_id=gap_token_id,
         device=device,
-        include_full_turn_mle=True,
+        lead_with_gap=lead_with_gap,
+        include_full_turn_mle=include_full_turn_mle,
+        prompt_format=prompt_format,
     )
     nll_ab = compute_post_gap_continuation_nll(
         model,
@@ -512,6 +748,8 @@ def compute_contrastive_pair_loss(
         continuation_text=pair.continuation_b,
         gap_token_id=gap_token_id,
         device=device,
+        lead_with_gap=lead_with_gap,
+        prompt_format=prompt_format,
     )
     nll_ba = compute_post_gap_continuation_nll(
         model,
@@ -522,6 +760,8 @@ def compute_contrastive_pair_loss(
         continuation_text=pair.continuation_a,
         gap_token_id=gap_token_id,
         device=device,
+        lead_with_gap=lead_with_gap,
+        prompt_format=prompt_format,
     )
 
     mle_loss = 0.5 * (full_nll_aa + full_nll_bb)
@@ -570,14 +810,24 @@ def generate_post_gap_continuation_greedy(
     gap_token_id: int,
     device: str | torch.device,
     max_new_tokens: int = 32,
+    lead_with_gap: bool = False,
+    prompt_format: str = "legacy_ua",
 ) -> str:
     """Greedily generate the post-gap Clause 2 continuation from `[pre_gap_prompt]` + `chord`."""
     was_training = model.training
     model.eval()
     projector.eval()
     try:
-        pre_gap_str = pair.format_pre_gap_prompt()
-        pre_ids: list[int] = list(tokenizer.encode(pre_gap_str, add_special_tokens=True))
+        use_chatml = _uses_chatml_template(tokenizer, prompt_format)
+        effective_lead = bool(lead_with_gap or not pair.clause_1_prefix.strip())
+        pre_gap_str = pair.format_pre_gap_prompt(
+            lead_with_gap=effective_lead,
+            prompt_format=prompt_format,
+            tokenizer=tokenizer,
+        )
+        pre_ids: list[int] = list(
+            tokenizer.encode(pre_gap_str, add_special_tokens=not use_chatml)
+        )
         if not pre_ids or pre_ids[-1] != gap_token_id:
             if gap_token_id not in pre_ids:
                 pre_ids.append(gap_token_id)
@@ -761,6 +1011,8 @@ def evaluate_holdout_pairs(
     learned_leaves: tuple[LearnedLeaf, ...] = DEFAULT_COMPLEX_FEELING_LEAVES,
     birth_state: BirthState | None = None,
     max_new_tokens: int = 32,
+    lead_with_gap: bool = False,
+    prompt_format: str = "legacy_ua",
 ) -> HoldoutEvaluationSummary:
     """Run Check A (Log-Prob Flip), Check B (Unplug-the-Cord), and Check C (Greedy Gen + MiniLM Sensors)."""
     was_training = model.training
@@ -784,6 +1036,8 @@ def evaluate_holdout_pairs(
                     continuation_text=pair.continuation_a,
                     gap_token_id=gap_token_id,
                     device=device,
+                    lead_with_gap=lead_with_gap,
+                    prompt_format=prompt_format,
                 ).item()
             )
             nll_ab = float(
@@ -796,6 +1050,8 @@ def evaluate_holdout_pairs(
                     continuation_text=pair.continuation_b,
                     gap_token_id=gap_token_id,
                     device=device,
+                    lead_with_gap=lead_with_gap,
+                    prompt_format=prompt_format,
                 ).item()
             )
             nll_ba = float(
@@ -808,6 +1064,8 @@ def evaluate_holdout_pairs(
                     continuation_text=pair.continuation_a,
                     gap_token_id=gap_token_id,
                     device=device,
+                    lead_with_gap=lead_with_gap,
+                    prompt_format=prompt_format,
                 ).item()
             )
             nll_bb = float(
@@ -820,6 +1078,8 @@ def evaluate_holdout_pairs(
                     continuation_text=pair.continuation_b,
                     gap_token_id=gap_token_id,
                     device=device,
+                    lead_with_gap=lead_with_gap,
+                    prompt_format=prompt_format,
                 ).item()
             )
 
@@ -843,6 +1103,8 @@ def evaluate_holdout_pairs(
                     continuation_text=pair.continuation_a,
                     gap_token_id=gap_token_id,
                     device=device,
+                    lead_with_gap=lead_with_gap,
+                    prompt_format=prompt_format,
                 ).item()
             )
             nll_zero_ba = float(
@@ -855,6 +1117,8 @@ def evaluate_holdout_pairs(
                     continuation_text=pair.continuation_a,
                     gap_token_id=gap_token_id,
                     device=device,
+                    lead_with_gap=lead_with_gap,
+                    prompt_format=prompt_format,
                 ).item()
             )
             nll_zero_ab = float(
@@ -867,6 +1131,8 @@ def evaluate_holdout_pairs(
                     continuation_text=pair.continuation_b,
                     gap_token_id=gap_token_id,
                     device=device,
+                    lead_with_gap=lead_with_gap,
+                    prompt_format=prompt_format,
                 ).item()
             )
             nll_zero_bb = float(
@@ -879,6 +1145,8 @@ def evaluate_holdout_pairs(
                     continuation_text=pair.continuation_b,
                     gap_token_id=gap_token_id,
                     device=device,
+                    lead_with_gap=lead_with_gap,
+                    prompt_format=prompt_format,
                 ).item()
             )
             unplugged_shift = round(
@@ -897,6 +1165,8 @@ def evaluate_holdout_pairs(
                     pair,
                     continuation_text=pair.continuation_a,
                     device=device,
+                    lead_with_gap=lead_with_gap,
+                    prompt_format=prompt_format,
                 ).item()
             )
             nll_nogap_b = float(
@@ -906,6 +1176,8 @@ def evaluate_holdout_pairs(
                     pair,
                     continuation_text=pair.continuation_b,
                     device=device,
+                    lead_with_gap=lead_with_gap,
+                    prompt_format=prompt_format,
                 ).item()
             )
             nogap_prior_bias = round(nll_nogap_b - nll_nogap_a, 6)
@@ -922,6 +1194,8 @@ def evaluate_holdout_pairs(
                 gap_token_id=gap_token_id,
                 device=device,
                 max_new_tokens=max_new_tokens,
+                lead_with_gap=lead_with_gap,
+                prompt_format=prompt_format,
             )
             gen_b = generate_post_gap_continuation_greedy(
                 model,
@@ -932,6 +1206,8 @@ def evaluate_holdout_pairs(
                 gap_token_id=gap_token_id,
                 device=device,
                 max_new_tokens=max_new_tokens,
+                lead_with_gap=lead_with_gap,
+                prompt_format=prompt_format,
             )
             gen_zero = generate_post_gap_continuation_greedy(
                 model,
@@ -942,6 +1218,8 @@ def evaluate_holdout_pairs(
                 gap_token_id=gap_token_id,
                 device=device,
                 max_new_tokens=max_new_tokens,
+                lead_with_gap=lead_with_gap,
+                prompt_format=prompt_format,
             )
             text_changed = gen_a.strip().lower() != gen_b.strip().lower()
 
@@ -1048,6 +1326,12 @@ def train_left_brain_lora_and_callosum(
     swap_margin_target: float = 1.20,
     warmup_steps: int = 0,
     anchor_at_birth: bool = False,
+    lead_with_gap: bool = False,
+    train_both_gap_positions: bool = False,
+    include_full_turn_mle: bool = True,
+    prompt_format: str = "legacy_ua",
+    preservation_anchors: Sequence[SelfDistilledPreservationAnchor] = (),
+    preservation_kl_weight: float = 1.0,
 ) -> list[dict[str, float]]:
     """Train `SubliminalGapProjector` and `LoRALinear` adapters on `train_pairs` with `batch_size=1`."""
     if bool(anchor_at_birth) and not getattr(projector, "semantically_anchored_at_birth", False):
@@ -1056,7 +1340,9 @@ def train_left_brain_lora_and_callosum(
     projector.train()
 
     lora_params = [p for p in model.parameters() if p.requires_grad]
-    proj_params = list(projector.parameters())
+    proj_params = [p for p in projector.parameters() if p.requires_grad]
+    if not proj_params:
+        proj_params = list(projector.parameters())
     if not lora_params:
         raise ValueError("Model has no trainable LoRA parameters; call inject_lora_adapters(model) first")
 
@@ -1069,6 +1355,10 @@ def train_left_brain_lora_and_callosum(
         weight_decay=float(weight_decay),
     )
 
+    lead_modes: tuple[bool, ...] = (False, True) if train_both_gap_positions else (bool(lead_with_gap),)
+    pres_list = list(preservation_anchors)
+    n_pairs = max(1, len(train_pairs))
+    n_pres = len(pres_list)
     global_step = 0
     w_steps = max(0, int(warmup_steps))
     epoch_history: list[dict[str, float]] = []
@@ -1079,152 +1369,200 @@ def train_left_brain_lora_and_callosum(
         sum_contrast = 0.0
         sum_ma = 0.0
         sum_mb = 0.0
+        sum_pres_kl = 0.0
+        steps_in_epoch = 0
+        pres_steps_in_epoch = 0
 
-        for pair in train_pairs:
-            if w_steps > 0:
-                scale = min(1.0, float(global_step + 1) / float(w_steps))
-                optimizer.param_groups[0]["lr"] = base_lrs[0] * scale
-                optimizer.param_groups[1]["lr"] = base_lrs[1] * scale
-            optimizer.zero_grad(set_to_none=True)
-            if getattr(model, "is_loaded_in_4bit", False):
-                with torch.no_grad():
-                    v_aa = float(
-                        compute_post_gap_continuation_nll(
-                            model,
-                            tokenizer,
-                            projector,
-                            pair,
-                            chord=pair.chord_a,
-                            continuation_text=pair.continuation_a,
-                            gap_token_id=gap_token_id,
-                            device=device,
-                        ).detach().item()
-                    )
-                    v_bb = float(
-                        compute_post_gap_continuation_nll(
-                            model,
-                            tokenizer,
-                            projector,
-                            pair,
-                            chord=pair.chord_b,
-                            continuation_text=pair.continuation_b,
-                            gap_token_id=gap_token_id,
-                            device=device,
-                        ).detach().item()
-                    )
-                    v_ab = float(
-                        compute_post_gap_continuation_nll(
-                            model,
-                            tokenizer,
-                            projector,
-                            pair,
-                            chord=pair.chord_a,
-                            continuation_text=pair.continuation_b,
-                            gap_token_id=gap_token_id,
-                            device=device,
-                        ).detach().item()
-                    )
-                    v_ba = float(
-                        compute_post_gap_continuation_nll(
-                            model,
-                            tokenizer,
-                            projector,
-                            pair,
-                            chord=pair.chord_b,
-                            continuation_text=pair.continuation_a,
-                            gap_token_id=gap_token_id,
-                            device=device,
-                        ).detach().item()
-                    )
-                mle_val = 0.5 * (v_aa + v_bb)
-                br_ma = v_ab - v_aa
-                br_mb = v_ba - v_bb
-                sw_ma = v_ba - v_aa
-                sw_mb = v_ab - v_bb
-                contrast_val = (
-                    0.35 * (max(0.0, float(swap_margin_target) - sw_ma) + max(0.0, float(swap_margin_target) - sw_mb))
-                    + 0.15 * (max(0.0, float(margin_target) - br_ma) + max(0.0, float(margin_target) - br_mb))
+        for pair_idx, pair in enumerate(train_pairs):
+            for cur_lead in lead_modes:
+                if w_steps > 0:
+                    scale = min(1.0, float(global_step + 1) / float(w_steps))
+                    optimizer.param_groups[0]["lr"] = base_lrs[0] * scale
+                    optimizer.param_groups[1]["lr"] = base_lrs[1] * scale
+                optimizer.zero_grad(set_to_none=True)
+                use_single_branch_accum = bool(
+                    getattr(model, "is_loaded_in_4bit", False)
+                    or (not include_full_turn_mle and torch.device(device).type == "cuda")
                 )
-                tot_val = float(mle_weight) * mle_val + float(contrastive_weight) * contrast_val
-                metrics = {
-                    "total_loss": tot_val,
-                    "mle_loss": mle_val,
-                    "contrast_loss": contrast_val,
-                    "margin_a": br_ma,
-                    "margin_b": br_mb,
-                    "swap_margin_a": sw_ma,
-                    "swap_margin_b": sw_mb,
-                }
-                t_aa = torch.tensor(v_aa, dtype=torch.float32, requires_grad=True)
-                t_bb = torch.tensor(v_bb, dtype=torch.float32, requires_grad=True)
-                t_ab = torch.tensor(v_ab, dtype=torch.float32, requires_grad=True)
-                t_ba = torch.tensor(v_ba, dtype=torch.float32, requires_grad=True)
-                mle_s = 0.5 * (t_aa + t_bb)
-                contrast_s = (
-                    0.35
-                    * (
-                        F.relu(float(swap_margin_target) - (t_ba - t_aa))
-                        + F.relu(float(swap_margin_target) - (t_ab - t_bb))
-                    )
-                    + 0.15
-                    * (
-                        F.relu(float(margin_target) - (t_ab - t_aa))
-                        + F.relu(float(margin_target) - (t_ba - t_bb))
-                    )
-                )
-                tot_s = float(mle_weight) * mle_s + float(contrastive_weight) * contrast_s
-                g_aa, g_bb, g_ab, g_ba = torch.autograd.grad(tot_s, (t_aa, t_bb, t_ab, t_ba))
-                w_aa = float(g_aa.item())
-                w_bb = float(g_bb.item())
-                w_ab = float(g_ab.item())
-                w_ba = float(g_ba.item())
-                for br_chord, br_text, br_w in (
-                    (pair.chord_a, pair.continuation_a, w_aa),
-                    (pair.chord_b, pair.continuation_b, w_bb),
-                    (pair.chord_a, pair.continuation_b, w_ab),
-                    (pair.chord_b, pair.continuation_a, w_ba),
-                ):
-                    if abs(br_w) > 1e-12:
-                        step_nll = compute_post_gap_continuation_nll(
-                            model,
-                            tokenizer,
-                            projector,
-                            pair,
-                            chord=br_chord,
-                            continuation_text=br_text,
-                            gap_token_id=gap_token_id,
-                            device=device,
+                if use_single_branch_accum:
+                    with torch.no_grad():
+                        v_aa = float(
+                            compute_post_gap_continuation_nll(
+                                model,
+                                tokenizer,
+                                projector,
+                                pair,
+                                chord=pair.chord_a,
+                                continuation_text=pair.continuation_a,
+                                gap_token_id=gap_token_id,
+                                device=device,
+                                lead_with_gap=cur_lead,
+                                prompt_format=prompt_format,
+                            ).detach().item()
                         )
-                        (step_nll * float(br_w)).backward()
-                        del step_nll
-            else:
-                loss, metrics = compute_contrastive_pair_loss(
-                    model,
-                    tokenizer,
-                    projector,
-                    pair,
-                    gap_token_id=gap_token_id,
-                    device=device,
-                    mle_weight=mle_weight,
-                    contrastive_weight=contrastive_weight,
-                    margin_target=margin_target,
-                    swap_margin_target=swap_margin_target,
-                )
-                loss.backward()
-            torch.nn.utils.clip_grad_norm_(proj_params + lora_params, max_norm=1.0)
-            optimizer.step()
-            global_step += 1
+                        v_bb = float(
+                            compute_post_gap_continuation_nll(
+                                model,
+                                tokenizer,
+                                projector,
+                                pair,
+                                chord=pair.chord_b,
+                                continuation_text=pair.continuation_b,
+                                gap_token_id=gap_token_id,
+                                device=device,
+                                lead_with_gap=cur_lead,
+                                prompt_format=prompt_format,
+                            ).detach().item()
+                        )
+                        v_ab = float(
+                            compute_post_gap_continuation_nll(
+                                model,
+                                tokenizer,
+                                projector,
+                                pair,
+                                chord=pair.chord_a,
+                                continuation_text=pair.continuation_b,
+                                gap_token_id=gap_token_id,
+                                device=device,
+                                lead_with_gap=cur_lead,
+                                prompt_format=prompt_format,
+                            ).detach().item()
+                        )
+                        v_ba = float(
+                            compute_post_gap_continuation_nll(
+                                model,
+                                tokenizer,
+                                projector,
+                                pair,
+                                chord=pair.chord_b,
+                                continuation_text=pair.continuation_a,
+                                gap_token_id=gap_token_id,
+                                device=device,
+                                lead_with_gap=cur_lead,
+                                prompt_format=prompt_format,
+                            ).detach().item()
+                        )
+                    mle_val = 0.5 * (v_aa + v_bb)
+                    br_ma = v_ab - v_aa
+                    br_mb = v_ba - v_bb
+                    sw_ma = v_ba - v_aa
+                    sw_mb = v_ab - v_bb
+                    contrast_val = (
+                        0.35 * (max(0.0, float(swap_margin_target) - sw_ma) + max(0.0, float(swap_margin_target) - sw_mb))
+                        + 0.15 * (max(0.0, float(margin_target) - br_ma) + max(0.0, float(margin_target) - br_mb))
+                    )
+                    tot_val = float(mle_weight) * mle_val + float(contrastive_weight) * contrast_val
+                    metrics = {
+                        "total_loss": tot_val,
+                        "mle_loss": mle_val,
+                        "contrast_loss": contrast_val,
+                        "margin_a": br_ma,
+                        "margin_b": br_mb,
+                        "swap_margin_a": sw_ma,
+                        "swap_margin_b": sw_mb,
+                    }
+                    t_aa = torch.tensor(v_aa, dtype=torch.float32, requires_grad=True)
+                    t_bb = torch.tensor(v_bb, dtype=torch.float32, requires_grad=True)
+                    t_ab = torch.tensor(v_ab, dtype=torch.float32, requires_grad=True)
+                    t_ba = torch.tensor(v_ba, dtype=torch.float32, requires_grad=True)
+                    mle_s = 0.5 * (t_aa + t_bb)
+                    contrast_s = (
+                        0.35
+                        * (
+                            F.relu(float(swap_margin_target) - (t_ba - t_aa))
+                            + F.relu(float(swap_margin_target) - (t_ab - t_bb))
+                        )
+                        + 0.15
+                        * (
+                            F.relu(float(margin_target) - (t_ab - t_aa))
+                            + F.relu(float(margin_target) - (t_ba - t_bb))
+                        )
+                    )
+                    tot_s = float(mle_weight) * mle_s + float(contrastive_weight) * contrast_s
+                    g_aa, g_bb, g_ab, g_ba = torch.autograd.grad(tot_s, (t_aa, t_bb, t_ab, t_ba))
+                    w_aa = float(g_aa.item())
+                    w_bb = float(g_bb.item())
+                    w_ab = float(g_ab.item())
+                    w_ba = float(g_ba.item())
+                    for br_chord, br_text, br_w in (
+                        (pair.chord_a, pair.continuation_a, w_aa),
+                        (pair.chord_b, pair.continuation_b, w_bb),
+                        (pair.chord_a, pair.continuation_b, w_ab),
+                        (pair.chord_b, pair.continuation_a, w_ba),
+                    ):
+                        if abs(br_w) > 1e-12:
+                            step_nll = compute_post_gap_continuation_nll(
+                                model,
+                                tokenizer,
+                                projector,
+                                pair,
+                                chord=br_chord,
+                                continuation_text=br_text,
+                                gap_token_id=gap_token_id,
+                                device=device,
+                                lead_with_gap=cur_lead,
+                                prompt_format=prompt_format,
+                            )
+                            (step_nll * float(br_w)).backward()
+                            del step_nll
+                else:
+                    loss, metrics = compute_contrastive_pair_loss(
+                        model,
+                        tokenizer,
+                        projector,
+                        pair,
+                        gap_token_id=gap_token_id,
+                        device=device,
+                        mle_weight=mle_weight,
+                        contrastive_weight=contrastive_weight,
+                        margin_target=margin_target,
+                        swap_margin_target=swap_margin_target,
+                        lead_with_gap=cur_lead,
+                        include_full_turn_mle=include_full_turn_mle,
+                        prompt_format=prompt_format,
+                    )
+                    loss.backward()
+                torch.nn.utils.clip_grad_norm_(proj_params + lora_params, max_norm=1.0)
+                optimizer.step()
+                global_step += 1
+                steps_in_epoch += 1
 
-            sum_total += metrics["total_loss"]
-            sum_mle += metrics["mle_loss"]
-            sum_contrast += metrics["contrast_loss"]
-            sum_ma += metrics["margin_a"]
-            sum_mb += metrics["margin_b"]
+                sum_total += metrics["total_loss"]
+                sum_mle += metrics["mle_loss"]
+                sum_contrast += metrics["contrast_loss"]
+                sum_ma += metrics["margin_a"]
+                sum_mb += metrics["margin_b"]
+
+            if n_pres > 0 and float(preservation_kl_weight) > 0.0:
+                pres_start = (pair_idx * n_pres) // n_pairs
+                pres_end = ((pair_idx + 1) * n_pres) // n_pairs
+                for anchor in pres_list[pres_start:pres_end]:
+                    if w_steps > 0:
+                        scale = min(1.0, float(global_step + 1) / float(w_steps))
+                        optimizer.param_groups[0]["lr"] = base_lrs[0] * scale
+                        optimizer.param_groups[1]["lr"] = base_lrs[1] * scale
+                    optimizer.zero_grad(set_to_none=True)
+                    kl_loss = compute_preservation_anchor_kl_loss(
+                        model,
+                        tokenizer,
+                        projector,
+                        anchor,
+                        gap_token_id=gap_token_id,
+                        device=device,
+                        prompt_format=prompt_format,
+                    )
+                    weighted_kl = float(preservation_kl_weight) * kl_loss
+                    weighted_kl.backward()
+                    torch.nn.utils.clip_grad_norm_(proj_params + lora_params, max_norm=1.0)
+                    optimizer.step()
+                    global_step += 1
+                    pres_steps_in_epoch += 1
+                    sum_pres_kl += float(kl_loss.detach().item())
 
         if torch.device(device).type == "cuda":
             torch.cuda.empty_cache()
 
-        n = max(1, len(train_pairs))
+        n = max(1, steps_in_epoch)
         epoch_record = {
             "epoch": epoch_idx,
             "mean_total_loss": round(sum_total / n, 6),
@@ -1232,11 +1570,15 @@ def train_left_brain_lora_and_callosum(
             "mean_contrast_loss": round(sum_contrast / n, 6),
             "mean_train_margin_a": round(sum_ma / n, 6),
             "mean_train_margin_b": round(sum_mb / n, 6),
+            "mean_preservation_kl_loss": (
+                round(sum_pres_kl / pres_steps_in_epoch, 6) if pres_steps_in_epoch > 0 else 0.0
+            ),
             "wall_time_s": round(time.perf_counter() - t0, 2),
         }
         if torch.device(device).type == "cuda":
             print(
                 f"  [Epoch {epoch_idx}/{epochs}] loss={epoch_record['mean_total_loss']:.4f}, "
+                f"pres_kl={epoch_record['mean_preservation_kl_loss']:.4f}, "
                 f"ma={epoch_record['mean_train_margin_a']:+.4f}, mb={epoch_record['mean_train_margin_b']:+.4f}, "
                 f"wall={epoch_record['wall_time_s']:.1f}s, "
                 f"vram_res={torch.cuda.memory_reserved() / 1e9:.2f}GB",
@@ -1404,6 +1746,7 @@ def update_projector_on_harvested_gap_pairs(
     homeostatic_decay: float = 0.02,
     max_grad_norm: float = 0.5,
     max_pairs: int = 4,
+    prompt_format: str = "legacy_ua",
 ) -> dict[str, Any]:
     """Run a bounded, L2-anchored micro-plasticity step on `SubliminalGapProjector` during Deep REM Sleep.
 
@@ -1430,18 +1773,30 @@ def update_projector_on_harvested_gap_pairs(
         }
 
     all_params = list(projector.parameters())
-    for p in all_params:
-        if not p.requires_grad:
-            p.requires_grad_(True)
-    proj_params = all_params
-
-    device = proj_params[0].device
     anchor_params = projector.get_resting_anchor_params()
     decay = max(0.0, min(0.25, float(homeostatic_decay)))
     if decay > 0.0:
         with torch.no_grad():
-            for p, p0 in zip(proj_params, anchor_params):
+            for p, p0 in zip(all_params, anchor_params):
                 p.lerp_(p0, decay)
+
+    freeze_out_norm = bool(prompt_format == "chatml" and hasattr(projector, "output_norm"))
+    if freeze_out_norm:
+        for p in projector.department_heads.parameters():
+            if not p.requires_grad:
+                p.requires_grad_(True)
+        for p in projector.output_norm.parameters():
+            p.requires_grad_(False)
+        proj_params = list(projector.department_heads.parameters())
+        active_anchor_params = anchor_params[: len(proj_params)]
+    else:
+        for p in all_params:
+            if not p.requires_grad:
+                p.requires_grad_(True)
+        proj_params = all_params
+        active_anchor_params = anchor_params
+
+    device = proj_params[0].device
 
     was_proj_training = projector.training
     projector.train()
@@ -1465,6 +1820,8 @@ def update_projector_on_harvested_gap_pairs(
                     pair,
                     gap_token_id=gap_token_id,
                     device=device,
+                    include_full_turn_mle=(prompt_format != "chatml"),
+                    prompt_format=prompt_format,
                 )
             else:
                 # Fast projector-only separation margin in virtual gap-token space when LLM forward pass is omitted
@@ -1477,7 +1834,7 @@ def update_projector_on_harvested_gap_pairs(
                 task_loss = F.relu(cos_sim - (1.0 - target_sep))
 
             anchor_reg = sum(
-                torch.sum((p - p0) ** 2) for p, p0 in zip(proj_params, anchor_params)
+                torch.sum((p - p0) ** 2) for p, p0 in zip(proj_params, active_anchor_params)
             )
             total_loss = task_loss + float(lambda_anchor) * anchor_reg
             total_loss.backward()
@@ -1489,7 +1846,7 @@ def update_projector_on_harvested_gap_pairs(
 
     with torch.no_grad():
         drift_sq = sum(
-            torch.sum((p.detach() - p0) ** 2) for p, p0 in zip(proj_params, anchor_params)
+            torch.sum((p.detach() - p0) ** 2) for p, p0 in zip(all_params, anchor_params)
         )
         l2_drift = round(float(torch.sqrt(drift_sq).cpu().item()), 6)
 

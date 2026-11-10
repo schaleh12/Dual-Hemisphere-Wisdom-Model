@@ -429,3 +429,121 @@ def test_mit_lora_rank_channel_sculpting_and_true_theta0_callosum_homeostasis(tm
         state_dir=tmp_path,
     )
     assert meta_c2["l2_drift_from_resting_theta0"] < dist_before
+
+
+def test_self_distilled_preservation_anchor_kl_and_qk_only_training() -> None:
+    """Verify frozen base-model KL preservation anchors align 1-to-1 and keep `v_proj`/`o_proj` untouched under QK-only LoRA."""
+    from lmft_architecture.train_left_brain_lora import (
+        build_preservation_anchor_from_base_model,
+        compute_preservation_anchor_kl_loss,
+    )
+
+    class _ChatMLTestTokenizer(_WordLevelTestTokenizer):
+        chat_template = "{{ messages }}"
+
+        def apply_chat_template(self, messages, tokenize=False, add_generation_prompt=True):
+            return f"<|im_start|>user\n{messages[-1]['content']}<|im_end|>\n<|im_start|>assistant\n"
+
+    torch.manual_seed(101)
+    tok = _ChatMLTestTokenizer()
+    gap_id = ensure_subliminal_gap_token(tok)
+    pair = _sample_pair("qk_pres_pair")
+    for text in (
+        pair.user_prompt,
+        pair.clause_1_prefix,
+        pair.continuation_a,
+        pair.continuation_b,
+        "Good morning!",
+        "Good morning,",
+        "I hope your day is going well.",
+    ):
+        tok.encode(text)
+
+    model = _MiniCausalLM(vocab_size=96, hidden_size=32, num_layers=2)
+    projector = SubliminalGapProjector(hidden_size=32)
+    projector.output_norm.requires_grad_(False)
+    init_norm_weight = projector.output_norm.weight.detach().clone()
+
+    # Collect anchors BEFORE injecting LoRA
+    anchor_lead = build_preservation_anchor_from_base_model(
+        model,
+        tok,
+        user_prompt="Good morning!",
+        clause_1_prefix="",
+        continuation_text="Good morning, I hope your day is going well.",
+        chord=pair.chord_a,
+        gap_token_id=gap_id,
+        device="cpu",
+        lead_with_gap=True,
+        prompt_format="chatml",
+        top_k=16,
+    )
+    anchor_comma = build_preservation_anchor_from_base_model(
+        model,
+        tok,
+        user_prompt="Good morning!",
+        clause_1_prefix="Good morning,",
+        continuation_text="I hope your day is going well.",
+        chord=pair.chord_a,
+        gap_token_id=gap_id,
+        device="cpu",
+        lead_with_gap=False,
+        prompt_format="chatml",
+        top_k=16,
+    )
+
+    lora_cfg = LoRAConfig(
+        rank=4,
+        lora_alpha=8.0,
+        lora_dropout=0.0,
+        target_modules=("q_proj", "k_proj"),
+        num_top_layers=2,
+    )
+    inject_lora_adapters(model, lora_cfg)
+    assert isinstance(model.layers[-1].q_proj, LoRALinear)
+    assert isinstance(model.layers[-1].k_proj, LoRALinear)
+    assert not isinstance(model.layers[-1].v_proj, LoRALinear)
+    assert not isinstance(model.layers[-1].o_proj, LoRALinear)
+
+    kl_before = float(
+        compute_preservation_anchor_kl_loss(
+            model,
+            tok,
+            projector,
+            anchor_comma,
+            gap_token_id=gap_id,
+            device="cpu",
+            prompt_format="chatml",
+        ).item()
+    )
+    history = train_left_brain_lora_and_callosum(
+        model,
+        tok,
+        projector,
+        train_pairs=(pair,),
+        gap_token_id=gap_id,
+        device="cpu",
+        epochs=6,
+        lr_projector=3e-3,
+        lr_lora=2e-3,
+        include_full_turn_mle=False,
+        train_both_gap_positions=True,
+        prompt_format="chatml",
+        preservation_anchors=(anchor_lead, anchor_comma),
+        preservation_kl_weight=1.0,
+    )
+    kl_after = float(
+        compute_preservation_anchor_kl_loss(
+            model,
+            tok,
+            projector,
+            anchor_comma,
+            gap_token_id=gap_id,
+            device="cpu",
+            prompt_format="chatml",
+        ).item()
+    )
+    assert kl_after < kl_before
+    assert history[-1]["mean_preservation_kl_loss"] >= 0.0
+    assert torch.allclose(projector.output_norm.weight, init_norm_weight)
+

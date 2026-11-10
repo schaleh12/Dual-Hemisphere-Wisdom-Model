@@ -893,7 +893,18 @@ class SubliminalGapProjector(nn.Module):
             if lin2.bias is not None:
                 lin2.bias.zero_()
 
-        self.output_norm.weight.fill_(1.0)
+        mean_word_norm = float(
+            torch.nan_to_num(w_emb.to(dtype=torch.float32), nan=0.0, posinf=0.0, neginf=0.0)
+            .norm(dim=-1)
+            .mean()
+            .item()
+        )
+        token_rms = (
+            mean_word_norm / math.sqrt(float(self.hidden_size))
+            if math.isfinite(mean_word_norm) and mean_word_norm > 1e-6
+            else 1.0
+        )
+        self.output_norm.weight.fill_(token_rms)
         self.output_norm.bias.zero_()
         self.semantically_anchored_at_birth = True
         self.capture_resting_anchor()
@@ -1074,6 +1085,7 @@ class CorpusCallosumMetadata:
     notes: str = ""
     base_model_id: str = "SicariusSicariiStuff/Impish_LLAMA_4B"
     callosum_status: str = "TRAINED_STEERED_CALLOSUM"
+    prompt_format: str = "legacy_ua"
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -1092,6 +1104,7 @@ class CorpusCallosumMetadata:
             "notes": self.notes,
             "base_model_id": self.base_model_id,
             "callosum_status": self.callosum_status,
+            "prompt_format": self.prompt_format,
         }
 
 
@@ -1104,6 +1117,7 @@ def save_corpus_callosum_checkpoint(
     notes: str = "",
     base_model_id: str = "SicariusSicariiStuff/Impish_LLAMA_4B",
     callosum_status: str | None = None,
+    prompt_format: str = "legacy_ua",
 ) -> CorpusCallosumMetadata:
     """Persist `SubliminalGapProjector` weights and Sleep-Cycle maturation metadata to disk."""
     if sleep_cycle_index < 0 or trained_trajectories_count < 0:
@@ -1132,6 +1146,7 @@ def save_corpus_callosum_checkpoint(
         notes=str(notes),
         base_model_id=str(base_model_id),
         callosum_status=resolved_status,
+        prompt_format=str(prompt_format or "legacy_ua"),
     )
     atomic_json(out_dir / "corpus_callosum_meta.json", meta.to_dict())
     torch.save(projector.state_dict(), out_dir / "projector_weights.pt")
@@ -1165,6 +1180,7 @@ def load_corpus_callosum_checkpoint(
         notes=str(raw_meta.get("notes", "")),
         base_model_id=str(raw_meta.get("base_model_id", "SicariusSicariiStuff/Impish_LLAMA_4B")),
         callosum_status=str(raw_meta.get("callosum_status", default_status)),
+        prompt_format=str(raw_meta.get("prompt_format", "legacy_ua")),
     )
     projector = SubliminalGapProjector(
         hidden_size=meta.hidden_size,

@@ -52,6 +52,7 @@ def build_release_zip(
     ]
     for root_file in (
         "Launch-Setup-Wizard.bat",
+        "Launch-LMFT-Scholar.bat",
         "Launch-LMFT-Chess.bat",
         "Launch-LMFT-Bloodmoon.bat",
         "pyproject.toml",
@@ -110,6 +111,7 @@ def build_release_zip(
         for model_rel in (
             "models/right_brain_bridges",
             "models/left_brain_baseline",
+            "models/left_brain_scholar",
             "models/left_brain_chess",
             "models/left_brain_bloodmoon",
         ):

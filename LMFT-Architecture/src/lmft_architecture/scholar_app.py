@@ -121,11 +121,46 @@ from .three_legged_runtime import (
     generate_rem_dream_self_reflection,
     run_three_legged_turn,
 )
-from .train_left_brain_lora import update_projector_on_harvested_gap_pairs
+from .train_left_brain_lora import LoRALinear, update_projector_on_harvested_gap_pairs
 from .virgin_baseline import VIRGIN_FOUNDATIONAL_RULES, load_virgin_baseline_state
 from .workspace_paths import resolve_training_root
 
 WillEdgeSpec = Association
+DEFAULT_SCHOLAR_HF_ID = "SicariusSicariiStuff/Impish_LLAMA_4B"
+
+
+@dataclass(frozen=True)
+class _PassageAnchoredSensors:
+    """Ground Pass-1 external Fact scoring in `fact_anchor_text + wave_text` while scoring Left-Brain Theory drafts directly."""
+
+    wave_text: str
+    fact_anchor_text: str
+    base_sensors: ThreeBridgeSensors
+
+    def score_text(
+        self,
+        text: str,
+        *,
+        learned_leaves: tuple[LearnedLeaf, ...] = (),
+        branch_gating: bool = True,
+        branch_gate_threshold: float = 0.50,
+    ) -> tuple[dict[str, float], dict[str, float], tuple[str, ...], tuple[str, ...]]:
+        clean = text.strip()
+        anchor = self.fact_anchor_text.strip()
+        if clean == self.wave_text.strip() and anchor and anchor not in clean:
+            combined = f"{anchor}\n\n{clean}"
+            return self.base_sensors.score_text(
+                combined,
+                learned_leaves=learned_leaves,
+                branch_gating=branch_gating,
+                branch_gate_threshold=branch_gate_threshold,
+            )
+        return self.base_sensors.score_text(
+            text,
+            learned_leaves=learned_leaves,
+            branch_gating=branch_gating,
+            branch_gate_threshold=branch_gate_threshold,
+        )
 
 
 @dataclass(frozen=True)
@@ -698,6 +733,7 @@ class ScholarStudioRuntime:
 
         self._scholar_left_brain = scholar_left_brain
         self._lazy_load_gpu = bool(lazy_load_gpu)
+        self.sleep_cycle_index = 0
         self.left_brain_status = "UNLOADED"
         self.active_checkpoint_label = "Checkpoint: models/left_brain_scholar (Impish_LLAMA_4B)"
         if self._scholar_left_brain is not None:
@@ -715,7 +751,6 @@ class ScholarStudioRuntime:
         self.diary = SettledDiary()
         self.scene_counter = 0
         self.curriculum_step_counter = 0
-        self.sleep_cycle_index = 0
         self.harvested_gap_pairs_count = 0
         self.sleep_queue: list[UnresolvedSleepScene] = []
         self.savored_turn_ids: list[int] = []
@@ -761,42 +796,84 @@ class ScholarStudioRuntime:
             if item.is_file():
                 shutil.copy2(item, self.scholar_checkpoint_dir / item.name)
 
+    def _resolve_live_projector_path(self) -> Path | None:
+        for cand in (
+            self.state_dir / "live_projector_weights.pt",
+            self.scholar_checkpoint_dir / "live_projector_weights.pt",
+        ):
+            if cand.is_file():
+                return cand
+        return None
+
+    def _resolve_live_lora_rank_scales_path(self) -> Path | None:
+        for cand in (
+            self.state_dir / "live_lora_rank_scales.pt",
+            self.scholar_checkpoint_dir / "live_lora_rank_scales.pt",
+        ):
+            if cand.is_file():
+                return cand
+        return None
+
     def _load_scholar_locked(self, checkpoint_dir: Path) -> None:
         with self._lock:
             proj_path = checkpoint_dir / "projector_weights.pt"
             if not proj_path.exists():
-                self.left_brain_status = "FALLBACK (No GPU Checkpoint Found)"
+                self.left_brain_status = "UNAVAILABLE (No GPU Checkpoint Found)"
                 return
             try:
-                lb = SubliminalGapLeftBrain.from_checkpoint_directory(checkpoint_dir)
-                live_proj = checkpoint_dir / "live_projector_weights.pt"
+                lb = SubliminalGapLeftBrain.from_checkpoint(
+                    checkpoint_dir,
+                    max_clause_1_tokens=28,
+                    max_post_gap_tokens=96,
+                )
+                if hasattr(lb, "projector") and hasattr(lb.projector, "capture_resting_anchor"):
+                    lb.projector.capture_resting_anchor()
+
                 loaded_live_proj = False
-                if live_proj.exists() and hasattr(lb, "projector"):
+                live_proj = self._resolve_live_projector_path()
+                if live_proj is not None and hasattr(lb, "projector"):
                     import torch
 
-                    raw_state = torch.load(live_proj, map_location="cpu", weights_only=True)
-                    lb.projector.load_state_dict(raw_state)
-                    if hasattr(lb, "device"):
-                        lb.projector.to(lb.device)
+                    raw_state = torch.load(live_proj, map_location=lb.device, weights_only=True)
+                    lb.projector.load_state_dict(raw_state, strict=True)
                     loaded_live_proj = True
+
+                live_scales = self._resolve_live_lora_rank_scales_path()
+                if live_scales is not None and hasattr(lb, "model"):
+                    try:
+                        import torch
+
+                        scale_map = torch.load(live_scales, map_location=lb.device, weights_only=True)
+                        if isinstance(scale_map, dict):
+                            for mod_name, mod in lb.model.named_modules():
+                                if isinstance(mod, LoRALinear) and mod_name in scale_map:
+                                    saved_vec = scale_map[mod_name]
+                                    if tuple(saved_vec.shape) == tuple(mod.rank_scale.shape):
+                                        mod.rank_scale.copy_(
+                                            saved_vec.to(device=mod.rank_scale.device, dtype=mod.rank_scale.dtype)
+                                        )
+                    except Exception:
+                        pass
+
                 self._scholar_left_brain = lb
-                base_id = DEFAULT_IMPISH_BLOODMOON_HF_ID
+                base_id = DEFAULT_SCHOLAR_HF_ID
                 callosum_status = "TRAINED_STEERED_CALLOSUM"
-                meta_path = checkpoint_dir / "corpus_callosum_meta.json"
-                if meta_path.exists():
-                    try:
-                        meta = json.loads(meta_path.read_text(encoding="utf-8"))
-                        base_id = str(meta.get("base_model_id", base_id))
-                        callosum_status = str(meta.get("callosum_status", callosum_status))
-                    except Exception:
-                        pass
-                cfg_path = checkpoint_dir / "training_config.json"
-                if cfg_path.exists():
-                    try:
-                        cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
-                        base_id = str(cfg.get("model_path", base_id))
-                    except Exception:
-                        pass
+                if getattr(lb, "callosum_metadata", None) is not None:
+                    base_id = str(lb.callosum_metadata.base_model_id or base_id)
+                    callosum_status = str(lb.callosum_metadata.callosum_status or callosum_status)
+                    self.sleep_cycle_index = max(
+                        self.sleep_cycle_index,
+                        int(lb.callosum_metadata.sleep_cycle_index),
+                    )
+                else:
+                    meta_path = checkpoint_dir / "corpus_callosum_meta.json"
+                    if meta_path.exists():
+                        try:
+                            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                            base_id = str(meta.get("base_model_id", base_id))
+                            callosum_status = str(meta.get("callosum_status", callosum_status))
+                        except Exception:
+                            pass
                 if loaded_live_proj:
                     callosum_status = f"{callosum_status}+LIVE_SCULPTED"
                 self.left_brain_status = "READY (Impish_LLAMA_4B · 16-bit)"
@@ -804,7 +881,7 @@ class ScholarStudioRuntime:
                     f"LMFT-Scholar · Impish_LLAMA_4B ({callosum_status} — {base_id})"
                 )
             except Exception as exc:
-                self.left_brain_status = f"FALLBACK ({type(exc).__name__})"
+                self.left_brain_status = f"UNAVAILABLE ({type(exc).__name__}: {exc})"
 
     def _ensure_left_brain_ready(self) -> Any | None:
         if self._scholar_left_brain is None and self._lazy_load_gpu:
@@ -888,14 +965,32 @@ class ScholarStudioRuntime:
         if persist and self.active_lineage != "virgin":
             self._persist_session_threads()
 
+    def _extract_conversation_history_pairs(self) -> list[tuple[str, str]]:
+        """Extract prior `(user_text, companion_text)` turns from `self.chat_messages`, skipping non-speech diagnostics."""
+        pairs: list[tuple[str, str]] = []
+        pending_user: str | None = None
+        for msg in self.chat_messages:
+            sender = str(msg.get("sender", ""))
+            txt = str(msg.get("text", "")).strip()
+            if sender == "user":
+                pending_user = txt if txt else None
+            elif sender == "companion" and pending_user is not None:
+                if txt and not txt.startswith("[Offline Right-Brain Telemetry"):
+                    pairs.append((pending_user, txt))
+                pending_user = None
+        return pairs
+
     def _run_scholar_turn(
         self,
         *,
         user_text: str,
+        user_display_text: str | None = None,
         user_role_label: str,
         companion_role_label: str,
         fact_anchor_text: str | None = None,
         num_sentences: int | None = None,
+        include_conversation_history: bool = True,
+        lead_with_gap: bool | None = None,
     ) -> dict[str, Any]:
         with self._lock:
             self.scene_counter += 1
@@ -903,13 +998,16 @@ class ScholarStudioRuntime:
             use_equilibrium_stop = num_sentences is None
             target_sentences = 6 if num_sentences is None else max(1, min(6, int(num_sentences)))
             lb = self._ensure_left_brain_ready()
+            if lb is None and not self._lazy_load_gpu:
+                raise RuntimeError(
+                    f"Left-Brain LLM is not loaded ({self.left_brain_status})."
+                )
 
-            effective_sensors = self.sensors
+            effective_sensors: Any = self.sensors
             if fact_anchor_text and fact_anchor_text.strip():
-                effective_sensors = CruciblePairedBridgeSensors(
-                    stage_id="poetry_story",
+                effective_sensors = _PassageAnchoredSensors(
                     wave_text=user_text,
-                    structure_text=fact_anchor_text.strip(),
+                    fact_anchor_text=fact_anchor_text.strip(),
                     base_sensors=self.sensors,
                 )
 
@@ -928,6 +1026,16 @@ class ScholarStudioRuntime:
                 if self.active_lineage == "virgin"
                 else self.archives
             )
+            history_pairs = (
+                self._extract_conversation_history_pairs()
+                if include_conversation_history
+                else ()
+            )
+            resolved_lead = (
+                bool(lead_with_gap)
+                if lead_with_gap is not None
+                else bool(getattr(self, "lead_with_gap", False))
+            )
 
             turn_result = run_three_legged_turn(
                 self.birth_state,
@@ -945,6 +1053,8 @@ class ScholarStudioRuntime:
                 force_spoken_reply=True,
                 num_sentences=target_sentences,
                 equilibrium_stop=use_equilibrium_stop,
+                conversation_history=history_pairs,
+                lead_with_gap=resolved_lead,
                 will_edges=self.will_edges,
             )
 
@@ -961,14 +1071,22 @@ class ScholarStudioRuntime:
                 if getattr(turn_result.equilibrium, "vibes", None)
                 else vibe
             )
-            spoken_reply = (
-                turn_result.final_conscious_note
-                or f"Contemplating {vibe.active_concept or 'the Socratic tension'}, inner theory aligns with observed fact."
-            )
+            if lb is None:
+                spoken_reply = (
+                    f"[Offline Right-Brain Telemetry — No Left-Brain Checkpoint Loaded | "
+                    f"posture={vibe.posture}, active_concept={vibe.active_concept or 'none'}, "
+                    f"clarity={vibe.clarity:.2f}]"
+                )
+            else:
+                spoken_reply = (turn_result.final_conscious_note or "").strip()
+                if not spoken_reply:
+                    raise RuntimeError("Left-Brain returned empty generation output.")
+
+            shown_user_text = (user_display_text or user_text).strip()
             self._turn_records_by_id[scene_id] = {
                 "scene_index": scene_id,
                 "scenario_text": user_text,
-                "fact_anchor_text": fact_anchor_text or user_text,
+                "fact_anchor_text": fact_anchor_text or shown_user_text,
                 "turn": turn_result,
                 "spoken_reply": spoken_reply,
             }
@@ -989,7 +1107,7 @@ class ScholarStudioRuntime:
                 {
                     "sender": "user",
                     "role_label": user_role_label,
-                    "text": user_text,
+                    "text": shown_user_text,
                 }
             )
             companion_msg: dict[str, Any] = {
@@ -1072,11 +1190,10 @@ class ScholarStudioRuntime:
         else:
             contrastive_ref = dict(p1_coords)
 
-        hunch_text = (
-            spoken_reply
-            or turn.final_conscious_note
-            or "Contemplating the dilemma, inner theory required calibration."
-        )
+        raw_spoken = (spoken_reply or turn.final_conscious_note or "").strip()
+        if raw_spoken.startswith("[Offline Right-Brain Telemetry"):
+            raw_spoken = ""
+        hunch_text = raw_spoken or scenario_text.strip()
         return UnresolvedSleepScene(
             scene_index=int(scene_index),
             scenario_text=scenario_with_note,
@@ -1094,16 +1211,31 @@ class ScholarStudioRuntime:
             contrastive_reference_coordinates=contrastive_ref,
         )
 
-    def handle_chat_message(self, text: str, *, num_sentences: int | None = None) -> dict[str, Any]:
+    def handle_chat_message(
+        self,
+        text: str,
+        *,
+        num_sentences: int | None = None,
+        anchor_to_canvas: bool = False,
+    ) -> dict[str, Any]:
         clean = str(text or "").strip()
         if not clean:
             raise ValueError("Chat message text must be non-empty.")
+        canvas_clean = self.study_canvas_text.strip() if anchor_to_canvas else ""
+        if canvas_clean:
+            llm_prompt = f"Reading Passage: \"{canvas_clean[:800]}\"\n\n{clean}"
+            anchor_txt: str | None = canvas_clean
+        else:
+            llm_prompt = clean
+            anchor_txt = None
         return self._run_scholar_turn(
-            user_text=clean,
-            user_role_label="Socratic Question",
+            user_text=llm_prompt,
+            user_display_text=clean,
+            user_role_label="Socratic Dialogue",
             companion_role_label="LMFT-Scholar · Socratic Reflection",
-            fact_anchor_text=self.study_canvas_text if self.study_canvas_text.strip() else None,
+            fact_anchor_text=anchor_txt,
             num_sentences=num_sentences,
+            include_conversation_history=True,
         )
 
     def update_study_canvas(self, study_text: str) -> dict[str, Any]:
@@ -1123,7 +1255,7 @@ class ScholarStudioRuntime:
         if not clean_passage:
             raise ValueError("Study canvas passage must be non-empty.")
         prompt = (
-            f"Study Passage: \"{clean_passage[:420]}\"\n"
+            f"Study Passage: \"{clean_passage[:800]}\"\n"
             f"Reflect on the underlying Cultural, Philosophical, and Experiential tensions in this passage."
         )
         return self._run_scholar_turn(
@@ -1132,6 +1264,7 @@ class ScholarStudioRuntime:
             companion_role_label="LMFT-Scholar · Passage Contemplation",
             fact_anchor_text=clean_passage,
             num_sentences=num_sentences,
+            include_conversation_history=True,
         )
 
     def handle_step_curriculum_lesson(
@@ -1156,13 +1289,19 @@ class ScholarStudioRuntime:
 
         self.curriculum_step_counter += 1
         self.study_canvas_text = selected.passage_text
-        prompt = f"[{selected.department}] {selected.title}: {selected.socratic_prompt}"
+        prompt = (
+            f"[{selected.department}] {selected.title}\n"
+            f"Passage: \"{selected.passage_text}\"\n\n"
+            f"{selected.socratic_prompt}"
+        )
         snap = self._run_scholar_turn(
             user_text=prompt,
+            user_display_text=f"[{selected.department}] {selected.title}: {selected.socratic_prompt}",
             user_role_label=f"Curriculum Lesson #{self.curriculum_step_counter} · {selected.department}",
             companion_role_label=f"LMFT-Scholar · {selected.title}",
             fact_anchor_text=selected.passage_text,
             num_sentences=num_sentences,
+            include_conversation_history=False,
         )
         if sleep_after_essay and self.active_lineage != "virgin":
             latest_id = self.scene_counter
@@ -1360,13 +1499,13 @@ class ScholarStudioRuntime:
             projector_updated = False
             if self._last_harvested_gap_pairs and lb is not None and hasattr(lb, "projector"):
                 try:
-                    live_proj_path = self.scholar_checkpoint_dir / "live_projector_weights.pt"
-                    anchor = getattr(lb, "_resting_anchor_state_dict", None)
                     res_proj = update_projector_on_harvested_gap_pairs(
                         lb.projector,
                         self._last_harvested_gap_pairs,
-                        resting_anchor_state_dict=anchor,
-                        save_path=live_proj_path,
+                        state_dir=self.state_dir,
+                        model=getattr(lb, "model", None),
+                        tokenizer=getattr(lb, "tokenizer", None),
+                        prompt_format=getattr(lb, "prompt_format", "chatml"),
                     )
                     projector_updated = bool(res_proj.get("updated", False))
                 except Exception:
@@ -1673,7 +1812,7 @@ class ScholarStudioRuntime:
                 c1_prefix = f"{c1_part.strip()},"
                 cont_b = cont_b_part.strip() or raw_hunch
             else:
-                c1_prefix = "Contemplating the dilemma,"
+                c1_prefix = ""
                 cont_b = raw_hunch
             cont_a = target_text
             if cont_a.strip().lower() == cont_b.strip().lower():
@@ -1758,6 +1897,7 @@ class ScholarStudioRuntime:
                     chord_b=chord_b,
                     posture_label_b="CONCEPT_COLLISION",
                     continuation_b=cont_b,
+                    min_l2_distance=0.15,
                 )
                 with out_path.open("a", encoding="utf-8") as fh:
                     fh.write(json.dumps(pair.to_dict(), ensure_ascii=False) + "\n")
@@ -1897,10 +2037,11 @@ class ScholarStudioRuntime:
             merged_archives.save_all(target_archives_dir)
 
             # 5. Copy live Callosum projector weights (`live_projector_weights.pt`) if present
-            live_proj_src = self.scholar_checkpoint_dir / "live_projector_weights.pt"
+            live_proj_src = self._resolve_live_projector_path()
             copied_live_proj = False
-            if live_proj_src.exists():
+            if live_proj_src is not None and live_proj_src.is_file():
                 shutil.copy2(live_proj_src, target_model_dir / "live_projector_weights.pt")
+                shutil.copy2(live_proj_src, target_state_dir / "live_projector_weights.pt")
                 copied_live_proj = True
 
             self.last_graduation_receipt = (
@@ -2064,8 +2205,8 @@ class ScholarStudioRuntime:
                 "legislative": len(self.archives.legislative.feeling_clauses),
                 "judicial": len(self.archives.judicial.structural_clauses),
             },
-            "has_live_callosum_projector": (self.scholar_checkpoint_dir / "live_projector_weights.pt").exists(),
-            "callosum_live_weights": (self.scholar_checkpoint_dir / "live_projector_weights.pt").exists(),
+            "has_live_callosum_projector": self._resolve_live_projector_path() is not None,
+            "callosum_live_weights": self._resolve_live_projector_path() is not None,
         }
 
     def get_state_snapshot(self) -> dict[str, Any]:
@@ -2162,6 +2303,7 @@ def create_scholar_http_server(
                     snap = runtime.handle_chat_message(
                         str(body.get("text", "")),
                         num_sentences=int(raw_n) if raw_n is not None else None,
+                        anchor_to_canvas=bool(body.get("anchor_to_canvas", False)),
                     )
                     self._send_json(snap)
                     return

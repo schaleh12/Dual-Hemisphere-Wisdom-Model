@@ -211,3 +211,49 @@ def test_validate_train_holdout_disjointness_catches_leakage() -> None:
     )
     with pytest.raises(ValueError, match="Overlapping clause_1_prefixes"):
         validate_train_holdout_disjointness([train_pair], [leaked_holdout])
+
+
+def test_chatml_pre_gap_prompt_aligns_directly_at_comma_without_stray_space() -> None:
+    """Verify ChatML `format_pre_gap_prompt` places `<|subliminal_gap|>` directly after `c1` with zero stray whitespace."""
+    chord_a, chord_b = compile_chess_posture_chords(
+        queen_volition=0.80,
+        king_safety=0.75,
+        bishop_alignment=0.82,
+        knight_disruption=0.65,
+        pawn_chain_flow=0.70,
+        rook_bastion=0.78,
+    )
+    pair = ContrastiveGapPair(
+        pair_id="scholar-chatml-align",
+        domain="philosophical_dilemma",
+        split="train",
+        user_prompt="Why do tidy models fail in real panics?",
+        clause_1_prefix="Although an equation looks neat on paper,",
+        chord_a=chord_a,
+        posture_label_a="HUMBLE_CALIBRATION",
+        continuation_a="lived human behavior demands continual empirical humility.",
+        chord_b=chord_b,
+        posture_label_b="DOGMATIC_BLINDNESS",
+        continuation_b="mistaking equations for reality invites sudden fracture.",
+    )
+
+    class _MockChatMLTokenizer:
+        chat_template = "{{ messages }}"
+
+        def apply_chat_template(self, messages, tokenize=False, add_generation_prompt=True):
+            assert tokenize is False
+            assert add_generation_prompt is True
+            assert messages[0]["role"] == "system"
+            assert messages[-1]["role"] == "user"
+            return (
+                f"<|im_start|>system\n{messages[0]['content']}<|im_end|>\n"
+                f"<|im_start|>user\n{messages[-1]['content']}<|im_end|>\n<|im_start|>assistant\n"
+            )
+
+    tok = _MockChatMLTokenizer()
+    comma_pre = pair.format_pre_gap_prompt(lead_with_gap=False, prompt_format="chatml", tokenizer=tok)
+    assert comma_pre.endswith("Although an equation looks neat on paper,<|subliminal_gap|>")
+
+    lead_pre = pair.format_pre_gap_prompt(lead_with_gap=True, prompt_format="chatml", tokenizer=tok)
+    assert lead_pre.endswith("<|im_start|>assistant\n<|subliminal_gap|>")
+

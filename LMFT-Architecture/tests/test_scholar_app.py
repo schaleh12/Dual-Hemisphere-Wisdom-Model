@@ -245,3 +245,100 @@ def test_scholar_http_server_endpoints(tmp_path: Path) -> None:
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_scholar_chat_decouples_canvas_wires_history_and_updates_projector_in_rem_sleep(tmp_path: Path) -> None:
+    from lmft_architecture.subliminal_gap_splice import SubliminalGapProjector
+    from lmft_architecture.three_legged_runtime import SplicedThoughtTrace
+
+    class _StubScholarLeftBrain:
+        prompt_format = "chatml"
+
+        def __init__(self) -> None:
+            self.projector = SubliminalGapProjector(hidden_size=64)
+            self.projector.capture_resting_anchor()
+            self.seen_scenarios: list[str] = []
+            self.seen_histories: list[tuple[tuple[str, str], ...]] = []
+
+        def generate_multi_sentence_script(
+            self,
+            scenario_text: str,
+            chord=None,
+            *,
+            num_sentences: int = 2,
+            pass_index: int = 2,
+            clause_1_prefix=None,
+            conversation_history=(),
+            max_context_chars: int = 2400,
+            chord_builder_at_comma=None,
+            stop_condition=None,
+            lead_with_gap: bool = False,
+        ):
+            self.seen_scenarios.append(scenario_text)
+            self.seen_histories.append(tuple(conversation_history))
+            built_chord = None
+            if chord_builder_at_comma is not None:
+                res = chord_builder_at_comma("Hello there,")
+                built_chord = res[0] if isinstance(res, tuple) else res
+            reply = f"Hello there, glad to speak about: {scenario_text[:48]}."
+            trace = SplicedThoughtTrace(
+                pass_index=pass_index,
+                clause_1_prefix="Hello there,",
+                prompt_before_gap="Hello there, <|subliminal_gap|>",
+                spliced_chord=built_chord or chord,  # type: ignore[arg-type]
+                post_gap_continuation=f"glad to speak about: {scenario_text[:48]}.",
+                full_thought=reply,
+                hit_eos=True,
+            )
+            return reply, (trace,)
+
+    repo_root = tmp_path / "repo"
+    state_dir = repo_root / "outputs" / "scholar_state"
+    ckpt_dir = repo_root / "models" / "left_brain_scholar"
+    ckpt_dir.mkdir(parents=True, exist_ok=True)
+    stub_lb = _StubScholarLeftBrain()
+
+    runtime = ScholarStudioRuntime(
+        repo_root=repo_root,
+        state_dir=state_dir,
+        scholar_checkpoint_dir=ckpt_dir,
+        scholar_left_brain=stub_lb,
+        lazy_load_gpu=True,
+        auto_rem_sleep=False,
+    )
+
+    # 1. Default chat does NOT inject study_canvas_text (Moby-Dick) into user prompt or fact_anchor_text
+    snap1 = runtime.handle_chat_message("hello")
+    assert stub_lb.seen_scenarios[0] == "hello"
+    assert stub_lb.seen_histories[0] == ()
+    comp1 = [m for m in snap1["chat_messages"] if m.get("sender") == "companion" and "id" in m][-1]
+    assert "inner theory aligns with observed fact" not in comp1["text"]
+    assert "Moby-Dick" not in stub_lb.seen_scenarios[0]
+
+    # 2. Second chat turn receives Turn 1 in conversation_history
+    snap2 = runtime.handle_chat_message("How are you doing today?")
+    assert len(stub_lb.seen_histories[1]) == 1
+    assert stub_lb.seen_histories[1][0][0] == "hello"
+    assert stub_lb.seen_histories[1][0][1] == comp1["text"]
+
+    # 3. Opt-in anchor_to_canvas=True explicitly grounds the prompt and Pass-1 sensors in study_canvas_text
+    runtime.handle_chat_message("What is Starbuck's argument?", anchor_to_canvas=True)
+    assert "Reading Passage:" in stub_lb.seen_scenarios[2]
+    assert "Starbuck" in stub_lb.seen_scenarios[2]
+
+    # 4. Coach Turn 1 with a contrastive note and run REM sleep -> harvests philosophical_dilemma pair & updates projector!
+    turn_1_id = int(comp1["id"])
+    runtime.flag_turn_for_coaching(
+        turn_1_id,
+        user_note="Balance decisive power and urgent agency against catastrophic chaos and disorder.",
+        check_auto_sleep=False,
+    )
+    snap_sleep = runtime.handle_run_rem_sleep()
+    assert snap_sleep["sleep_cycle_index"] == 1
+    assert len(runtime.rem_dream_chronicles) == 1
+    chron = runtime.rem_dream_chronicles[-1]
+    assert chron["harvested_gap_pairs"] >= 1
+    assert chron["projector_updated"] is True
+    assert (state_dir / "live_projector_weights.pt").is_file()
+    assert snap_sleep["tree_inspector"]["has_live_callosum_projector"] is True
+

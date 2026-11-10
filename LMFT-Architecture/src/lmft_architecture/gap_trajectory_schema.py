@@ -55,12 +55,41 @@ VALID_GAP_DOMAINS = (
     "social_dilemma",
     "chess_intuition",
     "tone_conflict",
+    "philosophical_dilemma",
 )
 
 VALID_GAP_SPLITS = (
     "train",
     "holdout",
 )
+
+DEFAULT_CHATML_SYSTEM_PROMPT = (
+    "You are LMFT-Scholar, a thoughtful Socratic conversationalist and literary scholar."
+)
+
+
+def build_chatml_user_header(
+    tokenizer,
+    user_prompt: str,
+    *,
+    conversation_history: Sequence[tuple[str, str]] = (),
+    system_prompt: str | None = DEFAULT_CHATML_SYSTEM_PROMPT,
+) -> str:
+    """Render a consistent ChatML prompt header across training, self-distillation, and runtime."""
+    messages: list[dict[str, str]] = []
+    if system_prompt and system_prompt.strip():
+        messages.append({"role": "system", "content": system_prompt.strip()})
+    for u_txt, a_txt in conversation_history:
+        messages.append({"role": "user", "content": str(u_txt).strip()})
+        messages.append({"role": "assistant", "content": str(a_txt).strip()})
+    messages.append({"role": "user", "content": user_prompt.strip()})
+    return str(
+        tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
+        )
+    )
 
 MIN_CHORD_L2_DISTANCE = 0.35
 
@@ -124,9 +153,12 @@ class ContrastiveGapPair:
             raise ValueError(f"domain must be one of {VALID_GAP_DOMAINS}, got {self.domain!r}")
         if self.split not in VALID_GAP_SPLITS:
             raise ValueError(f"split must be one of {VALID_GAP_SPLITS}, got {self.split!r}")
+        if not isinstance(self.clause_1_prefix, str):
+            raise ValueError("clause_1_prefix must be a string")
+        if SUBLIMINAL_GAP_TOKEN in self.clause_1_prefix:
+            raise ValueError(f"clause_1_prefix must not contain raw {SUBLIMINAL_GAP_TOKEN!r}")
         for field_name, val in (
             ("user_prompt", self.user_prompt),
-            ("clause_1_prefix", self.clause_1_prefix),
             ("posture_label_a", self.posture_label_a),
             ("continuation_a", self.continuation_a),
             ("posture_label_b", self.posture_label_b),
@@ -159,14 +191,38 @@ class ContrastiveGapPair:
     def chord_distance(self) -> float:
         return chord_l2_distance(self.chord_a, self.chord_b)
 
-    def format_pre_gap_prompt(self, *, lead_with_gap: bool = False) -> str:
+    def format_pre_gap_prompt(
+        self,
+        *,
+        lead_with_gap: bool = False,
+        prompt_format: str = "legacy_ua",
+        tokenizer=None,
+    ) -> str:
         """Return the shared text up to and including `<|subliminal_gap|>` (identical for A and B)."""
         c1 = self.clause_1_prefix.strip()
+        if (
+            prompt_format == "chatml"
+            and tokenizer is not None
+            and hasattr(tokenizer, "apply_chat_template")
+            and getattr(tokenizer, "chat_template", None)
+        ):
+            header = build_chatml_user_header(tokenizer, self.user_prompt)
+            sep = "" if header.endswith(("\n", " ")) else " "
+            if lead_with_gap or not c1:
+                return f"{header}{sep}{SUBLIMINAL_GAP_TOKEN}"
+            return f"{header}{sep}{c1}{SUBLIMINAL_GAP_TOKEN}"
         if lead_with_gap or not c1:
             return f"User: {self.user_prompt.strip()}\nAssistant: {SUBLIMINAL_GAP_TOKEN}"
         return f"User: {self.user_prompt.strip()}\nAssistant: {c1} {SUBLIMINAL_GAP_TOKEN}"
 
-    def format_full_text(self, branch: str, *, lead_with_gap: bool = False) -> str:
+    def format_full_text(
+        self,
+        branch: str,
+        *,
+        lead_with_gap: bool = False,
+        prompt_format: str = "legacy_ua",
+        tokenizer=None,
+    ) -> str:
         """Return the full text for branch `'A'` or `'B'` with `<|subliminal_gap|>` between Clause 1 and Clause 2."""
         if branch == "A":
             cont = self.continuation_a.strip()
@@ -174,7 +230,12 @@ class ContrastiveGapPair:
             cont = self.continuation_b.strip()
         else:
             raise ValueError(f"branch must be 'A' or 'B', got {branch!r}")
-        return f"{self.format_pre_gap_prompt(lead_with_gap=lead_with_gap)} {cont}"
+        pre = self.format_pre_gap_prompt(
+            lead_with_gap=lead_with_gap,
+            prompt_format=prompt_format,
+            tokenizer=tokenizer,
+        )
+        return f"{pre} {cont}"
 
     def to_dict(self) -> dict:
         return {
@@ -506,8 +567,8 @@ def validate_train_holdout_disjointness(
     if train_prompts & holdout_prompts:
         raise ValueError("Overlapping user_prompts detected between train and holdout splits")
 
-    train_prefixes = {p.clause_1_prefix.strip().lower() for p in train_pairs}
-    holdout_prefixes = {p.clause_1_prefix.strip().lower() for p in holdout_pairs}
+    train_prefixes = {p.clause_1_prefix.strip().lower() for p in train_pairs if p.clause_1_prefix.strip()}
+    holdout_prefixes = {p.clause_1_prefix.strip().lower() for p in holdout_pairs if p.clause_1_prefix.strip()}
     if train_prefixes & holdout_prefixes:
         raise ValueError("Overlapping clause_1_prefixes detected between train and holdout splits")
 
