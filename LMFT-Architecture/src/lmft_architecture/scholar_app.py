@@ -717,23 +717,6 @@ class ScholarStudioRuntime:
                 turn_result.final_conscious_note
                 or f"Contemplating {vibe.active_concept or 'the Socratic tension'}, inner theory aligns with observed fact."
             )
-            spliced_clauses = [
-                f"{tr.clause_1_prefix} <|subliminal_gap|> {tr.post_gap_continuation}".strip()
-                for tr in turn_result.spliced_traces
-            ]
-            if not spliced_clauses:
-                if "," in spoken_reply:
-                    c1_fb, c2_fb = spoken_reply.split(",", 1)
-                    spliced_clauses = [f"{c1_fb.strip()}, <|subliminal_gap|> {c2_fb.strip()}"]
-                else:
-                    spliced_clauses = [f"<|subliminal_gap|> {spoken_reply}"]
-
-            spoken_publicly = bool(float(vibe.execution) >= 0.25)
-            speech_mode = (
-                "Public Speech (Will Execution)"
-                if spoken_publicly
-                else "Internal Monologue (Inspectable)"
-            )
             self._turn_records_by_id[scene_id] = {
                 "scene_index": scene_id,
                 "scenario_text": user_text,
@@ -766,9 +749,6 @@ class ScholarStudioRuntime:
                 "sender": "companion",
                 "role_label": companion_role_label,
                 "text": spoken_reply,
-                "internal_monologue": spoken_reply,
-                "spliced_clauses": spliced_clauses,
-                "spoken_publicly": spoken_publicly,
                 "coached": queued_now,
                 "savored": False,
                 "telemetry": {
@@ -776,10 +756,6 @@ class ScholarStudioRuntime:
                     "outcome": turn_result.outcome,
                     "settled": turn_result.settled,
                     "active_concept": vibe.active_concept or "none",
-                    "speech_mode": speech_mode,
-                    "spoken_publicly": spoken_publicly,
-                    "sentence_count": len(spliced_clauses),
-                    "spliced_clauses": spliced_clauses,
                     "clarity": round(float(vibe.clarity), 4),
                     "confidence": round(float(vibe.confidence), 4),
                     "fact": round(float(vibe.fact), 4),

@@ -53,9 +53,6 @@ def test_scholar_runtime_chat_passage_curriculum_savor_and_rem_sleep(tmp_path: P
     assert tel1["clarity"] >= 0.0
     assert "fact" in tel1 and "theory" in tel1
     assert "intention" in tel1 and "execution" in tel1
-    assert tel1["speech_mode"] in ("Public Speech (Will Execution)", "Internal Monologue (Inspectable)")
-    assert companion_msgs[0]["internal_monologue"]
-    assert any("<|subliminal_gap|>" in c for c in companion_msgs[0]["spliced_clauses"])
 
     # 2. Savor turn into 3-Branch Archives
     snap_savored = runtime.savor_turn_vibe(first_turn_id)

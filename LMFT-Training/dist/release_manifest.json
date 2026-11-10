@@ -2,8 +2,8 @@
   "schema_version": 1,
   "version": "0.2.0",
   "github_repo": "schaleh12/Dual-Hemisphere-Wisdom-Model",
-  "build_sha256": "57d831155ae41af2ec0164569a08b45fcc281c9b2d42b3f12fdb95ad8c344cb4",
-  "build_short_hash": "57d831155ae4",
+  "build_sha256": "7a347efb49470079df2936359000fd56704902b5e992df4fee07013cf96f83f0",
+  "build_short_hash": "7a347efb4947",
   "files": {
     "src/lmft_architecture/__init__.py": {
       "sha256": "a89f56c2195e87129adbffa5065d8769ea096e13ba98783d217c4d120ee92623",
@@ -254,12 +254,12 @@
       "size_bytes": 5068
     },
     "src/lmft_architecture/scholar_app.py": {
-      "sha256": "2dd5c30af60cf6cd89a30c3954cbb230baff55b90e2b8e267f820e8c7ebe9d7e",
-      "size_bytes": 71442
+      "sha256": "43234203ad23a93b68fdd7890981f9228318a22764bcd524a501147fc233388e",
+      "size_bytes": 70292
     },
     "src/lmft_architecture/scholar_ui.py": {
-      "sha256": "b87cfde11c07ec5f1b079590fb15f81c3ff500dd724c24c9daaaa8719536f8b0",
-      "size_bytes": 21003
+      "sha256": "5b8b1c6dc1c978b4a33c4fb1dcefde8c6df0b1b36f319192bfef9a4152b1459b",
+      "size_bytes": 20119
     },
     "src/lmft_architecture/scoped_attention.py": {
       "sha256": "b35d5c1bffc99dc5b1a529b253f690dbbf112f77e70cb4bb95db997cd46502dc",

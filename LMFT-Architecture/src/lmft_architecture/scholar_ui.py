@@ -428,7 +428,6 @@ function renderState(s) {
       .map(([k, v]) => `${k.split("/").slice(-1)[0]}=${Number(v).toFixed(2)}`)
       .join(", ");
     document.getElementById("telemetry-summary-text").innerHTML =
-      `<div><strong>Modality:</strong> ${escapeHtml(tel.speech_mode || "Public Speech")}</div>` +
       `<div><strong>Gear:</strong> ${escapeHtml(tel.gear_used || "")}</div>` +
       `<div><strong>Outcome:</strong> ${escapeHtml(tel.outcome || "")} (${tel.settled ? "Settled" : "Queued for Sleep"})</div>` +
       `<div><strong>Active Concept:</strong> ${escapeHtml(tel.active_concept || "none")}</div>` +
@@ -445,15 +444,8 @@ function renderState(s) {
     const box = document.getElementById("chat-messages");
     box.innerHTML = msgs.map(m => {
       const isComp = m.sender === "companion" && typeof m.id === "number";
-      const modeTag = (m.telemetry && m.telemetry.speech_mode) ? ` · ${escapeHtml(m.telemetry.speech_mode)}` : "";
       const badge = (m.telemetry && m.telemetry.active_concept)
-        ? `<span class="pill">${escapeHtml(m.telemetry.active_concept)}${modeTag}</span>`
-        : "";
-      const splicedClauses = (m.spliced_clauses && m.spliced_clauses.length)
-        ? m.spliced_clauses
-        : ((m.telemetry && m.telemetry.spliced_clauses) || []);
-      const traceBlock = (isComp && splicedClauses.length)
-        ? `<details style="margin-top:6px;font-size:11px;color:var(--text-2);"><summary style="cursor:pointer;">Inspect Internal Monologue &amp; &lt;|subliminal_gap|&gt; Splice (${splicedClauses.length} sentence${splicedClauses.length === 1 ? '' : 's'})</summary><div style="margin-top:4px;padding:6px 8px;background:var(--bg-2);border-radius:6px;white-space:pre-wrap;">${splicedClauses.map(c => escapeHtml(c)).join("\n")}</div></details>`
+        ? `<span class="pill">${escapeHtml(m.telemetry.active_concept)} · ${escapeHtml(m.telemetry.gear_used || "")}</span>`
         : "";
       const actions = isComp ? `
         <div class="msg-actions">
@@ -468,7 +460,6 @@ function renderState(s) {
             ${badge}
           </div>
           <div class="msg-text">${escapeHtml(m.text)}</div>
-          ${traceBlock}
           ${actions}
           ${m.auto_rem_sleep_receipt ? `<div style="margin-top:8px;padding:6px 8px;border-radius:6px;background:rgba(168,85,247,0.12);border:1px solid rgba(168,85,247,0.3);font-size:11px;">${escapeHtml(m.auto_rem_sleep_receipt)}</div>` : ""}
         </div>
