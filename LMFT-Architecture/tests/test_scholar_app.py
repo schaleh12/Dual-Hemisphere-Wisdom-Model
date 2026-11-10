@@ -17,10 +17,56 @@ from lmft_architecture.scholar_app import (
 
 
 def test_curriculum_lessons_cover_all_four_founding_departments() -> None:
-    assert len(SCHOLAR_CURRICULUM_LESSONS) >= 8
+    assert len(SCHOLAR_CURRICULUM_LESSONS) == 12
     depts = " ".join(l.department for l in SCHOLAR_CURRICULUM_LESSONS)
     for expected in ("Cultural", "Philosophical", "Experiential", "Psychological"):
         assert expected in depts
+    boughs = {l.department for l in SCHOLAR_CURRICULUM_LESSONS}
+    assert len(boughs) == 12
+
+
+def test_scholar_literature_seminar_sleep_after_essay_sprouts_tier2_and_tier3_canopy(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    state_dir = repo_root / "outputs" / "scholar_state"
+    ckpt_dir = repo_root / "models" / "left_brain_scholar"
+    ckpt_dir.mkdir(parents=True, exist_ok=True)
+
+    runtime = ScholarStudioRuntime(
+        repo_root=repo_root,
+        state_dir=state_dir,
+        scholar_checkpoint_dir=ckpt_dir,
+        lazy_load_gpu=True,
+        auto_rem_sleep=False,
+    )
+
+    # First book essay on cultural/efficiency (Moby-Dick) with sleep_after_essay=True -> sprouts Tier-2 leaf
+    snap1 = runtime.handle_step_curriculum_lesson(
+        lesson_id="cultural_efficiency_stewardship",
+        sleep_after_essay=True,
+    )
+    assert snap1["sleep_cycle_index"] == 1
+    assert snap1["learned_leaves_count"] >= 1
+    ti1 = snap1["tree_inspector"]
+    assert ti1["tier_counts"]["tier_2"] >= 1
+    assert any(l.leaf_id == "cultural/efficiency/prudent_stewardship" and l.tier == 2 for l in runtime.learned_leaves)
+
+    # Second book essay on cultural/efficiency with sleep_after_essay=True -> deepens into Tier-3 child leaf
+    snap2 = runtime.handle_step_curriculum_lesson(
+        lesson_id="cultural_efficiency_stewardship",
+        sleep_after_essay=True,
+    )
+    assert snap2["sleep_cycle_index"] == 2
+    ti2 = snap2["tree_inspector"]
+    assert ti2["tier_counts"]["tier_3"] >= 1
+    assert any(
+        l.leaf_id == "cultural/efficiency/prudent_stewardship/measured_conservation"
+        and l.tier == 3
+        and l.parent_branch == "cultural/efficiency/prudent_stewardship"
+        and l.anchor_weights is not None
+        and len(l.anchor_weights) == 8
+        for l in runtime.learned_leaves
+    )
+    assert len(load_learned_leaves(state_dir / "learned_rules.json")) == len(runtime.learned_leaves)
 
 
 def test_scholar_runtime_chat_passage_curriculum_savor_and_rem_sleep(tmp_path: Path) -> None:
@@ -160,20 +206,23 @@ def test_scholar_http_server_endpoints(tmp_path: Path) -> None:
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/") as resp:
             html = resp.read().decode("utf-8")
             assert "LMFT-Scholar" in html
-            assert "Foundational 4-Department Curriculum" in html
+            assert "12-Book Classic Literature Seminar" in html
+            assert "Visual Tree &amp; Canopy Development Inspector" in html
             assert "Natural Equilibrium Flow" in html
             assert "chat-sentences-select" not in html
             assert "curriculum-sentences-select" not in html
 
         req = urllib.request.Request(
             f"http://127.0.0.1:{port}/api/curriculum/step",
-            data=json.dumps({"lesson_id": "philosophical_being_agency"}).encode("utf-8"),
+            data=json.dumps({"lesson_id": "philosophical_being_agency", "sleep_after_essay": True}).encode("utf-8"),
             headers={"Content-Type": "application/json"},
             method="POST",
         )
         with urllib.request.urlopen(req) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             assert data["curriculum_step_counter"] == 1
+            assert data["sleep_cycle_index"] == 1
+            assert data["tree_inspector"]["tier_counts"]["tier_2"] >= 1
     finally:
         server.shutdown()
         server.server_close()

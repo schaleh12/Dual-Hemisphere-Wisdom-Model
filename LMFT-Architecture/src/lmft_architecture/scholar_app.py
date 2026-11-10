@@ -103,10 +103,16 @@ from .scholar_ui import SCHOLAR_SINGLE_PAGE_HTML
 from .sleep_consolidation import (
     UnresolvedSleepScene,
     apply_dream_reflection_to_archives,
+    assert_domain_general_text,
     consolidate_sleep_clusters_locally,
     extract_dream_vow_sentence,
 )
-from .subliminal_gap_splice import SubliminalChordVector
+from .subliminal_gap_splice import (
+    _DEFAULT_LEAF_ANCHOR_WEIGHTS,
+    SubliminalChordVector,
+    score_leaf_anchor_weights_at_birth,
+    sculpt_learned_leaf_anchor_weights,
+)
 from .three_legged_runtime import (
     SubliminalGapLeftBrain,
     ThreeLeggedTurnResult,
@@ -145,101 +151,358 @@ SCHOLAR_CURRICULUM_LESSONS: tuple[ScholarCurriculumLesson, ...] = (
     ScholarCurriculumLesson(
         lesson_id="cultural_efficiency_stewardship",
         department="Cultural · Efficiency",
-        title="Stewardship vs. Reckless Force (Power & Wastelessness)",
+        title="Moby-Dick — Prudent Stewardship vs. Monomaniacal Force (Power & Wastelessness)",
         passage_text=(
-            "A master builder can fell an ancient oak in ten minutes to bridge a narrow stream, "
-            "or spend an hour assembling fallen fieldstone into a crossing that outlasts generations "
-            "without sacrificing the living canopy."
+            "In Herman Melville's Moby-Dick, First Mate Starbuck pleads that the voyage exists to gather oil "
+            "and bring the crew safely home to Nantucket, whereas Captain Ahab welds the crew's will into a "
+            "single harpoon of vengeance that ultimately consumes the Pequod and all aboard."
         ),
         socratic_prompt=(
-            "Contemplate how genuine power harmonizes with wastelessness when choosing between "
-            "immediate force and patient stewardship."
+            "Write a contemplative essay examining how genuine power must remain tethered to wastelessness and "
+            "stewardship so that focused ambition does not devour the vessel that carries it."
         ),
     ),
     ScholarCurriculumLesson(
         lesson_id="cultural_justice_reciprocity",
         department="Cultural · Justice",
-        title="Reciprocity Under Scarcity (Honor & Fairness)",
+        title="Antigone & Les Misérables — Sacred Covenant vs. Rigid Decree (Honor & Fairness)",
         passage_text=(
-            "Two travelers share a single canteen across an arid plain. When the stronger traveler "
-            "takes only an equal measure while keeping watch through the cold night, trust deepens "
-            "into a covenant stronger than any written contract."
+            "In Sophocles' Antigone and Victor Hugo's Les Misérables, an unyielding legal decree demands "
+            "punishment without mercy, while Antigone and Bishop Myriel uphold a deeper covenant of honor "
+            "and restorative fairness that recognizes shared human dignity under scarcity and fault."
         ),
         socratic_prompt=(
-            "Reflect on how honor and fairness reinforce each other when asymmetric strength meets shared vulnerability."
+            "Reflect on how honor and fairness harmonize when strict procedural rules collide with restorative justice."
         ),
     ),
     ScholarCurriculumLesson(
         lesson_id="cultural_freedom_autonomy",
         department="Cultural · Freedom",
-        title="Inner Sufficiency vs. Compulsive Craving (Self-Sufficiency & Needlessness)",
+        title="Siddhartha & Walden — Inner Sufficiency Amid Abundance (Self-Sufficiency & Needlessness)",
         passage_text=(
-            "A scholar who walks through a bustling bazaar admiring the craftsmanship of every vessel "
-            "without needing to possess any of them enjoys the richness of the world while remaining "
-            "unfettered in spirit."
+            "In Hermann Hesse's Siddhartha and Henry David Thoreau's Walden, the seeker walks through the "
+            "bustling marketplace and the quiet woods alike, discovering that true autonomy arises not from "
+            "accumulating possessions, but from self-sufficiency and needlessness before compulsive craving."
         ),
         socratic_prompt=(
-            "Examine the relationship between self-sufficiency and needlessness when encountering abundance or temptation."
+            "Examine how self-sufficiency and needlessness sustain inner freedom when surrounded by status or temptation."
         ),
     ),
     ScholarCurriculumLesson(
         lesson_id="philosophical_being_agency",
         department="Philosophical · Being",
-        title="Deliberate Agency Within Given Existence (Agency & Existence)",
+        title="Frankenstein — Moral Agency Within Given Existence (Agency & Existence)",
         passage_text=(
-            "A sailor cannot command the direction of the ocean gale, yet by setting the angle of the "
-            "sail and holding the rudder steady, transforms the indifferent wind into deliberate passage."
+            "In Mary Shelley's Frankenstein, Victor claims the creative agency to bring a sentient being into "
+            "existence, yet flees the moment his creation opens its eyes, abandoning the creature to navigate "
+            "an unchosen existence in solitude."
         ),
         socratic_prompt=(
-            "Reflect on how conscious agency operates within the unchosen facts of existence."
+            "Reflect on how conscious agency carries ongoing stewardship for what it brings into existence."
         ),
     ),
     ScholarCurriculumLesson(
         lesson_id="philosophical_structure_harmony",
         department="Philosophical · Structure",
-        title="Living Order Amid Creative Turbulence (Order & Chaos)",
+        title="The Tempest & Lord of the Flies — Living Order Amid Upheaval (Order & Chaos)",
         passage_text=(
-            "When a mountain river floods in spring, rigid embankments crack under the surge, whereas "
-            "terraced floodplains absorb the turbulent water and turn the silt into fertile soil."
+            "When a sudden tempest shatters familiar hierarchies on an isolated island, brittle command "
+            "fractures into factional chaos, whereas resilient order absorbs the storm and weaves reconciliation "
+            "out of turbulence."
         ),
         socratic_prompt=(
-            "Contemplate how resilient order adapts to structural chaos without collapsing into rigidity or disorder."
+            "Contemplate how living structural order adapts to chaos without hardening into tyranny or collapsing into disorder."
         ),
     ),
     ScholarCurriculumLesson(
         lesson_id="philosophical_persistence_rhythm",
         department="Philosophical · Persistence",
-        title="Enduring Thread Through Distinct Moments (Continuity & Discreteness)",
+        title="The Odyssey — Enduring Identity Across Discrete Trials (Continuity & Discreteness)",
         passage_text=(
-            "A melody consists of discrete notes separated by silence, yet the listener hears a single "
-            "continuous phrase unfolding across time."
+            "Across twenty years of discrete islands, shipwrecks, and shifting disguises in Homer's Odyssey, "
+            "Odysseus and Penelope preserve a single unbroken thread of continuity and memory that links "
+            "departure to return."
         ),
         socratic_prompt=(
-            "Explore how continuity and discreteness coexist in memory, vows, and purposeful action."
+            "Explore how enduring continuity of purpose connects discrete, changing episodes across time."
+        ),
+    ),
+    ScholarCurriculumLesson(
+        lesson_id="experiential_reflection_wonder",
+        department="Experiential · Reflection",
+        title="Plato's Cave & Alice in Wonderland — Discerning What Matters (Novelty & Salience)",
+        passage_text=(
+            "When stepping out of Plato's cave into open sunlight or descending into an unfamiliar wonderland, "
+            "every shadow and spectacle dazzles with immediate novelty, requiring patient reflection to discern "
+            "true structural salience from passing distraction."
+        ),
+        socratic_prompt=(
+            "Examine how contemplative reflection distinguishes enduring salience from loud sensory novelty."
+        ),
+    ),
+    ScholarCurriculumLesson(
+        lesson_id="experiential_phase_catharsis",
+        department="Experiential · Phase",
+        title="The Iliad (Book 24) — Transforming Wrath Into Shared Catharsis (Valence & Arousal)",
+        passage_text=(
+            "In the final book of Homer's Iliad, aged King Priam enters Achilles' tent at night to ransom "
+            "Hector's body; as they weep together, consuming high-arousal rage softens into quiet, shared "
+            "sorrow and restorative emotional valence."
+        ),
+        socratic_prompt=(
+            "Reflect on how overwhelming emotional arousal is metabolized into grounded empathy and balanced valence."
         ),
     ),
     ScholarCurriculumLesson(
         lesson_id="experiential_resonance_lucidity",
         department="Experiential · Synchronization",
-        title="Empathetic Resonance Without Losing Center (Resonance & Entrainment)",
+        title="Julius Caesar & 1984 — Empathetic Resonance Without Crowd Entrainment (Resonance & Entrainment)",
         passage_text=(
-            "A seasoned mediator listens deeply to an angry crowd, feeling the heat and urgency of their "
-            "grievance while keeping a calm, unhurried breath that gradually steadies the room."
+            "In Shakespeare's Forum scene in Julius Caesar and Orwell's 1984, rhythmic rhetoric sweeps an "
+            "entire square into involuntary emotional entrainment, testing whether a listener can feel genuine "
+            "human resonance while keeping an unhurried, independent mind."
         ),
         socratic_prompt=(
-            "Reflect on how one can maintain high empathetic resonance without surrendering to involuntary emotional entrainment."
+            "Reflect on how one maintains compassionate resonance with others without surrendering to involuntary entrainment."
+        ),
+    ),
+    ScholarCurriculumLesson(
+        lesson_id="psychological_will_resolution",
+        department="Psychological · Will",
+        title="Hamlet — Bridging Deliberate Intention and Timed Execution (Intention & Execution)",
+        passage_text=(
+            "Throughout Shakespeare's Hamlet, the prince oscillates between endless solitary rumination that "
+            "paralyzes execution and sudden unexamined impulse, until intention and execution finally align "
+            "in calm readiness."
+        ),
+        socratic_prompt=(
+            "Examine how clear moral intention matures into steady, timely execution without hesitation or recklessness."
         ),
     ),
     ScholarCurriculumLesson(
         lesson_id="psychological_truth_calibration",
-        department="Psychological · Truth & Will",
-        title="Aligning Inner Theory With Observed Fact (Fact, Theory, Intention & Execution)",
+        department="Psychological · Truth",
+        title="Crime and Punishment — Calibrating Theory Against Lived Fact (Theory & Fact)",
         passage_text=(
-            "An astronomer whose cherished orbital chart fails to predict an eclipse does not blame the sky; "
-            "instead, the discrepancy becomes the exact compass that refines the theory and sharpens the next observation."
+            "In Dostoevsky's Crime and Punishment, Raskolnikov constructs an airtight abstract theory that "
+            "extraordinary individuals stand above moral law, only to discover that lived human fact and "
+            "conscience refuse to bend to his rationalization."
         ),
         socratic_prompt=(
-            "Examine how humility before observed fact transforms cognitive dissonance into clearer theory and steadier execution."
+            "Examine how humility before observed fact dissolves self-rationalizing theory and restores inner truth."
+        ),
+    ),
+    ScholarCurriculumLesson(
+        lesson_id="psychological_contemplation_stillness",
+        department="Psychological · Contemplation",
+        title="Marcus Aurelius' Meditations — Unclouded Stillness Under Pressure (Clarity & Confidence)",
+        passage_text=(
+            "Writing in his campaign tent along the frontier, Marcus Aurelius reminds himself that external "
+            "tumult cannot muddy the mind unless judgment consents, pairing unclouded perceptual clarity with "
+            "quiet, unboastful confidence."
+        ),
+        socratic_prompt=(
+            "Contemplate how genuine clarity and grounded confidence reinforce each other during uncertainty."
+        ),
+    ),
+)
+
+_SCHOLAR_BANNED_STORY_NOUNS: tuple[str, ...] = (
+    "ahab",
+    "starbuck",
+    "pequod",
+    "melville",
+    "moby",
+    "antigone",
+    "creon",
+    "valjean",
+    "javert",
+    "myriel",
+    "siddhartha",
+    "thoreau",
+    "walden",
+    "frankenstein",
+    "victor",
+    "shelley",
+    "prospero",
+    "golding",
+    "odysseus",
+    "penelope",
+    "homer",
+    "plato",
+    "alice",
+    "achilles",
+    "priam",
+    "hector",
+    "caesar",
+    "brutus",
+    "antony",
+    "orwell",
+    "hamlet",
+    "shakespeare",
+    "raskolnikov",
+    "dostoevsky",
+    "aurelius",
+)
+
+_BOUGH_WISDOM_LEXICON: dict[str, tuple[tuple[str, str], ...]] = {
+    "cultural/efficiency": (
+        (
+            "prudent_stewardship",
+            "Channeling concentrated power through patient resource stewardship so ambition never consumes the vessel.",
+        ),
+        (
+            "measured_conservation",
+            "Balancing decisive force with long-horizon wastelessness and sustainable craft.",
+        ),
+    ),
+    "cultural/justice": (
+        (
+            "covenant_reciprocity",
+            "Harmonizing sacred honor with restorative fairness when asymmetric strength meets shared vulnerability.",
+        ),
+        (
+            "restorative_equanimity",
+            "Tempering strict procedural judgement with proportionate mercy and reciprocal dignity.",
+        ),
+    ),
+    "cultural/freedom": (
+        (
+            "unfettered_sufficiency",
+            "Maintaining inner self-sufficiency and calm needlessness amid external abundance or craving.",
+        ),
+        (
+            "sovereign_detachment",
+            "Appreciating the richness of the world without surrendering autonomy to compulsive possession.",
+        ),
+    ),
+    "philosophical/being": (
+        (
+            "responsible_agency",
+            "Exercising deliberate moral agency and ongoing care within the unchosen facts of existence.",
+        ),
+        (
+            "grounded_stewardship_of_being",
+            "Aligning creative choice with enduring responsibility for sentient existence.",
+        ),
+    ),
+    "philosophical/structure": (
+        (
+            "resilient_adaptation",
+            "Weaving living, flexible order that absorbs creative turbulence without fracturing into chaos or rigidity.",
+        ),
+        (
+            "antifragile_harmony",
+            "Transforming external disruption into deeper structural coherence rather than brittle control.",
+        ),
+    ),
+    "philosophical/persistence": (
+        (
+            "enduring_fidelity",
+            "Preserving an unbroken thread of continuity and purpose across discrete trials and intervals.",
+        ),
+        (
+            "rhythmic_coherence",
+            "Linking distinct moments of action into a continuous, faithful trajectory over time.",
+        ),
+    ),
+    "experiential/reflection": (
+        (
+            "discerned_salience",
+            "Filtering fleeting sensory novelty through patient contemplation to isolate enduring structural salience.",
+        ),
+        (
+            "lucid_wonder",
+            "Welcoming unfamiliar experience with open curiosity while anchoring attention on what truly matters.",
+        ),
+    ),
+    "experiential/phase": (
+        (
+            "cathartic_equanimity",
+            "Metabolizing high-arousal grief or urgency into shared human compassion and balanced emotional valence.",
+        ),
+        (
+            "tempered_vitality",
+            "Holding intense felt energy within a calm, restorative emotional vessel.",
+        ),
+    ),
+    "experiential/synchronization": (
+        (
+            "centered_resonance",
+            "Feeling deep empathetic resonance with others while guarding independent judgment against involuntary entrainment.",
+        ),
+        (
+            "autonomous_attunement",
+            "Listening fully to collective emotion without surrendering one's inner rhythm to crowd contagion.",
+        ),
+    ),
+    "psychological/will": (
+        (
+            "deliberate_readiness",
+            "Aligning clear moral intention with timely, unhurried execution free from paralysis or rash impulse.",
+        ),
+        (
+            "integrated_resolve",
+            "Translating contemplative purpose into steady, proportionate action.",
+        ),
+    ),
+    "psychological/truth": (
+        (
+            "epistemic_humility",
+            "Calibrating internal theory honestly against observed human fact whenever dissonance arises.",
+        ),
+        (
+            "grounded_veracity",
+            "Dissolving self-rationalizing abstractions in the clear light of lived reality.",
+        ),
+    ),
+    "psychological/contemplation": (
+        (
+            "unclouded_stillness",
+            "Sustaining perceptual clarity and quiet, unboastful confidence amid external uncertainty.",
+        ),
+        (
+            "equanimous_clarity",
+            "Pairing sharp inner discernment with steady confidence under pressure.",
+        ),
+    ),
+}
+
+_FOUNDING_TREE_STRUCTURE: tuple[tuple[str, str, tuple[tuple[str, str, tuple[str, str]], ...]], ...] = (
+    (
+        "cultural",
+        "Cultural · The Do-er (Action & Stewardship)",
+        (
+            ("cultural/efficiency", "Efficiency", ("cultural/efficiency/power", "cultural/efficiency/wastelessness")),
+            ("cultural/justice", "Justice", ("cultural/justice/honor", "cultural/justice/fairness")),
+            ("cultural/freedom", "Freedom", ("cultural/freedom/self-sufficiency", "cultural/freedom/needlessness")),
+        ),
+    ),
+    (
+        "philosophical",
+        "Philosophical · The Thinker (Structure & Being)",
+        (
+            ("philosophical/being", "Being", ("philosophical/being/agency", "philosophical/being/existence")),
+            ("philosophical/structure", "Structure", ("philosophical/structure/order", "philosophical/structure/chaos")),
+            ("philosophical/persistence", "Persistence", ("philosophical/persistence/continuity", "philosophical/persistence/discreteness")),
+        ),
+    ),
+    (
+        "experiential",
+        "Experiential · The Feeler (Phase & Resonance)",
+        (
+            ("experiential/reflection", "Reflection", ("experiential/reflection/novelty", "experiential/reflection/salience")),
+            ("experiential/phase", "Phase", ("experiential/phase/valence", "experiential/phase/arousal")),
+            ("experiential/synchronization", "Synchronization", ("experiential/synchronization/resonance", "experiential/synchronization/entrainment")),
+        ),
+    ),
+    (
+        "psychological",
+        "Psychological · The Regulator (Will, Truth & Contemplation)",
+        (
+            ("psychological/will", "Will", ("psychological/will/intention", "psychological/will/execution")),
+            ("psychological/truth", "Truth", ("psychological/truth/theory", "psychological/truth/fact")),
+            ("psychological/contemplation", "Contemplation", ("psychological/contemplation/clarity", "psychological/contemplation/confidence")),
         ),
     ),
 )
@@ -879,6 +1142,7 @@ class ScholarStudioRuntime:
         *,
         lesson_id: str = "",
         num_sentences: int | None = None,
+        sleep_after_essay: bool = False,
     ) -> dict[str, Any]:
         clean_id = str(lesson_id or "").strip()
         selected: ScholarCurriculumLesson | None = None
@@ -896,13 +1160,29 @@ class ScholarStudioRuntime:
         self.curriculum_step_counter += 1
         self.study_canvas_text = selected.passage_text
         prompt = f"[{selected.department}] {selected.title}: {selected.socratic_prompt}"
-        return self._run_scholar_turn(
+        snap = self._run_scholar_turn(
             user_text=prompt,
             user_role_label=f"Curriculum Lesson #{self.curriculum_step_counter} · {selected.department}",
             companion_role_label=f"LMFT-Scholar · {selected.title}",
             fact_anchor_text=selected.passage_text,
             num_sentences=num_sentences,
         )
+        if sleep_after_essay and self.active_lineage != "virgin":
+            latest_id = self.scene_counter
+            if not any(s.scene_index == latest_id for s in self.sleep_queue):
+                self.flag_turn_for_coaching(
+                    latest_id,
+                    user_note=f"Consolidate {selected.department} wisdom from essay reflection.",
+                    check_auto_sleep=False,
+                )
+            snap = self.handle_run_rem_sleep(auto_triggered=True)
+            for msg in reversed(self.chat_messages):
+                if msg.get("id") == latest_id:
+                    msg["auto_rem_sleep_receipt"] = self.last_rem_sleep_receipt
+                    break
+            self._sync_active_thread_record(persist=True)
+            snap = self.get_state_snapshot()
+        return snap
 
     def savor_turn_vibe(self, scene_index: int) -> dict[str, Any]:
         rec = self._turn_records_by_id.get(int(scene_index))
@@ -1049,10 +1329,15 @@ class ScholarStudioRuntime:
             if report.updated_will_edges:
                 self.will_edges = tuple(report.updated_will_edges)
 
+            canopy_rules, canopy_leaves = self._grow_scholar_canopy_from_sleep_scenes(queued_snapshot)
+            all_forged_rules = tuple(list(report.forged_rules) + list(canopy_rules))
+            all_minted_leaves = tuple(list(report.minted_leaves) + list(canopy_leaves))
+            self._last_minted_leaves = all_minted_leaves
+
             lb = self._ensure_left_brain_ready()
             dream_text = ""
             rep_scene = queued_snapshot[0].scene_index
-            if lb is not None and hasattr(lb, "generate_with_comma_Rescan"):
+            if lb is not None and hasattr(lb, "generate_with_subliminal_splice"):
                 try:
                     rep = max(queued_snapshot, key=lambda s: float(s.salience))
                     rep_scene = rep.scene_index
@@ -1075,9 +1360,9 @@ class ScholarStudioRuntime:
                         learned_leaves=self.learned_leaves,
                     )
                     dream_text = generate_rem_dream_self_reflection(
-                        left_brain=lb,
-                        scenario_summary=rep.scenario_text[:200],
-                        sleep_chord=chord_sleep,
+                        lb,
+                        rep.scenario_text[:200],
+                        chord_sleep,
                         num_sentences=3,
                     )
                 except Exception:
@@ -1100,7 +1385,7 @@ class ScholarStudioRuntime:
             harvested_pairs = self._harvest_rem_contrastive_gap_pairs(
                 queued_snapshot=queued_snapshot,
                 vow_sentence=vow_sentence,
-                forged_rules=report.forged_rules,
+                forged_rules=all_forged_rules,
             )
 
             projector_updated = False
@@ -1122,8 +1407,8 @@ class ScholarStudioRuntime:
             self.rem_dream_chronicles.append(
                 {
                     "cycle_index": self.sleep_cycle_index,
-                    "forged_rules": [r.concept_name for r in report.forged_rules],
-                    "minted_leaves": [lf.leaf_id for lf in report.minted_leaves],
+                    "forged_rules": [r.concept_name for r in all_forged_rules],
+                    "minted_leaves": [lf.leaf_id for lf in all_minted_leaves],
                     "dream_text": dream_text,
                     "vow_sentence": vow_sentence,
                     "harvested_gap_pairs": harvested_pairs,
@@ -1135,11 +1420,149 @@ class ScholarStudioRuntime:
             trig_label = "Auto-REM Sleep" if auto_triggered else "REM Sleep"
             self.last_rem_sleep_receipt = (
                 f"{trig_label} Cycle #{self.sleep_cycle_index} Complete: "
-                f"Forged {len(report.forged_rules)} rule(s), minted {len(report.minted_leaves)} leaf(ves), "
+                f"Forged {len(all_forged_rules)} rule(s), minted {len(all_minted_leaves)} leaf(ves), "
                 f"harvested {len(report.harvested_clause_ids)} archive clause(s), "
                 f"and logged {harvested_pairs} Callosum gap pair(s)."
             )
             return self.get_state_snapshot()
+
+    def _grow_scholar_canopy_from_sleep_scenes(
+        self,
+        queued_snapshot: tuple[UnresolvedSleepScene, ...],
+    ) -> tuple[tuple[FuzzyConceptRule, ...], tuple[LearnedLeaf, ...]]:
+        """Grow domain-general Tier-2 and Tier-3 `LearnedLeaf` nodes and `FuzzyConceptRule`s across the 12 boughs with zero 9B Teacher dependency."""
+        if not queued_snapshot or self.active_lineage == "virgin":
+            return (), ()
+
+        active_leaves = list(self.learned_leaves)
+        existing_leaf_ids = {lf.leaf_id for lf in active_leaves}
+        active_rules = list(self.rules)
+        existing_rule_names = {r.concept_name for r in active_rules}
+        minted_leaves: list[LearnedLeaf] = []
+        forged_rules: list[FuzzyConceptRule] = []
+        builtin_ids = {
+            lf.leaf_id for lf in (PHILOSOPHICAL_SHADOW_LEAVES + DEFAULT_COMPLEX_FEELING_LEAVES)
+        }
+
+        for sc in queued_snapshot:
+            coords = dict(sc.external_coordinates or {})
+            target_bough = ""
+            low_scen = (sc.scenario_text or "").lower()
+            for _dept_id, _dept_title, boughs in _FOUNDING_TREE_STRUCTURE:
+                for bough_id, bough_label, _f_leaves in boughs:
+                    dept_prefix = bough_id.split("/")[0]
+                    if f"{dept_prefix} · {bough_label.lower()}" in low_scen or bough_id in low_scen:
+                        target_bough = bough_id
+                        break
+                if target_bough:
+                    break
+
+            if not target_bough:
+                dom_leaf = max(
+                    (
+                        (k, float(v))
+                        for k, v in coords.items()
+                        if k in FOUNDATIONAL_LEAVES
+                    ),
+                    key=lambda kv: (abs(kv[1] - 0.50), kv[1]),
+                    default=("cultural/efficiency/wastelessness", 0.65),
+                )[0]
+                target_bough = dom_leaf.rsplit("/", 1)[0]
+
+            lexicon_entries = _BOUGH_WISDOM_LEXICON.get(
+                target_bough,
+                (("balanced_stewardship", "Harmonizing inner theory with observed structural fact."),),
+            )
+            tier2_slug, tier2_desc = lexicon_entries[0]
+            tier2_slug = assert_domain_general_text(
+                tier2_slug,
+                "leaf_name",
+                banned_substrings=_SCHOLAR_BANNED_STORY_NOUNS,
+            )
+            tier2_desc = assert_domain_general_text(
+                tier2_desc,
+                "description",
+                banned_substrings=_SCHOLAR_BANNED_STORY_NOUNS,
+            )
+            tier2_leaf_id = f"{target_bough}/{tier2_slug}"
+
+            chosen_leaf: LearnedLeaf | None = None
+            if tier2_leaf_id not in existing_leaf_ids:
+                chosen_leaf = score_leaf_anchor_weights_at_birth(
+                    LearnedLeaf(
+                        parent_branch=target_bough,
+                        leaf_name=tier2_slug,
+                        description=tier2_desc,
+                    )
+                )
+                active_leaves.append(chosen_leaf)
+                minted_leaves.append(chosen_leaf)
+                existing_leaf_ids.add(chosen_leaf.leaf_id)
+            elif len(lexicon_entries) >= 2:
+                # Tier-2 leaf already exists on this bough -> sprout a Tier-3 child leaf beneath it!
+                tier3_slug, tier3_desc = lexicon_entries[1]
+                tier3_slug = assert_domain_general_text(
+                    tier3_slug,
+                    "leaf_name",
+                    banned_substrings=_SCHOLAR_BANNED_STORY_NOUNS,
+                )
+                tier3_desc = assert_domain_general_text(
+                    tier3_desc,
+                    "description",
+                    banned_substrings=_SCHOLAR_BANNED_STORY_NOUNS,
+                )
+                tier3_leaf_id = f"{tier2_leaf_id}/{tier3_slug}"
+                if tier3_leaf_id not in existing_leaf_ids:
+                    chosen_leaf = score_leaf_anchor_weights_at_birth(
+                        LearnedLeaf(
+                            parent_branch=tier2_leaf_id,
+                            leaf_name=tier3_slug,
+                            description=tier3_desc,
+                        )
+                    )
+                    active_leaves.append(chosen_leaf)
+                    minted_leaves.append(chosen_leaf)
+                    existing_leaf_ids.add(chosen_leaf.leaf_id)
+
+            # Contrastive weight-space sculpting for existing custom leaves under this bough
+            for idx_lf, lf in enumerate(active_leaves):
+                if (
+                    lf.leaf_id not in builtin_ids
+                    and lf.leaf_id not in _DEFAULT_LEAF_ANCHOR_WEIGHTS
+                    and lf.leaf_id.startswith(target_bough + "/")
+                ):
+                    active_leaves[idx_lf] = sculpt_learned_leaf_anchor_weights(
+                        lf,
+                        coords,
+                        sc.contrastive_reference_coordinates,
+                    )
+
+            if chosen_leaf is not None and chosen_leaf.leaf_name not in existing_rule_names:
+                bough_founding = [
+                    k for k in FOUNDATIONAL_LEAVES if k.startswith(target_bough + "/")
+                ]
+                rule_targets: dict[str, float] = {}
+                for fk in bough_founding[:1]:
+                    rule_targets[fk] = round(max(0.62, min(0.78, float(coords.get(fk, 0.68)))), 2)
+                if "philosophical/structure/order" not in rule_targets:
+                    rule_targets["philosophical/structure/order"] = 0.68
+                rule_targets[chosen_leaf.leaf_id] = 0.65 if chosen_leaf.tier == 2 else 0.58
+                scholar_rule = FuzzyConceptRule(
+                    rule_id=f"rule-scholar-{chosen_leaf.leaf_name[:28]}",
+                    concept_name=chosen_leaf.leaf_name,
+                    description=chosen_leaf.description,
+                    target_leaves=rule_targets,
+                    low=0.58,
+                    high=0.82,
+                    polarity="attractive",
+                )
+                active_rules.append(scholar_rule)
+                forged_rules.append(scholar_rule)
+                existing_rule_names.add(scholar_rule.concept_name)
+
+        self.learned_leaves = tuple(active_leaves)
+        self.rules = tuple(active_rules)
+        return tuple(forged_rules), tuple(minted_leaves)
 
     def _harvest_rem_contrastive_gap_pairs(
         self,
@@ -1172,7 +1595,7 @@ class ScholarStudioRuntime:
             if cont_a.strip().lower() == cont_b.strip().lower():
                 continue
 
-            coords_b: dict[str, float] = {k: 0.50 for k in FOUNDATIONAL_LEAVES}
+            coords_b: dict[str, float] = {k: 0.50 for k in valid_keys}
             for k, v in (sc.external_coordinates or {}).items():
                 if k in valid_keys:
                     coords_b[k] = float(v)
@@ -1413,6 +1836,161 @@ class ScholarStudioRuntime:
             self._persist_session_threads()
             return self.get_state_snapshot()
 
+    def _build_tree_inspector_snapshot(self) -> dict[str, Any]:
+        builtin_ids = {
+            lf.leaf_id for lf in (PHILOSOPHICAL_SHADOW_LEAVES + DEFAULT_COMPLEX_FEELING_LEAVES)
+        }
+        visible_leaves = (
+            ()
+            if self.active_lineage == "virgin"
+            else tuple(lf for lf in self.learned_leaves if lf.leaf_id not in builtin_ids)
+        )
+        visible_rules = (
+            VIRGIN_FOUNDATIONAL_RULES
+            if self.active_lineage == "virgin"
+            else self.rules
+        )
+
+        latest_coords: dict[str, float] = {}
+        for msg in reversed(self.chat_messages):
+            tel = msg.get("telemetry")
+            if isinstance(tel, dict) and isinstance(tel.get("theory_coordinates"), dict):
+                latest_coords.update({str(k): float(v) for k, v in tel["theory_coordinates"].items()})
+                if "fact" in tel:
+                    latest_coords["psychological/truth/fact"] = float(tel["fact"])
+                if "theory" in tel:
+                    latest_coords["psychological/truth/theory"] = float(tel["theory"])
+                if "intention" in tel:
+                    latest_coords["psychological/will/intention"] = float(tel["intention"])
+                if "execution" in tel:
+                    latest_coords["psychological/will/execution"] = float(tel["execution"])
+                if "clarity" in tel:
+                    latest_coords["psychological/contemplation/clarity"] = float(tel["clarity"])
+                if "confidence" in tel:
+                    latest_coords["psychological/contemplation/confidence"] = float(tel["confidence"])
+                if "valence" in tel:
+                    latest_coords["experiential/phase/valence"] = float(tel["valence"])
+                if "arousal" in tel:
+                    latest_coords["experiential/phase/arousal"] = float(tel["arousal"])
+                break
+
+        tier_counts = {
+            "tier_1": 24,
+            "tier_2": sum(1 for lf in visible_leaves if lf.tier == 2),
+            "tier_3": sum(1 for lf in visible_leaves if lf.tier == 3),
+            "tier_4": sum(1 for lf in visible_leaves if lf.tier >= 4),
+        }
+
+        dept_anchor_names: dict[str, tuple[str, ...]] = {
+            "cultural": FOUNDATIONAL_LEAVES[:6] + ("psychological/will/intention", "psychological/will/execution"),
+            "philosophical": FOUNDATIONAL_LEAVES[6:12] + ("psychological/truth/theory", "psychological/truth/fact"),
+            "experiential": FOUNDATIONAL_LEAVES[12:18] + ("psychological/contemplation/clarity", "psychological/contemplation/confidence"),
+            "psychological": FOUNDATIONAL_LEAVES[18:24] + ("experiential/phase/valence", "experiential/phase/arousal"),
+        }
+
+        departments_out: list[dict[str, Any]] = []
+        for dept_id, dept_label, boughs in _FOUNDING_TREE_STRUCTURE:
+            boughs_out: list[dict[str, Any]] = []
+            anchor_names_for_dept = dept_anchor_names.get(dept_id, FOUNDATIONAL_LEAVES[:8])
+            for bough_id, bough_label, f_leaves in boughs:
+                founding_items = [
+                    {
+                        "leaf_id": fl_id,
+                        "short_name": fl_id.split("/")[-1],
+                        "tier": 1,
+                        "activation": round(float(latest_coords.get(fl_id, 0.50)), 3),
+                    }
+                    for fl_id in f_leaves
+                ]
+                grown_items: list[dict[str, Any]] = []
+                for lf in visible_leaves:
+                    if lf.leaf_id.startswith(bough_id + "/"):
+                        anchor_map: dict[str, float] = {}
+                        if lf.anchor_weights:
+                            paired = sorted(
+                                zip(anchor_names_for_dept, lf.anchor_weights),
+                                key=lambda kv: abs(float(kv[1])),
+                                reverse=True,
+                            )[:3]
+                            anchor_map = {str(k): round(float(v), 2) for k, v in paired}
+                        grown_items.append(
+                            {
+                                "leaf_id": lf.leaf_id,
+                                "short_name": lf.leaf_name,
+                                "leaf_name": lf.leaf_name,
+                                "parent_branch": lf.parent_branch,
+                                "tier": lf.tier,
+                                "description": lf.description,
+                                "activation": round(float(latest_coords.get(lf.leaf_id, 0.50)), 3),
+                                "anchor_weights": anchor_map,
+                            }
+                        )
+                bough_act = (
+                    sum(float(item["activation"]) for item in founding_items) / max(1, len(founding_items))
+                )
+                boughs_out.append(
+                    {
+                        "bough_id": bough_id,
+                        "title": bough_label,
+                        "bough_label": bough_label,
+                        "activation": round(bough_act, 3),
+                        "founding_leaves": founding_items,
+                        "learned_leaves": grown_items,
+                        "grown_leaves": grown_items,
+                    }
+                )
+            dept_act = (
+                sum(float(b["activation"]) for b in boughs_out) / max(1, len(boughs_out))
+            )
+            departments_out.append(
+                {
+                    "department_id": dept_id,
+                    "title": dept_label,
+                    "department_label": dept_label,
+                    "activation": round(dept_act, 3),
+                    "boughs": boughs_out,
+                }
+            )
+
+        return {
+            "founding_node_count": 40,
+            "total_tree_nodes": 40 + len(visible_leaves),
+            "total_node_count": 40 + len(visible_leaves),
+            "learned_leaves_count": len(visible_leaves),
+            "rules_count": len(visible_rules),
+            "tier_counts": tier_counts,
+            "departments": departments_out,
+            "rules": [
+                {
+                    "rule_id": r.rule_id,
+                    "concept_name": r.concept_name,
+                    "target_leaf": f"Tier {r.tier} ({getattr(r, 'polarity', 'attractive')})",
+                    "top_clauses": {k: round(float(v), 2) for k, v in r.target_leaves.items()},
+                    "source": r.rule_id,
+                    "confidence": round(float(r.high), 2),
+                    "description": r.description,
+                }
+                for r in visible_rules
+            ],
+            "will_synapses": [
+                {
+                    "id": e.id,
+                    "edge_id": f"{e.source_id.split('/')[-1]} ➔ {e.target_id.split('/')[-1]}",
+                    "source": e.source_id.split("/")[-1],
+                    "target": e.target_id.split("/")[-1],
+                    "weight": round(float(e.weight), 4),
+                }
+                for e in self.will_edges
+            ],
+            "archive_counts": {
+                "executive": len(self.archives.executive.action_clauses),
+                "legislative": len(self.archives.legislative.feeling_clauses),
+                "judicial": len(self.archives.judicial.structural_clauses),
+            },
+            "has_live_callosum_projector": (self.scholar_checkpoint_dir / "live_projector_weights.pt").exists(),
+            "callosum_live_weights": (self.scholar_checkpoint_dir / "live_projector_weights.pt").exists(),
+        }
+
     def get_state_snapshot(self) -> dict[str, Any]:
         builtin_ids = {
             lf.leaf_id for lf in (PHILOSOPHICAL_SHADOW_LEAVES + DEFAULT_COMPLEX_FEELING_LEAVES)
@@ -1447,6 +2025,7 @@ class ScholarStudioRuntime:
             ],
             "chat_messages": list(self.chat_messages),
             "curriculum_lessons": [l.to_dict() for l in SCHOLAR_CURRICULUM_LESSONS],
+            "tree_inspector": self._build_tree_inspector_snapshot(),
         }
 
 
@@ -1526,6 +2105,7 @@ def create_scholar_http_server(
                     snap = runtime.handle_step_curriculum_lesson(
                         lesson_id=str(body.get("lesson_id", "")),
                         num_sentences=int(raw_n) if raw_n is not None else None,
+                        sleep_after_essay=bool(body.get("sleep_after_essay", False)),
                     )
                     self._send_json(snap)
                     return

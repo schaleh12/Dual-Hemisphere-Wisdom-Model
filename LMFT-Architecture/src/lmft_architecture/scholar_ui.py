@@ -251,6 +251,91 @@ SCHOLAR_SINGLE_PAGE_HTML = """<!DOCTYPE html>
     font-size: 11px;
     color: var(--text-2);
   }
+  .tree-inspector-pane {
+    flex: 1;
+    display: none;
+    flex-direction: column;
+    padding: 16px;
+    gap: 14px;
+    overflow-y: auto;
+    min-height: 0;
+  }
+  .tree-summary-strip {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 10px;
+  }
+  .tree-stat-card {
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+  .tree-stat-label {
+    font-size: 11px;
+    color: var(--text-2);
+    margin-bottom: 4px;
+  }
+  .tree-stat-val {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-0);
+  }
+  .dept-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+  .dept-card {
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .bough-block {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 9px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .leaf-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 11px;
+    padding: 3px 6px;
+    border-radius: 4px;
+    background: rgba(10, 13, 20, 0.45);
+  }
+  .leaf-row.grown-tier-2 {
+    border-left: 3px solid var(--accent);
+    background: rgba(245, 158, 11, 0.10);
+  }
+  .leaf-row.grown-tier-3 {
+    margin-left: 14px;
+    border-left: 3px solid var(--sleep-accent);
+    background: rgba(168, 85, 247, 0.12);
+  }
+  .bar-track {
+    width: 72px;
+    height: 6px;
+    background: var(--bg-0);
+    border-radius: 999px;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .bar-fill {
+    height: 100%;
+    background: var(--right-accent);
+    border-radius: 999px;
+  }
 </style>
 </head>
 <body>
@@ -268,6 +353,7 @@ SCHOLAR_SINGLE_PAGE_HTML = """<!DOCTYPE html>
       <option value="scholar" selected>Lineage: Scholar Studio (Trainable)</option>
       <option value="virgin">Lineage: Cycle 0 Virgin (Read-Only)</option>
     </select>
+    <button class="btn" id="toggle-tree-inspector-btn" onclick="toggleTreeInspectorView()">🌳 Visual Tree &amp; Canopy Inspector</button>
     <button class="btn" onclick="runRemSleepNow()">REM Sleep Now</button>
     <button class="btn" onclick="graduateBrain('chess')" title="Export learned domain-general rules, archives &amp; Will edges to LMFT-Chess">Graduate ➔ Chess</button>
     <button class="btn" onclick="graduateBrain('bloodmoon')" title="Export learned domain-general rules, archives &amp; Will edges to LMFT-Bloodmoon">Graduate ➔ Bloodmoon</button>
@@ -276,14 +362,18 @@ SCHOLAR_SINGLE_PAGE_HTML = """<!DOCTYPE html>
 
 <section class="curriculum-banner" id="curriculum-evolution-bar">
   <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-    <strong style="font-size:12px;">Foundational 4-Department Curriculum:</strong>
-    <select id="lesson-select" style="min-width:290px;"></select>
+    <strong style="font-size:12px;">12-Book Classic Literature Seminar:</strong>
+    <select id="lesson-select" style="min-width:300px;"></select>
     <span class="pill" id="lesson-step-pill">Steps: 0</span>
   </div>
   <div class="curriculum-controls">
+    <label style="font-size:11px;display:flex;align-items:center;gap:5px;cursor:pointer;" title="Automatically enter REM Sleep after each book essay to sprout Tier-2 and Tier-3 leaves">
+      <input type="checkbox" id="sleep-after-essay-toggle" checked />
+      Sleep &amp; Grow Canopy After Essay
+    </label>
     <span class="pill" title="Left Brain stops naturally when Right-Brain equilibrium settles">Natural Equilibrium Flow</span>
-    <button class="btn btn-primary" id="step-curriculum-btn" onclick="stepCurriculumLesson()">Step Curriculum Lesson</button>
-    <button class="btn" id="loop-curriculum-btn" onclick="toggleCurriculumLoop()">Run Curriculum Loop</button>
+    <button class="btn btn-primary" id="step-curriculum-btn" onclick="stepCurriculumLesson()">Step Literature Essay</button>
+    <button class="btn" id="loop-curriculum-btn" onclick="toggleCurriculumLoop()">Run Seminar Loop</button>
   </div>
 </section>
 
@@ -333,6 +423,28 @@ SCHOLAR_SINGLE_PAGE_HTML = """<!DOCTYPE html>
   </section>
 </div>
 
+<div class="tree-inspector-pane" id="tree-inspector-view">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+    <div>
+      <strong style="font-size:15px;">🌳 Visual Tree &amp; Canopy Development Inspector</strong>
+      <div class="invariant-note">Live view of the 40 Founding Seed Nodes, sprouted Tier-2 &amp; Tier-3 Learned Leaves, Callosum anchor weights, Fuzzy Concept Rules, and 9 Will Synapses.</div>
+    </div>
+    <button class="btn" onclick="toggleTreeInspectorView()">← Return to Socratic Studio</button>
+  </div>
+  <div class="tree-summary-strip" id="tree-summary-strip"></div>
+  <div class="dept-grid" id="tree-dept-grid"></div>
+  <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:12px;">
+    <div class="dept-card">
+      <strong style="font-size:13px;">Consolidated Domain-General Fuzzy Rules (Right-Brain Canopy)</strong>
+      <div id="tree-rules-list" style="display:flex;flex-direction:column;gap:6px;font-size:11px;"></div>
+    </div>
+    <div class="dept-card">
+      <strong style="font-size:13px;">9 Plastic Will &amp; Contemplation Synapses (will_edges.json)</strong>
+      <div id="tree-will-list" style="display:flex;flex-direction:column;gap:6px;font-size:11px;"></div>
+    </div>
+  </div>
+</div>
+
 <script>
 let lastRenderedChatSig = "";
 let curriculumLoopTimer = null;
@@ -340,6 +452,23 @@ let scholarBusy = false;
 let canvasDirty = false;
 let lastServerCanvasText = null;
 let populatedLessons = false;
+let treeInspectorOpen = false;
+
+function toggleTreeInspectorView() {
+  treeInspectorOpen = !treeInspectorOpen;
+  const studioEl = document.getElementById("scholar-studio-view");
+  const treeEl = document.getElementById("tree-inspector-view");
+  const btnEl = document.getElementById("toggle-tree-inspector-btn");
+  if (treeInspectorOpen) {
+    studioEl.style.display = "none";
+    treeEl.style.display = "flex";
+    if (btnEl) btnEl.classList.add("btn-primary");
+  } else {
+    studioEl.style.display = "grid";
+    treeEl.style.display = "none";
+    if (btnEl) btnEl.classList.remove("btn-primary");
+  }
+}
 
 function markCanvasDirty() {
   canvasDirty = true;
@@ -467,6 +596,135 @@ function renderState(s) {
     }).join("");
     box.scrollTop = box.scrollHeight;
   }
+
+  if (s.tree_inspector) {
+    renderTreeInspector(s.tree_inspector);
+  }
+}
+
+function renderTreeInspector(ti) {
+  const stripEl = document.getElementById("tree-summary-strip");
+  if (stripEl) {
+    const tc = ti.tier_counts || {};
+    const arc = ti.archive_counts || {};
+    stripEl.innerHTML = `
+      <div class="tree-stat-card">
+        <div class="tree-stat-label">Total Tree Nodes</div>
+        <div class="tree-stat-val">${ti.total_tree_nodes || 40} <span style="font-size:11px;color:var(--text-2);font-weight:400;">(40 Seed + ${ti.learned_leaves_count || 0} Grown)</span></div>
+      </div>
+      <div class="tree-stat-card">
+        <div class="tree-stat-label">Canopy Leaf Tiers</div>
+        <div class="tree-stat-val">T1: ${tc.tier_1 || 24} · T2: ${tc.tier_2 || 0} · T3: ${tc.tier_3 || 0}</div>
+      </div>
+      <div class="tree-stat-card">
+        <div class="tree-stat-label">Consolidated Fuzzy Rules</div>
+        <div class="tree-stat-val">${ti.rules_count || 0}</div>
+      </div>
+      <div class="tree-stat-card">
+        <div class="tree-stat-label">3-Branch Archives</div>
+        <div class="tree-stat-val" style="font-size:13px;">Exec: ${arc.executive || 0} · Leg: ${arc.legislative || 0} · Jud: ${arc.judicial || 0}</div>
+      </div>
+      <div class="tree-stat-card">
+        <div class="tree-stat-label">Weight-Space Plasticity</div>
+        <div class="tree-stat-val" style="font-size:12px;color:${ti.has_live_callosum_projector ? 'var(--ok)' : 'var(--text-1)'};">${ti.has_live_callosum_projector ? 'Callosum + LoRA Live' : 'Right-Brain Canopy + Will'}</div>
+      </div>
+    `;
+  }
+
+  const deptGrid = document.getElementById("tree-dept-grid");
+  if (deptGrid && Array.isArray(ti.departments)) {
+    deptGrid.innerHTML = ti.departments.map(dept => {
+      const boughsHtml = (dept.boughs || []).map(b => {
+        const foundingHtml = (b.founding_leaves || []).map(fl => {
+          const pct = Math.max(0, Math.min(100, Math.round(Number(fl.activation || 0) * 100)));
+          return `
+            <div class="leaf-row">
+              <span><strong>[T1]</strong> ${escapeHtml(fl.short_name)}</span>
+              <div style="display:flex;align-items:center;gap:6px;">
+                <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+                <span style="width:28px;text-align:right;">${Number(fl.activation || 0).toFixed(2)}</span>
+              </div>
+            </div>
+          `;
+        }).join("");
+
+        const grownHtml = (b.learned_leaves || []).map(gl => {
+          const tier = Number(gl.tier || 2);
+          const pct = Math.max(0, Math.min(100, Math.round(Number(gl.activation || 0) * 100)));
+          const topAnchors = Object.entries(gl.anchor_weights || {})
+            .map(([k, v]) => `${k.split("/").slice(-1)[0]}:${Number(v).toFixed(2)}`)
+            .join(", ");
+          return `
+            <div class="leaf-row ${tier >= 3 ? 'grown-tier-3' : 'grown-tier-2'}" title="${escapeHtml(gl.description || '')}">
+              <div>
+                <div><strong>[T${tier} Grown]</strong> ${escapeHtml(gl.short_name)}</div>
+                <div style="font-size:10px;color:var(--text-2);">${escapeHtml(gl.description || '')}${topAnchors ? ' · Callosum Anchors: ' + escapeHtml(topAnchors) : ''}</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:6px;">
+                <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${tier >= 3 ? 'var(--sleep-accent)' : 'var(--accent)'};"></div></div>
+                <span style="width:28px;text-align:right;">${Number(gl.activation || 0).toFixed(2)}</span>
+              </div>
+            </div>
+          `;
+        }).join("");
+
+        return `
+          <div class="bough-block">
+            <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;">
+              <strong>Bough: ${escapeHtml(b.title)} <span style="font-weight:400;color:var(--text-2);">(${escapeHtml(b.bough_id)})</span></strong>
+              <span class="pill">Act: ${Number(b.activation || 0).toFixed(2)} · Grown: ${(b.learned_leaves || []).length}</span>
+            </div>
+            ${foundingHtml}
+            ${grownHtml}
+          </div>
+        `;
+      }).join("");
+
+      return `
+        <div class="dept-card">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <strong style="font-size:14px;">Department: ${escapeHtml(dept.title)}</strong>
+            <span class="pill">Dept Activation: ${Number(dept.activation || 0).toFixed(2)}</span>
+          </div>
+          ${boughsHtml}
+        </div>
+      `;
+    }).join("");
+  }
+
+  const rulesEl = document.getElementById("tree-rules-list");
+  if (rulesEl && Array.isArray(ti.rules)) {
+    rulesEl.innerHTML = ti.rules.map(r => {
+      const clauses = Object.entries(r.top_clauses || {})
+        .map(([k, v]) => `${k.split("/").slice(-1)[0]}≥${Number(v).toFixed(2)}`)
+        .join(", ");
+      return `
+        <div class="leaf-row" style="padding:6px 8px;">
+          <div>
+            <strong>${escapeHtml(r.concept_name)}</strong> ➔ <span style="color:var(--right-accent)">${escapeHtml(r.target_leaf)}</span>
+            <div style="color:var(--text-2);font-size:10px;">Clauses: ${escapeHtml(clauses)} · Source: ${escapeHtml(r.source)}</div>
+          </div>
+          <span class="pill">Conf: ${Number(r.confidence || 0).toFixed(2)}</span>
+        </div>
+      `;
+    }).join("");
+  }
+
+  const willEl = document.getElementById("tree-will-list");
+  if (willEl && Array.isArray(ti.will_synapses)) {
+    willEl.innerHTML = ti.will_synapses.map(w => {
+      const pct = Math.max(0, Math.min(100, Math.round((Number(w.weight || 0) / 1.5) * 100)));
+      return `
+        <div class="leaf-row" style="padding:5px 8px;">
+          <span>${escapeHtml(w.edge_id)}</span>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:var(--ok);"></div></div>
+            <span style="width:34px;text-align:right;">${Number(w.weight || 0).toFixed(3)}</span>
+          </div>
+        </div>
+      `;
+    }).join("");
+  }
 }
 
 async function sendChatMessage() {
@@ -509,7 +767,9 @@ async function stepCurriculumLesson() {
   scholarBusy = true;
   try {
     const lessonId = document.getElementById("lesson-select").value;
-    await apiPost("/api/curriculum/step", { lesson_id: lessonId });
+    const sleepEl = document.getElementById("sleep-after-essay-toggle");
+    const sleepAfterEssay = sleepEl ? !!sleepEl.checked : true;
+    await apiPost("/api/curriculum/step", { lesson_id: lessonId, sleep_after_essay: sleepAfterEssay });
   } finally {
     scholarBusy = false;
   }
@@ -521,11 +781,11 @@ function toggleCurriculumLoop() {
     clearInterval(curriculumLoopTimer);
     curriculumLoopTimer = null;
     btn.classList.remove("btn-loop-active");
-    btn.textContent = "Run Curriculum Loop";
+    btn.textContent = "Run Seminar Loop";
     return;
   }
   btn.classList.add("btn-loop-active");
-  btn.textContent = "Stop Curriculum Loop";
+  btn.textContent = "Stop Seminar Loop";
   stepCurriculumLesson();
   curriculumLoopTimer = setInterval(() => {
     if (!scholarBusy) stepCurriculumLesson();
