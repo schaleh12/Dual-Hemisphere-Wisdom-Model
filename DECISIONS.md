@@ -1,11 +1,6 @@
 # LMFT-Architecture — Design Decisions (Rolling 5-Decision Window)
 
-*(Keep only the 5 most recent decisions here, under 80 lines AND 5,000 characters in plain English. Earlier decisions `D001–D066` are archived in `LMFT-Architecture/docs/archive/`.)*
-
-## D067: Semantic Birth Anchoring, Symmetric Updates & `will_edges` Scoring (`subliminal_gap_splice.py`, `sleep_consolidation.py`, `chess_app.py`, 2026-11-08)
-- **Context**: Audit found 5 installer bugs, one-way ratchets, `0.25 / 0.53` stamps, a rigged `calm_baseline_score` gate, random static at `Cycle 0` birth, REM vow theater, and un-wired `will_edges` in move scoring.
-- **Design Choice**: Fixed the installer bugs, replaced one-way ratchets with symmetric updates, removed coordinate stamps, replaced `calm_baseline_score` with `calm_deviation`, cut Dream Vow theater, wired `self.will_edges` into move scoring, and anchored `SubliminalGapProjector` (`256`-dim) to LLM input embeddings at Birth.
-- **Result**: Raw holdout flips reached `6/6` on `Qwen3-8B` and `5/6` (`6/6` calibrated) on `Impish_Bloodmoon_12B` and `Qwen3-4B`.
+*(Keep only the 5 most recent decisions here, under 80 lines AND 5,000 characters in plain English. Earlier decisions `D001–D067` are archived in `LMFT-Architecture/docs/archive/`.)*
 
 ## D068: Tier 2–4 Sub-Feature Leaf Genesis, Ply-5 Detective Walk & Two-Way Gear-2 Deliberation (`reflection_classifier.py`, `chess_kibitz_bridge.py`, `sleep_consolidation.py`, `chess_app.py`, 2026-11-09)
 - **Context**: All 29 learned rules in `club_ruleset.json` stayed at Tier 1 while 82 Tier-2 `LearnedLeaf` nodes went unused because multi-ply traps shared nearly identical Tier-1 summary coordinates.
@@ -22,7 +17,12 @@
 - **Design Choice**: Built `LMFT-Scholar` (`Launch-LMFT-Scholar.bat`, `models/left_brain_scholar/`, `outputs/scholar_state/`) with a 12-Book Literature Seminar (REM sleep after each essay), local Tier-2/3 canopy genesis (zero 9B Teacher reliance), a Visual Tree & Canopy Inspector, and `graduate_brain_to_target`.
 - **Result**: Verified passing tests in `test_scholar_app.py` and full compatibility across `LMFT-Chess` and `LMFT-Bloodmoon`.
 
-## D071: Norm-Locked ChatML Callosum, `QK`-Only LoRA & Self-Distilled Base-Voice Preservation (`subliminal_gap_splice.py`, `gap_trajectory_schema.py`, `train_left_brain_lora.py`, `three_legged_runtime.py`, `scholar_app.py`, 2026-11-10)
-- **Context**: `LMFT-Scholar` produced garbled chat replies because `projector.output_norm` (`L2 = 55.5`) was `90x` louder than `Impish_LLAMA_4B` word embeddings (`0.6191`), `scholar_app.py` lacked LoRA loading and ChatML formatting, and `v_proj`/`o_proj` LoRA memorized training phrases on casual greetings.
-- **Design Choice**: Locked `projector.output_norm` to the base model's word-embedding norm (`0.6191`), added native `prompt_format="chatml"` with `build_chatml_user_header`, removed all canned fallbacks, trained `models/left_brain_scholar/` with `QK`-only LoRA plus 40 self-distilled KL anchors from frozen `Impish_LLAMA_4B`, fixed REM Callosum persistence, and added non-blocking background GPU warmup plus Windows exclusive port-`8428` eviction so the Studio window opens immediately and never stacks behind a stale server.
-- **Result**: Achieved `8/8` positive chord-swap shifts and `8/8` distinct greedy continuations on unseen holdouts (`+1.3773` comma / `+1.4355` turn-start net swap margin, `2/8` and `4/8` raw flips) while speaking naturally on greetings, literary dialogue, and Seminar essays.
+## D071: Norm-Locked ChatML Callosum, `QK`-Only LoRA & Non-Blocking Startup (`subliminal_gap_splice.py`, `train_left_brain_lora.py`, `three_legged_runtime.py`, `scholar_app.py`, 2026-11-10)
+- **Context**: `LMFT-Scholar` gave garbled replies because `projector.output_norm` (`55.5`) was `90x` louder than `Impish_LLAMA_4B` word embeddings (`0.6191`), `v_proj`/`o_proj` LoRA memorized phrases on greetings, and synchronous GPU loading stalled window startup.
+- **Design Choice**: Locked `projector.output_norm` to `0.6191`, added native `prompt_format="chatml"`, trained `models/left_brain_scholar/` with `QK`-only LoRA plus 40 self-distilled KL anchors, and added background GPU warmup plus Windows exclusive port-`8428` eviction.
+- **Result**: Achieved `8/8` positive swap shifts (`+1.3773` comma / `+1.4355` turn-start net margin) with instant window startup and natural Gear-2 replies.
+
+## D072: Genuine 4B-to-MiniLM Right-Brain Leaf Distillation & Unseen Holdout Gatekeeper (`scholar_app.py`, `scholar_ui.py`, `right_brain_equilibrium.py`, `sleep_consolidation.py`, 2026-11-10)
+- **Context**: `LMFT-Scholar` previously grew junk Tier-2/3 leaves (`fairness_chaos_synthesis`, `power_existence_accord`, `coached_low_power`) from Python f-strings and Chess blunder templates without teaching the MiniLM bridges what new leaves meant.
+- **Design Choice**: Removed all Python string-concatenation and Chess leaf templates from `scholar_app.py`, added contrasting literary foils to all 12 Seminar lessons, enabled Tier-4 sensor querying in `ThreeBridgeSensors.score_text`, fixed `learned_leaves.json` restart persistence, and wired REM Sleep to distill plain-English concepts and 10 modern examples from `Impish_LLAMA_4B`, fine-tune isolated plastic bridges in `outputs/scholar_state/right_brain_bridges/` with replay anchors, and roll back any candidate failing unseen holdout checks (`SceneA >= 0.48`, `margin >= 0.12`, `calm <= 0.38`, `drift <= 0.12`).
+- **Result**: Live 5-step GPU Seminar run cleanly ratified `2/5` human leaves (`compassionate_covenant` at `+0.6074` unseen margin and `chosen_presence` at `+0.9138` unseen margin) while honestly rolling back `3/5` candidates whose founding-leaf drift (`0.13–0.22`) exceeded `0.12`.

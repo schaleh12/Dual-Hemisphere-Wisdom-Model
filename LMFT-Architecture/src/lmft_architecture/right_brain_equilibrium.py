@@ -375,7 +375,7 @@ class ThreeBridgeSensors:
         skipped: list[str] = []
 
         if learned_leaves:
-            for tier_level in (2, 3):
+            for tier_level in (2, 3, 4):
                 tier_leaves = tuple(l for l in learned_leaves if l.tier == tier_level)
                 if not tier_leaves:
                     continue

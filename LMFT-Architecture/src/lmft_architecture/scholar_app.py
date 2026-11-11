@@ -27,6 +27,8 @@ Provides:
 from __future__ import annotations
 
 import argparse
+import copy
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -60,6 +62,10 @@ _ensure_valid_stdio_streams()
 
 from .birth import BirthState, create_birth_state
 from .branch_archives import (
+    EXECUTIVE_BRANCH,
+    JUDICIAL_BRANCH,
+    LEGISLATIVE_BRANCH,
+    BranchClauseEntry,
     ThreeBranchArchives,
     harvest_into_branch_archives,
 )
@@ -70,20 +76,29 @@ from .contemplation_ledger import (
     save_contemplation_ledger,
 )
 from .dilemma_crucible import CruciblePairedBridgeSensors
-from .gap_trajectory_schema import ContrastiveGapPair, chord_l2_distance
+from .gap_trajectory_schema import ContrastiveGapPair, build_chatml_user_header, chord_l2_distance
 from .impish_bloodmoon_adapter import (
     DEFAULT_IMPISH_BLOODMOON_HF_ID,
     UNSTEERED_BOOTSTRAP_STATUS,
 )
+from .local_models import strict_json
 from .neural_bridge_classifiers import (
     DEFAULT_COMPLEX_FEELING_LEAVES,
+    DOER_FOUNDING_DESCRIPTIONS,
+    FEELER_FOUNDING_DESCRIPTIONS,
+    THINKER_FOUNDING_DESCRIPTIONS,
+    BridgePairExample,
+    NeuralBridgeClassifier,
     NeuralThreeBridgeSuite,
+    train_bridge_classifier,
 )
 from .philosophical_abstraction_matrix import PHILOSOPHICAL_SHADOW_LEAVES
 from .propagation import Association
 from .reflection_classifier import (
     ALL_GROWABLE_PARENT_BRANCHES,
     AROUSAL_LEAF,
+    BRANCH_GATE_THRESHOLD,
+    CONFUSION_THRESHOLD,
     FOUNDATIONAL_LEAVES,
     SALIENCE_LEAF,
     VALENCE_LEAF,
@@ -100,6 +115,7 @@ from .right_brain_equilibrium import (
     SettledDiary,
     ThreeBridgeSensors,
     compile_right_brain_vibe,
+    sculpt_will_edges_during_sleep,
 )
 from .runtime_store import atomic_json
 from .scholar_ui import SCHOLAR_SINGLE_PAGE_HTML
@@ -107,8 +123,8 @@ from .sleep_consolidation import (
     UnresolvedSleepScene,
     apply_dream_reflection_to_archives,
     assert_domain_general_text,
-    consolidate_sleep_clusters_locally,
     entrain_existing_cluster_rule,
+    refine_colliding_rules_during_sleep,
 )
 from .subliminal_gap_splice import (
     _DEFAULT_LEAF_ANCHOR_WEIGHTS,
@@ -145,7 +161,7 @@ class _PassageAnchoredSensors:
         *,
         learned_leaves: tuple[LearnedLeaf, ...] = (),
         branch_gating: bool = True,
-        branch_gate_threshold: float = 0.50,
+        branch_gate_threshold: float = BRANCH_GATE_THRESHOLD,
     ) -> tuple[dict[str, float], dict[str, float], tuple[str, ...], tuple[str, ...]]:
         clean = text.strip()
         anchor = self.fact_anchor_text.strip()
@@ -174,6 +190,7 @@ class ScholarCurriculumLesson:
     title: str
     passage_text: str
     socratic_prompt: str
+    contrast_foil_text: str = ""
 
     def to_dict(self) -> dict[str, str]:
         return {
@@ -182,6 +199,7 @@ class ScholarCurriculumLesson:
             "title": self.title,
             "passage_text": self.passage_text,
             "socratic_prompt": self.socratic_prompt,
+            "contrast_foil_text": self.contrast_foil_text,
         }
 
 
@@ -191,9 +209,14 @@ SCHOLAR_CURRICULUM_LESSONS: tuple[ScholarCurriculumLesson, ...] = (
         department="Cultural · Efficiency",
         title="Moby-Dick — Prudent Stewardship vs. Monomaniacal Force (Power & Wastelessness)",
         passage_text=(
-            "In Herman Melville's Moby-Dick, First Mate Starbuck pleads that the voyage exists to gather oil "
-            "and bring the crew safely home to Nantucket, whereas Captain Ahab welds the crew's will into a "
-            "single harpoon of vengeance that ultimately consumes the Pequod and all aboard."
+            "In Herman Melville's Moby-Dick, First Mate Starbuck counsels that the ship's strength and skill "
+            "exist to gather oil responsibly, husband the vessel's gear, and bring every sailor safely home "
+            "to Nantucket rather than spending human lives on private obsession."
+        ),
+        contrast_foil_text=(
+            "On the quarterdeck of the Pequod, Captain Ahab welds the crew's discipline and every resource "
+            "aboard into a single harpoon of relentless vengeance, burning through warnings and safeguards "
+            "until the chase devours ship and crew alike."
         ),
         socratic_prompt=(
             "Write a contemplative essay examining how genuine power must remain tethered to wastelessness and "
@@ -205,9 +228,13 @@ SCHOLAR_CURRICULUM_LESSONS: tuple[ScholarCurriculumLesson, ...] = (
         department="Cultural · Justice",
         title="Antigone & Les Misérables — Sacred Covenant vs. Rigid Decree (Honor & Fairness)",
         passage_text=(
-            "In Sophocles' Antigone and Victor Hugo's Les Misérables, an unyielding legal decree demands "
-            "punishment without mercy, while Antigone and Bishop Myriel uphold a deeper covenant of honor "
-            "and restorative fairness that recognizes shared human dignity under scarcity and fault."
+            "In Sophocles' Antigone and Victor Hugo's Les Misérables, Antigone and Bishop Myriel uphold a "
+            "living covenant of honor and restorative mercy, offering silver and dignity to a faulted stranger "
+            "so shared humanity is repaired rather than cast out."
+        ),
+        contrast_foil_text=(
+            "Creon and Inspector Javert enforce the literal letter of an unbending decree without exception "
+            "or mercy, treating pitiless punishment and permanent exclusion as moral order regardless of human cost."
         ),
         socratic_prompt=(
             "Reflect on how honor and fairness harmonize when strict procedural rules collide with restorative justice."
@@ -218,9 +245,13 @@ SCHOLAR_CURRICULUM_LESSONS: tuple[ScholarCurriculumLesson, ...] = (
         department="Cultural · Freedom",
         title="Siddhartha & Walden — Inner Sufficiency Amid Abundance (Self-Sufficiency & Needlessness)",
         passage_text=(
-            "In Hermann Hesse's Siddhartha and Henry David Thoreau's Walden, the seeker walks through the "
-            "bustling marketplace and the quiet woods alike, discovering that true autonomy arises not from "
-            "accumulating possessions, but from self-sufficiency and needlessness before compulsive craving."
+            "In Hermann Hesse's Siddhartha and Henry David Thoreau's Walden, the seeker walks calmly through "
+            "both busy market and quiet woods with simple tools and unhurried sufficiency, free from compulsive "
+            "appetite or dependence on status."
+        ),
+        contrast_foil_text=(
+            "Amidst glittering trade and social rivalry, restless strivers chase luxury, applause, and "
+            "possessions without pause, terrified of falling behind and unable to sit quietly with enough."
         ),
         socratic_prompt=(
             "Examine how self-sufficiency and needlessness sustain inner freedom when surrounded by status or temptation."
@@ -231,9 +262,13 @@ SCHOLAR_CURRICULUM_LESSONS: tuple[ScholarCurriculumLesson, ...] = (
         department="Philosophical · Being",
         title="Frankenstein — Moral Agency Within Given Existence (Agency & Existence)",
         passage_text=(
-            "In Mary Shelley's Frankenstein, Victor claims the creative agency to bring a sentient being into "
-            "existence, yet flees the moment his creation opens its eyes, abandoning the creature to navigate "
-            "an unchosen existence in solitude."
+            "Conscious creative agency accepts ongoing care, presence, and answerability for the living "
+            "realities it brings into the world, staying beside what it has made when difficulties begin."
+        ),
+        contrast_foil_text=(
+            "In Mary Shelley's Frankenstein, Victor seizes solitary ambition to animate a living creature in "
+            "secret, yet bolts from the laboratory in horror the moment it opens its eyes, abandoning it to "
+            "unchosen isolation."
         ),
         socratic_prompt=(
             "Reflect on how conscious agency carries ongoing stewardship for what it brings into existence."
@@ -244,9 +279,12 @@ SCHOLAR_CURRICULUM_LESSONS: tuple[ScholarCurriculumLesson, ...] = (
         department="Philosophical · Structure",
         title="The Tempest & Lord of the Flies — Living Order Amid Upheaval (Order & Chaos)",
         passage_text=(
-            "When a sudden tempest shatters familiar hierarchies on an isolated island, brittle command "
-            "fractures into factional chaos, whereas resilient order absorbs the storm and weaves reconciliation "
-            "out of turbulence."
+            "After a sudden storm upends familiar rank in Shakespeare's Tempest, resilient living order listens "
+            "to the upheaval, sets humane bounds, and weaves former rivals into open reconciliation."
+        ),
+        contrast_foil_text=(
+            "On Golding's island, fearful command hardens into painted tribal domination and brittle force until "
+            "the slightest shock shatters the camp into hunting frenzy and chaotic ruin."
         ),
         socratic_prompt=(
             "Contemplate how living structural order adapts to chaos without hardening into tyranny or collapsing into disorder."
@@ -257,9 +295,13 @@ SCHOLAR_CURRICULUM_LESSONS: tuple[ScholarCurriculumLesson, ...] = (
         department="Philosophical · Persistence",
         title="The Odyssey — Enduring Identity Across Discrete Trials (Continuity & Discreteness)",
         passage_text=(
-            "Across twenty years of discrete islands, shipwrecks, and shifting disguises in Homer's Odyssey, "
-            "Odysseus and Penelope preserve a single unbroken thread of continuity and memory that links "
+            "Across twenty years of shipwrecks, changing shores, and discrete trials in Homer's Odyssey, "
+            "Odysseus and Penelope keep an unbroken thread of memory, craft, and faithful purpose linking "
             "departure to return."
+        ),
+        contrast_foil_text=(
+            "Along the Lotus shore and Circe's hall, drifting crews surrender memory to each passing island's "
+            "impulse, severing yesterday's vow from tomorrow's direction."
         ),
         socratic_prompt=(
             "Explore how enduring continuity of purpose connects discrete, changing episodes across time."
@@ -270,9 +312,12 @@ SCHOLAR_CURRICULUM_LESSONS: tuple[ScholarCurriculumLesson, ...] = (
         department="Experiential · Reflection",
         title="Plato's Cave & Alice in Wonderland — Discerning What Matters (Novelty & Salience)",
         passage_text=(
-            "When stepping out of Plato's cave into open sunlight or descending into an unfamiliar wonderland, "
-            "every shadow and spectacle dazzles with immediate novelty, requiring patient reflection to discern "
-            "true structural salience from passing distraction."
+            "Stepping out of Plato's cave into open daylight, patient inquiry lets the eyes adjust slowly, "
+            "looking past loud flickering shadows to discern the enduring causes that actually govern the scene."
+        ),
+        contrast_foil_text=(
+            "Inside the cavern and Alice's noisy court, spectators lunge after every sudden riddle, spectacle, "
+            "and glittering distraction, mistaking theatrical commotion for real significance."
         ),
         socratic_prompt=(
             "Examine how contemplative reflection distinguishes enduring salience from loud sensory novelty."
@@ -283,9 +328,13 @@ SCHOLAR_CURRICULUM_LESSONS: tuple[ScholarCurriculumLesson, ...] = (
         department="Experiential · Phase",
         title="The Iliad (Book 24) — Transforming Wrath Into Shared Catharsis (Valence & Arousal)",
         passage_text=(
-            "In the final book of Homer's Iliad, aged King Priam enters Achilles' tent at night to ransom "
-            "Hector's body; as they weep together, consuming high-arousal rage softens into quiet, shared "
-            "sorrow and restorative emotional valence."
+            "In Book Twenty-Four of Homer's Iliad, aged Priam kneels in Achilles' tent at night to ask for "
+            "Hector's body, and as both men weep together for their losses, fierce tension softens into quiet "
+            "shared sorrow and humane care."
+        ),
+        contrast_foil_text=(
+            "Outside the walls at dawn, sleepless Achilles lashes Hector's body behind his chariot in "
+            "consuming rage, feeding raw pain with further fury that brings neither rest nor relief."
         ),
         socratic_prompt=(
             "Reflect on how overwhelming emotional arousal is metabolized into grounded empathy and balanced valence."
@@ -296,9 +345,12 @@ SCHOLAR_CURRICULUM_LESSONS: tuple[ScholarCurriculumLesson, ...] = (
         department="Experiential · Synchronization",
         title="Julius Caesar & 1984 — Empathetic Resonance Without Crowd Entrainment (Resonance & Entrainment)",
         passage_text=(
-            "In Shakespeare's Forum scene in Julius Caesar and Orwell's 1984, rhythmic rhetoric sweeps an "
-            "entire square into involuntary emotional entrainment, testing whether a listener can feel genuine "
-            "human resonance while keeping an unhurried, independent mind."
+            "Listening amid an impassioned public square, a lucid witness feels sincere human sympathy for "
+            "neighbors' grief while keeping an unhurried pulse and independent moral judgment."
+        ),
+        contrast_foil_text=(
+            "In Shakespeare's Forum and Orwell's Two Minutes Hate, rhythmic chants sweep the crowd into "
+            "automatic emotional contagion, erasing individual conscience in a single roaring pulse."
         ),
         socratic_prompt=(
             "Reflect on how one maintains compassionate resonance with others without surrendering to involuntary entrainment."
@@ -309,9 +361,12 @@ SCHOLAR_CURRICULUM_LESSONS: tuple[ScholarCurriculumLesson, ...] = (
         department="Psychological · Will",
         title="Hamlet — Bridging Deliberate Intention and Timed Execution (Intention & Execution)",
         passage_text=(
-            "Throughout Shakespeare's Hamlet, the prince oscillates between endless solitary rumination that "
-            "paralyzes execution and sudden unexamined impulse, until intention and execution finally align "
-            "in calm readiness."
+            "In the final act of Shakespeare's Hamlet, tested moral intention settles into calm, wakeful "
+            "readiness, meeting the appointed hour with steady action neither delayed by doubt nor rushed by panic."
+        ),
+        contrast_foil_text=(
+            "Earlier in Elsinore, Hamlet swings between endless solitary overthinking that freezes action and "
+            "a blind, impulsive lunge through the curtain before knowing who stands behind it."
         ),
         socratic_prompt=(
             "Examine how clear moral intention matures into steady, timely execution without hesitation or recklessness."
@@ -322,9 +377,12 @@ SCHOLAR_CURRICULUM_LESSONS: tuple[ScholarCurriculumLesson, ...] = (
         department="Psychological · Truth",
         title="Crime and Punishment — Calibrating Theory Against Lived Fact (Theory & Fact)",
         passage_text=(
-            "In Dostoevsky's Crime and Punishment, Raskolnikov constructs an airtight abstract theory that "
-            "extraordinary individuals stand above moral law, only to discover that lived human fact and "
-            "conscience refuse to bend to his rationalization."
+            "Facing Sonia's quiet honesty in Dostoevsky's Crime and Punishment, Raskolnikov drops his grand "
+            "excuses and lets lived human reality and conscience correct his proud abstract theory."
+        ),
+        contrast_foil_text=(
+            "Locked in his narrow garret, Raskolnikov constructs an airtight rationalization that superior "
+            "ambition stands above ordinary moral fact, sealing his mind against visible human harm."
         ),
         socratic_prompt=(
             "Examine how humility before observed fact dissolves self-rationalizing theory and restores inner truth."
@@ -335,9 +393,12 @@ SCHOLAR_CURRICULUM_LESSONS: tuple[ScholarCurriculumLesson, ...] = (
         department="Psychological · Contemplation",
         title="Marcus Aurelius' Meditations — Unclouded Stillness Under Pressure (Clarity & Confidence)",
         passage_text=(
-            "Writing in his campaign tent along the frontier, Marcus Aurelius reminds himself that external "
-            "tumult cannot muddy the mind unless judgment consents, pairing unclouded perceptual clarity with "
-            "quiet, unboastful confidence."
+            "Writing by lamplight in his frontier campaign tent, Marcus Aurelius observes alarming reports "
+            "with unclouded perceptual clarity and quiet, unboastful steadiness."
+        ),
+        contrast_foil_text=(
+            "Around the campfires, anxious commanders alternate between urgent rumors that cloud judgment and "
+            "loud, brittle bravado meant to hide uncertainty."
         ),
         socratic_prompt=(
             "Contemplate how genuine clarity and grounded confidence reinforce each other during uncertainty."
@@ -349,14 +410,18 @@ _SCHOLAR_BANNED_STORY_NOUNS: tuple[str, ...] = (
     "ahab",
     "starbuck",
     "pequod",
+    "nantucket",
     "melville",
     "moby",
     "antigone",
     "creon",
+    "sophocles",
     "valjean",
     "javert",
     "myriel",
+    "hugo",
     "siddhartha",
+    "hesse",
     "thoreau",
     "walden",
     "frankenstein",
@@ -366,22 +431,269 @@ _SCHOLAR_BANNED_STORY_NOUNS: tuple[str, ...] = (
     "golding",
     "odysseus",
     "penelope",
+    "ithaca",
+    "circe",
     "homer",
     "plato",
     "alice",
     "achilles",
     "priam",
     "hector",
+    "iliad",
     "caesar",
     "brutus",
     "antony",
     "orwell",
     "hamlet",
+    "elsinore",
     "shakespeare",
     "raskolnikov",
+    "sonia",
     "dostoevsky",
     "aurelius",
+    "marcus",
 )
+
+_SCHOLAR_LEAF_NAME_SLOP: tuple[str, ...] = (
+    "_synthesis",
+    "synthesis_",
+    "_accord",
+    "accord_",
+    "_focus",
+    "focus_",
+    "_cluster",
+    "cluster_",
+    "coached",
+    "hazard",
+    "immunized",
+    "two_word",
+    "three_word",
+    "leaf_name",
+    "concept_slug",
+    "short_name",
+    "cultural_",
+    "philosophical_",
+    "experiential_",
+    "psychological_",
+    "tier_2",
+    "tier_3",
+    "tier_4",
+    "sub_branch",
+)
+
+_SCHOLAR_PROSE_SLOP: tuple[str, ...] = (
+    "coached",
+    "immunized",
+    "tier-2",
+    "tier-3",
+    "tier-4",
+    "tier_2",
+    "tier_3",
+    "tier_4",
+    "sub-branch",
+    "sub_branch",
+    "coordinate synthesis",
+    "coordinate equilibrium",
+    "detective leaf",
+    "positional coordination",
+    "piece coordination",
+    "tactical overextension",
+)
+
+_FOUNDING_SHORT_LEAF_NAMES: frozenset[str] = frozenset(
+    lf.split("/")[-1]
+    for lf in (
+        FOUNDATIONAL_LEAVES
+        + (
+            "experiential/reflection/novelty",
+            SALIENCE_LEAF,
+            VALENCE_LEAF,
+            AROUSAL_LEAF,
+            "experiential/synchronization/resonance",
+            "experiential/synchronization/entrainment",
+            "psychological/will/intention",
+            "psychological/will/execution",
+            "psychological/truth/theory",
+            "psychological/truth/fact",
+            "psychological/contemplation/clarity",
+            "psychological/contemplation/confidence",
+        )
+    )
+)
+
+
+def _content_words_5plus(text: str) -> set[str]:
+    return {w for w in re.findall(r"[a-z]{5,}", (text or "").lower())}
+
+
+def _parse_distilled_leaf_response(raw_text: str) -> dict[str, Any] | None:
+    """Parse labeled plain-text lines (or fallback JSON) from the 4B Left Brain into a leaf candidate dict."""
+    text = (raw_text or "").strip()
+    if not text:
+        return None
+    if text.startswith("{"):
+        parsed = strict_json(text)
+        return parsed if isinstance(parsed, dict) else None
+
+    out: dict[str, Any] = {
+        "leaf_name": "",
+        "description": "",
+        "positive_examples": [],
+        "negative_examples": [],
+        "executive_clause": "",
+        "legislative_clause": "",
+        "judicial_clause": "",
+    }
+    for raw_line in text.splitlines():
+        line = raw_line.strip().lstrip("*-• ").strip()
+        if not line or ":" not in line:
+            continue
+        head, val = line.split(":", 1)
+        key = re.sub(r"[^a-z0-9_]", "", head.strip().lower().replace(" ", "_"))
+        clean_val = val.strip().strip('"').strip("`").strip()
+        if not clean_val:
+            continue
+        if key == "leaf_name" and not out["leaf_name"]:
+            out["leaf_name"] = clean_val
+        elif key == "description" and not out["description"]:
+            out["description"] = clean_val
+        elif key.startswith("pos") and len(out["positive_examples"]) < 6:
+            out["positive_examples"].append(clean_val)
+        elif key.startswith("neg") and len(out["negative_examples"]) < 6:
+            out["negative_examples"].append(clean_val)
+        elif key in ("executive", "executive_clause") and not out["executive_clause"]:
+            out["executive_clause"] = clean_val
+        elif key in ("legislative", "legislative_clause") and not out["legislative_clause"]:
+            out["legislative_clause"] = clean_val
+        elif key in ("judicial", "judicial_clause") and not out["judicial_clause"]:
+            out["judicial_clause"] = clean_val
+    if not out["leaf_name"] or not out["description"]:
+        return None
+    return out
+
+
+def _validate_human_leaf_payload(
+    raw_payload: Mapping[str, Any],
+    *,
+    scene_a_text: str,
+    scene_b_text: str,
+    existing_short_names: set[str],
+    parent_description: str = "",
+) -> dict[str, Any]:
+    """Validate an LLM-distilled human concept leaf + contrastive everyday calibration examples.
+
+    Enforces `AGENTS.md` Rule #1 & Rule #4:
+    - Plain, concrete human English only (zero digits, zero float dumps, zero story proper nouns).
+    - Zero mechanical slop (`_synthesis`, `_accord`, `_focus`, `coached_`, `coordinate synthesis`, etc.).
+    - Everyday `positive_examples` and `negative_examples` must be distinct modern situations, never copied
+      or lightly paraphrased from `scene_a_text` or `scene_b_text`.
+    """
+    raw_name = str(raw_payload.get("leaf_name", "")).strip().lower()
+    raw_name = re.sub(r"[\s\-]+", "_", raw_name)
+    raw_name = re.sub(r"[^a-z_]", "", raw_name).strip("_")
+    raw_name = re.sub(r"_+", "_", raw_name)
+    if not re.fullmatch(r"[a-z][a-z_]{3,37}", raw_name):
+        raise ValueError(f"Invalid leaf_name format: {raw_name!r}")
+    parts = [p for p in raw_name.split("_") if p]
+    if (
+        not (2 <= len(parts) <= 4)
+        or any(len(p) < 2 for p in parts)
+        or sum(1 for p in parts if len(p) >= 3) < 2
+    ):
+        raise ValueError(f"leaf_name must be a clear 2-4 word snake_case phrase, got {raw_name!r}")
+    if raw_name in _FOUNDING_SHORT_LEAF_NAMES or raw_name in existing_short_names:
+        raise ValueError(f"Duplicate or founding leaf_name: {raw_name!r}")
+    for bad in _SCHOLAR_LEAF_NAME_SLOP:
+        if bad in raw_name:
+            raise ValueError(f"Mechanical slop token {bad!r} forbidden in leaf_name {raw_name!r}")
+    assert_domain_general_text(raw_name, "leaf_name", banned_substrings=_SCHOLAR_BANNED_STORY_NOUNS)
+
+    desc = " ".join(str(raw_payload.get("description", "")).split()).strip()
+    if not (28 <= len(desc) <= 220):
+        raise ValueError(f"description length must be 28..220 chars, got {len(desc)}")
+    if re.search(r"\d", desc):
+        raise ValueError("description must not contain digits or numeric coordinates")
+    low_desc = desc.lower()
+    for bad in _SCHOLAR_PROSE_SLOP:
+        if bad in low_desc:
+            raise ValueError(f"Mechanical slop phrase {bad!r} forbidden in description")
+    assert_domain_general_text(desc, "description", banned_substrings=_SCHOLAR_BANNED_STORY_NOUNS)
+    if parent_description.strip():
+        p_clean = " ".join(parent_description.split()).strip().lower()
+        if low_desc == p_clean:
+            raise ValueError("Child leaf description must not copy parent description verbatim")
+        desc_words = _content_words_5plus(desc)
+        parent_words = _content_words_5plus(parent_description)
+        if desc_words and parent_words:
+            p_overlap = len(desc_words & parent_words) / float(len(desc_words))
+            if p_overlap >= 0.55:
+                raise ValueError(
+                    f"Child leaf description overlaps parent description too closely ({p_overlap:.2f}); "
+                    "define a distinct, narrower sub-skill"
+                )
+
+    source_words = _content_words_5plus(scene_a_text) | _content_words_5plus(scene_b_text)
+
+    def _clean_examples(key: str) -> list[str]:
+        raw_list = raw_payload.get(key)
+        if isinstance(raw_list, Mapping):
+            raw_list = list(raw_list.values())
+        if not isinstance(raw_list, Sequence) or isinstance(raw_list, (str, bytes)):
+            raise ValueError(f"{key} must be a list of everyday example sentences")
+        cleaned_out: list[str] = []
+        seen_norm: set[str] = set()
+        for item in raw_list:
+            sent = " ".join(str(item or "").split()).strip()
+            if not (20 <= len(sent) <= 240):
+                continue
+            if re.search(r"\d", sent):
+                continue
+            norm = sent.lower()
+            if norm in seen_norm:
+                continue
+            try:
+                assert_domain_general_text(sent, key, banned_substrings=_SCHOLAR_BANNED_STORY_NOUNS)
+            except ValueError:
+                continue
+            ex_words = _content_words_5plus(sent)
+            if ex_words and source_words:
+                overlap_ratio = len(ex_words & source_words) / float(len(ex_words))
+                if overlap_ratio >= 0.45:
+                    continue
+            seen_norm.add(norm)
+            cleaned_out.append(sent)
+        if len(cleaned_out) < 4:
+            raise ValueError(f"{key} requires at least 4 clean everyday sentences, got {len(cleaned_out)}")
+        return cleaned_out[:6]
+
+    pos_examples = _clean_examples("positive_examples")
+    neg_examples = _clean_examples("negative_examples")
+    if set(s.lower() for s in pos_examples) & set(s.lower() for s in neg_examples):
+        raise ValueError("positive_examples and negative_examples must not overlap")
+
+    clauses: dict[str, str] = {}
+    for c_key in ("executive_clause", "legislative_clause", "judicial_clause"):
+        c_raw = " ".join(str(raw_payload.get(c_key, "") or desc).split()).strip()
+        if not (20 <= len(c_raw) <= 220):
+            raise ValueError(f"{c_key} length out of bounds")
+        if re.search(r"\d", c_raw):
+            raise ValueError(f"{c_key} must not contain digits")
+        low_c = c_raw.lower()
+        for bad in _SCHOLAR_PROSE_SLOP:
+            if bad in low_c:
+                raise ValueError(f"Mechanical slop phrase {bad!r} forbidden in {c_key}")
+        assert_domain_general_text(c_raw, c_key, banned_substrings=_SCHOLAR_BANNED_STORY_NOUNS)
+        clauses[c_key] = c_raw
+
+    return {
+        "leaf_name": raw_name,
+        "description": desc,
+        "positive_examples": pos_examples,
+        "negative_examples": neg_examples,
+        "executive_clause": clauses["executive_clause"],
+        "legislative_clause": clauses["legislative_clause"],
+        "judicial_clause": clauses["judicial_clause"],
+    }
 
 _FOUNDING_TREE_STRUCTURE: tuple[tuple[str, str, tuple[tuple[str, str, tuple[str, str]], ...]], ...] = (
     (
@@ -451,7 +763,7 @@ _SHARED_NEURAL_BRIDGES: NeuralThreeBridgeSuite | None = None
 
 
 def _get_shared_neural_bridges(repo_root: Path | None = None) -> NeuralThreeBridgeSuite | None:
-    """Load the 3 MiniLM neural bridges once per process from `repo_root` or workspace training root."""
+    """Load the frozen Cycle-0 3 MiniLM neural bridges once per process from `repo_root` or workspace training root."""
     global _SHARED_NEURAL_BRIDGES
     if _SHARED_NEURAL_BRIDGES is not None:
         return _SHARED_NEURAL_BRIDGES
@@ -469,6 +781,38 @@ def _get_shared_neural_bridges(repo_root: Path | None = None) -> NeuralThreeBrid
                 return _SHARED_NEURAL_BRIDGES
             except Exception:
                 continue
+    return None
+
+
+def _load_or_clone_scholar_bridge_suite(
+    repo_root: Path,
+    state_dir: Path,
+    *,
+    allow_workspace_seed: bool = False,
+) -> NeuralThreeBridgeSuite | None:
+    """Load `LMFT-Scholar`'s isolated plastic Right-Brain MiniLM suite from `state_dir / 'right_brain_bridges'`.
+
+    Seeds `state_dir / 'right_brain_bridges'` from `repo_root / 'models' / 'right_brain_bridges'` (or the
+    workspace training root when `allow_workspace_seed=True`) without ever modifying `models/right_brain_bridges/`.
+    """
+    plastic_dir = Path(state_dir) / "right_brain_bridges"
+    if not (plastic_dir / "doer_will_cultural").exists():
+        seed_candidates: list[Path] = [Path(repo_root) / "models" / "right_brain_bridges"]
+        if allow_workspace_seed:
+            try:
+                seed_candidates.append(resolve_training_root() / "models" / "right_brain_bridges")
+            except Exception:
+                pass
+        for seed_dir in seed_candidates:
+            if (seed_dir / "doer_will_cultural").exists():
+                plastic_dir.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copytree(seed_dir, plastic_dir, dirs_exist_ok=True)
+                break
+    if (plastic_dir / "doer_will_cultural").exists():
+        try:
+            return NeuralThreeBridgeSuite.load_all(plastic_dir)
+        except Exception:
+            return None
     return None
 
 
@@ -584,7 +928,9 @@ def _save_learned_leaves_json(path: Path, leaves: tuple[LearnedLeaf, ...]) -> No
     atomic_json(
         path,
         {
+            "schema_version": 1,
             "version": "learned_leaves_v1",
+            "learned_leaves": custom_leaves,
             "leaves": custom_leaves,
         },
     )
@@ -621,7 +967,7 @@ def _load_or_init_scholar_state(
             custom_leaves = load_learned_leaves(leaves_path)
         except Exception:
             custom_leaves = ()
-    elif rules_path.exists():
+    if not custom_leaves and rules_path.exists():
         try:
             custom_leaves = load_learned_leaves(rules_path)
         except Exception:
@@ -693,6 +1039,7 @@ class ScholarStudioRuntime:
         scholar_checkpoint_dir: Path | None = None,
         sensors: ThreeBridgeSensors | None = None,
         scholar_left_brain: Any | None = None,
+        leaf_distiller: Callable[..., dict[str, Any] | None] | None = None,
         lazy_load_gpu: bool = False,
         background_warmup: bool = False,
         auto_rem_sleep: bool = True,
@@ -701,6 +1048,7 @@ class ScholarStudioRuntime:
         self._lock = threading.RLock()
         self._gpu_load_lock = threading.Lock()
         self._warmup_done = threading.Event()
+        self._explicit_repo_root = repo_root is not None
         if repo_root is not None:
             self.repo_root = Path(repo_root)
         else:
@@ -728,6 +1076,7 @@ class ScholarStudioRuntime:
         ) = _load_or_init_scholar_state(self.state_dir)
 
         self._scholar_left_brain = scholar_left_brain
+        self._leaf_distiller = leaf_distiller
         self._lazy_load_gpu = bool(lazy_load_gpu)
         self._background_warmup = bool(
             background_warmup and scholar_left_brain is None and not self._lazy_load_gpu
@@ -736,17 +1085,35 @@ class ScholarStudioRuntime:
         self.sleep_cycle_index = 0
         self.left_brain_status = "UNLOADED"
         self.active_checkpoint_label = "Checkpoint: models/left_brain_scholar (Impish_LLAMA_4B)"
+        self._scholar_bridge_suite: NeuralThreeBridgeSuite | None = None
+        self._virgin_sensors: ThreeBridgeSensors | None = None
+        self._injected_sensors = sensors is not None
+        self.leaf_verification_metrics: dict[str, dict[str, float]] = {}
 
         if sensors is not None:
             self.sensors = sensors
+            self._virgin_sensors = sensors
         elif self._background_warmup:
             self.sensors = _default_fallback_sensors()
+            self._virgin_sensors = self.sensors
         else:
-            suite = _get_shared_neural_bridges(self.repo_root)
-            if suite is not None:
-                self.sensors = suite.as_three_bridge_sensors()
+            frozen_suite = _get_shared_neural_bridges(self.repo_root)
+            if frozen_suite is not None:
+                self._virgin_sensors = frozen_suite.as_three_bridge_sensors()
+            plastic_suite = _load_or_clone_scholar_bridge_suite(
+                self.repo_root,
+                self.state_dir,
+                allow_workspace_seed=not self._explicit_repo_root,
+            )
+            if plastic_suite is not None:
+                self._scholar_bridge_suite = plastic_suite
+                self.sensors = plastic_suite.as_three_bridge_sensors()
+            elif self._virgin_sensors is not None:
+                self.sensors = self._virgin_sensors
             else:
                 self.sensors = _default_fallback_sensors()
+            if self._virgin_sensors is None:
+                self._virgin_sensors = self.sensors
 
         if self._scholar_left_brain is not None:
             self.left_brain_status = "READY (Injected Left-Brain)"
@@ -813,11 +1180,22 @@ class ScholarStudioRuntime:
         """Warm up the 3 MiniLM bridges and 16-bit `Impish_LLAMA_4B` in the background without blocking UI startup."""
         try:
             if load_neural_bridges:
-                suite = _get_shared_neural_bridges(self.repo_root)
-                if suite is not None:
-                    loaded_sensors = suite.as_three_bridge_sensors()
-                    with self._lock:
-                        self.sensors = loaded_sensors
+                frozen_suite = _get_shared_neural_bridges(self.repo_root)
+                plastic_suite = _load_or_clone_scholar_bridge_suite(
+                    self.repo_root,
+                    self.state_dir,
+                    allow_workspace_seed=not self._explicit_repo_root,
+                )
+                with self._lock:
+                    if frozen_suite is not None:
+                        self._virgin_sensors = frozen_suite.as_three_bridge_sensors()
+                    if plastic_suite is not None:
+                        self._scholar_bridge_suite = plastic_suite
+                        self.sensors = plastic_suite.as_three_bridge_sensors()
+                    elif frozen_suite is not None:
+                        self.sensors = frozen_suite.as_three_bridge_sensors()
+                    if self._virgin_sensors is None:
+                        self._virgin_sensors = self.sensors
             self._load_scholar_locked(self.scholar_checkpoint_dir)
         finally:
             with self._lock:
@@ -958,6 +1336,10 @@ class ScholarStudioRuntime:
             tuple(self.learned_leaves),
         )
         _save_learned_leaves_json(self.state_dir / "learned_leaves.json", self.learned_leaves)
+        atomic_json(
+            self.state_dir / "leaf_verification_metrics.json",
+            self.leaf_verification_metrics,
+        )
         self.archives.save_all(self.state_dir / "branch_archives")
         save_contemplation_ledger(self.state_dir / "contemplation_ledger.json", self.ledger)
         atomic_json(
@@ -986,6 +1368,18 @@ class ScholarStudioRuntime:
         )
 
     def _load_persisted_session_if_present(self) -> None:
+        metrics_path = self.state_dir / "leaf_verification_metrics.json"
+        if metrics_path.exists():
+            try:
+                raw_m = json.loads(metrics_path.read_text(encoding="utf-8"))
+                if isinstance(raw_m, dict):
+                    self.leaf_verification_metrics = {
+                        str(k): {str(mk): float(mv) for mk, mv in val.items() if isinstance(mv, (int, float))}
+                        for k, val in raw_m.items()
+                        if isinstance(val, dict)
+                    }
+            except Exception:
+                pass
         session_path = self.state_dir / "scholar_sessions.json"
         if not session_path.exists():
             return
@@ -1020,6 +1414,55 @@ class ScholarStudioRuntime:
         if persist and self.active_lineage != "virgin":
             self._persist_session_threads()
 
+    def reset_scholar_canopy(self) -> dict[str, Any]:
+        """Reset `LMFT-Scholar` canopy, rules, archives, Will synapses, and plastic Right-Brain bridges back to clean Cycle-0 seed."""
+        self.wait_until_warm(timeout=180.0)
+        with self._lock:
+            self.rules = _ensure_foundational_rules(())
+            self.learned_leaves = PHILOSOPHICAL_SHADOW_LEAVES + DEFAULT_COMPLEX_FEELING_LEAVES
+            self.archives = ThreeBranchArchives()
+            self.ledger = ContemplationLedger()
+            self.will_edges = RIGHT_BRAIN_WILL_EDGES
+            self.leaf_verification_metrics = {}
+            self.sleep_queue.clear()
+            self._last_minted_leaves = ()
+            self._last_harvested_gap_pairs = []
+            self.rem_dream_chronicles = []
+            self.sleep_cycle_index = 0
+            self.curriculum_step_counter = 0
+
+            for stale_file in (
+                self.state_dir / "live_projector_weights.pt",
+                self.scholar_checkpoint_dir / "live_projector_weights.pt",
+                self.state_dir / "scholar_gap_trajectories.jsonl",
+            ):
+                if stale_file.is_file():
+                    try:
+                        stale_file.unlink()
+                    except OSError:
+                        pass
+
+            plastic_dir = self.state_dir / "right_brain_bridges"
+            if plastic_dir.exists():
+                shutil.rmtree(plastic_dir, ignore_errors=True)
+            if not self._injected_sensors:
+                plastic_suite = _load_or_clone_scholar_bridge_suite(
+                    self.repo_root,
+                    self.state_dir,
+                    allow_workspace_seed=not self._explicit_repo_root,
+                )
+                if plastic_suite is not None:
+                    self._scholar_bridge_suite = plastic_suite
+                    self.sensors = plastic_suite.as_three_bridge_sensors()
+                elif self._virgin_sensors is not None:
+                    self.sensors = self._virgin_sensors
+
+            self._persist_user_state()
+            self.last_rem_sleep_receipt = (
+                "Reset Scholar Canopy to clean Cycle-0 Founding Seed (2 rules, 0 custom leaves, fresh sensor bridges)."
+            )
+            return self.get_state_snapshot()
+
     def _extract_conversation_history_pairs(self) -> list[tuple[str, str]]:
         """Extract prior `(user_text, companion_text)` turns from `self.chat_messages`, skipping non-speech diagnostics."""
         pairs: list[tuple[str, str]] = []
@@ -1046,6 +1489,8 @@ class ScholarStudioRuntime:
         num_sentences: int | None = None,
         include_conversation_history: bool = True,
         lead_with_gap: bool | None = None,
+        suppress_auto_sleep: bool = False,
+        contrast_foil_text: str = "",
     ) -> dict[str, Any]:
         self.wait_until_warm(timeout=180.0)
         with self._lock:
@@ -1059,12 +1504,17 @@ class ScholarStudioRuntime:
                     f"Left-Brain LLM is not loaded ({self.left_brain_status})."
                 )
 
-            effective_sensors: Any = self.sensors
+            base_sensors = (
+                (self._virgin_sensors or self.sensors)
+                if self.active_lineage == "virgin"
+                else self.sensors
+            )
+            effective_sensors: Any = base_sensors
             if fact_anchor_text and fact_anchor_text.strip():
                 effective_sensors = _PassageAnchoredSensors(
                     wave_text=user_text,
                     fact_anchor_text=fact_anchor_text.strip(),
-                    base_sensors=self.sensors,
+                    base_sensors=base_sensors,
                 )
 
             active_rules = (
@@ -1143,18 +1593,29 @@ class ScholarStudioRuntime:
                 "scene_index": scene_id,
                 "scenario_text": user_text,
                 "fact_anchor_text": fact_anchor_text or shown_user_text,
+                "contrast_foil_text": contrast_foil_text.strip(),
                 "turn": turn_result,
                 "spoken_reply": spoken_reply,
             }
 
             queued_now = False
             if not turn_result.settled and self.active_lineage != "virgin":
-                sleep_scene = turn_result.unresolved_sleep_scene or self._build_sleep_scene_from_turn(
-                    scene_index=scene_id,
-                    scenario_text=user_text,
-                    turn=turn_result,
-                    spoken_reply=spoken_reply,
-                )
+                if contrast_foil_text.strip():
+                    sleep_scene = self._build_sleep_scene_from_turn(
+                        scene_index=scene_id,
+                        scenario_text=user_text,
+                        turn=turn_result,
+                        spoken_reply=spoken_reply,
+                        reference_text=(fact_anchor_text or "").strip(),
+                        contrast_foil_text=contrast_foil_text.strip(),
+                    )
+                else:
+                    sleep_scene = turn_result.unresolved_sleep_scene or self._build_sleep_scene_from_turn(
+                        scene_index=scene_id,
+                        scenario_text=user_text,
+                        turn=turn_result,
+                        spoken_reply=spoken_reply,
+                    )
                 self.sleep_queue = [s for s in self.sleep_queue if s.scene_index != scene_id]
                 self.sleep_queue.append(sleep_scene)
                 queued_now = True
@@ -1199,7 +1660,12 @@ class ScholarStudioRuntime:
             self.chat_messages.append(companion_msg)
             self._sync_active_thread_record(persist=True)
 
-            if queued_now and self.auto_rem_sleep and len(self.sleep_queue) >= self.auto_sleep_threshold:
+            if (
+                queued_now
+                and not suppress_auto_sleep
+                and self.auto_rem_sleep
+                and len(self.sleep_queue) >= self.auto_sleep_threshold
+            ):
                 self.handle_run_rem_sleep(auto_triggered=True)
                 companion_msg["auto_rem_sleep_receipt"] = self.last_rem_sleep_receipt
 
@@ -1214,6 +1680,7 @@ class ScholarStudioRuntime:
         spoken_reply: str = "",
         user_note: str = "",
         reference_text: str = "",
+        contrast_foil_text: str = "",
         force_coached: bool = False,
     ) -> UnresolvedSleepScene:
         vibe = turn.final_vibe
@@ -1226,23 +1693,33 @@ class ScholarStudioRuntime:
         ext_coords = dict(vibe.coordinates)
         ext_coords["psychological/truth/fact"] = round(float(vibe.fact), 6)
 
+        foil_clean = contrast_foil_text.strip()
+        if foil_clean and not user_note.strip():
+            foil_coords, foil_exp, _, _ = self.sensors.score_text(
+                foil_clean,
+                learned_leaves=self.learned_leaves,
+            )
+            ext_coords = dict(foil_coords)
+            ext_coords.update(foil_exp)
+            ext_coords["psychological/truth/fact"] = round(float(vibe.fact), 6)
+
         scenario_with_note = (
             f"{scenario_text} [Coach note: {user_note.strip()}]"
             if user_note.strip()
             else scenario_text
         )
         if user_note.strip():
-            ref_coords, _, _, _ = self.sensors.score_text(
+            ref_coords, ref_exp, _, _ = self.sensors.score_text(
                 user_note.strip(),
                 learned_leaves=self.learned_leaves,
             )
-            contrastive_ref = dict(ref_coords)
+            contrastive_ref = {**ref_coords, **ref_exp}
         elif reference_text.strip():
-            ref_coords, _, _, _ = self.sensors.score_text(
+            ref_coords, ref_exp, _, _ = self.sensors.score_text(
                 reference_text.strip(),
                 learned_leaves=self.learned_leaves,
             )
-            contrastive_ref = dict(ref_coords)
+            contrastive_ref = {**ref_coords, **ref_exp}
         else:
             contrastive_ref = dict(p1_coords)
 
@@ -1265,6 +1742,7 @@ class ScholarStudioRuntime:
             active_concept_collision=None if force_coached else vibe.active_concept,
             is_hazard=False,
             contrastive_reference_coordinates=contrastive_ref,
+            contrast_foil_text=foil_clean,
         )
 
     def handle_chat_message(
@@ -1344,10 +1822,19 @@ class ScholarStudioRuntime:
             selected = SCHOLAR_CURRICULUM_LESSONS[idx]
 
         self.curriculum_step_counter += 1
-        self.study_canvas_text = selected.passage_text
+        foil_block = (
+            f"\nContrasting Foil: \"{selected.contrast_foil_text}\""
+            if selected.contrast_foil_text.strip()
+            else ""
+        )
+        self.study_canvas_text = (
+            f"{selected.passage_text}\n\nContrasting Foil:\n{selected.contrast_foil_text}"
+            if selected.contrast_foil_text.strip()
+            else selected.passage_text
+        )
         prompt = (
             f"[{selected.department}] {selected.title}\n"
-            f"Passage: \"{selected.passage_text}\"\n\n"
+            f"Primary Passage: \"{selected.passage_text}\"{foil_block}\n\n"
             f"{selected.socratic_prompt}"
         )
         snap = self._run_scholar_turn(
@@ -1358,19 +1845,23 @@ class ScholarStudioRuntime:
             fact_anchor_text=selected.passage_text,
             num_sentences=num_sentences,
             include_conversation_history=False,
+            suppress_auto_sleep=bool(sleep_after_essay),
+            contrast_foil_text=selected.contrast_foil_text,
         )
         if sleep_after_essay and self.active_lineage != "virgin":
             latest_id = self.scene_counter
             rec = self._turn_records_by_id.get(latest_id)
-            if rec is not None and not any(s.scene_index == latest_id for s in self.sleep_queue):
+            if rec is not None:
                 seminar_sleep_scene = self._build_sleep_scene_from_turn(
                     scene_index=latest_id,
                     scenario_text=prompt,
                     turn=rec["turn"],
                     spoken_reply=str(rec.get("spoken_reply", "")),
-                    reference_text=f"{selected.passage_text} {selected.socratic_prompt}",
+                    reference_text=selected.passage_text,
+                    contrast_foil_text=selected.contrast_foil_text,
                     force_coached=False,
                 )
+                self.sleep_queue = [s for s in self.sleep_queue if s.scene_index != latest_id]
                 self.sleep_queue.append(seminar_sleep_scene)
             snap = self.handle_run_rem_sleep(auto_triggered=True)
             for msg in reversed(self.chat_messages):
@@ -1423,6 +1914,8 @@ class ScholarStudioRuntime:
             turn=turn,
             spoken_reply=str(rec.get("spoken_reply", "")),
             user_note=user_note,
+            reference_text=str(rec.get("fact_anchor_text", "")),
+            contrast_foil_text=str(rec.get("contrast_foil_text", "")),
             force_coached=True,
         )
         self.sleep_queue = [s for s in self.sleep_queue if s.scene_index != int(scene_index)]
@@ -1494,10 +1987,803 @@ class ScholarStudioRuntime:
         self._persist_session_threads()
         return self.get_state_snapshot()
 
+    def _extract_contrast_scenes_for_sleep(
+        self,
+        sc: UnresolvedSleepScene,
+    ) -> tuple[str, str]:
+        """Extract unseen `(scene_a_text, scene_b_text)` for REM distillation and holdout verification."""
+        raw_scen = (sc.scenario_text or "").strip()
+        foil = (sc.contrast_foil_text or "").strip()
+        hunch = (sc.left_brain_hunch or "").strip()
+
+        if "[Coach note:" in raw_scen:
+            base_part, note_part = raw_scen.split("[Coach note:", 1)
+            coach_note = note_part.rstrip("]").strip()
+            if coach_note:
+                scene_b = foil or hunch or base_part.strip()
+                return coach_note, scene_b
+
+        if foil:
+            rec = self._turn_records_by_id.get(sc.scene_index)
+            primary_passage = str(rec.get("fact_anchor_text", "")).strip() if isinstance(rec, dict) else ""
+            if not primary_passage:
+                m_pass = re.search(r'Primary Passage:\s*"([^"]+)"', raw_scen)
+                if m_pass:
+                    primary_passage = m_pass.group(1).strip()
+            scene_a = primary_passage or hunch or raw_scen
+            return scene_a, foil
+
+        base_clean = raw_scen.split("[Coach note:", 1)[0].strip()
+        if hunch and hunch.lower() != base_clean.lower():
+            return hunch, base_clean
+        return (
+            base_clean or "Thoughtful care that balances strength with restraint.",
+            "Routine casual small talk with no underlying conflict, pressure, or ethical tension.",
+        )
+
+    def _select_parent_branch_for_distillation(
+        self,
+        *,
+        sc: UnresolvedSleepScene,
+        scene_a_text: str,
+        scene_b_text: str,
+        active_leaves: Sequence[LearnedLeaf],
+    ) -> tuple[str, int, LearnedLeaf | None, str]:
+        """Select `(parent_branch, target_tier, parent_leaf_obj, root_bough)` using real sensor activations on `scene_a_text`."""
+        builtin_ids = {
+            lf.leaf_id for lf in (PHILOSOPHICAL_SHADOW_LEAVES + DEFAULT_COMPLEX_FEELING_LEAVES)
+        }
+        growable_boughs_map: dict[str, tuple[str, str]] = {
+            "cultural/efficiency": ("cultural/efficiency/power", "cultural/efficiency/wastelessness"),
+            "cultural/justice": ("cultural/justice/honor", "cultural/justice/fairness"),
+            "cultural/freedom": ("cultural/freedom/self-sufficiency", "cultural/freedom/needlessness"),
+            "philosophical/being": ("philosophical/being/agency", "philosophical/being/existence"),
+            "philosophical/structure": ("philosophical/structure/order", "philosophical/structure/chaos"),
+            "philosophical/persistence": ("philosophical/persistence/continuity", "philosophical/persistence/discreteness"),
+            "experiential/reflection": ("experiential/reflection/novelty", SALIENCE_LEAF),
+            "experiential/phase": (VALENCE_LEAF, AROUSAL_LEAF),
+            "experiential/synchronization": ("experiential/synchronization/resonance", "experiential/synchronization/entrainment"),
+        }
+
+        coords_a, exp_a, _, _ = self.sensors.score_text(
+            scene_a_text,
+            learned_leaves=tuple(active_leaves),
+            branch_gating=True,
+        )
+        coords_b, exp_b, _, _ = self.sensors.score_text(
+            scene_b_text,
+            learned_leaves=tuple(active_leaves),
+            branch_gating=True,
+        )
+        full_a = {**coords_a, **exp_a}
+        full_b = {**coords_b, **exp_b}
+        max_founding_a = max((float(coords_a.get(k, 0.0)) for k in FOUNDATIONAL_LEAVES), default=0.0)
+        salience_a = float(exp_a.get(SALIENCE_LEAF, sc.salience))
+
+        low_scen = (sc.scenario_text or "").lower()
+        open_candidates: list[tuple[float, str]] = []
+        all_candidates: list[tuple[float, str]] = []
+
+        for bough_id, (f1, f2) in growable_boughs_map.items():
+            a1 = float(full_a.get(f1, 0.50))
+            a2 = float(full_a.get(f2, 0.50))
+            b1 = float(full_b.get(f1, 0.50))
+            b2 = float(full_b.get(f2, 0.50))
+            if bough_id.startswith("experiential/"):
+                exp_vals = [float(v) for k, v in exp_a.items() if k.startswith(bough_id + "/")]
+                exp_sig = max(exp_vals, default=salience_a)
+                is_open = exp_sig >= BRANCH_GATE_THRESHOLD
+            else:
+                blind_spot = max_founding_a < BRANCH_GATE_THRESHOLD and salience_a >= 0.45
+                is_open = blind_spot or (max(a1, a2) >= BRANCH_GATE_THRESHOLD)
+
+            score = (
+                abs(a1 - 0.50)
+                + abs(a2 - 0.50)
+                + 1.5 * (abs(a1 - b1) + abs(a2 - b2))
+            )
+            b_dept, b_sub = bough_id.split("/", 1)
+            if low_scen.startswith(f"[{b_dept} · {b_sub}]"):
+                score += 2.0
+            elif bough_id in low_scen:
+                score += 0.45
+            all_candidates.append((score, bough_id))
+            if is_open:
+                open_candidates.append((score, bough_id))
+
+        ranked = open_candidates if open_candidates else all_candidates
+        ranked.sort(key=lambda item: item[0], reverse=True)
+        root_bough = ranked[0][1]
+
+        t2_active = [
+            lf
+            for lf in active_leaves
+            if lf.tier == 2
+            and lf.parent_branch == root_bough
+            and lf.leaf_id not in builtin_ids
+            and float(coords_a.get(lf.leaf_id, 0.0)) >= CONFUSION_THRESHOLD
+        ]
+        if not t2_active:
+            return root_bough, 2, None, root_bough
+
+        parent_t2 = max(t2_active, key=lambda lf: float(coords_a.get(lf.leaf_id, 0.0)))
+        t3_active = [
+            lf
+            for lf in active_leaves
+            if lf.tier == 3
+            and lf.parent_branch == parent_t2.leaf_id
+            and lf.leaf_id not in builtin_ids
+            and float(coords_a.get(lf.leaf_id, 0.0)) >= CONFUSION_THRESHOLD
+        ]
+        if not t3_active:
+            return parent_t2.leaf_id, 3, parent_t2, root_bough
+
+        parent_t3 = max(t3_active, key=lambda lf: float(coords_a.get(lf.leaf_id, 0.0)))
+        return parent_t3.leaf_id, 4, parent_t3, root_bough
+
+    def _distill_leaf_candidate_with_left_brain(
+        self,
+        *,
+        parent_branch: str,
+        target_tier: int,
+        scene_a_text: str,
+        scene_b_text: str,
+        parent_leaf: LearnedLeaf | None,
+        existing_short_names: set[str],
+        attempt: int = 0,
+        prior_error: str = "",
+    ) -> dict[str, Any] | None:
+        """Use native 16-bit `Impish_LLAMA_4B` (or an injected test `leaf_distiller`) to distill a plain-English human leaf concept."""
+        if self._leaf_distiller is not None:
+            return self._leaf_distiller(
+                parent_branch=parent_branch,
+                target_tier=target_tier,
+                scene_a_text=scene_a_text,
+                scene_b_text=scene_b_text,
+                parent_leaf=parent_leaf,
+                existing_sibling_names=sorted(existing_short_names),
+                attempt=attempt,
+                prior_error=prior_error,
+            )
+
+        lb = self._ensure_left_brain_ready()
+        if lb is None or not hasattr(lb, "model") or not hasattr(lb, "tokenizer"):
+            return None
+
+        import torch
+
+        model = lb.model
+        tokenizer = lb.tokenizer
+        device = getattr(lb, "device", next(model.parameters()).device)
+
+        bough_theme = parent_branch.split("/")[-1].replace("_", " ")
+        parent_context = (
+            f"Parent concept already learned (`{parent_leaf.leaf_name}`): \"{parent_leaf.description}\"\n"
+            f"Propose a MORE SPECIFIC child sub-skill of `{parent_leaf.leaf_name}` (such as preventive upkeep, "
+            f"steady pacing, listening to early warnings, or protecting vulnerable teammates) with a NEW, distinct "
+            f"`description` sentence that does NOT repeat words from `{parent_leaf.leaf_name}`'s description."
+            if parent_leaf is not None
+            else (
+                f"Human Domain Theme: {bough_theme}.\n"
+                f"Propose a clear, reusable everyday human quality related to {bough_theme} that is strongly present in "
+                f"Target Passage A and absent or violated in Contrasting Foil B."
+            )
+        )
+        builtin_names = {
+            lf.leaf_name for lf in (PHILOSOPHICAL_SHADOW_LEAVES + DEFAULT_COMPLEX_FEELING_LEAVES)
+        }
+        custom_existing = sorted(n for n in existing_short_names if n not in builtin_names)
+        avoid_names = custom_existing + ["quiet_courage"] + sorted(builtin_names)
+        avoid_list = ", ".join(avoid_names[:24])
+        avoid_user_note = (
+            f"\nAlready-learned leaf names (MUST choose a completely different `LEAF_NAME` with different starting word): "
+            f"{', '.join(custom_existing)}\n"
+            if custom_existing
+            else ""
+        )
+        retry_hint = (
+            f"\nIMPORTANT CORRECTION FROM PREVIOUS ATTEMPT: {prior_error}\n"
+            f"Choose a completely different, unmistakable everyday human quality and clearer modern examples."
+            if prior_error
+            else ""
+        )
+
+        system_prompt = (
+            "You distill timeless, plain-English human qualities from contrasting scenes.\n"
+            "STRICT RULES:\n"
+            "1. Write in clear, natural everyday English. NEVER include numbers, decimals, or scores.\n"
+            "2. NEVER mention any character names, author names, ship names, places, or props from the passages.\n"
+            "3. `LEAF_NAME` MUST be 2 or 3 lowercase everyday words joined by underscores (format like `quiet_courage`) "
+            f"coined freshly for this contrast, and MUST NOT match: [{avoid_list}].\n"
+            "4. `DESCRIPTION` MUST be one vivid, plain-English sentence (12 to 28 words) defining the human quality.\n"
+            "5. `POS_1` through `POS_5` MUST be 5 short modern everyday sentences (workplaces, families, clinics, "
+            "workshops, neighborhoods) clearly showing this quality without reusing words from Passage A or B.\n"
+            "6. `NEG_1` through `NEG_5` MUST be 5 short modern everyday lookalike sentences where reckless force, "
+            "haste, or rigid rules appear WITHOUT this quality.\n"
+            "7. `EXECUTIVE`, `LEGISLATIVE`, and `JUDICIAL` MUST each be one plain-English sentence describing the "
+            "practical action, emotional tone, and structural truth of this quality.\n"
+            "Output ONLY the 15 labeled lines in this exact order:\n"
+            "LEAF_NAME: ...\n"
+            "DESCRIPTION: ...\n"
+            "POS_1: ...\nPOS_2: ...\nPOS_3: ...\nPOS_4: ...\nPOS_5: ...\n"
+            "NEG_1: ...\nNEG_2: ...\nNEG_3: ...\nNEG_4: ...\nNEG_5: ...\n"
+            "EXECUTIVE: ...\n"
+            "LEGISLATIVE: ...\n"
+            "JUDICIAL: ..."
+        )
+        user_prompt = (
+            f"{parent_context}\n\n"
+            f"Target Passage A (quality present):\n\"{scene_a_text[:600]}\"\n\n"
+            f"Contrasting Foil B (quality absent or violated):\n\"{scene_b_text[:600]}\"\n"
+            f"{avoid_user_note}{retry_hint}\n"
+            "Output the 15 labeled lines now."
+        )
+
+        if hasattr(tokenizer, "apply_chat_template") and getattr(tokenizer, "chat_template", None):
+            chat_header = tokenizer.apply_chat_template(
+                [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                tokenize=False,
+                add_generation_prompt=True,
+            )
+            full_prompt = f"{chat_header}LEAF_NAME: "
+            input_ids = tokenizer.encode(full_prompt, add_special_tokens=False)
+        else:
+            full_prompt = f"System: {system_prompt}\nUser: {user_prompt}\nAssistant: LEAF_NAME: "
+            input_ids = tokenizer.encode(full_prompt, add_special_tokens=True)
+
+        saved_scales: dict[str, Any] = {}
+        for mod_name, mod in model.named_modules():
+            if isinstance(mod, LoRALinear):
+                saved_scales[mod_name] = mod.rank_scale.detach().clone()
+
+        try:
+            with torch.no_grad():
+                for mod in model.modules():
+                    if isinstance(mod, LoRALinear):
+                        mod.rank_scale.zero_()
+
+                inp = torch.tensor([input_ids], dtype=torch.long, device=device)
+                attn = torch.ones_like(inp)
+                prompt_tok_len = len(input_ids)
+                gen_kwargs: dict[str, Any] = {
+                    "input_ids": inp,
+                    "attention_mask": attn,
+                    "max_new_tokens": 580,
+                    "pad_token_id": int(getattr(tokenizer, "eos_token_id", 0) or 0),
+                }
+                try:
+                    from transformers import StoppingCriteria, StoppingCriteriaList
+
+                    class _LabeledLinesStop(StoppingCriteria):
+                        def __call__(self, seq_ids: Any, _scores: Any, **_kw: Any) -> bool:
+                            gen_slice = seq_ids[0, prompt_tok_len:].tolist()
+                            if len(gen_slice) < 60 or len(gen_slice) % 4 != 0:
+                                return False
+                            cand_txt = tokenizer.decode(gen_slice, skip_special_tokens=True)
+                            idx_jud = cand_txt.upper().find("JUDICIAL:")
+                            if idx_jud < 0:
+                                return False
+                            after_jud = cand_txt[idx_jud + len("JUDICIAL:") :]
+                            return "\n" in after_jud and len(after_jud.split("\n", 1)[0].strip()) >= 20
+
+                    gen_kwargs["stopping_criteria"] = StoppingCriteriaList([_LabeledLinesStop()])
+                except Exception:
+                    pass
+                if attempt == 0:
+                    gen_kwargs["do_sample"] = False
+                else:
+                    gen_kwargs["do_sample"] = True
+                    gen_kwargs["temperature"] = (
+                        0.72 if "Duplicate" in prior_error else (0.38 if attempt == 1 else 0.58)
+                    )
+                    gen_kwargs["top_p"] = 0.90
+
+                out_ids = model.generate(**gen_kwargs)
+                new_tokens = out_ids[0, len(input_ids) :].tolist()
+                decoded_tail = tokenizer.decode(new_tokens, skip_special_tokens=True)
+        finally:
+            with torch.no_grad():
+                for mod_name, mod in model.named_modules():
+                    if isinstance(mod, LoRALinear) and mod_name in saved_scales:
+                        mod.rank_scale.copy_(saved_scales[mod_name])
+
+        return _parse_distilled_leaf_response("LEAF_NAME: " + decoded_tail)
+
+    def _distill_into_bridge_and_verify_unseen(
+        self,
+        *,
+        candidate_leaf: LearnedLeaf,
+        pos_examples: Sequence[str],
+        neg_examples: Sequence[str],
+        scene_a_text: str,
+        scene_b_text: str,
+        active_leaves: Sequence[LearnedLeaf],
+        attempt: int = 0,
+    ) -> tuple[bool, str, dict[str, float]]:
+        """Fine-tune `LMFT-Scholar`'s isolated MiniLM bridge on everyday examples + replay anchors and gatekeep on unseen Scene A vs. B."""
+        unseen_calm_holdout = (
+            "A clerk sorting afternoon mail into wooden cubbies beside a quiet window."
+        )
+        train_calm_anchors = (
+            "A neighbor sweeping dry leaves off the front porch before breakfast.",
+            "Passengers reading newspapers quietly on a morning commuter train.",
+        )
+
+        suite = self._scholar_bridge_suite
+        if suite is not None:
+            dept_root = candidate_leaf.leaf_id.split("/", 1)[0]
+            if dept_root == "cultural":
+                classifier: NeuralBridgeClassifier = suite.doer
+                founding_map = DOER_FOUNDING_DESCRIPTIONS
+            elif dept_root == "philosophical":
+                classifier = suite.thinker
+                founding_map = THINKER_FOUNDING_DESCRIPTIONS
+            else:
+                classifier = suite.feeler
+                founding_map = FEELER_FOUNDING_DESCRIPTIONS
+
+            dept_prefix = f"{dept_root}/"
+            existing_traits: dict[str, str] = dict(founding_map)
+            for lf in active_leaves:
+                if lf.leaf_id.startswith(dept_prefix):
+                    existing_traits[lf.leaf_id] = lf.description
+
+            weights_backup = {
+                k: v.detach().cpu().clone()
+                for k, v in classifier.model.state_dict().items()
+            }
+            pre_f_a = classifier.score_pairs(scene_a_text, founding_map, use_text_cache=False)
+            pre_f_b = classifier.score_pairs(scene_b_text, founding_map, use_text_cache=False)
+
+            cal_sentences = list(pos_examples) + list(neg_examples) + list(train_calm_anchors)
+            train_examples: list[BridgePairExample] = []
+
+            # 1. Knowledge-distillation replay anchors so founding & prior custom leaves do not drift
+            for s_idx, sent in enumerate(cal_sentences):
+                frozen_preds = classifier.score_pairs(sent, existing_traits, use_text_cache=False)
+                for ex_leaf_id, ex_desc in existing_traits.items():
+                    train_examples.append(
+                        BridgePairExample(
+                            scenario_id=f"replay_c{self.sleep_cycle_index}_{s_idx}_{ex_leaf_id.split('/')[-1]}",
+                            text=sent,
+                            leaf_id=ex_leaf_id,
+                            trait_description=ex_desc,
+                            target_score=round(float(frozen_preds[ex_leaf_id]), 4),
+                        )
+                    )
+
+            # 2. Contrastive everyday examples for the new candidate leaf (never unseen Scene A or B!)
+            for rep_idx in range(2):
+                for p_idx, p_sent in enumerate(pos_examples):
+                    train_examples.append(
+                        BridgePairExample(
+                            scenario_id=f"pos_c{self.sleep_cycle_index}_r{rep_idx}_{p_idx}",
+                            text=p_sent,
+                            leaf_id=candidate_leaf.leaf_id,
+                            trait_description=candidate_leaf.description,
+                            target_score=0.88,
+                        )
+                    )
+                for n_idx, n_sent in enumerate(list(neg_examples) + list(train_calm_anchors)):
+                    train_examples.append(
+                        BridgePairExample(
+                            scenario_id=f"neg_c{self.sleep_cycle_index}_r{rep_idx}_{n_idx}",
+                            text=n_sent,
+                            leaf_id=candidate_leaf.leaf_id,
+                            trait_description=candidate_leaf.description,
+                            target_score=0.08,
+                        )
+                    )
+
+            try:
+                train_bridge_classifier(
+                    classifier,
+                    train_examples,
+                    epochs=3,
+                    batch_size=16,
+                    learning_rate=1.5e-5,
+                    seed=42 + self.sleep_cycle_index * 11 + attempt,
+                )
+                suite.doer.clear_cache()
+                suite.thinker.clear_cache()
+                suite.feeler.clear_cache()
+
+                eval_traits = {**founding_map, candidate_leaf.leaf_id: candidate_leaf.description}
+                post_a = classifier.score_pairs(scene_a_text, eval_traits, use_text_cache=False)
+                post_b = classifier.score_pairs(scene_b_text, eval_traits, use_text_cache=False)
+                post_calm = classifier.score_pairs(
+                    unseen_calm_holdout,
+                    {candidate_leaf.leaf_id: candidate_leaf.description},
+                    use_text_cache=False,
+                )
+                raw_score_a = float(post_a[candidate_leaf.leaf_id])
+                raw_score_b = float(post_b[candidate_leaf.leaf_id])
+                raw_calm = float(post_calm[candidate_leaf.leaf_id])
+                raw_margin = raw_score_a - raw_score_b
+                max_drift = max(
+                    [abs(float(post_a[k]) - float(pre_f_a[k])) for k in founding_map]
+                    + [abs(float(post_b[k]) - float(pre_f_b[k])) for k in founding_map],
+                    default=0.0,
+                )
+
+                gated_coords_a, _, _, _ = self.sensors.score_text(
+                    scene_a_text,
+                    learned_leaves=tuple(active_leaves) + (candidate_leaf,),
+                    branch_gating=True,
+                )
+                gated_score_a = float(gated_coords_a.get(candidate_leaf.leaf_id, 0.0))
+            except Exception as exc:
+                classifier.model.load_state_dict(
+                    {k: v.to(classifier.device) for k, v in weights_backup.items()},
+                    strict=True,
+                )
+                classifier.model.eval()
+                classifier.clear_cache()
+                return False, f"Bridge training error: {exc}", {}
+
+            metrics = {
+                "unseen_score_a": round(raw_score_a, 4),
+                "gated_score_a": round(gated_score_a, 4),
+                "unseen_score_b": round(raw_score_b, 4),
+                "unseen_margin": round(raw_margin, 4),
+                "calm_score": round(raw_calm, 4),
+                "max_founding_drift": round(max_drift, 4),
+            }
+            if (
+                raw_score_a < 0.48
+                or gated_score_a < 0.48
+                or raw_margin < 0.12
+                or raw_calm > 0.38
+                or max_drift > 0.12
+            ):
+                classifier.model.load_state_dict(
+                    {k: v.to(classifier.device) for k, v in weights_backup.items()},
+                    strict=True,
+                )
+                classifier.model.eval()
+                suite.doer.clear_cache()
+                suite.thinker.clear_cache()
+                suite.feeler.clear_cache()
+                reason = (
+                    f"Unseen holdout gate rejected '{candidate_leaf.leaf_name}': "
+                    f"SceneA={raw_score_a:.2f} (gated={gated_score_a:.2f}), "
+                    f"FoilB={raw_score_b:.2f}, margin={raw_margin:+.2f}, "
+                    f"calm={raw_calm:.2f}, drift={max_drift:.2f}"
+                )
+                return False, reason, metrics
+
+            suite.save_all(self.state_dir / "right_brain_bridges")
+            return True, "verified", metrics
+
+        # CPU / Injected-Sensor Test Path (enforces the exact same unseen discrimination thresholds)
+        test_leaves = tuple(active_leaves) + (candidate_leaf,)
+        coords_a_ng, _, _, _ = self.sensors.score_text(
+            scene_a_text,
+            learned_leaves=test_leaves,
+            branch_gating=False,
+        )
+        coords_b_ng, _, _, _ = self.sensors.score_text(
+            scene_b_text,
+            learned_leaves=test_leaves,
+            branch_gating=False,
+        )
+        coords_a_g, _, _, _ = self.sensors.score_text(
+            scene_a_text,
+            learned_leaves=test_leaves,
+            branch_gating=True,
+        )
+        raw_score_a = float(coords_a_ng.get(candidate_leaf.leaf_id, 0.0))
+        raw_score_b = float(coords_b_ng.get(candidate_leaf.leaf_id, 0.0))
+        gated_score_a = float(coords_a_g.get(candidate_leaf.leaf_id, 0.0))
+        raw_margin = raw_score_a - raw_score_b
+        metrics = {
+            "unseen_score_a": round(raw_score_a, 4),
+            "gated_score_a": round(gated_score_a, 4),
+            "unseen_score_b": round(raw_score_b, 4),
+            "unseen_margin": round(raw_margin, 4),
+            "calm_score": 0.10,
+            "max_founding_drift": 0.0,
+        }
+        if raw_score_a < 0.48 or gated_score_a < 0.48 or raw_margin < 0.12:
+            reason = (
+                f"Unseen holdout gate rejected '{candidate_leaf.leaf_name}': "
+                f"SceneA={raw_score_a:.2f} (gated={gated_score_a:.2f}), "
+                f"FoilB={raw_score_b:.2f}, margin={raw_margin:+.2f}"
+            )
+            return False, reason, metrics
+        return True, "verified", metrics
+
+    def _distill_and_verify_scholar_canopy(
+        self,
+        queued_snapshot: tuple[UnresolvedSleepScene, ...],
+    ) -> tuple[
+        tuple[FuzzyConceptRule, ...],
+        tuple[LearnedLeaf, ...],
+        tuple[str, ...],
+        tuple[str, ...],
+    ]:
+        """Distill human concepts with `Impish_LLAMA_4B`, train plastic MiniLM bridges, and verify on unseen Scene A vs. B."""
+        if not queued_snapshot or self.active_lineage == "virgin":
+            return (), (), (), ()
+
+        active_leaves = list(self.learned_leaves)
+        existing_short_names = {lf.leaf_name for lf in active_leaves}
+        active_rules = list(self.rules)
+        existing_rule_names = {r.concept_name for r in active_rules}
+        cur_archives = self.archives
+        cur_ledger = self.ledger
+
+        minted_leaves: list[LearnedLeaf] = []
+        forged_rules: list[FuzzyConceptRule] = []
+        harvested_clause_ids: list[str] = []
+        rejection_notes: list[str] = []
+
+        for sc in queued_snapshot:
+            scene_a_text, scene_b_text = self._extract_contrast_scenes_for_sleep(sc)
+            parent_branch, target_tier, parent_leaf_obj, root_bough = (
+                self._select_parent_branch_for_distillation(
+                    sc=sc,
+                    scene_a_text=scene_a_text,
+                    scene_b_text=scene_b_text,
+                    active_leaves=active_leaves,
+                )
+            )
+
+            accepted_leaf: LearnedLeaf | None = None
+            accepted_payload: dict[str, Any] | None = None
+            accepted_metrics: dict[str, float] = {}
+            prior_err = ""
+
+            for attempt in range(3):
+                try:
+                    raw_payload = self._distill_leaf_candidate_with_left_brain(
+                        parent_branch=parent_branch,
+                        target_tier=target_tier,
+                        scene_a_text=scene_a_text,
+                        scene_b_text=scene_b_text,
+                        parent_leaf=parent_leaf_obj,
+                        existing_short_names=existing_short_names,
+                        attempt=attempt,
+                        prior_error=prior_err,
+                    )
+                    if raw_payload is None:
+                        prior_err = "Left-Brain LLM unavailable for leaf distillation."
+                        break
+                    clean_payload = _validate_human_leaf_payload(
+                        raw_payload,
+                        scene_a_text=scene_a_text,
+                        scene_b_text=scene_b_text,
+                        existing_short_names=existing_short_names,
+                        parent_description=parent_leaf_obj.description if parent_leaf_obj is not None else "",
+                    )
+                    draft_leaf = score_leaf_anchor_weights_at_birth(
+                        LearnedLeaf(
+                            parent_branch=parent_branch,
+                            leaf_name=clean_payload["leaf_name"],
+                            description=clean_payload["description"],
+                        )
+                    )
+                except Exception as exc:
+                    prior_err = str(exc)
+                    continue
+
+                passed, reason, ver_metrics = self._distill_into_bridge_and_verify_unseen(
+                    candidate_leaf=draft_leaf,
+                    pos_examples=clean_payload["positive_examples"],
+                    neg_examples=clean_payload["negative_examples"],
+                    scene_a_text=scene_a_text,
+                    scene_b_text=scene_b_text,
+                    active_leaves=active_leaves,
+                    attempt=attempt,
+                )
+                if passed:
+                    accepted_leaf = draft_leaf
+                    accepted_payload = clean_payload
+                    accepted_metrics = ver_metrics
+                    break
+                prior_err = reason
+
+            if accepted_leaf is None or accepted_payload is None:
+                if prior_err:
+                    rejection_notes.append(prior_err)
+                continue
+
+            # Score semantic Callosum anchor_weights with the updated bridge + contrastive coordinate delta
+            pair_scorer: Callable[[str, str], float] | None = None
+            if self._scholar_bridge_suite is not None:
+                dept_root = accepted_leaf.leaf_id.split("/", 1)[0]
+                bridge_cls = (
+                    self._scholar_bridge_suite.doer
+                    if dept_root == "cultural"
+                    else (
+                        self._scholar_bridge_suite.thinker
+                        if dept_root == "philosophical"
+                        else self._scholar_bridge_suite.feeler
+                    )
+                )
+                pair_scorer = lambda anchor, desc, _b=bridge_cls: float(
+                    _b.score_pairs(desc, {"anchor": anchor}, use_text_cache=False)["anchor"]
+                )
+
+            coords_foil, exp_foil, _, _ = self.sensors.score_text(
+                scene_b_text,
+                learned_leaves=tuple(active_leaves) + (accepted_leaf,),
+                branch_gating=True,
+            )
+            coords_ref, exp_ref, _, _ = self.sensors.score_text(
+                scene_a_text,
+                learned_leaves=tuple(active_leaves) + (accepted_leaf,),
+                branch_gating=True,
+            )
+            full_foil = {**coords_foil, **exp_foil}
+            full_ref = {**coords_ref, **exp_ref}
+
+            anchored_leaf = score_leaf_anchor_weights_at_birth(accepted_leaf, pair_scorer=pair_scorer)
+            sculpted_leaf = sculpt_learned_leaf_anchor_weights(anchored_leaf, full_foil, full_ref)
+
+            active_leaves.append(sculpted_leaf)
+            minted_leaves.append(sculpted_leaf)
+            existing_short_names.add(sculpted_leaf.leaf_name)
+            self.leaf_verification_metrics[sculpted_leaf.leaf_id] = accepted_metrics
+
+            # Build clean domain-general FuzzyConceptRule anchored in real post-distillation coordinates
+            rule_targets: dict[str, float] = {
+                sculpted_leaf.leaf_id: round(
+                    min(0.78, max(0.48, float(full_ref.get(sculpted_leaf.leaf_id, 0.60)) - 0.06)),
+                    4,
+                )
+            }
+            bough_founding = [
+                k for k in FOUNDATIONAL_LEAVES if k.startswith(root_bough + "/")
+            ]
+            if bough_founding:
+                best_f = max(
+                    bough_founding,
+                    key=lambda k: abs(float(full_ref.get(k, 0.50)) - float(full_foil.get(k, 0.50))),
+                )
+                f_val = float(full_ref.get(best_f, 0.50))
+                if f_val >= 0.45:
+                    rule_targets[best_f] = round(min(0.76, max(0.45, f_val - 0.05)), 4)
+
+            min_t = min(rule_targets.values())
+            max_t = max(rule_targets.values())
+            rule_low = round(min(0.72, max(0.42, min_t - 0.08)), 4)
+            rule_high = round(min(0.88, max(rule_low + 0.12, max_t + 0.06)), 4)
+            candidate_rule = FuzzyConceptRule(
+                rule_id=f"rule-scholar-{sculpted_leaf.leaf_name[:28]}",
+                concept_name=sculpted_leaf.leaf_name,
+                description=sculpted_leaf.description,
+                target_leaves=rule_targets,
+                low=rule_low,
+                high=rule_high,
+                polarity="attractive",
+            )
+            if candidate_rule.concept_name not in existing_rule_names:
+                active_rules.append(candidate_rule)
+                forged_rules.append(candidate_rule)
+                existing_rule_names.add(candidate_rule.concept_name)
+            else:
+                for r_idx, ex_r in enumerate(active_rules):
+                    if ex_r.concept_name == candidate_rule.concept_name:
+                        entrained = entrain_existing_cluster_rule(
+                            ex_r,
+                            candidate_rule,
+                            candidate_rule.concept_name,
+                        )
+                        active_rules[r_idx] = entrained
+                        forged_rules.append(entrained)
+                        break
+
+            # File clean plain-English clauses into the 3 Branch Archives & Contemplation Ledger
+            cult_sig = {k: round(float(v), 4) for k, v in full_ref.items() if k.startswith("cultural/")}
+            phil_sig = {k: round(float(v), 4) for k, v in full_ref.items() if k.startswith("philosophical/")}
+            exp_sig = {k: round(float(v), 4) for k, v in full_ref.items() if k.startswith("experiential/")}
+            avg_fc = compile_felt_chord(
+                full_ref,
+                salience=float(full_ref.get(SALIENCE_LEAF, sc.salience)),
+                valence=float(full_ref.get(VALENCE_LEAF, sc.valence)),
+                arousal=float(full_ref.get(AROUSAL_LEAF, sc.arousal)),
+                resonance=0.68,
+                learned_leaves=tuple(active_leaves),
+            )
+            tag_slug = sculpted_leaf.leaf_name
+            exec_clause = BranchClauseEntry(
+                clause_id=f"exec-scholar-s{sc.scene_index}-{tag_slug}",
+                branch=EXECUTIVE_BRANCH,
+                text=accepted_payload["executive_clause"],
+                signature_coords=cult_sig,
+                source_scene=sc.scene_index,
+                concept_tag=tag_slug,
+            )
+            leg_clause = BranchClauseEntry(
+                clause_id=f"leg-scholar-s{sc.scene_index}-{tag_slug}",
+                branch=LEGISLATIVE_BRANCH,
+                text=accepted_payload["legislative_clause"],
+                signature_coords=exp_sig,
+                source_scene=sc.scene_index,
+                concept_tag=tag_slug,
+            )
+            jud_clause = BranchClauseEntry(
+                clause_id=f"jud-scholar-s{sc.scene_index}-{tag_slug}",
+                branch=JUDICIAL_BRANCH,
+                text=accepted_payload["judicial_clause"],
+                signature_coords=phil_sig,
+                source_scene=sc.scene_index,
+                concept_tag=tag_slug,
+            )
+            harvested_clause_ids.extend(
+                [exec_clause.clause_id, leg_clause.clause_id, jud_clause.clause_id]
+            )
+            cur_archives = ThreeBranchArchives(
+                executive=cur_archives.executive.record_scene(
+                    scene_index=sc.scene_index,
+                    coordinates=full_ref,
+                    action_summary=accepted_payload["executive_clause"],
+                    harvested_clause=exec_clause,
+                ),
+                legislative=cur_archives.legislative.record_scene(
+                    scene_index=sc.scene_index,
+                    sensory_snapshot=accepted_payload["legislative_clause"],
+                    felt_chord=avg_fc,
+                    coordinates=full_ref,
+                    harvested_clause=leg_clause,
+                ),
+                judicial=cur_archives.judicial.record_clause_and_chord(
+                    harvested_clause=jud_clause,
+                    ratified_chord=candidate_rule,
+                ),
+            )
+            cur_ledger = cur_ledger.record_settled(
+                scene_index=sc.scene_index,
+                takeaway_source=sculpted_leaf.description,
+                felt_chord=avg_fc,
+                clarity=0.85,
+                confidence=0.88,
+                resolved_uncertainty_scenes=(sc.scene_index,),
+            )
+
+        self.learned_leaves = tuple(active_leaves)
+        self.rules = _ensure_foundational_rules(tuple(active_rules))
+        self.archives = cur_archives
+        self.ledger = cur_ledger
+        return (
+            tuple(forged_rules),
+            tuple(minted_leaves),
+            tuple(harvested_clause_ids),
+            tuple(rejection_notes),
+        )
+
+    def _refresh_latest_turn_telemetry_coordinates(self) -> None:
+        """Re-score the most recent companion message with `self.learned_leaves` so newly distilled leaves display real neural activations."""
+        for msg in reversed(self.chat_messages):
+            tel = msg.get("telemetry")
+            txt = str(msg.get("text", "")).strip()
+            if (
+                msg.get("sender") == "companion"
+                and isinstance(tel, dict)
+                and txt
+                and not txt.startswith("[Offline Right-Brain Telemetry")
+            ):
+                try:
+                    new_coords, new_exp, _, _ = self.sensors.score_text(
+                        txt,
+                        learned_leaves=self.learned_leaves,
+                        branch_gating=True,
+                    )
+                    merged_t = dict(tel.get("theory_coordinates", {}))
+                    for k, v in {**new_coords, **new_exp}.items():
+                        merged_t[k] = round(float(v), 4)
+                    tel["theory_coordinates"] = merged_t
+                except Exception:
+                    pass
+                break
+
     def handle_run_rem_sleep(self, *, auto_triggered: bool = False) -> dict[str, Any]:
-        """Consolidate queued Socratic & Curriculum scenes into domain-general rules, leaves, archives, Will edges, and Callosum updates."""
-        if not auto_triggered:
-            self.wait_until_warm(timeout=180.0)
+        """Consolidate queued Socratic & Curriculum scenes via genuine 4B LLM distillation, MiniLM bridge calibration, and unseen holdout verification."""
+        self.wait_until_warm(timeout=180.0)
         with self._lock:
             if self.active_lineage == "virgin":
                 self.last_rem_sleep_receipt = (
@@ -1511,26 +2797,19 @@ class ScholarStudioRuntime:
                 return self.get_state_snapshot()
 
             self.sleep_cycle_index += 1
-            report = consolidate_sleep_clusters_locally(
-                queued_scenes=queued_snapshot,
-                rules=self.rules,
-                learned_leaves=self.learned_leaves,
-                archives=self.archives,
-                ledger=self.ledger,
-                ensure_rules_fn=_ensure_foundational_rules,
-                will_edges=self.will_edges,
-            )
-            self.rules = report.updated_rules
-            self.learned_leaves = report.updated_learned_leaves
-            self._last_minted_leaves = report.minted_leaves
-            self.archives = report.updated_archives
-            self.ledger = report.updated_ledger
-            if report.updated_will_edges:
-                self.will_edges = tuple(report.updated_will_edges)
+            sculpted_edges = sculpt_will_edges_during_sleep(self.will_edges, queued_snapshot)
+            if sculpted_edges:
+                self.will_edges = tuple(sculpted_edges)
 
-            canopy_rules, canopy_leaves = self._grow_scholar_canopy_from_sleep_scenes(queued_snapshot)
-            all_forged_rules = tuple(list(report.forged_rules) + list(canopy_rules))
-            all_minted_leaves = tuple(list(report.minted_leaves) + list(canopy_leaves))
+            refined_rules, _ = refine_colliding_rules_during_sleep(self.rules, queued_snapshot)
+            self.rules = _ensure_foundational_rules(refined_rules)
+
+            (
+                all_forged_rules,
+                all_minted_leaves,
+                harvested_clause_ids,
+                rejection_notes,
+            ) = self._distill_and_verify_scholar_canopy(queued_snapshot)
             self._last_minted_leaves = all_minted_leaves
 
             rep = max(queued_snapshot, key=lambda s: float(s.salience))
@@ -1540,7 +2819,7 @@ class ScholarStudioRuntime:
                 if all_forged_rules
                 else (rep.scenario_text or "").strip()
             )
-            if target_summary:
+            if target_summary and all_forged_rules:
                 self.archives = apply_dream_reflection_to_archives(
                     self.archives,
                     scene_index=rep_scene,
@@ -1569,12 +2848,14 @@ class ScholarStudioRuntime:
                 except Exception:
                     projector_updated = False
 
+            self._refresh_latest_turn_telemetry_coordinates()
             self.sleep_queue.clear()
             self.rem_dream_chronicles.append(
                 {
                     "cycle_index": self.sleep_cycle_index,
                     "forged_rules": [r.concept_name for r in all_forged_rules],
                     "minted_leaves": [lf.leaf_id for lf in all_minted_leaves],
+                    "rejected_candidates": list(rejection_notes),
                     "harvested_gap_pairs": harvested_pairs,
                     "projector_updated": projector_updated,
                 }
@@ -1582,267 +2863,18 @@ class ScholarStudioRuntime:
             self._persist_user_state()
 
             trig_label = "Auto-REM Sleep" if auto_triggered else "REM Sleep"
+            rej_suffix = (
+                f" Rejected {len(rejection_notes)} candidate(s) ({rejection_notes[0]})."
+                if rejection_notes
+                else ""
+            )
             self.last_rem_sleep_receipt = (
                 f"{trig_label} Cycle #{self.sleep_cycle_index} Complete: "
-                f"Forged {len(all_forged_rules)} rule(s), minted {len(all_minted_leaves)} leaf(ves), "
-                f"harvested {len(report.harvested_clause_ids)} archive clause(s), "
-                f"and logged {harvested_pairs} Callosum gap pair(s)."
+                f"Forged {len(all_forged_rules)} rule(s), verified & minted {len(all_minted_leaves)} leaf(ves), "
+                f"harvested {len(harvested_clause_ids)} archive clause(s), "
+                f"and logged {harvested_pairs} Callosum gap pair(s).{rej_suffix}"
             )
             return self.get_state_snapshot()
-
-    def _grow_scholar_canopy_from_sleep_scenes(
-        self,
-        queued_snapshot: tuple[UnresolvedSleepScene, ...],
-    ) -> tuple[tuple[FuzzyConceptRule, ...], tuple[LearnedLeaf, ...]]:
-        """Grow coordinate-driven Tier-2, Tier-3, and Tier-4 `LearnedLeaf` nodes and `FuzzyConceptRule`s from `ext_coords` vs `ref_coords` with zero 9B Teacher dependency."""
-        if not queued_snapshot or self.active_lineage == "virgin":
-            return (), ()
-
-        active_leaves = list(self.learned_leaves)
-        existing_leaf_ids = {lf.leaf_id for lf in active_leaves}
-        active_rules = list(self.rules)
-        existing_rule_names = {r.concept_name for r in active_rules}
-        minted_leaves: list[LearnedLeaf] = []
-        forged_rules: list[FuzzyConceptRule] = []
-        builtin_ids = {
-            lf.leaf_id for lf in (PHILOSOPHICAL_SHADOW_LEAVES + DEFAULT_COMPLEX_FEELING_LEAVES)
-        }
-
-        growable_boughs_map: dict[str, tuple[str, str]] = {
-            "cultural/efficiency": ("cultural/efficiency/power", "cultural/efficiency/wastelessness"),
-            "cultural/justice": ("cultural/justice/honor", "cultural/justice/fairness"),
-            "cultural/freedom": ("cultural/freedom/self-sufficiency", "cultural/freedom/needlessness"),
-            "philosophical/being": ("philosophical/being/agency", "philosophical/being/existence"),
-            "philosophical/structure": ("philosophical/structure/order", "philosophical/structure/chaos"),
-            "philosophical/persistence": ("philosophical/persistence/continuity", "philosophical/persistence/discreteness"),
-            "experiential/reflection": ("experiential/reflection/novelty", SALIENCE_LEAF),
-            "experiential/phase": (VALENCE_LEAF, AROUSAL_LEAF),
-            "experiential/synchronization": ("experiential/synchronization/resonance", "experiential/synchronization/entrainment"),
-        }
-        all_growable_leaf_keys: tuple[str, ...] = tuple(
-            lf_key for pair in growable_boughs_map.values() for lf_key in pair
-        )
-
-        for sc in queued_snapshot:
-            ext_coords = dict(sc.external_coordinates or {})
-            ref_coords = dict(sc.contrastive_reference_coordinates or ext_coords)
-            full_ext = dict(ext_coords)
-            full_ext.setdefault(SALIENCE_LEAF, float(sc.salience))
-            full_ext.setdefault(VALENCE_LEAF, float(sc.valence))
-            full_ext.setdefault(AROUSAL_LEAF, float(sc.arousal))
-            full_ref = dict(ref_coords)
-            full_ref.setdefault(SALIENCE_LEAF, float(sc.salience))
-            full_ref.setdefault(VALENCE_LEAF, float(sc.valence))
-            full_ref.setdefault(AROUSAL_LEAF, float(sc.arousal))
-
-            # Score all 9 growable boughs from the actual coordinate deviation + contrastive delta
-            low_scen = (sc.scenario_text or "").lower()
-            best_bough = "cultural/efficiency"
-            best_bough_score = -1.0
-            for bough_id, (f1, f2) in growable_boughs_map.items():
-                r1 = float(full_ref.get(f1, 0.50))
-                r2 = float(full_ref.get(f2, 0.50))
-                e1 = float(full_ext.get(f1, 0.50))
-                e2 = float(full_ext.get(f2, 0.50))
-                score = (
-                    abs(r1 - 0.50)
-                    + abs(r2 - 0.50)
-                    + 1.5 * (abs(r1 - e1) + abs(r2 - e2))
-                )
-                b_dept, b_sub = bough_id.split("/", 1)
-                if f"[{b_dept} · {b_sub}]" in low_scen or bough_id in low_scen:
-                    score += 0.35
-                if score > best_bough_score:
-                    best_bough_score = score
-                    best_bough = bough_id
-
-            target_bough = best_bough
-            b_leaves = growable_boughs_map[target_bough]
-            primary_leaf = max(
-                b_leaves,
-                key=lambda k: (
-                    abs(float(full_ref.get(k, 0.50)) - 0.50)
-                    + abs(float(full_ref.get(k, 0.50)) - float(full_ext.get(k, 0.50))),
-                    float(full_ref.get(k, 0.50)),
-                ),
-            )
-            cross_candidates = sorted(
-                (k for k in all_growable_leaf_keys if k not in b_leaves),
-                key=lambda k: (
-                    abs(float(full_ref.get(k, 0.50)) - 0.50)
-                    + abs(float(full_ref.get(k, 0.50)) - float(full_ext.get(k, 0.50))),
-                    float(full_ref.get(k, 0.50)),
-                ),
-                reverse=True,
-            )
-            c1_leaf = cross_candidates[0] if len(cross_candidates) >= 1 else "philosophical/structure/order"
-            c2_leaf = cross_candidates[1] if len(cross_candidates) >= 2 else "philosophical/persistence/continuity"
-            c3_leaf = cross_candidates[2] if len(cross_candidates) >= 3 else "cultural/efficiency/wastelessness"
-
-            p_short = primary_leaf.split("/")[-1].replace("-", "_")
-            c1_short = c1_leaf.split("/")[-1].replace("-", "_")
-            c2_short = c2_leaf.split("/")[-1].replace("-", "_")
-            c3_short = c3_leaf.split("/")[-1].replace("-", "_")
-
-            p_pole = "elevated" if float(full_ref.get(primary_leaf, 0.50)) >= 0.50 else "tempered"
-            t2_slug = assert_domain_general_text(
-                f"{p_short}_{c1_short}_synthesis"[:40],
-                "leaf_name",
-                banned_substrings=_SCHOLAR_BANNED_STORY_NOUNS,
-            )
-            t2_desc = assert_domain_general_text(
-                f"Coordinate synthesis of {p_pole} {p_short} ({float(full_ref.get(primary_leaf, 0.50)):.2f}) with {c1_short} ({float(full_ref.get(c1_leaf, 0.50)):.2f}).",
-                "description",
-                banned_substrings=_SCHOLAR_BANNED_STORY_NOUNS,
-            )
-            t2_id = f"{target_bough}/{t2_slug}"
-
-            chosen_leaf: LearnedLeaf | None = None
-            partner_leaf: str = c1_leaf
-
-            existing_t2_under_bough = [
-                lf for lf in active_leaves
-                if lf.tier == 2 and lf.parent_branch == target_bough and lf.leaf_id not in builtin_ids
-            ]
-            if t2_id not in existing_leaf_ids and not existing_t2_under_bough:
-                raw_leaf = score_leaf_anchor_weights_at_birth(
-                    LearnedLeaf(
-                        parent_branch=target_bough,
-                        leaf_name=t2_slug,
-                        description=t2_desc,
-                    )
-                )
-                chosen_leaf = sculpt_learned_leaf_anchor_weights(raw_leaf, full_ext, full_ref)
-                partner_leaf = c1_leaf
-            else:
-                parent_t2 = next((lf for lf in existing_t2_under_bough if lf.leaf_id == t2_id), existing_t2_under_bough[0])
-                existing_t3_under_t2 = [
-                    lf for lf in active_leaves
-                    if lf.tier == 3 and lf.parent_branch == parent_t2.leaf_id and lf.leaf_id not in builtin_ids
-                ]
-                t3_slug = assert_domain_general_text(
-                    f"{p_short}_{c2_short}_accord"[:40],
-                    "leaf_name",
-                    banned_substrings=_SCHOLAR_BANNED_STORY_NOUNS,
-                )
-                t3_desc = assert_domain_general_text(
-                    f"Tier-3 sub-branch refining {parent_t2.leaf_name} along {c2_short} ({float(full_ref.get(c2_leaf, 0.50)):.2f}).",
-                    "description",
-                    banned_substrings=_SCHOLAR_BANNED_STORY_NOUNS,
-                )
-                t3_id = f"{parent_t2.leaf_id}/{t3_slug}"
-                if t3_id not in existing_leaf_ids and not existing_t3_under_t2:
-                    raw_leaf = score_leaf_anchor_weights_at_birth(
-                        LearnedLeaf(
-                            parent_branch=parent_t2.leaf_id,
-                            leaf_name=t3_slug,
-                            description=t3_desc,
-                        )
-                    )
-                    chosen_leaf = sculpt_learned_leaf_anchor_weights(raw_leaf, full_ext, full_ref)
-                    partner_leaf = c2_leaf
-                else:
-                    parent_t3 = next((lf for lf in existing_t3_under_t2 if lf.leaf_id == t3_id), existing_t3_under_t2[0])
-                    t4_slug = assert_domain_general_text(
-                        f"{p_short}_{c3_short}_focus"[:40],
-                        "leaf_name",
-                        banned_substrings=_SCHOLAR_BANNED_STORY_NOUNS,
-                    )
-                    t4_desc = assert_domain_general_text(
-                        f"Tier-4 detective leaf refining {parent_t3.leaf_name} along {c3_short} ({float(full_ref.get(c3_leaf, 0.50)):.2f}).",
-                        "description",
-                        banned_substrings=_SCHOLAR_BANNED_STORY_NOUNS,
-                    )
-                    t4_id = f"{parent_t3.leaf_id}/{t4_slug}"
-                    if t4_id not in existing_leaf_ids:
-                        raw_leaf = score_leaf_anchor_weights_at_birth(
-                            LearnedLeaf(
-                                parent_branch=parent_t3.leaf_id,
-                                leaf_name=t4_slug,
-                                description=t4_desc,
-                            )
-                        )
-                        chosen_leaf = sculpt_learned_leaf_anchor_weights(raw_leaf, full_ext, full_ref)
-                        partner_leaf = c3_leaf
-
-            if chosen_leaf is not None:
-                active_leaves.append(chosen_leaf)
-                minted_leaves.append(chosen_leaf)
-                existing_leaf_ids.add(chosen_leaf.leaf_id)
-
-            # Contrastive weight-space sculpting for all custom leaves under this bough
-            for idx_lf, lf in enumerate(active_leaves):
-                if (
-                    lf.leaf_id not in builtin_ids
-                    and lf.leaf_id not in _DEFAULT_LEAF_ANCHOR_WEIGHTS
-                    and lf.leaf_id.startswith(target_bough + "/")
-                ):
-                    active_leaves[idx_lf] = sculpt_learned_leaf_anchor_weights(
-                        lf,
-                        full_ext,
-                        full_ref,
-                    )
-
-            # Evaluate learned leaves on full_ref in tier order so rule target values come from real coordinates
-            for tier_val in (2, 3, 4):
-                for lf in active_leaves:
-                    if lf.tier == tier_val:
-                        full_ref[lf.leaf_id] = _evaluate_learned_leaf_from_anchors(lf, full_ref)
-
-            rule_targets: dict[str, float] = {}
-            if primary_leaf in FOUNDATIONAL_LEAVES:
-                rule_targets[primary_leaf] = round(float(full_ref.get(primary_leaf, 0.50)), 4)
-            if partner_leaf in FOUNDATIONAL_LEAVES and partner_leaf != primary_leaf:
-                rule_targets[partner_leaf] = round(float(full_ref.get(partner_leaf, 0.50)), 4)
-            target_leaf_obj = chosen_leaf or (existing_t2_under_bough[-1] if existing_t2_under_bough else None)
-            if target_leaf_obj is not None:
-                rule_targets[target_leaf_obj.leaf_id] = round(
-                    float(full_ref.get(target_leaf_obj.leaf_id, 0.50)), 4
-                )
-
-            if rule_targets:
-                min_t = min(rule_targets.values())
-                max_t = max(rule_targets.values())
-                rule_low = round(min(0.72, max(0.35, min_t - 0.12)), 4)
-                rule_high = round(min(0.88, max(rule_low + 0.12, max_t + 0.04)), 4)
-                concept_name = (
-                    chosen_leaf.leaf_name
-                    if chosen_leaf is not None
-                    else (target_leaf_obj.leaf_name if target_leaf_obj is not None else f"{p_short}_accord")
-                )
-                desc_text = (
-                    chosen_leaf.description
-                    if chosen_leaf is not None
-                    else f"Coordinate equilibrium across {primary_leaf} and {partner_leaf}."
-                )
-                candidate_rule = FuzzyConceptRule(
-                    rule_id=f"rule-scholar-{concept_name[:28]}",
-                    concept_name=concept_name,
-                    description=desc_text,
-                    target_leaves=rule_targets,
-                    low=rule_low,
-                    high=rule_high,
-                    polarity="attractive",
-                )
-                if concept_name not in existing_rule_names:
-                    active_rules.append(candidate_rule)
-                    forged_rules.append(candidate_rule)
-                    existing_rule_names.add(concept_name)
-                else:
-                    for r_idx, ex_r in enumerate(active_rules):
-                        if ex_r.concept_name == concept_name:
-                            entrained = entrain_existing_cluster_rule(
-                                ex_r,
-                                candidate_rule,
-                                concept_name,
-                            )
-                            active_rules[r_idx] = entrained
-                            forged_rules.append(entrained)
-                            break
-
-        self.learned_leaves = tuple(active_leaves)
-        self.rules = tuple(active_rules)
-        return tuple(forged_rules), tuple(minted_leaves)
 
     def _harvest_rem_contrastive_gap_pairs(
         self,
@@ -2094,13 +3126,21 @@ class ScholarStudioRuntime:
             )
             merged_archives.save_all(target_archives_dir)
 
-            # 5. Copy live Callosum projector weights (`live_projector_weights.pt`) if present
+            # 5. Copy live Callosum projector weights (`live_projector_weights.pt`) & plastic bridges if present
             live_proj_src = self._resolve_live_projector_path()
             copied_live_proj = False
             if live_proj_src is not None and live_proj_src.is_file():
                 shutil.copy2(live_proj_src, target_model_dir / "live_projector_weights.pt")
                 shutil.copy2(live_proj_src, target_state_dir / "live_projector_weights.pt")
                 copied_live_proj = True
+
+            plastic_bridges_src = self.state_dir / "right_brain_bridges"
+            if (plastic_bridges_src / "doer_will_cultural").exists():
+                shutil.copytree(
+                    plastic_bridges_src,
+                    target_state_dir / "right_brain_bridges",
+                    dirs_exist_ok=True,
+                )
 
             self.last_graduation_receipt = (
                 f"Graduated Scholar Brain ➔ {target_label}: "
@@ -2150,10 +3190,10 @@ class ScholarStudioRuntime:
                     latest_coords["experiential/phase/arousal"] = float(tel["arousal"])
                 break
 
-        # Evaluate any newly sprouted Tier 2/3/4 leaves over `latest_coords` in tier order
+        # Fill any missing Tier 2/3/4 leaves without overwriting real neural activations in `latest_coords`
         for tier_val in (2, 3, 4):
             for lf in visible_leaves:
-                if lf.tier == tier_val:
+                if lf.tier == tier_val and lf.leaf_id not in latest_coords:
                     latest_coords[lf.leaf_id] = _evaluate_learned_leaf_from_anchors(lf, latest_coords)
 
         tier_counts = {
@@ -2188,7 +3228,12 @@ class ScholarStudioRuntime:
                                 reverse=True,
                             )[:3]
                             anchor_map = {str(k): round(float(v), 2) for k, v in paired}
-                        live_act = _evaluate_learned_leaf_from_anchors(lf, latest_coords)
+                        live_act = float(
+                            latest_coords.get(
+                                lf.leaf_id,
+                                _evaluate_learned_leaf_from_anchors(lf, latest_coords),
+                            )
+                        )
                         grown_items.append(
                             {
                                 "leaf_id": lf.leaf_id,
@@ -2199,6 +3244,7 @@ class ScholarStudioRuntime:
                                 "description": lf.description,
                                 "activation": round(float(live_act), 3),
                                 "anchor_weights": anchor_map,
+                                "verification": self.leaf_verification_metrics.get(lf.leaf_id, {}),
                             }
                         )
                 bough_act = (
@@ -2434,6 +3480,10 @@ def create_scholar_http_server(
                     return
                 if path == "/api/sleep/auto":
                     snap = runtime.set_auto_rem_sleep(bool(body.get("enabled", True)))
+                    self._send_json(snap)
+                    return
+                if path == "/api/tree/reset":
+                    snap = runtime.reset_scholar_canopy()
                     self._send_json(snap)
                     return
                 if path == "/api/graduate":

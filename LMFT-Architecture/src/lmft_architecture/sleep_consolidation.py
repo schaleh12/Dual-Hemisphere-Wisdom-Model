@@ -89,6 +89,7 @@ class UnresolvedSleepScene:
     reference_bitboard_features: dict[str, float] | None = None
     played_sub_sensors: tuple[float, ...] | None = None
     reference_sub_sensors: tuple[float, ...] | None = None
+    contrast_foil_text: str = ""
 
 
 @dataclass(frozen=True)

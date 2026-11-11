@@ -431,9 +431,12 @@ SCHOLAR_SINGLE_PAGE_HTML = """<!DOCTYPE html>
   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
     <div>
       <strong style="font-size:15px;">🌳 Visual Tree &amp; Canopy Development Inspector</strong>
-      <div class="invariant-note">Live view of the 40 Founding Seed Nodes, sprouted Tier-2 &amp; Tier-3 Learned Leaves, Callosum anchor weights, Fuzzy Concept Rules, and 9 Will Synapses.</div>
+      <div class="invariant-note">Live view of the 40 Founding Seed Nodes, LLM-distilled &amp; MiniLM-verified Tier-2..4 Learned Leaves, Callosum anchor weights, Fuzzy Rules, and 9 Will Synapses.</div>
     </div>
-    <button class="btn" onclick="toggleTreeInspectorView()">← Return to Socratic Studio</button>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <button class="btn" onclick="resetScholarCanopy()" title="Wipe custom leaves/rules and re-clone fresh Right-Brain sensor bridges">↺ Reset Canopy to Clean Seed</button>
+      <button class="btn" onclick="toggleTreeInspectorView()">← Return to Socratic Studio</button>
+    </div>
   </div>
   <div class="tree-summary-strip" id="tree-summary-strip"></div>
   <div class="dept-grid" id="tree-dept-grid"></div>
@@ -635,7 +638,7 @@ function renderTreeInspector(ti) {
       </div>
       <div class="tree-stat-card">
         <div class="tree-stat-label">Canopy Leaf Tiers</div>
-        <div class="tree-stat-val">T1: ${tc.tier_1 || 24} · T2: ${tc.tier_2 || 0} · T3: ${tc.tier_3 || 0}</div>
+        <div class="tree-stat-val">T1: ${tc.tier_1 || 24} · T2: ${tc.tier_2 || 0} · T3: ${tc.tier_3 || 0} · T4: ${tc.tier_4 || 0}</div>
       </div>
       <div class="tree-stat-card">
         <div class="tree-stat-label">Consolidated Fuzzy Rules</div>
@@ -675,11 +678,15 @@ function renderTreeInspector(ti) {
           const topAnchors = Object.entries(gl.anchor_weights || {})
             .map(([k, v]) => `${k.split("/").slice(-1)[0]}:${Number(v).toFixed(2)}`)
             .join(", ");
+          const ver = gl.verification || {};
+          const verTag = (typeof ver.unseen_margin === "number")
+            ? ` · Verified Unseen Δ=${ver.unseen_margin >= 0 ? '+' : ''}${Number(ver.unseen_margin).toFixed(2)} (A=${Number(ver.unseen_score_a || 0).toFixed(2)} vs B=${Number(ver.unseen_score_b || 0).toFixed(2)})`
+            : "";
           return `
-            <div class="leaf-row ${tier >= 3 ? 'grown-tier-3' : 'grown-tier-2'}" title="${escapeHtml(gl.description || '')}">
+            <div class="leaf-row ${tier >= 3 ? 'grown-tier-3' : 'grown-tier-2'}" style="${tier >= 4 ? 'margin-left:28px;' : ''}" title="${escapeHtml(gl.description || '')}">
               <div>
                 <div><strong>[T${tier} Grown]</strong> ${escapeHtml(gl.short_name)}</div>
-                <div style="font-size:10px;color:var(--text-2);">${escapeHtml(gl.description || '')}${topAnchors ? ' · Callosum Anchors: ' + escapeHtml(topAnchors) : ''}</div>
+                <div style="font-size:10px;color:var(--text-2);">${escapeHtml(gl.description || '')}${verTag}${topAnchors ? ' · Callosum Anchors: ' + escapeHtml(topAnchors) : ''}</div>
               </div>
               <div style="display:flex;align-items:center;gap:6px;">
                 <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${tier >= 3 ? 'var(--sleep-accent)' : 'var(--accent)'};"></div></div>
@@ -893,6 +900,10 @@ async function switchThread(tid) { await apiPost("/api/threads/switch", { thread
 async function switchLineage(lineage) { await apiPost("/api/lineage/switch", { lineage }); }
 async function runRemSleepNow() { await apiPost("/api/sleep/run", {}); }
 async function toggleAutoSleep(enabled) { await apiPost("/api/sleep/auto", { enabled: !!enabled }); }
+async function resetScholarCanopy() {
+  if (!confirm("Reset Scholar Canopy back to the clean Cycle-0 seed (wiping custom leaves, rules, and re-cloning fresh Right-Brain bridges)?")) return;
+  await apiPost("/api/tree/reset", {});
+}
 async function graduateBrain(targetApp) {
   await apiPost("/api/graduate", { target_app: targetApp });
 }

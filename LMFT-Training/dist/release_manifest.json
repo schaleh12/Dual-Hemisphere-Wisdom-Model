@@ -2,8 +2,8 @@
   "schema_version": 1,
   "version": "0.2.0",
   "github_repo": "schaleh12/Dual-Hemisphere-Wisdom-Model",
-  "build_sha256": "68f61560bc9574e0ff643e34e78f238c0c404a3e0200ba46524a5d1111c678f4",
-  "build_short_hash": "68f61560bc95",
+  "build_sha256": "adf3832293dcecb0b1078c0f9b43f4ba14aa33061071cbd92f86ab67652fe98b",
+  "build_short_hash": "adf3832293dc",
   "files": {
     "src/lmft_architecture/__init__.py": {
       "sha256": "a89f56c2195e87129adbffa5065d8769ea096e13ba98783d217c4d120ee92623",
@@ -242,8 +242,8 @@
       "size_bytes": 23256
     },
     "src/lmft_architecture/right_brain_equilibrium.py": {
-      "sha256": "5282ec6f7b87a84fdf388537055f874200dbbb9265a488f850bd207e8ade1469",
-      "size_bytes": 79207
+      "sha256": "df776ff33cb64f7814f58e037df045c8fbb1907eb5468160b2316e947b99e108",
+      "size_bytes": 79210
     },
     "src/lmft_architecture/runtime.py": {
       "sha256": "956d5410e1568020854a6a2bde681a8109a21ff4fdf1a62e22c66462450cc0f1",
@@ -254,12 +254,12 @@
       "size_bytes": 5068
     },
     "src/lmft_architecture/scholar_app.py": {
-      "sha256": "ff9a752dfac4acca71e00b04f283b93d7ab5c76fdd77629357a0987e7590a134",
-      "size_bytes": 117870
+      "sha256": "2db568e7faaffa316965d2c12b33c407aa77ac5b222d6c93e7a5f44b20aec0cf",
+      "size_bytes": 163841
     },
     "src/lmft_architecture/scholar_ui.py": {
-      "sha256": "63f01be2d7bee76b50c74fe10e1fc9ac9980993c6cbb008727c5aa83cf9e35e9",
-      "size_bytes": 34167
+      "sha256": "da599b82307edbd00c517dff2d4bc701910efa304962744000bb8c223f472756",
+      "size_bytes": 35082
     },
     "src/lmft_architecture/scoped_attention.py": {
       "sha256": "b35d5c1bffc99dc5b1a529b253f690dbbf112f77e70cb4bb95db997cd46502dc",
@@ -270,8 +270,8 @@
       "size_bytes": 2752
     },
     "src/lmft_architecture/sleep_consolidation.py": {
-      "sha256": "051ac8c7eaedb28b7564a1113cf41a25aca6db83c4aab26f846ca0047739b1e8",
-      "size_bytes": 87449
+      "sha256": "7b83a616f673dd36d8a694a808e45dba5b3a51a143a56e31689949b9d2b27488",
+      "size_bytes": 87482
     },
     "src/lmft_architecture/subliminal_gap_splice.py": {
       "sha256": "01c3f17030fc0916101cf88518b793ed730669f85dc8b692fcc008e6c3f6e1bf",
