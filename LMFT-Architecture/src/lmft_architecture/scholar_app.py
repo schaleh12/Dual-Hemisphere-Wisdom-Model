@@ -36,11 +36,13 @@ import os
 from pathlib import Path
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import threading
 import time
 from typing import Any, Mapping
+import urllib.request
 import webbrowser
 
 os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
@@ -692,10 +694,13 @@ class ScholarStudioRuntime:
         sensors: ThreeBridgeSensors | None = None,
         scholar_left_brain: Any | None = None,
         lazy_load_gpu: bool = False,
+        background_warmup: bool = False,
         auto_rem_sleep: bool = True,
         auto_sleep_threshold: int = 2,
     ) -> None:
         self._lock = threading.RLock()
+        self._gpu_load_lock = threading.Lock()
+        self._warmup_done = threading.Event()
         if repo_root is not None:
             self.repo_root = Path(repo_root)
         else:
@@ -722,8 +727,20 @@ class ScholarStudioRuntime:
             self.will_edges,
         ) = _load_or_init_scholar_state(self.state_dir)
 
+        self._scholar_left_brain = scholar_left_brain
+        self._lazy_load_gpu = bool(lazy_load_gpu)
+        self._background_warmup = bool(
+            background_warmup and scholar_left_brain is None and not self._lazy_load_gpu
+        )
+        self.left_brain_loading: bool = False
+        self.sleep_cycle_index = 0
+        self.left_brain_status = "UNLOADED"
+        self.active_checkpoint_label = "Checkpoint: models/left_brain_scholar (Impish_LLAMA_4B)"
+
         if sensors is not None:
             self.sensors = sensors
+        elif self._background_warmup:
+            self.sensors = _default_fallback_sensors()
         else:
             suite = _get_shared_neural_bridges(self.repo_root)
             if suite is not None:
@@ -731,17 +748,18 @@ class ScholarStudioRuntime:
             else:
                 self.sensors = _default_fallback_sensors()
 
-        self._scholar_left_brain = scholar_left_brain
-        self._lazy_load_gpu = bool(lazy_load_gpu)
-        self.sleep_cycle_index = 0
-        self.left_brain_status = "UNLOADED"
-        self.active_checkpoint_label = "Checkpoint: models/left_brain_scholar (Impish_LLAMA_4B)"
         if self._scholar_left_brain is not None:
             self.left_brain_status = "READY (Injected Left-Brain)"
+            self._warmup_done.set()
         elif self._lazy_load_gpu:
             self.left_brain_status = "STANDBY (Impish_LLAMA_4B Ready)"
+            self._warmup_done.set()
+        elif self._background_warmup:
+            self.left_brain_loading = True
+            self.left_brain_status = "WARMING UP GPU (Loading Impish_LLAMA_4B · 16-bit...)"
         else:
             self._load_scholar_locked(self.scholar_checkpoint_dir)
+            self._warmup_done.set()
 
         self.active_lineage: str = "scholar"
         self.auto_rem_sleep = bool(auto_rem_sleep)
@@ -783,6 +801,32 @@ class ScholarStudioRuntime:
         ]
         self.active_thread_id: str = "thread-1"
         self._load_persisted_session_if_present()
+        if self._background_warmup:
+            threading.Thread(
+                target=self._run_background_warmup,
+                args=(sensors is None,),
+                daemon=True,
+                name="lmft-scholar-gpu-warmup",
+            ).start()
+
+    def _run_background_warmup(self, load_neural_bridges: bool) -> None:
+        """Warm up the 3 MiniLM bridges and 16-bit `Impish_LLAMA_4B` in the background without blocking UI startup."""
+        try:
+            if load_neural_bridges:
+                suite = _get_shared_neural_bridges(self.repo_root)
+                if suite is not None:
+                    loaded_sensors = suite.as_three_bridge_sensors()
+                    with self._lock:
+                        self.sensors = loaded_sensors
+            self._load_scholar_locked(self.scholar_checkpoint_dir)
+        finally:
+            with self._lock:
+                self.left_brain_loading = False
+            self._warmup_done.set()
+
+    def wait_until_warm(self, timeout: float = 180.0) -> bool:
+        """Wait for any in-flight background GPU warmup to finish before running a turn."""
+        return bool(self._warmup_done.wait(timeout=timeout))
 
     def _ensure_scholar_checkpoint_seeded(self) -> None:
         """Seed `models/left_brain_scholar/` from `models/left_brain_baseline/` if not yet created."""
@@ -815,11 +859,17 @@ class ScholarStudioRuntime:
         return None
 
     def _load_scholar_locked(self, checkpoint_dir: Path) -> None:
-        with self._lock:
+        with self._gpu_load_lock:
+            if self._scholar_left_brain is not None:
+                return
             proj_path = checkpoint_dir / "projector_weights.pt"
             if not proj_path.exists():
-                self.left_brain_status = "UNAVAILABLE (No GPU Checkpoint Found)"
+                with self._lock:
+                    self.left_brain_loading = False
+                    self.left_brain_status = "UNAVAILABLE (No GPU Checkpoint Found)"
                 return
+            with self._lock:
+                self.left_brain_loading = True
             try:
                 lb = SubliminalGapLeftBrain.from_checkpoint(
                     checkpoint_dir,
@@ -855,16 +905,13 @@ class ScholarStudioRuntime:
                     except Exception:
                         pass
 
-                self._scholar_left_brain = lb
                 base_id = DEFAULT_SCHOLAR_HF_ID
                 callosum_status = "TRAINED_STEERED_CALLOSUM"
+                ckpt_sleep_cycle = 0
                 if getattr(lb, "callosum_metadata", None) is not None:
                     base_id = str(lb.callosum_metadata.base_model_id or base_id)
                     callosum_status = str(lb.callosum_metadata.callosum_status or callosum_status)
-                    self.sleep_cycle_index = max(
-                        self.sleep_cycle_index,
-                        int(lb.callosum_metadata.sleep_cycle_index),
-                    )
+                    ckpt_sleep_cycle = int(lb.callosum_metadata.sleep_cycle_index)
                 else:
                     meta_path = checkpoint_dir / "corpus_callosum_meta.json"
                     if meta_path.exists():
@@ -876,14 +923,22 @@ class ScholarStudioRuntime:
                             pass
                 if loaded_live_proj:
                     callosum_status = f"{callosum_status}+LIVE_SCULPTED"
-                self.left_brain_status = "READY (Impish_LLAMA_4B · 16-bit)"
-                self.active_checkpoint_label = (
-                    f"LMFT-Scholar · Impish_LLAMA_4B ({callosum_status} — {base_id})"
-                )
+                with self._lock:
+                    self._scholar_left_brain = lb
+                    self.sleep_cycle_index = max(self.sleep_cycle_index, ckpt_sleep_cycle)
+                    self.left_brain_loading = False
+                    self.left_brain_status = "READY (Impish_LLAMA_4B · 16-bit)"
+                    self.active_checkpoint_label = (
+                        f"LMFT-Scholar · Impish_LLAMA_4B ({callosum_status} — {base_id})"
+                    )
             except Exception as exc:
-                self.left_brain_status = f"UNAVAILABLE ({type(exc).__name__}: {exc})"
+                with self._lock:
+                    self.left_brain_loading = False
+                    self.left_brain_status = f"UNAVAILABLE ({type(exc).__name__}: {exc})"
 
     def _ensure_left_brain_ready(self) -> Any | None:
+        if not self._warmup_done.is_set():
+            self._warmup_done.wait(timeout=180.0)
         if self._scholar_left_brain is None and self._lazy_load_gpu:
             self._load_scholar_locked(self.scholar_checkpoint_dir)
         return self._scholar_left_brain
@@ -992,6 +1047,7 @@ class ScholarStudioRuntime:
         include_conversation_history: bool = True,
         lead_with_gap: bool | None = None,
     ) -> dict[str, Any]:
+        self.wait_until_warm(timeout=180.0)
         with self._lock:
             self.scene_counter += 1
             scene_id = self.scene_counter
@@ -1440,6 +1496,8 @@ class ScholarStudioRuntime:
 
     def handle_run_rem_sleep(self, *, auto_triggered: bool = False) -> dict[str, Any]:
         """Consolidate queued Socratic & Curriculum scenes into domain-general rules, leaves, archives, Will edges, and Callosum updates."""
+        if not auto_triggered:
+            self.wait_until_warm(timeout=180.0)
         with self._lock:
             if self.active_lineage == "virgin":
                 self.last_rem_sleep_receipt = (
@@ -2210,41 +2268,44 @@ class ScholarStudioRuntime:
         }
 
     def get_state_snapshot(self) -> dict[str, Any]:
-        builtin_ids = {
-            lf.leaf_id for lf in (PHILOSOPHICAL_SHADOW_LEAVES + DEFAULT_COMPLEX_FEELING_LEAVES)
-        }
-        custom_leaves_count = sum(1 for lf in self.learned_leaves if lf.leaf_id not in builtin_ids)
-        return {
-            "app_name": "LMFT-Scholar",
-            "active_lineage": self.active_lineage,
-            "left_brain_status": self.left_brain_status,
-            "active_checkpoint_label": self.active_checkpoint_label,
-            "rules_count": len(VIRGIN_FOUNDATIONAL_RULES)
-            if self.active_lineage == "virgin"
-            else len(self.rules),
-            "learned_leaves_count": 0
-            if self.active_lineage == "virgin"
-            else custom_leaves_count,
-            "sleep_queue_count": len(self.sleep_queue),
-            "sleep_cycle_index": self.sleep_cycle_index,
-            "curriculum_step_counter": self.curriculum_step_counter,
-            "auto_rem_sleep": self.auto_rem_sleep,
-            "study_canvas_text": self.study_canvas_text,
-            "last_rem_sleep_receipt": self.last_rem_sleep_receipt,
-            "last_graduation_receipt": self.last_graduation_receipt,
-            "active_thread_id": self.active_thread_id,
-            "threads": [
-                {
-                    "thread_id": t["thread_id"],
-                    "title": t["title"],
-                    "message_count": len(t.get("messages", [])),
-                }
-                for t in self.threads
-            ],
-            "chat_messages": list(self.chat_messages),
-            "curriculum_lessons": [l.to_dict() for l in SCHOLAR_CURRICULUM_LESSONS],
-            "tree_inspector": self._build_tree_inspector_snapshot(),
-        }
+        with self._lock:
+            builtin_ids = {
+                lf.leaf_id for lf in (PHILOSOPHICAL_SHADOW_LEAVES + DEFAULT_COMPLEX_FEELING_LEAVES)
+            }
+            custom_leaves_count = sum(1 for lf in self.learned_leaves if lf.leaf_id not in builtin_ids)
+            return {
+                "app_name": "LMFT-Scholar",
+                "server_pid": os.getpid(),
+                "active_lineage": self.active_lineage,
+                "left_brain_loading": bool(self.left_brain_loading),
+                "left_brain_status": self.left_brain_status,
+                "active_checkpoint_label": self.active_checkpoint_label,
+                "rules_count": len(VIRGIN_FOUNDATIONAL_RULES)
+                if self.active_lineage == "virgin"
+                else len(self.rules),
+                "learned_leaves_count": 0
+                if self.active_lineage == "virgin"
+                else custom_leaves_count,
+                "sleep_queue_count": len(self.sleep_queue),
+                "sleep_cycle_index": self.sleep_cycle_index,
+                "curriculum_step_counter": self.curriculum_step_counter,
+                "auto_rem_sleep": self.auto_rem_sleep,
+                "study_canvas_text": self.study_canvas_text,
+                "last_rem_sleep_receipt": self.last_rem_sleep_receipt,
+                "last_graduation_receipt": self.last_graduation_receipt,
+                "active_thread_id": self.active_thread_id,
+                "threads": [
+                    {
+                        "thread_id": t["thread_id"],
+                        "title": t["title"],
+                        "message_count": len(t.get("messages", [])),
+                    }
+                    for t in self.threads
+                ],
+                "chat_messages": list(self.chat_messages),
+                "curriculum_lessons": [l.to_dict() for l in SCHOLAR_CURRICULUM_LESSONS],
+                "tree_inspector": self._build_tree_inspector_snapshot(),
+            }
 
 
 def create_scholar_http_server(
@@ -2254,6 +2315,12 @@ def create_scholar_http_server(
     port: int = 8428,
 ) -> ThreadingHTTPServer:
     """Create the local HTTP server for `LMFT-Scholar.exe`."""
+
+    class ScholarHTTPServer(ThreadingHTTPServer):
+        # Prevent Windows SO_REUSEADDR socket stacking so a new launch never hides behind a stale listener.
+        allow_reuse_address = not sys.platform.startswith("win")
+
+    server_ref: list[ThreadingHTTPServer] = []
 
     class ScholarRequestHandler(BaseHTTPRequestHandler):
         def log_message(self, format: str, *args: Any) -> None:  # noqa: A002
@@ -2281,11 +2348,16 @@ def create_scholar_http_server(
         def do_GET(self) -> None:  # noqa: N802
             path = self.path.split("?", 1)[0]
             if path in ("/", "/index.html"):
-                raw = SCHOLAR_SINGLE_PAGE_HTML.encode("utf-8")
+                import importlib
+                from . import scholar_ui as _live_ui
+
+                importlib.reload(_live_ui)
+                raw = _live_ui.SCHOLAR_SINGLE_PAGE_HTML.encode("utf-8")
                 self.send_response(int(HTTPStatus.OK))
                 self.send_header("Content-Type", "text/html; charset=utf-8")
                 self.send_header("Content-Length", str(len(raw)))
-                self.send_header("Cache-Control", "no-store")
+                self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+                self.send_header("Pragma", "no-cache")
                 self.end_headers()
                 self.wfile.write(raw)
                 return
@@ -2298,6 +2370,11 @@ def create_scholar_http_server(
             path = self.path.split("?", 1)[0]
             try:
                 body = self._read_json_body()
+                if path == "/api/shutdown":
+                    self._send_json({"status": "shutting_down", "pid": os.getpid()})
+                    if server_ref:
+                        threading.Thread(target=server_ref[0].shutdown, daemon=True).start()
+                    return
                 if path == "/api/chat":
                     raw_n = body.get("num_sentences")
                     snap = runtime.handle_chat_message(
@@ -2367,11 +2444,107 @@ def create_scholar_http_server(
             except Exception as exc:
                 self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
 
-    return ThreadingHTTPServer((host, int(port)), ScholarRequestHandler)
+    srv = ScholarHTTPServer((host, int(port)), ScholarRequestHandler)
+    server_ref.append(srv)
+    return srv
 
 
-def _open_single_window_browser(url: str) -> None:
-    """Open `url` in a dedicated app-mode window on Windows if Edge/Chrome is present."""
+def _is_local_port_listening(host: str, port: int, *, timeout_sec: float = 0.25) -> bool:
+    check_host = "127.0.0.1" if host.strip() in ("0.0.0.0", "localhost", "127.0.0.1") else host
+    try:
+        with socket.create_connection((check_host, int(port)), timeout=timeout_sec):
+            return True
+    except OSError:
+        return False
+
+
+def _evict_existing_scholar_on_port(host: str, port: int) -> None:
+    """Cleanly shut down or evict any lingering `scholar_app` server holding `port` before re-binding."""
+    if port <= 0 or host.strip() not in ("127.0.0.1", "localhost", "0.0.0.0"):
+        return
+    if not _is_local_port_listening("127.0.0.1", port):
+        return
+
+    my_pid = os.getpid()
+    my_ppid = os.getppid()
+
+    for _ in range(8):
+        if not _is_local_port_listening("127.0.0.1", port):
+            return
+        try:
+            req = urllib.request.Request(
+                f"http://127.0.0.1:{int(port)}/api/shutdown",
+                data=b"{}",
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=0.6):
+                pass
+            time.sleep(0.2)
+            if not _is_local_port_listening("127.0.0.1", port):
+                return
+        except Exception:
+            pass
+
+        if sys.platform.startswith("win"):
+            try:
+                out = subprocess.check_output(
+                    ["netstat", "-ano", "-p", "tcp"],
+                    text=True,
+                    stderr=subprocess.DEVNULL,
+                    timeout=2.0,
+                )
+                target_suffix = f":{int(port)}"
+                killed_any = False
+                for line in out.splitlines():
+                    parts = line.split()
+                    if len(parts) < 5 or parts[3].upper() != "LISTENING":
+                        continue
+                    local_addr = parts[1]
+                    if not local_addr.endswith(target_suffix):
+                        continue
+                    pid = int(parts[4])
+                    if pid <= 0 or pid in (my_pid, my_ppid):
+                        continue
+                    tlist = subprocess.check_output(
+                        ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
+                        text=True,
+                        stderr=subprocess.DEVNULL,
+                        timeout=1.5,
+                    ).lower()
+                    if "python" in tlist:
+                        subprocess.run(
+                            ["taskkill", "/PID", str(pid), "/T", "/F"],
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                            timeout=2.0,
+                            check=False,
+                        )
+                        killed_any = True
+                if not killed_any:
+                    break
+                time.sleep(0.25)
+            except Exception:
+                break
+        else:
+            break
+
+
+def _wait_for_local_server_ready(url: str, *, timeout_sec: float = 3.0) -> bool:
+    deadline = time.time() + timeout_sec
+    state_url = f"{url.rstrip('/')}/api/state"
+    while time.time() < deadline:
+        try:
+            with urllib.request.urlopen(state_url, timeout=0.5) as resp:
+                if resp.status == 200:
+                    return True
+        except Exception:
+            time.sleep(0.05)
+    return False
+
+
+def launch_scholar_desktop_window(url: str, *, profile_dir: Path | None = None) -> subprocess.Popen[Any] | None:
+    """Open `url` in a dedicated isolated app-mode window on Windows so window close cleanly exits `pythonw.exe`."""
     if sys.platform.startswith("win"):
         candidates = [
             Path(os.environ.get("ProgramFiles(x86)", "C:/Program Files (x86)"))
@@ -2381,14 +2554,56 @@ def _open_single_window_browser(url: str) -> None:
             Path(os.environ.get("ProgramFiles", "C:/Program Files"))
             / "Google/Chrome/Application/chrome.exe",
         ]
+        user_data_dir = profile_dir or (resolve_training_root() / "outputs" / ".scholar_window_profile")
+        user_data_dir.mkdir(parents=True, exist_ok=True)
         for exe in candidates:
             if exe.exists():
                 try:
-                    subprocess.Popen([str(exe), f"--app={url}"])
-                    return
+                    return subprocess.Popen(
+                        [
+                            str(exe),
+                            f"--app={url}",
+                            f"--user-data-dir={user_data_dir}",
+                            "--window-size=1380,860",
+                            "--no-first-run",
+                            "--no-default-browser-check",
+                        ]
+                    )
                 except Exception:
                     pass
     webbrowser.open(url)
+    return None
+
+
+def launch_native_pywebview_window(title: str, url: str) -> bool:
+    """Open `url` inside a native Windows desktop window (`pywebview`) when installed."""
+    try:
+        import ctypes
+        import webview  # type: ignore[import-untyped]
+        from lmft_architecture.workspace_paths import resolve_arch_root
+
+        if sys.platform.startswith("win"):
+            try:
+                ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("LMFT.Celestriad.ScholarApp.1")
+            except Exception:
+                pass
+
+        ico_path = resolve_arch_root() / "docs" / "assets" / "celestriad_spirit_particle.ico"
+        icon_str = str(ico_path) if ico_path.is_file() else None
+        storage_dir = resolve_training_root() / "outputs" / ".scholar_window_profile"
+        storage_dir.mkdir(parents=True, exist_ok=True)
+        webview.create_window(
+            title,
+            url,
+            width=1380,
+            height=860,
+            min_size=(1020, 680),
+            background_color="#0a0d14",
+        )
+        webview.start(private_mode=False, storage_path=str(storage_dir), icon=icon_str)
+        return True
+    except Exception:
+        return False
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -2402,23 +2617,49 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--lazy-gpu", action="store_true")
     args = parser.parse_args(argv)
 
-    runtime = ScholarStudioRuntime(lazy_load_gpu=bool(args.lazy_gpu))
-    server = create_scholar_http_server(runtime, host=args.host, port=args.port)
+    _evict_existing_scholar_on_port(args.host, int(args.port))
+
+    runtime = ScholarStudioRuntime(
+        lazy_load_gpu=bool(args.lazy_gpu),
+        background_warmup=not bool(args.lazy_gpu),
+    )
+    try:
+        server = create_scholar_http_server(runtime, host=args.host, port=args.port)
+    except OSError:
+        server = create_scholar_http_server(runtime, host=args.host, port=0)
+
     actual_port = server.server_address[1]
-    url = f"http://{args.host}:{actual_port}/"
+    browser_host = "localhost" if str(args.host).strip() in ("127.0.0.1", "0.0.0.0") else args.host
+    url = f"http://{browser_host}:{actual_port}"
     print(f"LMFT-Scholar Studio running at {url}")
 
-    if not args.no_browser:
-        if args.single_window:
-            _open_single_window_browser(url)
-        else:
-            webbrowser.open(url)
+    server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+    server_thread.start()
+    _wait_for_local_server_ready(f"http://127.0.0.1:{actual_port}", timeout_sec=3.0)
 
     try:
-        server.serve_forever()
+        if not args.no_browser:
+            window_url = f"{url}/?v={int(time.time())}"
+            if launch_native_pywebview_window(
+                "LMFT-Scholar — Foundational Two-Hemisphere Socratic & Literature Studio (Impish_LLAMA_4B)",
+                window_url,
+            ):
+                return 0
+            if args.single_window or sys.executable.lower().endswith("pythonw.exe"):
+                t0 = time.time()
+                window_proc = launch_scholar_desktop_window(window_url)
+                if window_proc is not None:
+                    window_proc.wait()
+                    if (time.time() - t0) >= 3.0:
+                        return 0
+            else:
+                webbrowser.open(window_url)
+        while server_thread.is_alive():
+            time.sleep(0.5)
     except KeyboardInterrupt:
         pass
     finally:
+        server.shutdown()
         server.server_close()
     return 0
 

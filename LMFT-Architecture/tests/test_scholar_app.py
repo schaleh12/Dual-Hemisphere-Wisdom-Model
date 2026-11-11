@@ -342,3 +342,145 @@ def test_scholar_chat_decouples_canvas_wires_history_and_updates_projector_in_re
     assert (state_dir / "live_projector_weights.pt").is_file()
     assert snap_sleep["tree_inspector"]["has_live_callosum_projector"] is True
 
+
+def test_scholar_background_warmup_nonblocking_state_and_gear2_synchronization(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    import time
+    from lmft_architecture import scholar_app
+    from lmft_architecture.subliminal_gap_splice import SubliminalGapProjector
+    from lmft_architecture.three_legged_runtime import SplicedThoughtTrace
+
+    class _DelayedWarmupLeftBrain:
+        prompt_format = "chatml"
+
+        def __init__(self) -> None:
+            self.device = "cpu"
+            self.callosum_metadata = None
+            self.projector = SubliminalGapProjector(hidden_size=64)
+            self.projector.capture_resting_anchor()
+
+        def generate_multi_sentence_script(
+            self,
+            scenario_text: str,
+            chord=None,
+            *,
+            num_sentences: int = 2,
+            pass_index: int = 2,
+            clause_1_prefix=None,
+            conversation_history=(),
+            max_context_chars: int = 2400,
+            chord_builder_at_comma=None,
+            stop_condition=None,
+            lead_with_gap: bool = False,
+        ):
+            built = chord
+            if chord_builder_at_comma is not None:
+                res = chord_builder_at_comma("Hello,")
+                built = res[0] if isinstance(res, tuple) else res
+            reply = f"Hello, warmed up and speaking to: {scenario_text}."
+            trace = SplicedThoughtTrace(
+                pass_index=pass_index,
+                clause_1_prefix="Hello,",
+                prompt_before_gap="Hello, <|subliminal_gap|>",
+                spliced_chord=built,  # type: ignore[arg-type]
+                post_gap_continuation=f"warmed up and speaking to: {scenario_text}.",
+                full_thought=reply,
+                hit_eos=True,
+            )
+            return reply, (trace,)
+
+    load_entered = threading.Event()
+    release_load = threading.Event()
+
+    def _slow_from_checkpoint(checkpoint_dir: Path, **kwargs):
+        load_entered.set()
+        release_load.wait(timeout=5.0)
+        return _DelayedWarmupLeftBrain()
+
+    monkeypatch.setattr(scholar_app.SubliminalGapLeftBrain, "from_checkpoint", _slow_from_checkpoint)
+    monkeypatch.setattr(scholar_app, "_get_shared_neural_bridges", lambda _root: None)
+
+    repo_root = tmp_path / "repo"
+    ckpt_dir = repo_root / "models" / "left_brain_scholar"
+    ckpt_dir.mkdir(parents=True, exist_ok=True)
+    (ckpt_dir / "projector_weights.pt").write_bytes(b"DUMMY")
+
+    t0 = time.perf_counter()
+    runtime = ScholarStudioRuntime(
+        repo_root=repo_root,
+        state_dir=repo_root / "outputs" / "scholar_state",
+        scholar_checkpoint_dir=ckpt_dir,
+        lazy_load_gpu=False,
+        background_warmup=True,
+        auto_rem_sleep=False,
+    )
+    assert (time.perf_counter() - t0) < 0.5
+    assert load_entered.wait(timeout=2.0)
+
+    # While GPU warmup is still in flight, get_state_snapshot() must NOT block!
+    t_snap = time.perf_counter()
+    snap_warming = runtime.get_state_snapshot()
+    assert (time.perf_counter() - t_snap) < 0.2
+    assert snap_warming["left_brain_loading"] is True
+    assert "WARMING UP GPU" in snap_warming["left_brain_status"]
+
+    # Sending a chat message during warmup must wait for warmup and answer in Gear 2 (never Gear 1!)
+    chat_holder: list[dict] = []
+
+    def _send_early_hello() -> None:
+        chat_holder.append(runtime.handle_chat_message("hello"))
+
+    chat_thread = threading.Thread(target=_send_early_hello, daemon=True)
+    chat_thread.start()
+    time.sleep(0.05)
+    release_load.set()
+    chat_thread.join(timeout=5.0)
+
+    assert len(chat_holder) == 1
+    snap_after = chat_holder[0]
+    assert snap_after["left_brain_loading"] is False
+    assert snap_after["left_brain_status"].startswith("READY")
+    last_msg = snap_after["chat_messages"][-1]
+    assert "warmed up and speaking to: hello" in last_msg["text"]
+    assert last_msg["telemetry"]["gear_used"] != "GEAR_1_FAST_RIGHT_BRAIN"
+
+
+def test_scholar_http_server_exclusive_port_and_shutdown_endpoint(tmp_path: Path) -> None:
+    import sys
+    import pytest
+
+    repo_root = tmp_path / "repo"
+    runtime = ScholarStudioRuntime(
+        repo_root=repo_root,
+        state_dir=repo_root / "outputs" / "scholar_state",
+        scholar_checkpoint_dir=repo_root / "models" / "left_brain_scholar",
+        lazy_load_gpu=True,
+        auto_rem_sleep=False,
+    )
+    server = create_scholar_http_server(runtime, host="127.0.0.1", port=0)
+    port = server.server_address[1]
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        if sys.platform.startswith("win"):
+            with pytest.raises(OSError):
+                dup = create_scholar_http_server(runtime, host="127.0.0.1", port=port)
+                dup.server_close()
+
+        req = urllib.request.Request(
+            f"http://127.0.0.1:{port}/api/shutdown",
+            data=b"{}",
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=3.0) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+            assert payload["status"] == "shutting_down"
+        thread.join(timeout=3.0)
+        assert not thread.is_alive()
+    finally:
+        server.server_close()
+
+

@@ -422,7 +422,7 @@ SCHOLAR_SINGLE_PAGE_HTML = """<!DOCTYPE html>
         <input type="checkbox" id="anchor-canvas-toggle" />
         Use Canvas
       </label>
-      <button class="btn btn-primary" onclick="sendChatMessage()">Send</button>
+      <button class="btn btn-primary" id="send-chat-btn" onclick="sendChatMessage()">Send</button>
     </div>
   </section>
 </div>
@@ -453,6 +453,7 @@ SCHOLAR_SINGLE_PAGE_HTML = """<!DOCTYPE html>
 let lastRenderedChatSig = "";
 let curriculumLoopTimer = null;
 let scholarBusy = false;
+let lastKnownLoading = false;
 let canvasDirty = false;
 let lastServerCanvasText = null;
 let populatedLessons = false;
@@ -505,7 +506,23 @@ async function apiPost(path, payload) {
 
 function renderState(s) {
   if (!s) return;
-  document.getElementById("model-status-pill").textContent = s.left_brain_status || "Impish_LLAMA_4B";
+  lastKnownLoading = !!s.left_brain_loading;
+  const statusPill = document.getElementById("model-status-pill");
+  const stText = s.left_brain_status || "Impish_LLAMA_4B";
+  statusPill.textContent = stText;
+  if (stText.startsWith("READY")) {
+    statusPill.style.borderColor = "var(--ok)";
+    statusPill.style.color = "var(--ok)";
+  } else if (s.left_brain_loading || stText.startsWith("WARMING")) {
+    statusPill.style.borderColor = "var(--accent)";
+    statusPill.style.color = "var(--accent)";
+  } else if (stText.startsWith("UNAVAILABLE")) {
+    statusPill.style.borderColor = "#ef4444";
+    statusPill.style.color = "#fca5a5";
+  } else {
+    statusPill.style.borderColor = "";
+    statusPill.style.color = "";
+  }
   document.getElementById("rules-count-pill").textContent = "Rules: " + (s.rules_count || 0);
   document.getElementById("leaves-count-pill").textContent = "Leaves: " + (24 + Number(s.learned_leaves_count || 0));
   document.getElementById("sleep-queue-pill").textContent = "Sleep Queue: " + (s.sleep_queue_count || 0);
@@ -731,18 +748,65 @@ function renderTreeInspector(ti) {
   }
 }
 
+function appendOptimisticPendingCards(userRole, userText, waitNote) {
+  const box = document.getElementById("chat-messages");
+  if (!box) return;
+  const wrap = document.createElement("div");
+  wrap.id = "pending-turn-preview";
+  wrap.style.display = "flex";
+  wrap.style.flexDirection = "column";
+  wrap.style.gap = "10px";
+  wrap.innerHTML = `
+    <div class="msg-card">
+      <div class="msg-role"><span>${escapeHtml(userRole)}</span></div>
+      <div class="msg-text">${escapeHtml(userText)}</div>
+    </div>
+    <div class="msg-card" style="border-color:var(--accent);opacity:0.9;">
+      <div class="msg-role"><span>LMFT-Scholar · Contemplating</span><span class="pill">GEAR_2_SUBLIMINAL_GAP_SPLICE</span></div>
+      <div class="msg-text" style="color:var(--text-2);font-style:italic;">${escapeHtml(waitNote)}</div>
+    </div>
+  `;
+  box.appendChild(wrap);
+  box.scrollTop = box.scrollHeight;
+}
+
+function clearOptimisticPendingCards() {
+  const el = document.getElementById("pending-turn-preview");
+  if (el) el.remove();
+}
+
 async function sendChatMessage() {
   const inp = document.getElementById("chat-input");
+  const sendBtn = document.getElementById("send-chat-btn");
   const txt = inp.value.trim();
   if (!txt || scholarBusy) return;
   const anchorEl = document.getElementById("anchor-canvas-toggle");
   const anchorToCanvas = anchorEl ? !!anchorEl.checked : false;
   scholarBusy = true;
+  if (sendBtn) {
+    sendBtn.disabled = true;
+    sendBtn.textContent = "Thinking...";
+  }
+  inp.value = "";
+  appendOptimisticPendingCards(
+    anchorToCanvas ? "Socratic Question (Canvas)" : "Socratic Dialogue",
+    txt,
+    lastKnownLoading
+      ? "Finishing 16-bit Impish_LLAMA_4B GPU warmup, then replying across <|subliminal_gap|>..."
+      : "Deliberating across 40-node Right Brain and speaking via Impish_LLAMA_4B..."
+  );
   try {
-    inp.value = "";
+    lastRenderedChatSig = "";
     await apiPost("/api/chat", { text: txt, anchor_to_canvas: anchorToCanvas });
+  } catch (_err) {
+    clearOptimisticPendingCards();
+    inp.value = txt;
   } finally {
     scholarBusy = false;
+    if (sendBtn) {
+      sendBtn.disabled = false;
+      sendBtn.textContent = "Send";
+    }
   }
 }
 
@@ -753,12 +817,22 @@ async function studyCanvasPassage() {
     alert("Paste a passage or dilemma into the canvas first.");
     return;
   }
+  const btn = document.getElementById("study-passage-btn");
   scholarBusy = true;
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Contemplating...";
+  }
   try {
     canvasDirty = false;
+    lastRenderedChatSig = "";
     await apiPost("/api/canvas/study", { passage_text: txt });
   } finally {
     scholarBusy = false;
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Contemplate Passage ➔";
+    }
   }
 }
 
@@ -770,14 +844,24 @@ async function saveStudyCanvas() {
 
 async function stepCurriculumLesson() {
   if (scholarBusy) return;
+  const btn = document.getElementById("step-curriculum-btn");
   scholarBusy = true;
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Writing Essay...";
+  }
   try {
     const lessonId = document.getElementById("lesson-select").value;
     const sleepEl = document.getElementById("sleep-after-essay-toggle");
     const sleepAfterEssay = sleepEl ? !!sleepEl.checked : true;
+    lastRenderedChatSig = "";
     await apiPost("/api/curriculum/step", { lesson_id: lessonId, sleep_after_essay: sleepAfterEssay });
   } finally {
     scholarBusy = false;
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Step Literature Essay";
+    }
   }
 }
 
@@ -814,13 +898,16 @@ async function graduateBrain(targetApp) {
 }
 
 async function pollState() {
+  if (scholarBusy) return;
   try {
     const res = await fetch("/api/state");
     if (res.ok) renderState(await res.json());
   } catch (_e) {}
 }
 pollState();
-setInterval(pollState, 3000);
+setInterval(() => {
+  if (lastKnownLoading || !scholarBusy) pollState();
+}, 1500);
 </script>
 </body>
 </html>
